@@ -1,0 +1,57 @@
+import { nowISO } from "./schema-validator.mjs";
+
+export function createPlannerEnvelope({ taskIntent, executionProfile, contextManifest, toolIntentPlan }) {
+  return {
+    schemaVersion: "planner-envelope-v2",
+    runID: taskIntent.runID,
+    taskID: taskIntent.taskID,
+    sessionID: taskIntent.sessionID,
+    goal: taskIntent.goal,
+    taskType: taskIntent.taskType,
+    successCriteria: [
+      "assemble task context through Context Plane",
+      "record tool intent, policy, approval, model route, QA, metrics, and checkpoint artifacts",
+      "execute only allowed internal tools",
+      "stream or synthesize a user-facing answer without exposing raw tools in the public surface",
+    ],
+    constraints: taskIntent.constraints,
+    selectedSkills: taskIntent.selectedSkills,
+    selectedExtensions: taskIntent.selectedExtensions,
+    publicSurfaceOnly: true,
+    contextManifestPath: contextManifest?.artifactPath || null,
+    executionProfileID: executionProfile.profileID,
+    internalToolPlan: (toolIntentPlan.tools || []).map((item) => ({
+      toolName: item.toolName,
+      actionIntent: item.actionIntent,
+      riskLevel: item.riskLevel,
+      reason: item.reason,
+      policyCheckRequired: true,
+    })),
+    parallelizableWorkers: executionProfile.workerPolicy.maxWorkers > 1 ? [{ mode: "future_parallel_worker" }] : [],
+    requiredArtifacts: [
+      "control-plane-manifest.json",
+      "task-intent.json",
+      "execution-profile.json",
+      "tool-intent-plan.json",
+      "context-manifest.json",
+      "context-bundle.json",
+      "retrieval-plan.json",
+      "context-gate.json",
+      "policy-decisions.json",
+      "approval-decisions.json",
+      "model-route.json",
+      "qa-gate.json",
+      "runtime-metrics.json",
+      "checkpoint.json",
+      "retry-ledger.json",
+      "tool-calls.json",
+      "final-output.md",
+    ],
+    stopConditions: ["policy blocked required action", "provider unavailable for requested live model", "run cancelled"],
+    fixedWorkflow: false,
+    rawSecretsReturned: false,
+    rawTranscriptIncluded: false,
+    createdAt: nowISO(),
+  };
+}
+

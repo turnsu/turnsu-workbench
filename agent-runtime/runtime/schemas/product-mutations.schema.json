@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-product-mutations.schema.json",
+  "title": "Agent Product Mutations",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "runID",
+    "source",
+    "createdAt",
+    "updatedAt",
+    "idempotencyKeys",
+    "tasks",
+    "watchlistItems",
+    "crystals",
+    "proposals",
+    "memory",
+    "handoffs"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "agent-product-mutations-v1" },
+    "runID": { "type": "string", "pattern": "^run-[A-Za-z0-9_.-]+$" },
+    "source": { "type": "string" },
+    "createdAt": { "type": "string" },
+    "updatedAt": { "type": "string" },
+    "idempotencyKeys": { "type": "array", "items": { "type": "string" } },
+    "tasks": { "type": "array", "items": { "type": "object" } },
+    "watchlistItems": { "type": "array", "items": { "type": "object" } },
+    "crystals": { "type": "array", "items": { "type": "object" } },
+    "proposals": { "type": "array", "items": { "type": "object" } },
+    "memory": { "type": "array", "items": { "type": "object" } },
+    "handoffs": { "type": "array", "items": { "type": "object" } }
+  },
+  "additionalProperties": false
+}

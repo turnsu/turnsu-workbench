@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bridge-status.schema.json",
+  "title": "Permissioned Data Bridge Status",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "kind",
+    "status",
+    "permission",
+    "freshness",
+    "artifactPath"
+  ],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "kind": { "enum": ["wechat_import", "market_data", "onchain_data", "external_agent", "export"] },
+    "status": { "enum": ["idle", "planned", "running", "completed", "degraded", "failed", "blocked", "not_run", "archived"] },
+    "permission": { "enum": ["none", "local_read", "local_write", "user_confirmation", "external_bridge", "export_outside_project", "blocked"] },
+    "freshness": { "enum": ["fresh", "fixture", "current_run", "stale", "degraded", "blocked", "not_run", "unknown"] },
+    "lastRunAt": { "type": ["string", "null"] },
+    "lastSuccessAt": { "type": ["string", "null"] },
+    "artifactPath": { "type": ["string", "null"] },
+    "blockedReason": { "type": ["string", "null"] },
+    "lastError": { "type": ["string", "null"] }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wechat-agent.local/schemas/agent-session.schema.json",
+  "title": "Agent Session",
+  "type": "object",
+  "required": ["sessionID", "createdAt", "updatedAt", "status", "messages"],
+  "properties": {
+    "sessionID": { "type": "string" },
+    "title": { "type": "string" },
+    "createdAt": { "type": "string" },
+    "updatedAt": { "type": "string" },
+    "status": { "enum": ["idle", "running", "completed", "blocked", "failed", "cancelled"] },
+    "activeRunID": { "type": ["string", "null"] },
+    "messages": { "type": "array" }
+  },
+  "additionalProperties": true
+}

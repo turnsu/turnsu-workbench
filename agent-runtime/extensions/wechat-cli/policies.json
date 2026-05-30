@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "agent-extension-policy-v1",
+  "extensionID": "wechat-cli",
+  "rules": [
+    {
+      "action": "read_fixture_export",
+      "status": "pass",
+      "reason": "Fixture exports are local test artifacts."
+    },
+    {
+      "action": "read_user_export_file",
+      "status": "needs_confirmation",
+      "reason": "User-provided exports may contain private WeChat content and require explicit operator confirmation."
+    },
+    {
+      "action": "run_live_wechat_cli",
+      "status": "blocked",
+      "reason": "Live wechat-cli commands can read the user's active WeChat data and are outside this MVP boundary."
+    },
+    {
+      "action": "read_live_wechat",
+      "status": "blocked",
+      "reason": "Direct live WeChat client/database reads remain prohibited."
+    }
+  ]
+}

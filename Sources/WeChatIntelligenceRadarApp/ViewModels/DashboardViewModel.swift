@@ -1,0 +1,811 @@
+import Foundation
+import AppKit
+import SwiftUI
+import UniformTypeIdentifiers
+
+@MainActor
+final class DashboardViewModel: ObservableObject {
+    @Published private(set) var snapshot: IntelligenceSnapshot = .empty
+    @Published private(set) var logs: [AgentRunLog] = []
+    @Published private(set) var capabilities: [Capability] = []
+    @Published private(set) var policies: [PolicyDecision] = []
+    @Published private(set) var envelope: PlannerEnvelope?
+    @Published private(set) var copyStatus: String = "可复制"
+    @Published private(set) var syncState: AgentSyncState = .idle
+    @Published private(set) var artifactStatus: AgentRunArtifactStatus?
+    @Published private(set) var terminalData: TerminalDataSnapshot = .empty
+    @Published private(set) var refreshStatus: String = "idle · not_run"
+    @Published private(set) var runtimeCommandStatus: String = "idle"
+    @Published var selectedGroupID: UUID?
+    @Published var selectedWindow: TimeWindow = .month
+    @Published var selectedWorkspace: TerminalWorkspace = .home
+    @Published var selectedTokenID: String?
+    @Published var selectedMessageID: UUID?
+    @Published var selectedEvidenceID: UUID?
+    @Published var selectedAlertID: UUID?
+    @Published var selectedArtifactPath: String?
+    @Published var selectedCrystalID: UUID?
+    @Published var selectedProposalID: UUID?
+    @Published var selectedMemoryID: UUID?
+    @Published var selectedHandoffID: UUID?
+    @Published var selectedOperationsTab: OperationsDeckTab = .run
+    @Published var searchQuery: String = ""
+    @Published var agentDaemonStatus: AgentDaemonStatus = .unavailable
+    @Published var agentSessions: [AgentSession] = []
+    @Published var selectedAgentSessionID: String?
+    @Published var agentMessages: [AgentMessage] = []
+    @Published var agentStreamEvents: [AgentStreamEvent] = []
+    @Published var agentSkills: [AgentSkillManifest] = []
+    @Published var agentExtensions: [AgentExtensionManifest] = []
+    @Published var selectedAgentSkillIDs: Set<String> = [
+        "wechat-onchain-intelligence",
+        "cmc-market-radar"
+    ]
+    @Published var selectedAgentExtensionIDs: Set<String> = [
+        "wechat-cli-export-bridge",
+        "cmc-skill-hub"
+    ]
+    @Published var agentTasks: [AgentLongTask] = []
+    @Published var agentToolCalls: [AgentToolCallRecord] = []
+    @Published var agentRunManifest: AgentRunManifest?
+    @Published var agentControlSummary: AgentControlPlaneSummary?
+    @Published var agentContextSummary: AgentContextPlaneSummary?
+    @Published var agentOpsSnapshot: AgentOpsSnapshot = AgentOpsRuntimeStore().read()
+    @Published var selectedAgentEventID: String?
+    @Published var selectedAgentInspector: AgentInspectorSelection = .overview
+    @Published var agentRunDetailsExpanded: Bool = false
+    @Published var agentPrompt: String = ""
+    @Published var agentAttachments: [AgentAttachment] = []
+    @Published var agentSubmitStatus: String = "daemon_not_checked"
+
+    private var backend: RuntimeBackend
+    private let runDate: Date
+    private var runCount = 0
+    private let agentClient: AgentDaemonClient
+    private let agentEventClient: AgentEventStreamClient
+    private let agentStreamStore: AgentStreamStore
+    private let agentAttachmentStore: AgentAttachmentStore
+    private let agentToolRegistryStore: AgentToolRegistryStore
+    private let agentOpsRuntimeStore: AgentOpsRuntimeStore
+    private var agentEventStreamTask: Task<Void, Never>?
+
+    init(
+        backend: RuntimeBackend = RuntimeBackend(),
+        runDate: Date = Date(),
+        initialWorkspace: TerminalWorkspace = .home,
+        agentClient: AgentDaemonClient = AgentDaemonClient(),
+        agentEventClient: AgentEventStreamClient = AgentEventStreamClient(),
+        agentStreamStore: AgentStreamStore = AgentStreamStore(),
+        agentAttachmentStore: AgentAttachmentStore = AgentAttachmentStore(),
+        agentToolRegistryStore: AgentToolRegistryStore = AgentToolRegistryStore(),
+        agentOpsRuntimeStore: AgentOpsRuntimeStore = AgentOpsRuntimeStore()
+    ) {
+        self.backend = backend
+        self.runDate = runDate
+        self.selectedWorkspace = initialWorkspace
+        self.agentClient = agentClient
+        self.agentEventClient = agentEventClient
+        self.agentStreamStore = agentStreamStore
+        self.agentAttachmentStore = agentAttachmentStore
+        self.agentToolRegistryStore = agentToolRegistryStore
+        self.agentOpsRuntimeStore = agentOpsRuntimeStore
+        refresh(reason: "initial")
+        refreshAgentWorkspace()
+    }
+
+    var headerDateText: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy/MM/dd"
+        return formatter.string(from: runDate)
+    }
+
+    var subtitle: String {
+        "2026-04-24 - 2026-05-23 · 共 \(snapshot.groups.first?.memberCount ?? 0) 个群 · \(selectedWindow.rawValue)窗口"
+    }
+
+    func refresh(reason: String = "manual") {
+        runCount += 1
+        syncState = AgentSyncState(
+            status: .running,
+            runID: "pending",
+            lastRunAt: AgentDateFormatting.isoString(Date()),
+            lastSuccessAt: syncState.lastSuccessAt,
+            sourceFreshness: syncState.sourceFreshness,
+            errorMessage: nil,
+            artifactPath: syncState.artifactPath
+        )
+        refreshStatus = "running · \(reason)"
+        let state = backend.execute(.refreshRun(
+            reason: reason,
+            selectedGroupID: selectedGroupID,
+            window: selectedWindow,
+            date: runDate
+        ))
+        apply(state)
+        if selectedTokenID == nil {
+            selectedTokenID = terminalData.tokenEntities.first?.tokenID
+        }
+        refreshStatus = "\(syncState.status.rawValue) · \(syncState.sourceFreshness)"
+        copyStatus = "可复制"
+        appendLog(.info, "UI trigger=\(reason)，runID=\(syncState.runID)，window=\(selectedWindow.rawValue)，group=\(selectedGroupID?.uuidString.prefix(8) ?? "all")。")
+    }
+
+    func select(group: ChatGroup?) {
+        selectedGroupID = group?.id
+        refresh(reason: group == nil ? "select_all_groups" : "select_group")
+    }
+
+    func updateWindow(_ window: TimeWindow) {
+        selectedWindow = window
+        refresh(reason: "change_time_window")
+    }
+
+    func copySummaryToPasteboard() {
+        let text = """
+        \(snapshot.briefing.title)
+        \(snapshot.briefing.body)
+        Web3: \(snapshot.web3.detectedSymbols.joined(separator: "/")) · \(snapshot.web3.status)
+        Market source: \(snapshot.web3.market.sourceName) · \(snapshot.web3.market.upstreamStatus)
+        """
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        copyStatus = "已复制"
+        appendLog(.info, "摘要已复制到剪贴板，包含 Web3 market context 状态。")
+    }
+
+    func select(workspace: TerminalWorkspace) {
+        selectedWorkspace = workspace
+    }
+
+    func openToken(_ tokenID: String) {
+        apply(backend.execute(.openToken(tokenID)))
+        selectedWorkspace = .token
+    }
+
+    func selectMessage(_ messageID: UUID) {
+        apply(backend.execute(.selectMessage(messageID)))
+    }
+
+    func createTaskFromSelectedMessage() {
+        guard let selectedMessageID else { return }
+        apply(backend.execute(.createTaskFromMessage(selectedMessageID)))
+        selectedOperationsTab = .tasks
+    }
+
+    func addSelectedTokenToWatchlist() {
+        guard let selectedTokenID else { return }
+        apply(backend.execute(.addTokenToWatchlist(selectedTokenID)))
+        selectedWorkspace = .watchlist
+    }
+
+    func acknowledgeAlert(_ alertID: UUID) {
+        apply(backend.execute(.acknowledgeAlert(alertID)))
+    }
+
+    func muteAlert(_ alertID: UUID) {
+        apply(backend.execute(.muteAlert(alertID)))
+    }
+
+    func resolveAlert(_ alertID: UUID) {
+        apply(backend.execute(.resolveAlert(alertID)))
+    }
+
+    func copySelectedEvidenceToPasteboard() {
+        guard let evidence = selectedEvidence else { return }
+        _ = backend.execute(.copyEvidence(evidence.id))
+        let text = "\(evidence.title)\n\(evidence.summary)\nsource=\(evidence.source) freshness=\(evidence.freshness) confidence=\(String(format: "%.2f", evidence.confidence))"
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        copyStatus = "Evidence copied"
+        appendLog(.info, "Evidence copied: \(evidence.id.uuidString.prefix(8))。")
+    }
+
+    func openArtifactReference(_ path: String) {
+        apply(backend.execute(.openArtifactReference(path)))
+        selectedOperationsTab = .artifacts
+    }
+
+    func selectCrystal(_ crystalID: UUID) {
+        apply(backend.execute(.selectCrystal(crystalID)))
+    }
+
+    func selectProposal(_ proposalID: UUID) {
+        apply(backend.execute(.selectProposal(proposalID)))
+    }
+
+    func acceptSelectedProposal() {
+        guard let selectedProposalID else { return }
+        apply(backend.execute(.acceptProposal(selectedProposalID)))
+        selectedOperationsTab = .tasks
+    }
+
+    func rejectSelectedProposal(reason: String = "Rejected from Agent Proposal panel.") {
+        guard let selectedProposalID else { return }
+        apply(backend.execute(.rejectProposal(selectedProposalID, reason: reason)))
+        selectedOperationsTab = .logs
+    }
+
+    func createHandoffFromSelectedCrystal() {
+        let ids = selectedCrystalID.map { [$0] } ?? terminalData.proactive.crystals.prefix(3).map(\.id)
+        apply(backend.execute(.createHandoff(crystalIDs: ids)))
+        selectedOperationsTab = .artifacts
+    }
+
+    func archiveSelectedHandoff() {
+        guard let id = selectedHandoff?.id else { return }
+        apply(backend.execute(.archiveHandoff(id)))
+        selectedOperationsTab = .artifacts
+    }
+
+    func purgeArchivedHandoffs() {
+        apply(backend.execute(.purgeArchivedHandoffs))
+        selectedOperationsTab = .artifacts
+    }
+
+    func markSelectedCrystalUseful() {
+        guard let selectedCrystalID else { return }
+        apply(backend.execute(.markCrystalUseful(selectedCrystalID)))
+    }
+
+    func markSelectedCrystalFalsePositive() {
+        guard let selectedCrystalID else { return }
+        apply(backend.execute(.markCrystalFalsePositive(selectedCrystalID, reason: "Marked false positive from Crystal Stream.")))
+    }
+
+    func refreshAgentWorkspace() {
+        let registry = agentToolRegistryStore.read()
+        agentSkills = registry.skills
+        agentExtensions = registry.extensions
+        if selectedAgentSkillIDs.isEmpty {
+            selectedAgentSkillIDs = Set(registry.skills.filter { $0.defaultSelected ?? false }.map(\.skillID))
+        }
+        if selectedAgentExtensionIDs.isEmpty {
+            selectedAgentExtensionIDs = Set(registry.extensions.filter { $0.defaultSelected ?? false }.map(\.extensionID))
+        }
+        agentSessions = agentStreamStore.readSessions()
+        agentTasks = agentStreamStore.readTasks()
+        agentOpsSnapshot = agentOpsRuntimeStore.read()
+        if selectedAgentSessionID == nil {
+            selectedAgentSessionID = agentSessions.first?.sessionID
+        }
+        reloadSelectedAgentSession()
+        Task {
+            do {
+                let status = try await agentClient.health()
+                let remoteRegistry = try? await agentClient.capabilities()
+                await MainActor.run {
+                    self.agentDaemonStatus = status
+                    self.agentSubmitStatus = "daemon:\(status.status)"
+                    let remoteSkills = remoteRegistry?.skills ?? []
+                    let remoteExtensions = remoteRegistry?.extensions ?? []
+                    if !remoteSkills.isEmpty {
+                        self.agentSkills = remoteSkills
+                    } else if self.agentSkills.isEmpty {
+                        self.agentSkills = status.skills ?? []
+                    }
+                    if !remoteExtensions.isEmpty {
+                        self.agentExtensions = remoteExtensions
+                    } else if self.agentExtensions.isEmpty {
+                        self.agentExtensions = status.extensions ?? []
+                    }
+                    self.agentOpsSnapshot = self.agentOpsRuntimeStore.read()
+                }
+            } catch {
+                await MainActor.run {
+                    self.agentDaemonStatus = .unavailable
+                    self.agentSubmitStatus = "daemon_unavailable_start_script"
+                }
+            }
+        }
+    }
+
+    func selectAgentSession(_ sessionID: String) {
+        selectedAgentSessionID = sessionID
+        selectedAgentInspector = .message(sessionID)
+        reloadSelectedAgentSession()
+    }
+
+    func renameAgentSession(_ sessionID: String, title: String) {
+        do {
+            if let updated = try agentStreamStore.renameSession(sessionID: sessionID, title: title) {
+                agentSessions = agentStreamStore.readSessions()
+                if selectedAgentSessionID == sessionID {
+                    agentMessages = updated.messages
+                }
+                agentSubmitStatus = "session_renamed"
+            }
+        } catch {
+            agentSubmitStatus = "session_rename_failed:\(error.localizedDescription)"
+        }
+    }
+
+    func toggleAgentSkill(_ skillID: String) {
+        if selectedAgentSkillIDs.contains(skillID) {
+            selectedAgentSkillIDs.remove(skillID)
+        } else {
+            selectedAgentSkillIDs.insert(skillID)
+        }
+    }
+
+    func toggleAgentExtension(_ extensionID: String) {
+        if selectedAgentExtensionIDs.contains(extensionID) {
+            selectedAgentExtensionIDs.remove(extensionID)
+        } else {
+            selectedAgentExtensionIDs.insert(extensionID)
+        }
+    }
+
+    func pickAgentImageAttachment() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.jpeg, .png, .gif, .webP]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let attachment = try agentAttachmentStore.copyImage(from: url)
+            agentAttachments.append(attachment)
+            selectedAgentSkillIDs.insert("image-analysis")
+            agentSubmitStatus = "attachment_ready"
+        } catch {
+            agentSubmitStatus = "attachment_failed:\(error.localizedDescription)"
+        }
+    }
+
+    func clearAgentAttachments() {
+        agentAttachments = []
+        agentSubmitStatus = "attachments_cleared"
+    }
+
+    func applyAgentTemplate(_ template: AgentTaskTemplate) {
+        agentPrompt = template.prompt
+        for skillID in template.defaultSkillIDs {
+            selectedAgentSkillIDs.insert(skillID)
+        }
+        for extensionID in template.defaultExtensionIDs {
+            selectedAgentExtensionIDs.insert(extensionID)
+        }
+        agentSubmitStatus = "draft_ready:\(template.id)"
+        selectedAgentInspector = .overview
+    }
+
+    func selectAgentInspector(_ selection: AgentInspectorSelection) {
+        selectedAgentInspector = selection
+        if case .event(let eventID) = selection {
+            selectedAgentEventID = eventID
+        }
+    }
+
+    func toggleAgentRunDetails() {
+        agentRunDetailsExpanded.toggle()
+    }
+
+    func submitAgentPrompt() {
+        let prompt = agentPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else {
+            agentSubmitStatus = "prompt_empty"
+            return
+        }
+        agentSubmitStatus = "submitting"
+        let selectedSkills = Array(selectedAgentSkillIDs).sorted()
+        let selectedExtensions = Array(selectedAgentExtensionIDs).sorted()
+        let attachments = agentAttachments
+        let refs = agentContextRefs
+        Task {
+            do {
+                let sessionID: String
+                if let existing = selectedAgentSessionID {
+                    sessionID = existing
+                } else {
+                    let session = try await agentClient.createSession(title: prompt.prefix(28).description)
+                    sessionID = session.sessionID
+                }
+                let response = try await agentClient.postMessageAsync(
+                    sessionID: sessionID,
+                    prompt: prompt,
+                    selectedSkillIDs: selectedSkills,
+                    selectedExtensionIDs: selectedExtensions,
+                    attachments: attachments,
+                    contextRefs: refs
+                )
+                await MainActor.run {
+                    self.selectedAgentSessionID = response.session.sessionID
+                    self.agentPrompt = ""
+                    self.agentAttachments = []
+                    self.agentMessages = response.session.messages
+                    self.agentTasks = [response.task] + self.agentTasks.filter { $0.taskID != response.task.taskID }
+                    self.agentStreamEvents = []
+                    self.agentToolCalls = []
+                    self.agentRunManifest = nil
+                    self.agentControlSummary = nil
+                    self.agentContextSummary = nil
+                    self.agentSubmitStatus = "run_started:\(response.runID)"
+                    self.subscribeAgentEvents(runID: response.runID)
+                    self.selectedAgentInspector = .task(response.task.taskID)
+                    self.agentRunDetailsExpanded = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.agentSubmitStatus = "submit_failed:\(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    func pauseSelectedAgentRun() {
+        controlSelectedAgentRun("pause")
+    }
+
+    func resumeSelectedAgentRun() {
+        controlSelectedAgentRun("resume")
+    }
+
+    func cancelSelectedAgentRun() {
+        controlSelectedAgentRun("cancel")
+    }
+
+    var selectedAgentSession: AgentSession? {
+        agentSessions.first(where: { $0.sessionID == selectedAgentSessionID })
+    }
+
+    var selectedAgentRunID: String? {
+        selectedAgentSession?.activeRunID ?? agentTasks.first?.runID
+    }
+
+    var selectedAgentEvent: AgentStreamEvent? {
+        agentStreamEvents.first(where: { $0.eventID == selectedAgentEventID }) ?? agentStreamEvents.last
+    }
+
+    var agentAssistantText: String {
+        let text = agentStreamEvents.compactMap(\.delta).joined()
+        if !text.isEmpty { return text }
+        return agentMessages.last(where: { $0.role == "assistant" })?.plainText ?? ""
+    }
+
+    var agentThreadState: AgentThreadState {
+        AgentWorkspaceStateAdapter.makeThreadState(
+            selectedSession: selectedAgentSession,
+            messages: agentMessages,
+            streamEvents: agentStreamEvents,
+            toolCalls: agentToolCalls,
+            runManifest: agentRunManifest,
+            controlSummary: agentControlSummary,
+            contextSummary: agentContextSummary,
+            longTasks: agentTasks,
+            daemonStatus: agentDaemonStatus,
+            contextRefs: agentContextRefs,
+            selectedSkillIDs: selectedAgentSkillIDs,
+            selectedExtensionIDs: selectedAgentExtensionIDs,
+            pendingAttachments: agentAttachments,
+            draftPrompt: agentPrompt,
+            selectedEventID: selectedAgentEventID
+        )
+    }
+
+    var agentContextChips: [AgentContextChip] {
+        AgentWorkspaceStateAdapter.makeContextChips(from: agentContextRefs)
+    }
+
+    var agentContextRefs: [RuntimeObjectReference] {
+        var refs: [RuntimeObjectReference] = []
+        if let crystal = selectedCrystal {
+            refs.append(RuntimeObjectReference(
+                id: crystal.id.uuidString,
+                kind: .crystal,
+                label: crystal.title,
+                path: "runtime/crystals/crystals.json",
+                value: crystal.id.uuidString,
+                source: "swift_agent_console_selection",
+                freshness: crystal.freshness,
+                confidence: crystal.confidence,
+                privacyLevel: "local",
+                redactionStatus: "pointer_only",
+                generatedAt: crystal.updatedAt,
+                runID: crystal.provenance.runID
+            ))
+        }
+        if let token = selectedToken {
+            refs.append(RuntimeObjectReference(
+                id: token.tokenID,
+                kind: .token,
+                label: "\(token.symbol) · \(token.chain)",
+                path: "runtime/entities/token-entities.json",
+                value: token.tokenID,
+                source: "swift_agent_console_selection",
+                freshness: ProactiveFreshness(rawValue: token.freshness) ?? .unknown,
+                confidence: token.confidence,
+                privacyLevel: "local",
+                redactionStatus: "pointer_only",
+                generatedAt: nil,
+                runID: syncState.runID
+            ))
+        }
+        if let message = selectedMessage {
+            refs.append(RuntimeObjectReference(
+                id: message.id.uuidString,
+                kind: .message,
+                label: "\(message.groupName) · \(message.sender)",
+                path: "runtime/wechat/messages.normalized.json",
+                value: message.id.uuidString,
+                source: "swift_agent_console_selection",
+                freshness: .fixture,
+                confidence: nil,
+                privacyLevel: "private",
+                redactionStatus: "pointer_only",
+                generatedAt: AgentDateFormatting.isoString(message.sentAt),
+                runID: syncState.runID
+            ))
+        }
+        return refs
+    }
+
+    var selectedToken: TokenEntity? {
+        terminalData.tokenEntities.first(where: { $0.tokenID == selectedTokenID }) ?? filteredTokens.first ?? terminalData.tokenEntities.first
+    }
+
+    var selectedMessage: NormalizedWeChatMessage? {
+        terminalData.normalizedMessages.first(where: { $0.id == selectedMessageID })
+    }
+
+    var selectedEvidence: EvidenceItem? {
+        if let selectedEvidenceID {
+            return terminalData.evidenceItems.first(where: { $0.id == selectedEvidenceID })
+        }
+        if let selectedTokenID {
+            return terminalData.evidenceItems.first(where: { $0.tokenIDs.contains(selectedTokenID) })
+        }
+        if let selectedMessageID {
+            return terminalData.evidenceItems.first(where: { $0.messageIDs.contains(selectedMessageID) })
+        }
+        return terminalData.evidenceItems.first
+    }
+
+    var selectedAlert: AlertRecord? {
+        terminalData.alerts.first(where: { $0.id == selectedAlertID }) ?? terminalData.alerts.first
+    }
+
+    var selectedCrystal: IntelligenceCrystal? {
+        terminalData.proactive.crystals.first(where: { $0.id == selectedCrystalID }) ?? filteredCrystals.first ?? terminalData.proactive.crystals.first
+    }
+
+    var selectedProposal: AgentProposal? {
+        if let selectedProposalID {
+            return terminalData.proactive.proposals.first(where: { $0.id == selectedProposalID })
+        }
+        if hasSearch {
+            return filteredProposals.first
+        }
+        if let selectedCrystal {
+            return terminalData.proactive.proposals.first { proposal in
+                proposal.crystalRefs.contains { $0.id == selectedCrystal.id.uuidString }
+            }
+        }
+        return terminalData.proactive.proposals.first
+    }
+
+    var selectedMemory: MemoryEntry? {
+        terminalData.proactive.memory.first(where: { $0.id == selectedMemoryID })
+    }
+
+    var selectedHandoff: HandoffPacket? {
+        terminalData.proactive.handoffs.first(where: { $0.id == selectedHandoffID }) ?? filteredHandoffs.first ?? terminalData.proactive.handoffs.first
+    }
+
+    var selectedTokenMessages: [NormalizedWeChatMessage] {
+        guard let token = selectedToken else { return [] }
+        return filteredMessages.filter { $0.linkedTokenIDs.contains(token.tokenID) }
+    }
+
+    var selectedTokenMarket: MarketAsset? {
+        guard let token = selectedToken else { return nil }
+        return terminalData.marketSnapshots.flatMap(\.assets).first { $0.symbol == token.symbol }
+    }
+
+    var selectedTokenOnchain: OnchainSnapshot? {
+        guard let token = selectedToken else { return nil }
+        return terminalData.onchainSnapshots.first { $0.tokenID == token.tokenID }
+    }
+
+    var hasSearch: Bool {
+        !normalizedSearchQuery.isEmpty
+    }
+
+    var filteredMessages: [NormalizedWeChatMessage] {
+        guard hasSearch else { return terminalData.normalizedMessages }
+        return terminalData.normalizedMessages.filter { message in
+            matchesSearch([
+                message.groupName,
+                message.sender,
+                message.text,
+                message.extractedSymbols.joined(separator: " "),
+                message.extractedContracts.joined(separator: " "),
+                message.linkedTokenIDs.joined(separator: " ")
+            ])
+        }
+    }
+
+    var filteredTokens: [TokenEntity] {
+        guard hasSearch else { return terminalData.tokenEntities }
+        return terminalData.tokenEntities.filter { token in
+            matchesSearch([
+                token.tokenID,
+                token.symbol,
+                token.name,
+                token.chain,
+                token.contractAddress ?? "",
+                token.aliases.joined(separator: " ")
+            ])
+        }
+    }
+
+    var filteredCrystals: [IntelligenceCrystal] {
+        guard hasSearch else { return terminalData.proactive.crystals }
+        return terminalData.proactive.crystals.filter { crystal in
+            matchesSearch([
+                crystal.title,
+                crystal.rationale,
+                crystal.detail,
+                crystal.sourceMix.joined(separator: " "),
+                crystal.tokenRefs.map { "\($0.label) \($0.id) \($0.value ?? "")" }.joined(separator: " ")
+            ])
+        }
+    }
+
+    var filteredProposals: [AgentProposal] {
+        guard hasSearch else { return terminalData.proactive.proposals }
+        return terminalData.proactive.proposals.filter { proposal in
+            matchesSearch([
+                proposal.title,
+                proposal.summary,
+                proposal.rationale,
+                proposal.action.rawValue,
+                proposal.tokenRefs.map { "\($0.label) \($0.id) \($0.value ?? "")" }.joined(separator: " ")
+            ])
+        }
+    }
+
+    var filteredHandoffs: [HandoffPacket] {
+        guard hasSearch else { return terminalData.proactive.handoffs }
+        return terminalData.proactive.handoffs.filter { handoff in
+            matchesSearch([
+                handoff.title,
+                handoff.summaryText,
+                handoff.status.rawValue,
+                handoff.selectedCrystalRefs.map { $0.label }.joined(separator: " "),
+                handoff.tokenRefs.map { "\($0.label) \($0.id) \($0.value ?? "")" }.joined(separator: " ")
+            ])
+        }
+    }
+
+    var filteredWatchlistItems: [WatchlistItem] {
+        guard hasSearch else { return terminalData.watchlistItems }
+        return terminalData.watchlistItems.filter { item in
+            matchesSearch([
+                item.tokenID,
+                item.symbol,
+                item.chain,
+                item.contractAddress ?? "",
+                item.reason,
+                item.status
+            ])
+        }
+    }
+
+    private var normalizedSearchQuery: String {
+        searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func matchesSearch(_ values: [String]) -> Bool {
+        let query = normalizedSearchQuery
+        guard !query.isEmpty else { return true }
+        return values.contains { $0.lowercased().contains(query) }
+    }
+
+    private func appendLog(_ level: LogLevel, _ message: String) {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        logs.insert(AgentRunLog(level: level, message: message, timestamp: formatter.string(from: Date())), at: 0)
+    }
+
+    private func reloadSelectedAgentSession() {
+        if let session = selectedAgentSession {
+            agentMessages = session.messages
+            agentStreamEvents = agentStreamStore.readEvents(runID: session.activeRunID)
+            agentToolCalls = agentStreamStore.readToolCalls(runID: session.activeRunID)
+            loadAgentRunReadModels(runID: session.activeRunID)
+        } else {
+            agentMessages = []
+            agentStreamEvents = []
+            agentToolCalls = []
+            loadAgentRunReadModels(runID: nil)
+        }
+        selectedAgentEventID = agentStreamEvents.last?.eventID
+    }
+
+    private func loadAgentRunReadModels(runID: String?) {
+        agentRunManifest = agentStreamStore.readRunManifest(runID: runID)
+        agentControlSummary = agentStreamStore.readControlSummary(runID: runID)
+        agentContextSummary = agentStreamStore.readContextSummary(runID: runID)
+    }
+
+    private func subscribeAgentEvents(runID: String) {
+        agentEventStreamTask?.cancel()
+        let client = agentEventClient
+        agentEventStreamTask = Task { [weak self] in
+            do {
+                for try await event in client.events(runID: runID) {
+                    await MainActor.run {
+                        guard let self else { return }
+                        if !self.agentStreamEvents.contains(where: { $0.eventID == event.eventID }) {
+                            self.agentStreamEvents.append(event)
+                        }
+                        self.selectedAgentEventID = event.eventID
+                        self.agentToolCalls = self.agentStreamStore.readToolCalls(runID: runID)
+                        self.loadAgentRunReadModels(runID: runID)
+                        if Self.isTerminalAgentEvent(event) {
+                            self.apply(self.backend.execute(.importAgentProductMutations(runID: runID)))
+                            self.agentSessions = self.agentStreamStore.readSessions()
+                            self.agentTasks = self.agentStreamStore.readTasks()
+                            if let session = self.agentSessions.first(where: { $0.sessionID == self.selectedAgentSessionID }) {
+                                self.agentMessages = session.messages
+                            }
+                            self.agentSubmitStatus = "run_\(event.status ?? "completed"):\(runID)"
+                        }
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self?.agentSubmitStatus = "stream_failed:\(error.localizedDescription)"
+                    self?.agentStreamEvents = self?.agentStreamStore.readEvents(runID: runID) ?? []
+                    self?.agentToolCalls = self?.agentStreamStore.readToolCalls(runID: runID) ?? []
+                    self?.loadAgentRunReadModels(runID: runID)
+                }
+            }
+        }
+    }
+
+    private static func isTerminalAgentEvent(_ event: AgentStreamEvent) -> Bool {
+        ["run.completed", "run.failed", "run.cancelled"].contains(event.type)
+    }
+
+    private func controlSelectedAgentRun(_ action: String) {
+        guard let runID = selectedAgentRunID else {
+            agentSubmitStatus = "run_missing"
+            return
+        }
+        Task {
+            do {
+                _ = try await agentClient.control(runID: runID, action: action)
+                await MainActor.run {
+                    self.agentSubmitStatus = "run_\(action)"
+                    self.refreshAgentWorkspace()
+                }
+            } catch {
+                await MainActor.run {
+                    self.agentSubmitStatus = "run_\(action)_failed:\(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func apply(_ state: RuntimeBackendState) {
+        snapshot = state.result.snapshot
+        logs = state.result.logs
+        capabilities = state.result.capabilities
+        policies = state.result.policies
+        envelope = state.result.envelope
+        syncState = state.result.syncState
+        artifactStatus = state.result.artifactStatus
+        terminalData = state.result.terminalData
+        runtimeCommandStatus = state.commandStatus
+        selectedMessageID = state.selection.selectedMessageID
+        selectedTokenID = state.selection.selectedTokenID ?? selectedTokenID
+        selectedEvidenceID = state.selection.selectedEvidenceID
+        selectedAlertID = state.selection.selectedAlertID
+        selectedArtifactPath = state.selection.selectedArtifactPath
+        selectedCrystalID = state.selection.selectedCrystalID ?? selectedCrystalID ?? state.result.terminalData.proactive.crystals.first?.id
+        selectedProposalID = state.selection.selectedProposalID ?? selectedProposalID
+        selectedMemoryID = state.selection.selectedMemoryID
+        selectedHandoffID = state.selection.selectedHandoffID ?? selectedHandoffID
+    }
+}

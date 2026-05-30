@@ -1,0 +1,126 @@
+{
+  "schemaVersion": "agent-public-surface-v1",
+  "updatedAt": "2026-05-28T00:00:00.000Z",
+  "capabilities": [],
+  "tools": [],
+  "internalToolsExposed": false,
+  "surfacePolicy": {
+    "frontendShows": ["skills", "extensions", "templates"],
+    "frontendHides": ["internalTools", "providers", "normalizers", "policyImplementations"],
+    "notes": "Swift UI sends selected skill/extension IDs. Agent Runtime Host resolves internal tools and providers."
+  },
+  "skills": [
+    {
+      "skillID": "wechat-onchain-intelligence",
+      "title": "微信 x 链上情报",
+      "description": "合并本地微信情报、Token、行情和链上快照，生成情报卡和行动建议。",
+      "category": "intelligence",
+      "defaultSelected": true,
+      "status": "available",
+      "permissionSummary": "本地 artifact 读写；真实微信读取保持阻断。"
+    },
+    {
+      "skillID": "cmc-market-radar",
+      "title": "CoinMarketCap 市场雷达",
+      "description": "读取 CMC / CoinMarketCap MCP 风格市场证据，形成行情快照、市场风险和观察线索。",
+      "category": "market",
+      "defaultSelected": true,
+      "status": "available",
+      "permissionSummary": "默认使用 fixture/normalized provider；live MCP 需要显式配置。"
+    },
+    {
+      "skillID": "market-regime-review",
+      "title": "市场状态复核",
+      "description": "判断市场状态、风险预算和需要继续追踪的 Token/板块。",
+      "category": "market",
+      "defaultSelected": false,
+      "status": "available",
+      "permissionSummary": "本地证据优先；缺少 live provider 时标记降级。"
+    },
+    {
+      "skillID": "social-price-divergence",
+      "title": "讨论与价格偏离",
+      "description": "比较微信讨论热度、公开关注度和短期价格变化是否背离。",
+      "category": "research",
+      "defaultSelected": false,
+      "status": "available",
+      "permissionSummary": "研究用途，不生成交易指令。"
+    },
+    {
+      "skillID": "image-analysis",
+      "title": "图片理解",
+      "description": "把截图或图片与当前情报上下文合并分析。",
+      "category": "multimodal",
+      "defaultSelected": false,
+      "status": "available",
+      "permissionSummary": "图片 hash 和记录文件本地保存；外发分析取决于 Kimi 配置。"
+    },
+    {
+      "skillID": "long-task",
+      "title": "长期任务",
+      "description": "创建可恢复的本地长期观察任务、复盘和交接记录。",
+      "category": "task",
+      "defaultSelected": false,
+      "status": "available",
+      "permissionSummary": "只写本地 runtime artifact。"
+    },
+    {
+      "skillID": "handoff-writer",
+      "title": "交接包生成",
+      "description": "把情报卡、行动建议、证据和未决问题整理成本地交接包。",
+      "category": "handoff",
+      "defaultSelected": false,
+      "status": "available",
+      "permissionSummary": "默认生成脱敏本地预览，不对外发布。"
+    }
+  ],
+  "extensions": [
+    {
+      "extensionID": "wechat-cli-export-bridge",
+      "title": "WeChatCLI 能力包",
+      "description": "读取用户提供的导出/fixture 文件并归一化为 Agent 可用的微信消息。",
+      "category": "wechat",
+      "defaultSelected": true,
+      "status": "available",
+      "permissionSummary": "真实 live wechat-cli 命令已内置为 blocked。"
+    },
+    {
+      "extensionID": "cmc-skill-hub",
+      "title": "CoinMarketCap MCP 能力包",
+      "description": "提供 CoinMarketCap Skill Hub / MCP 风格市场能力，支持 fixture、normalized file 和可选 MCP provider。",
+      "category": "market",
+      "defaultSelected": true,
+      "status": "available",
+      "permissionSummary": "MCP provider 不可用时明确降级，不伪造 live 数据。"
+    },
+    {
+      "extensionID": "local-memory",
+      "title": "本地记忆",
+      "description": "保存有用/误报/偏好等长期判断，影响后续排序和回顾。",
+      "category": "memory",
+      "defaultSelected": false,
+      "status": "available",
+      "permissionSummary": "只写本地 memory artifact。"
+    }
+  ],
+  "templates": [
+    {
+      "templateID": "daily-intel",
+      "title": "分析今日重点",
+      "skillIDs": ["wechat-onchain-intelligence", "cmc-market-radar"],
+      "extensionIDs": ["wechat-cli-export-bridge", "cmc-skill-hub"]
+    },
+    {
+      "templateID": "token-check",
+      "title": "检查某个 Token",
+      "skillIDs": ["wechat-onchain-intelligence", "market-regime-review"],
+      "extensionIDs": ["cmc-skill-hub"]
+    },
+    {
+      "templateID": "long-watch",
+      "title": "创建长期监控",
+      "skillIDs": ["long-task", "handoff-writer"],
+      "extensionIDs": ["wechat-cli-export-bridge", "cmc-skill-hub"]
+    }
+  ]
+}

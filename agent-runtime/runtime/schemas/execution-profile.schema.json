@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-execution-profile.schema.json",
+  "title": "Agent Execution Profile",
+  "type": "object",
+  "required": ["schemaVersion", "profileID", "runID", "taskID", "requiredStages", "workerPolicy"],
+  "properties": {
+    "schemaVersion": { "const": "agent-execution-profile-v1" },
+    "profileID": { "type": "string" },
+    "runID": { "type": "string" },
+    "taskID": { "type": "string" },
+    "requiredStages": { "type": "array", "items": { "type": "string" } },
+    "workerPolicy": { "type": "object" }
+  }
+}
+

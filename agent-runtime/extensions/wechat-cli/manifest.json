@@ -1,0 +1,36 @@
+{
+  "id": "wechat-cli",
+  "schemaVersion": "agent-extension-package-v1",
+  "title": "WeChatCLI Export Extension",
+  "description": "Migrates WeChatCLI command contracts and export normalization into the Agent Runtime Host without running live WeChat reads.",
+  "publicExtension": {
+    "extensionID": "wechat-cli-export-bridge",
+    "title": "WeChatCLI 能力包",
+    "description": "读取用户提供的导出/fixture 文件并归一化为 Agent 可用的微信消息。",
+    "category": "wechat",
+    "defaultSelected": true,
+    "status": "available",
+    "permissionSummary": "fixture/local normalized read is allowed; live init/history/search/sessions/new-messages are blocked."
+  },
+  "publicSkills": [],
+  "internalTools": [
+    "wechat_cli.import_export_file",
+    "wechat_cli.live_command"
+  ],
+  "providers": [
+    "fixtureExportProvider",
+    "userExportFileProvider",
+    "blockedLiveCommandProvider"
+  ],
+  "policies": {
+    "read_fixture_export": "pass",
+    "read_user_export_file": "needs_confirmation",
+    "run_live_wechat_cli": "blocked",
+    "read_live_wechat": "blocked"
+  },
+  "sourceReference": {
+    "path": "wechat-cli_raw",
+    "migrationMode": "contract_and_normalizer_only",
+    "notMigrated": ["key_scanner", "decrypt", "db_cache", "live_history", "live_search"]
+  }
+}

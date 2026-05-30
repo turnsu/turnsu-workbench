@@ -1,0 +1,67 @@
+{
+  "id": "cmc-skill-hub",
+  "schemaVersion": "agent-extension-package-v1",
+  "title": "CMC Skill Hub Extension",
+  "description": "CoinMarketCap Skill Hub style market intelligence module with fixture, normalized-file, and optional MCP provider backends.",
+  "publicExtension": {
+    "extensionID": "cmc-skill-hub",
+    "title": "CoinMarketCap MCP 能力包",
+    "description": "提供 CoinMarketCap Skill Hub / MCP 风格市场能力，支持 fixture、normalized file 和可选 MCP provider。",
+    "category": "market",
+    "defaultSelected": true,
+    "status": "available",
+    "permissionSummary": "MCP provider 不可用时明确降级，不伪造 live 数据。"
+  },
+  "publicSkills": [
+    {
+      "skillID": "cmc-market-radar",
+      "title": "CoinMarketCap 市场雷达",
+      "description": "读取 CMC / CoinMarketCap MCP 市场证据，形成行情快照、市场风险和观察线索。",
+      "category": "market",
+      "defaultSelected": true,
+      "status": "available",
+      "permissionSummary": "默认 fixture/normalized provider；live MCP 显式配置后启用。"
+    },
+    {
+      "skillID": "market-regime-review",
+      "title": "市场状态复核",
+      "description": "判断市场状态、风险预算和需要继续追踪的 Token/板块。",
+      "category": "market",
+      "defaultSelected": false,
+      "status": "available",
+      "permissionSummary": "研究用途，不生成交易指令。"
+    },
+    {
+      "skillID": "social-price-divergence",
+      "title": "讨论与价格偏离",
+      "description": "比较社交讨论和短期价格变化是否背离。",
+      "category": "research",
+      "defaultSelected": false,
+      "status": "available",
+      "permissionSummary": "研究用途，不生成交易指令。"
+    }
+  ],
+  "internalTools": [
+    "cmc.read_market_evidence",
+    "cmc.detect_market_regime",
+    "cmc.track_social_price_divergence",
+    "cmc.request_mcp_refresh"
+  ],
+  "providers": [
+    "fixtureProvider",
+    "normalizedFileProvider",
+    "mcpProvider"
+  ],
+  "mcpSkills": [
+    "daily_market_overview",
+    "detect_market_regime",
+    "build_daily_market_brief",
+    "track_social_price_divergence"
+  ],
+  "policies": {
+    "fixture_provider": "pass",
+    "normalized_file_provider": "pass",
+    "mcp_provider": "needs_config",
+    "trade_instruction": "blocked"
+  }
+}

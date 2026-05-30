@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "agent-extension-policy-v1",
+  "extensionID": "cmc-skill-hub",
+  "rules": [
+    {
+      "action": "read_fixture_market_evidence",
+      "status": "pass",
+      "reason": "Fixture evidence is local and deterministic for smoke tests."
+    },
+    {
+      "action": "read_normalized_cmc_file",
+      "status": "pass",
+      "reason": "Normalized market artifact is already inside the project runtime boundary."
+    },
+    {
+      "action": "request_live_cmc_mcp",
+      "status": "needs_confirmation",
+      "reason": "Live MCP execution depends on an external connector and should be explicit."
+    },
+    {
+      "action": "generate_trade_instruction",
+      "status": "blocked",
+      "reason": "CMC evidence is research context only, not a trade instruction."
+    }
+  ]
+}

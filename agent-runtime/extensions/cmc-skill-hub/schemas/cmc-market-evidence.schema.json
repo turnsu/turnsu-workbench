@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cmc-market-evidence.schema.json",
+  "title": "CMC Market Evidence",
+  "type": "object",
+  "required": ["status"],
+  "properties": {
+    "schemaVersion": { "type": "string" },
+    "provider": { "type": "string" },
+    "skill": { "type": "string" },
+    "status": { "type": "string" },
+    "generatedAt": { "type": "string" },
+    "market_read": { "type": "object" },
+    "watchlist": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["symbol"],
+        "properties": {
+          "symbol": { "type": "string" },
+          "name": { "type": "string" },
+          "priceUSD": { "type": "number" },
+          "percentChange24h": { "type": "number" },
+          "volume24hUSD": { "type": "number" },
+          "marketCapUSD": { "type": "number" },
+          "risk": { "type": "string" },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "action_guidance": { "type": "array", "items": { "type": "string" } },
+    "freshness_note": { "type": "string" }
+  }
+}

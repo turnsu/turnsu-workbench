@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "wechat-cli-export-fixture-v1",
+  "source": "wechat-cli_raw_contract_fixture",
+  "sessions": [
+    {
+      "sessionID": "group-ai-products",
+      "name": "AI产品蛙虫团",
+      "members": 165
+    }
+  ],
+  "messages": [
+    {
+      "messageID": "fixture-btc-1",
+      "sessionID": "group-ai-products",
+      "sessionName": "AI产品蛙虫团",
+      "sender": "WaytoAGI",
+      "sentAt": "2026-05-26T09:12:00.000Z",
+      "text": "BTC 今天讨论升温，关注 CMC market regime 和 ETF 资金变化。"
+    },
+    {
+      "messageID": "fixture-eth-1",
+      "sessionID": "group-ai-products",
+      "sessionName": "AI产品蛙虫团",
+      "sender": "HowOneAI",
+      "sentAt": "2026-05-26T10:20:00.000Z",
+      "text": "ETH CA 0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee 需要结合链上和市场热度复核。"
+    },
+    {
+      "messageID": "fixture-sol-1",
+      "sessionID": "group-ai-products",
+      "sessionName": "AI产品蛙虫团",
+      "sender": "Vibe Coding",
+      "sentAt": "2026-05-26T11:05:00.000Z",
+      "text": "SOL 生态讨论增加，先加入 watchlist，不做交易动作。"
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "version": "wechat-agent-capability-registry-v1",
+  "defaults": {
+    "loadPolicy": "lazy-by-planner-and-policy-gate",
+    "alwaysOn": [
+      "planner-runtime",
+      "policy-gate",
+      "runtime-observability",
+      "capability-registry"
+    ]
+  },
+  "capabilities": [
+    {
+      "capabilityId": "pi-sdk-runtime",
+      "title": "Pi SDK Runtime Kernel",
+      "description": "Embeds @earendil-works/pi-coding-agent for sessions, ResourceLoader, extension tools, skills, prompts, and event streaming.",
+      "toolIntents": ["read", "draft", "write_private"],
+      "policy": ["built-in bash/edit/write disabled", "project tools only", "SDK dependency pinned"],
+      "observability": ["piRuntime", "registeredTools", "activeTools", "extensionErrors"],
+      "installState": "local_npm_pinned",
+      "status": "available",
+      "securityReview": { "status": "needs_runtime_node_upgrade", "summary": "Pi package installed with --ignore-scripts; package declares Node >=22.19.0 while current local smoke ran on Node 22.17.0." }
+    },
+    {
+      "capabilityId": "planner-runtime",
+      "title": "Planner Runtime",
+      "description": "Builds an auditable planner envelope for chat, tool use, and long tasks.",
+      "toolIntents": ["read", "draft"],
+      "policy": ["fixedWorkflow=false", "no secrets in planner artifacts"],
+      "observability": ["plannerDecisions", "capabilitySelections"],
+      "installState": "local",
+      "status": "available",
+      "securityReview": { "status": "passed", "summary": "Local deterministic planner metadata." }
+    },
+    {
+      "capabilityId": "model-provider",
+      "title": "DeepSeek / Kimi Provider",
+      "description": "Routes text/tool calls to DeepSeek and image analysis to Kimi vision.",
+      "toolIntents": ["draft"],
+      "policy": ["provider keys from env only", "no raw request body artifacts"],
+      "observability": ["modelRoute", "streamTrace"],
+      "installState": "local",
+      "status": "available",
+      "securityReview": { "status": "passed", "summary": "OpenAI-compatible client with redacted errors." }
+    },
+    {
+      "capabilityId": "tool-runner",
+      "title": "Pi Tool Runner",
+      "description": "Executes permissioned local tools for WeChat x on-chain runtime objects.",
+      "toolIntents": ["read", "write_private", "persist_memory"],
+      "policy": ["live WeChat blocked", "external publish blocked", "computer use needs confirmation"],
+      "observability": ["toolCalls", "policyDecisions", "artifacts"],
+      "installState": "local",
+      "status": "available",
+      "securityReview": { "status": "passed", "summary": "Only local artifact reads/writes are pass by default." }
+    },
+    {
+      "capabilityId": "attachment-runtime",
+      "title": "Attachment Runtime",
+      "description": "Copies user images into runtime artifacts and routes image analysis to Kimi.",
+      "toolIntents": ["read", "draft"],
+      "policy": ["image external analysis pass by user preference", "attachment hash recorded"],
+      "observability": ["attachments", "policyDecisions", "modelRoute"],
+      "installState": "local",
+      "status": "available",
+      "securityReview": { "status": "passed", "summary": "No API key or raw request body is persisted." }
+    },
+    {
+      "capabilityId": "task-daemon",
+      "title": "Long Task Daemon",
+      "description": "Keeps sessions, tasks, stream events, and artifacts recoverable outside the Swift app lifecycle.",
+      "toolIntents": ["read", "write_private"],
+      "policy": ["local daemon only", "no LaunchAgent in v1"],
+      "observability": ["taskState", "runEvents", "pid"],
+      "installState": "local",
+      "status": "available",
+      "securityReview": { "status": "passed", "summary": "Local HTTP/SSE daemon bound to 127.0.0.1." }
+    }
+  ],
+  "tools": [
+    { "name": "wechat.read_normalized_messages", "permission": "pass", "description": "Read local normalized WeChat fixture/runtime messages." },
+    { "name": "token.resolve_entities", "permission": "pass", "description": "Read local token entity artifacts." },
+    { "name": "market.read_snapshot", "permission": "pass", "description": "Read local CMC/market snapshot artifacts." },
+    { "name": "onchain.read_snapshot", "permission": "pass", "description": "Read local on-chain snapshot artifacts." },
+    { "name": "crystal.create_or_update", "permission": "pass", "description": "Create or update a local IntelligenceCrystal." },
+    { "name": "proposal.create", "permission": "pass", "description": "Create a local AgentProposal." },
+    { "name": "memory.save", "permission": "pass", "description": "Write local MemoryEntry artifacts." },
+    { "name": "handoff.write", "permission": "pass", "description": "Write a local HandoffPacket." },
+    { "name": "image.analyze_with_kimi", "permission": "pass", "description": "Analyze user-provided image with configured Kimi vision provider." },
+    { "name": "computer_use.request", "permission": "needs_confirmation", "description": "Request a future Computer Use action; v1 does not execute it." }
+  ]
+}

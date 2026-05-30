@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "agent-extension-package-v1",
+  "id": "context-plane",
+  "title": "Context Plane",
+  "description": "Internal context assembly package for task-level ContextSource, ContextChunk, ContextBundle, retrieval plan, and context gate artifacts.",
+  "visibility": "internal",
+  "publicExtension": null,
+  "publicSkills": [],
+  "internalOnly": true,
+  "policies": {
+    "readRuntimeArtifactSummary": "pass",
+    "includeFullRawTranscript": "blocked",
+    "includeSecretMaterial": "blocked"
+  }
+}
+

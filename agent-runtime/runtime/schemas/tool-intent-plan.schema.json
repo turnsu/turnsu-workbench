@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-tool-intent-plan.schema.json",
+  "title": "Agent Tool Intent Plan",
+  "type": "object",
+  "required": ["schemaVersion", "runID", "taskID", "publicSurfaceOnly", "internalToolsExposed", "tools"],
+  "properties": {
+    "schemaVersion": { "const": "agent-tool-intent-plan-v1" },
+    "runID": { "type": "string" },
+    "taskID": { "type": "string" },
+    "publicSurfaceOnly": { "type": "boolean" },
+    "internalToolsExposed": { "type": "boolean" },
+    "tools": { "type": "array" }
+  }
+}
+

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-approval-decision.schema.json",
+  "title": "Agent Approval Decision",
+  "type": "object",
+  "required": ["schemaVersion", "id", "action", "status", "approved", "approvalAvailable"],
+  "properties": {
+    "schemaVersion": { "const": "agent-approval-decision-v1" },
+    "id": { "type": "string" },
+    "action": { "type": "string" },
+    "status": { "type": "string" },
+    "approved": { "type": "boolean" },
+    "approvalAvailable": { "type": "boolean" }
+  }
+}
+
