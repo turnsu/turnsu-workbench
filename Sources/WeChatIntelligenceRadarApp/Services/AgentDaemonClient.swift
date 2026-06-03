@@ -60,6 +60,12 @@ struct AgentDaemonClient {
         try await post("/runs/\(runID)/\(action)", body: [String: String](), as: AgentStreamEvent.self)
     }
 
+    /// Ask the daemon to pull fresh local WeChat via wechat-cli (read-only) and write
+    /// runtime/wechat/messages.live.json. Returns its status (ok / degraded / disabled).
+    func refreshWechatLive() async throws -> WeChatLiveRefreshResult {
+        try await post("/wechat/live/refresh", body: [String: String](), as: WeChatLiveRefreshResult.self)
+    }
+
     private func get<T: Decodable>(_ path: String, as type: T.Type) async throws -> T {
         let url = endpoint(path)
         var request = URLRequest(url: url, timeoutInterval: 3)
@@ -99,6 +105,15 @@ private struct AgentMessageRequest: Encodable {
     let selectedExtensionIDs: [String]
     let attachments: [AgentAttachment]
     let contextRefs: [RuntimeObjectReference]
+}
+
+struct WeChatLiveRefreshResult: Decodable {
+    let status: String          // ok / empty / degraded / disabled
+    var messages: Int? = nil
+    var sessions: Int? = nil
+    var reason: String? = nil
+    var hint: String? = nil
+    var artifact: String? = nil
 }
 
 enum AgentDaemonClientError: LocalizedError {

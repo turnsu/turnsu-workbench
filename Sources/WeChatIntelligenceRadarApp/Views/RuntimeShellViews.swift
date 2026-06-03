@@ -2,26 +2,43 @@ import SwiftUI
 
 struct TerminalTopCommandBar: View {
     @ObservedObject var viewModel: DashboardViewModel
+    @FocusState private var searchFocused: Bool
+    @State private var refreshSpin = 0.0
+    @AppStorage("radar.appearance") private var appearancePref = "system"
 
     var body: some View {
         HStack(spacing: 10) {
             HStack(spacing: 9) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(RadarTheme.mutedText)
+                    .foregroundStyle(searchFocused ? RadarTheme.blue : RadarTheme.mutedText)
                 TextField("搜索情报、Token、群聊…", text: $viewModel.searchQuery)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
+                    .focused($searchFocused)
+                if !viewModel.searchQuery.isEmpty {
+                    Button {
+                        viewModel.searchQuery = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(RadarTheme.mutedText)
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.opacity.combined(with: .scale))
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(Color.white.opacity(0.055))
+            .background(searchFocused ? RadarTheme.tintMedium : RadarTheme.tintSoft)
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(RadarTheme.borderSoft, lineWidth: 1)
+                    .strokeBorder(searchFocused ? RadarTheme.blue.opacity(0.5) : RadarTheme.borderSoft, lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .frame(maxWidth: .infinity)
+            .animation(RadarMotion.snappy, value: searchFocused)
+            .animation(RadarMotion.snappy, value: viewModel.searchQuery.isEmpty)
 
             Picker("Window", selection: Binding(
                 get: { viewModel.selectedWindow },
@@ -36,25 +53,61 @@ struct TerminalTopCommandBar: View {
             .frame(width: 180)
 
             HStack(spacing: 7) {
-                StatusDot(color: RuntimeStatusPresenter.color(for: viewModel.syncState.status.rawValue))
-                Text(RuntimeStatusPresenter.label(viewModel.syncState.status.rawValue))
+                StatusDot(
+                    color: RuntimeStatusPresenter.color(for: viewModel.syncState.status.rawValue),
+                    pulsing: viewModel.syncState.status == .running
+                )
+                Text(viewModel.wechatLiveStatus.isEmpty ? RuntimeStatusPresenter.label(viewModel.syncState.status.rawValue) : viewModel.wechatLiveStatus)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(RadarTheme.secondaryText)
+                    .lineLimit(1)
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 11)
             .padding(.vertical, 8)
-            .background(Color.white.opacity(0.045))
+            .background(RadarTheme.tintSoft)
             .clipShape(Capsule())
 
-            Button(action: { viewModel.refresh(reason: "top_command_refresh") }) {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 12, weight: .bold))
+            Button {
+                withAnimation(RadarMotion.snappy) { appearancePref = nextAppearance(appearancePref) }
+            } label: {
+                Image(systemName: appearanceIcon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(RadarTheme.secondaryText)
+                    .contentTransition(.symbolEffect(.replace))
             }
-            .buttonStyle(ResearchSecondaryButtonStyle())
+            .buttonStyle(HoverIconButtonStyle(size: 38))
+            .help("外观：跟随系统 / 浅色 / 深色")
+
+            Button {
+                withAnimation(RadarMotion.gentle) { refreshSpin += 360 }
+                Task { await viewModel.refreshWeChatLiveAndReload() }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(RadarTheme.primaryText)
+                    .rotationEffect(.degrees(refreshSpin))
+            }
+            .buttonStyle(HoverIconButtonStyle(size: 38))
+            .help("刷新：拉取实时微信（wechat-cli 只读）并重新分析")
         }
         .padding(8)
-        .background(.ultraThinMaterial)
         .researchPanel()
+    }
+
+    private var appearanceIcon: String {
+        switch appearancePref {
+        case "light": return "sun.max.fill"
+        case "dark": return "moon.fill"
+        default: return "circle.lefthalf.filled"
+        }
+    }
+
+    private func nextAppearance(_ current: String) -> String {
+        switch current {
+        case "system": return "light"
+        case "light": return "dark"
+        default: return "system"
+        }
     }
 }
 
@@ -196,12 +249,13 @@ struct RuntimeRightInspectorView: View {
 
             Spacer(minLength: 0)
         }
+        .animation(RadarMotion.smooth, value: inspectorKey)
         .padding(14)
         .frame(width: 320)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(
             LinearGradient(
-                colors: [RadarTheme.sidebar.opacity(0.86), RadarTheme.cyanBase.opacity(0.26), RadarTheme.backgroundDeep.opacity(0.8)],
+                colors: [RadarTheme.sidebar.opacity(0.86), RadarTheme.cyanBase.opacity(0.20), RadarTheme.backgroundDeep.opacity(0.8)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -209,23 +263,44 @@ struct RuntimeRightInspectorView: View {
         .researchPanel()
     }
 
+    /// Composite of every selectable id so the inspector cross-fades when focus moves.
+    private var inspectorKey: String {
+        [
+            viewModel.selectedCrystalID?.uuidString,
+            viewModel.selectedProposalID?.uuidString,
+            viewModel.selectedMessageID?.uuidString,
+            viewModel.selectedTokenID,
+            viewModel.selectedEvidenceID?.uuidString,
+            viewModel.selectedAlertID?.uuidString,
+            viewModel.selectedArtifactPath,
+            viewModel.selectedHandoffID?.uuidString
+        ].compactMap { $0 }.joined(separator: "|")
+    }
+
     private func inspectorSection(_ title: String, rows: [(String, String)]) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 9) {
             ResearchSectionEyebrow(text: title, icon: "square.text.square")
-            ForEach(rows, id: \.0) { row in
-                HStack(alignment: .top) {
-                    Text(row.0)
-                        .foregroundStyle(RadarTheme.mutedText)
-                        .frame(width: 76, alignment: .leading)
-                    Text(row.1)
-                        .lineLimit(2)
-                        .foregroundStyle(RadarTheme.primaryText)
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(rows, id: \.0) { row in
+                    HStack(alignment: .top, spacing: 10) {
+                        Text(row.0)
+                            .font(.system(size: 11))
+                            .foregroundStyle(RadarTheme.mutedText)
+                            .frame(width: 72, alignment: .leading)
+                        Text(row.1)
+                            .font(.system(size: 11, weight: .medium))
+                            .lineLimit(2)
+                            .foregroundStyle(RadarTheme.primaryText)
+                            .textSelection(.enabled)
+                        Spacer(minLength: 0)
+                    }
                 }
-                .font(.system(size: 10))
             }
         }
-        .padding(12)
+        .padding(13)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .researchPanel()
+        .transition(.opacity)
     }
 
     private var hasSelection: Bool {

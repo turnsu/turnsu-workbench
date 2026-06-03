@@ -105,6 +105,24 @@
   ],
   "templates": [
     {
+      "templateID": "cmc-alpha-scanner",
+      "title": "Alpha Scanner",
+      "skillIDs": ["cmc-market-radar", "market-regime-review", "social-price-divergence"],
+      "extensionIDs": ["cmc-skill-hub"]
+    },
+    {
+      "templateID": "cmc-perp-position-review",
+      "title": "Perp Position Review",
+      "skillIDs": ["cmc-market-radar", "market-regime-review"],
+      "extensionIDs": ["cmc-skill-hub"]
+    },
+    {
+      "templateID": "cmc-btc-macro-thesis-review",
+      "title": "BTC Macro Thesis Review",
+      "skillIDs": ["cmc-market-radar", "market-regime-review"],
+      "extensionIDs": ["cmc-skill-hub"]
+    },
+    {
       "templateID": "daily-intel",
       "title": "分析今日重点",
       "skillIDs": ["wechat-onchain-intelligence", "cmc-market-radar"],

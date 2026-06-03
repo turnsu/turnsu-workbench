@@ -15,6 +15,7 @@ final class DashboardViewModel: ObservableObject {
     @Published private(set) var artifactStatus: AgentRunArtifactStatus?
     @Published private(set) var terminalData: TerminalDataSnapshot = .empty
     @Published private(set) var refreshStatus: String = "idle · not_run"
+    @Published var wechatLiveStatus: String = ""
     @Published private(set) var runtimeCommandStatus: String = "idle"
     @Published var selectedGroupID: UUID?
     @Published var selectedWindow: TimeWindow = .month
@@ -50,6 +51,7 @@ final class DashboardViewModel: ObservableObject {
     @Published var agentRunManifest: AgentRunManifest?
     @Published var agentControlSummary: AgentControlPlaneSummary?
     @Published var agentContextSummary: AgentContextPlaneSummary?
+    @Published var agentStrategyResults: [CMCStrategistResult] = []
     @Published var agentOpsSnapshot: AgentOpsSnapshot = AgentOpsRuntimeStore().read()
     @Published var selectedAgentEventID: String?
     @Published var selectedAgentInspector: AgentInspectorSelection = .overview
@@ -67,6 +69,7 @@ final class DashboardViewModel: ObservableObject {
     private let agentAttachmentStore: AgentAttachmentStore
     private let agentToolRegistryStore: AgentToolRegistryStore
     private let agentOpsRuntimeStore: AgentOpsRuntimeStore
+    private let strategyResultStore = CMCStrategyResultStore()
     private var agentEventStreamTask: Task<Void, Never>?
 
     init(
@@ -128,6 +131,29 @@ final class DashboardViewModel: ObservableObject {
         refreshStatus = "\(syncState.status.rawValue) · \(syncState.sourceFreshness)"
         copyStatus = "可复制"
         appendLog(.info, "UI trigger=\(reason)，runID=\(syncState.runID)，window=\(selectedWindow.rawValue)，group=\(selectedGroupID?.uuidString.prefix(8) ?? "all")。")
+    }
+
+    /// Pull fresh live WeChat via the daemon (read-only wechat-cli), then re-run the local
+    /// pipeline so the new messages flow in. Degrades to local data if the daemon is down or
+    /// WeChat isn't initialized yet.
+    func refreshWeChatLiveAndReload() async {
+        wechatLiveStatus = "正在拉取实时微信…"
+        do {
+            let result = try await agentClient.refreshWechatLive()
+            switch result.status {
+            case "ok":
+                wechatLiveStatus = "实时微信已更新（\(result.messages ?? 0) 条）"
+            case "empty":
+                wechatLiveStatus = "实时微信无新消息"
+            case "disabled":
+                wechatLiveStatus = "实时微信未启用"
+            default:
+                wechatLiveStatus = "实时微信未就绪：\(result.hint ?? result.reason ?? result.status)"
+            }
+        } catch {
+            wechatLiveStatus = "后台未连接，使用本地数据"
+        }
+        refresh(reason: "wechat_live_refresh")
     }
 
     func select(group: ChatGroup?) {
@@ -478,7 +504,8 @@ final class DashboardViewModel: ObservableObject {
             selectedExtensionIDs: selectedAgentExtensionIDs,
             pendingAttachments: agentAttachments,
             draftPrompt: agentPrompt,
-            selectedEventID: selectedAgentEventID
+            selectedEventID: selectedAgentEventID,
+            strategyResults: agentStrategyResults
         )
     }
 
@@ -726,6 +753,18 @@ final class DashboardViewModel: ObservableObject {
         agentRunManifest = agentStreamStore.readRunManifest(runID: runID)
         agentControlSummary = agentStreamStore.readControlSummary(runID: runID)
         agentContextSummary = agentStreamStore.readContextSummary(runID: runID)
+        agentStrategyResults = strategyResultStore.results(forRunID: runID)
+    }
+
+    /// Sample strategy results used for previewing the workbench cards before a live CMC run
+    /// produces real artifacts. Clearly labeled `样例数据` in the UI.
+    var agentStrategyPreviews: [CMCStrategistResult] {
+        [.alphaSample, .perpSample, .macroSample]
+    }
+
+    /// Resolve a strategy result by id for the inspector — checks live results then previews.
+    func strategyResult(id: String) -> CMCStrategistResult? {
+        (agentStrategyResults + agentStrategyPreviews).first { $0.id == id }
     }
 
     private func subscribeAgentEvents(runID: String) {

@@ -17,6 +17,7 @@ agent-runtime/.pi-agent/
 # Local environment and secret files
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 *.p12
@@ -24,3 +25,4 @@ agent-runtime/.pi-agent/
 # Editor / OS noise
 .vscode/
 .idea/
+.tooling/

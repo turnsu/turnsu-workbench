@@ -10,6 +10,7 @@ enum AgentInspectorSelection: Hashable, Identifiable {
     case artifact(String)
     case task(String)
     case context(String)
+    case strategyResult(String)
 
     var id: String {
         switch self {
@@ -31,6 +32,8 @@ enum AgentInspectorSelection: Hashable, Identifiable {
             return "task:\(id)"
         case .context(let id):
             return "context:\(id)"
+        case .strategyResult(let id):
+            return "strategy:\(id)"
         }
     }
 }
@@ -48,7 +51,39 @@ struct AgentTaskTemplate: Identifiable, Hashable {
 }
 
 enum AgentWorkspaceTaskTemplates {
-    static let all: [AgentTaskTemplate] = [
+    /// CMC strategist templates (decision-support only). They fill the composer; the CMC
+    /// CoinMarketCap MCP 能力包 still enters via the composer Add / `/add`, not raw tools.
+    static let strategist: [AgentTaskTemplate] = [
+        AgentTaskTemplate(
+            id: "cmc-alpha-scanner",
+            title: "Alpha Scanner",
+            subtitle: "全市场扫描研究候选：关键价位、反证与观察条件，不给下单指令。",
+            prompt: "帮我用 CMC 能力包扫描今天值得进一步研究的 alpha 候选，只输出研究候选、关键价位、反证和后续观察条件，不给下单指令。",
+            icon: "scope",
+            defaultSkillIDs: ["cmc-market-radar", "market-regime-review", "social-price-divergence"],
+            defaultExtensionIDs: ["cmc-skill-hub"]
+        ),
+        AgentTaskTemplate(
+            id: "cmc-perp-position-review",
+            title: "Perp Position Review",
+            subtitle: "复核永续持仓结构：squeeze / breakdown / range 场景、触发线与风险边界。",
+            prompt: "我有一个永续持仓，请用 CMC 能力包复核结构，给出 squeeze / breakdown / range 三个场景、关键触发线、反证和风险边界。",
+            icon: "chart.line.uptrend.xyaxis",
+            defaultSkillIDs: ["cmc-market-radar", "market-regime-review"],
+            defaultExtensionIDs: ["cmc-skill-hub"]
+        ),
+        AgentTaskTemplate(
+            id: "cmc-btc-macro-thesis-review",
+            title: "BTC Macro Thesis Review",
+            subtitle: "复核 BTC 宏观 thesis：ETF 流、跨资产相关性与反证，只做决策支持与监控。",
+            prompt: "帮我复核 BTC 宏观 thesis：ETF 流、跨资产相关性和反证是否支持继续观察空头逻辑，只做决策支持和监控项。",
+            icon: "globe.asia.australia",
+            defaultSkillIDs: ["cmc-market-radar", "market-regime-review"],
+            defaultExtensionIDs: ["cmc-skill-hub"]
+        )
+    ]
+
+    static let all: [AgentTaskTemplate] = strategist + [
         AgentTaskTemplate(
             id: "daily-intel",
             title: "分析今日重点",
@@ -158,6 +193,7 @@ enum AgentMessagePart: Identifiable, Hashable {
         case approvalRequest
         case attachment
         case evidence
+        case strategyResult
         case finalOutput
         case error
     }
@@ -168,6 +204,7 @@ enum AgentMessagePart: Identifiable, Hashable {
     case approvalRequest(AgentApprovalState)
     case attachment(id: String, title: String, summary: String, attachment: AgentAttachment)
     case evidence(AgentContextChip)
+    case strategyResult(CMCStrategistResult)
     case finalOutput(id: String, title: String, summary: String, artifactPath: String?)
     case error(id: String, title: String, message: String)
 
@@ -185,6 +222,8 @@ enum AgentMessagePart: Identifiable, Hashable {
             return approval.id
         case .evidence(let chip):
             return chip.id
+        case .strategyResult(let result):
+            return "strategy:\(result.id)"
         }
     }
 
@@ -202,6 +241,8 @@ enum AgentMessagePart: Identifiable, Hashable {
             return .attachment
         case .evidence:
             return .evidence
+        case .strategyResult:
+            return .strategyResult
         case .finalOutput:
             return .finalOutput
         case .error:
@@ -390,7 +431,8 @@ struct AgentWorkspaceStateAdapter {
         draftPrompt: String,
         selectedEventID: String? = nil,
         selectedMessageID: String? = nil,
-        selectedToolCallID: String? = nil
+        selectedToolCallID: String? = nil,
+        strategyResults: [CMCStrategistResult] = []
     ) -> AgentThreadState {
         let resolvedMessages = messages.isEmpty ? (selectedSession?.messages ?? []) : messages
         let activeRunID = resolveRunID(session: selectedSession, streamEvents: streamEvents, longTasks: longTasks)
@@ -417,7 +459,8 @@ struct AgentWorkspaceStateAdapter {
             capabilityCalls: calls,
             approvals: approvals,
             pendingAttachments: pendingAttachments,
-            activeRunID: activeRunID
+            activeRunID: activeRunID,
+            strategyResults: strategyResults
         )
         let status = threadStatus(
             sessionStatus: selectedSession?.status,
@@ -734,7 +777,8 @@ extension AgentWorkspaceStateAdapter {
         capabilityCalls: [CapabilityCallState],
         approvals: [AgentApprovalState],
         pendingAttachments: [AgentAttachment],
-        activeRunID: String?
+        activeRunID: String?,
+        strategyResults: [CMCStrategistResult] = []
     ) -> [AgentThreadMessage] {
         var threadMessages = messages.map(makeThreadMessage)
         if let runMessage = makeRunMessage(
@@ -744,6 +788,9 @@ extension AgentWorkspaceStateAdapter {
             activeRunID: activeRunID
         ) {
             threadMessages.append(runMessage)
+        }
+        if let strategyMessage = makeStrategyMessage(strategyResults, activeRunID: activeRunID) {
+            threadMessages.append(strategyMessage)
         }
         if threadMessages.isEmpty, !pendingAttachments.isEmpty {
             threadMessages.append(AgentThreadMessage(
@@ -871,6 +918,44 @@ extension AgentWorkspaceStateAdapter {
             },
             runID: runID,
             createdAt: streamEvents.first?.timestamp ?? ""
+        )
+    }
+
+    /// Build the assistant message that carries structured CMC strategy result cards. Each result
+    /// links back to its source artifact; a final-output part points at the run record.
+    static func makeStrategyMessage(_ results: [CMCStrategistResult], activeRunID: String?) -> AgentThreadMessage? {
+        guard !results.isEmpty else { return nil }
+        var parts: [AgentMessagePart] = [
+            .planSummary(
+                id: "\(activeRunID ?? "strategy")-strategy-plan",
+                title: "策略读模型",
+                summary: "已根据 CMC 能力包生成结构化策略结果：结论、关键价位、场景、反证与风险边界。",
+                evidenceRefs: []
+            )
+        ]
+        parts.append(contentsOf: results.map(AgentMessagePart.strategyResult))
+        if let source = results.first?.sourceMap.first {
+            parts.append(.finalOutput(
+                id: "\(activeRunID ?? "strategy")-strategy-final",
+                title: "策略结果记录",
+                summary: "结论与证据已写入本机 artifact，可点击查看。",
+                artifactPath: source.artifactPath
+            ))
+        }
+        let linked = results.compactMap { result -> RuntimeObjectReference? in
+            guard let path = result.sourceMap.first?.artifactPath else { return nil }
+            return artifactReference(label: "\(result.subject.symbol) 策略证据", path: path, generatedAt: nil, runID: activeRunID)
+        }
+        return AgentThreadMessage(
+            id: "\(activeRunID ?? "strategy")-strategy",
+            role: .assistant,
+            authorName: "策略台",
+            parts: parts,
+            attachments: [],
+            contextChips: [],
+            linkedArtifacts: linked,
+            runID: activeRunID,
+            createdAt: ""
         )
     }
 
@@ -1369,7 +1454,7 @@ extension AgentWorkspaceStateAdapter {
         }
         switch status {
         case .allowed:
-            return "这一步只使用本机项目记录，不会操作真实微信或外部账户。"
+            return "这一步只在本机读取 / 写入数据，不发送、不外发。"
         case .needsApproval:
             return "\(toolDisplayName(action)) 涉及敏感能力，Agent 会等你确认后再继续。"
         case .blocked:
@@ -1380,11 +1465,11 @@ extension AgentWorkspaceStateAdapter {
     static func dataScopeText(for action: String) -> String {
         switch action {
         case "wechat.read_normalized_messages":
-            return "读取本机 normalized 微信消息文件。"
+            return "读取本机微信消息（本地 normalized 文件，或经 wechat-cli 实时只读）。"
         case "liveWechat":
-            return "会触达真实微信账号或窗口。"
+            return "读取本机微信数据（只读，经 wechat-cli），不发送。"
         case "liveWechatCLI":
-            return "会调用微信 CLI 或用户导出的微信数据。"
+            return "调用本机 wechat-cli 只读查询微信数据。"
         case "computer_use.request", "computerUse":
             return "可能读取屏幕或操作本机应用；当前版本只记录申请。"
         case "trade":
@@ -1420,7 +1505,7 @@ extension AgentWorkspaceStateAdapter {
             return "来自你在 Agent 工作台提交的任务和已选 Skill/Extension。"
         }
         if value.contains("Local artifact boundary accepted") {
-            return "已在本机项目记录中完成，不会操作真实微信。"
+            return "已在本机完成，只读不外发。"
         }
         if value.contains("No execution performed") && value.contains("needs_confirmation") {
             return "尚未执行，等待你确认后才会继续。"
@@ -1429,7 +1514,7 @@ extension AgentWorkspaceStateAdapter {
             return "这是敏感操作，当前版本不会直接执行，需要先由你确认。"
         }
         if value.contains("Local or user-preferred artifact action") {
-            return "只读取或写入本机项目记录，不会操作真实微信。"
+            return "只在本机读取 / 写入数据，不发送、不外发。"
         }
         return value
     }

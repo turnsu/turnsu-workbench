@@ -15,13 +15,17 @@ HEALTH_URL="http://127.0.0.1:8797/health"
 
 cd "$ROOT_DIR"
 
+# Prefer the project-local Node runtime (installed under .tooling/node).
+LOCAL_NODE_BIN="$ROOT_DIR/.tooling/node/bin"
+[[ -d "$LOCAL_NODE_BIN" ]] && export PATH="$LOCAL_NODE_BIN:$PATH"
+
 echo "WeChat x On-chain Agent Research OS Launcher"
 echo "Project: $ROOT_DIR"
 echo
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "ERROR: node is required to run the local agent daemon."
-  exit 1
+  echo "WARN: node not found (system or .tooling/node). The app will open, but the agent daemon"
+  echo "      and live features will be unavailable until Node is installed."
 fi
 
 echo "Rebuilding Research OS app bundle..."

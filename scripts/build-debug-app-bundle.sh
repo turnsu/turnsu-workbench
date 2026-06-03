@@ -8,10 +8,10 @@ rm -rf \
   "$ROOT_DIR/.build/debug/WeChatIntelligenceRadar.app" \
   "$ROOT_DIR/.build/arm64-apple-macosx/debug/WeChatIntelligenceRadar.app"
 
-SCRATCH_PATH="${WECHAT_RADAR_BUILD_PATH:-/private/tmp/wechat-radar-build}"
-swift build --scratch-path "$SCRATCH_PATH"
+# Use the default .build dir (incremental — fast when nothing changed).
+swift build
 
-BUILD_DIR="$(swift build --scratch-path "$SCRATCH_PATH" --show-bin-path)"
+BUILD_DIR="$(swift build --show-bin-path)"
 APP_DIR="$ROOT_DIR/.build/debug-app/WeChatIntelligenceRadar.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"

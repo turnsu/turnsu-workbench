@@ -59,6 +59,13 @@ struct WeChatFixtureFileAdapter: WeChatDataAdapter {
     private static func defaultFixtureURL(fileManager: FileManager = .default) -> URL? {
         var candidates: [URL] = []
 
+        // Live WeChat data (written by the daemon from local wechat-cli, read-only) takes
+        // precedence over the bundled fixture when present.
+        candidates.append(
+            RuntimePathResolver.findProjectRoot(fileManager: fileManager)
+                .appendingPathComponent("runtime/wechat/messages.live.json")
+        )
+
         if let resourceURL = Bundle.main.resourceURL {
             candidates.append(
                 resourceURL

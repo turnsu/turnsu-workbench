@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import Foundation
 import SwiftUI
 
@@ -14,7 +15,21 @@ final class WeChatIntelligenceRadarApp: NSObject, NSApplicationDelegate {
         super.init()
     }
 
+    /// Register the bundled Manrope font so `Font.custom("Manrope", …)` resolves. SPM executables
+    /// have no Info.plist font key, so we register programmatically from the resource bundle.
+    private static func registerBundledFonts() {
+        let candidates = [
+            Bundle.module.url(forResource: "Manrope", withExtension: "ttf"),
+            Bundle.module.url(forResource: "Manrope", withExtension: "ttf", subdirectory: "Fonts")
+        ]
+        for case let url? in candidates {
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+            break
+        }
+    }
+
     static func main() {
+        registerBundledFonts()
         if CommandLine.arguments.contains("--smoke-check") {
             let result = AgentOrchestrator(adapter: WeChatFixtureFileAdapter()).run(
                 date: Date(),
@@ -57,7 +72,6 @@ final class WeChatIntelligenceRadarApp: NSObject, NSApplicationDelegate {
         }
 
         let rootView = DashboardView(initialWorkspace: .home)
-            .preferredColorScheme(.dark)
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1180, height: 760),

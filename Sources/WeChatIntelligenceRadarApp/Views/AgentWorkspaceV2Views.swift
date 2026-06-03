@@ -6,30 +6,33 @@ struct AgentWorkspaceV2View: View {
 
     var body: some View {
         let thread = viewModel.agentThreadState
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                AgentLeftRail(
-                    viewModel: viewModel,
-                    thread: thread,
-                    collapsed: agentRailCollapsed,
-                    toggleCollapsed: { agentRailCollapsed.toggle() }
-                )
-                .frame(width: agentRailCollapsed ? 64 : 248)
-                .frame(maxHeight: .infinity)
+        // HSplitView gives native, drag-resizable dividers between the three panes.
+        // Min/ideal/max widths keep the Inspector from getting cramped at any window size.
+        HSplitView {
+            AgentLeftRail(
+                viewModel: viewModel,
+                thread: thread,
+                collapsed: agentRailCollapsed,
+                toggleCollapsed: { withAnimation(RadarMotion.gentle) { agentRailCollapsed.toggle() } }
+            )
+            .frame(
+                minWidth: agentRailCollapsed ? 64 : 200,
+                idealWidth: agentRailCollapsed ? 64 : 248,
+                maxWidth: agentRailCollapsed ? 64 : 380,
+                maxHeight: .infinity
+            )
 
-                AgentThreadWorkspace(viewModel: viewModel, thread: thread)
-                    .frame(minWidth: 450, maxWidth: .infinity)
-                    .frame(maxHeight: .infinity)
+            AgentThreadWorkspace(viewModel: viewModel, thread: thread)
+                .frame(minWidth: 420, idealWidth: 660, maxWidth: .infinity, maxHeight: .infinity)
+                .layoutPriority(1)
 
-                if viewModel.selectedAgentInspector != .overview {
-                    AgentInspectorV2Panel(viewModel: viewModel, thread: thread)
-                        .frame(width: 300)
-                        .frame(maxHeight: .infinity)
-                }
+            if viewModel.selectedAgentInspector != .overview {
+                AgentInspectorV2Panel(viewModel: viewModel, thread: thread)
+                    .frame(minWidth: 280, idealWidth: 340, maxWidth: 520, maxHeight: .infinity)
             }
-            .frame(maxHeight: .infinity)
         }
-        .frame(maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(RadarMotion.gentle, value: agentRailCollapsed)
     }
 }
 
@@ -114,7 +117,7 @@ private struct AgentLeftRail: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(RadarTheme.secondaryText)
                         .frame(width: 30, height: 30)
-                        .background(Color.white.opacity(0.055))
+                        .background(RadarTheme.tintSoft)
                         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -245,7 +248,7 @@ private struct CollapsedRailButton: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(selected ? RadarTheme.blue : RadarTheme.secondaryText)
                 .frame(width: 34, height: 34)
-                .background(selected ? Color.white.opacity(0.085) : Color.white.opacity(0.035))
+                .background(selected ? RadarTheme.tintStrong : RadarTheme.tintFaint)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -307,7 +310,7 @@ private struct AgentSessionRailRow: View {
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(RadarTheme.mutedText)
                             .frame(width: 22, height: 22)
-                            .background(Color.white.opacity(0.04))
+                            .background(RadarTheme.tintFaint)
                             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                     }
                     .buttonStyle(.plain)
@@ -353,7 +356,7 @@ private struct AgentThreadWorkspace: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(thread.title == "Agent 工作空间" ? "Agent" : thread.title)
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(RadarFont.display(20, .semibold))
                         .foregroundStyle(RadarTheme.primaryText)
                         .lineLimit(1)
                     Text("描述任务，选择能力包，Agent 会在本地写入记录。")
@@ -378,36 +381,59 @@ private struct AgentThreadWorkspace: View {
             Divider()
                 .overlay(RadarTheme.borderSoft)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    if thread.messages.isEmpty {
-                        AgentEmptyStateTemplates(viewModel: viewModel, templates: thread.availableTemplates)
-                            .frame(maxWidth: .infinity, alignment: .topLeading)
-                    } else {
-                        AgentTaskTemplateStrip(viewModel: viewModel, templates: thread.availableTemplates)
-                    }
+            // VSplitView: drag the divider to trade height between the message stream and
+            // the composer (e.g. give the input box more room for a long prompt).
+            VSplitView {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        // Lazy: only visible message rows render — keeps long threads smooth.
+                        LazyVStack(alignment: .leading, spacing: 12) {
+                            if thread.messages.isEmpty {
+                                AgentEmptyStateTemplates(viewModel: viewModel, templates: thread.availableTemplates)
+                                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                            } else {
+                                AgentTaskTemplateStrip(viewModel: viewModel, templates: thread.availableTemplates)
+                            }
 
-                    ForEach(thread.messages) { message in
-                        AgentThreadMessageRow(viewModel: viewModel, message: message)
+                            ForEach(thread.messages) { message in
+                                AgentThreadMessageRow(
+                                    viewModel: viewModel,
+                                    message: message,
+                                    isRunning: thread.status == .running && message.id == thread.messages.last?.id
+                                )
+                                    .id(message.id)
+                                    .transition(.asymmetric(
+                                        insertion: .opacity.combined(with: .offset(y: 12)),
+                                        removal: .opacity
+                                    ))
+                            }
+                            Color.clear.frame(height: 1).id("threadBottom")
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .animation(RadarMotion.spring, value: thread.messages.count)
+                    }
+                    .onChange(of: thread.messages.count) { _, _ in
+                        withAnimation(RadarMotion.gentle) { proxy.scrollTo("threadBottom", anchor: .bottom) }
+                    }
+                    .onChange(of: thread.run.eventCount) { _, _ in
+                        withAnimation(RadarMotion.gentle) { proxy.scrollTo("threadBottom", anchor: .bottom) }
                     }
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: 200, maxHeight: .infinity)
+
+                VStack(spacing: 0) {
+                    AgentRunInlineStatus(thread: thread)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 10)
+                    AgentComposerBar(viewModel: viewModel, thread: thread)
+                        .padding(12)
+                }
+                .frame(minHeight: 150, idealHeight: 198, maxHeight: 480)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .layoutPriority(1)
-
-            Divider()
-                .overlay(RadarTheme.borderSoft)
-
-            AgentRunInlineStatus(thread: thread)
-                .padding(.horizontal, 12)
-                .padding(.top, 10)
-
-            AgentComposerBar(viewModel: viewModel, thread: thread)
-                .padding(12)
         }
-        .background(.ultraThinMaterial)
         .researchPanel()
         .frame(maxHeight: .infinity)
     }
@@ -418,7 +444,7 @@ private struct AgentRunInlineStatus: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            StatusDot(color: AgentUIStyle.runColor(thread.run.status))
+            StatusDot(color: AgentUIStyle.runColor(thread.run.status), pulsing: thread.run.status == .running)
             Text(thread.run.latestStep)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(RadarTheme.secondaryText)
@@ -429,25 +455,32 @@ private struct AgentRunInlineStatus: View {
                 .lineLimit(1)
             Spacer()
             Text("\(thread.run.eventCount) 个事件")
-                .font(.system(size: 10))
+                .font(.system(size: 10, design: .rounded))
                 .foregroundStyle(RadarTheme.mutedText)
+                .contentTransition(.numericText())
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(Color.white.opacity(0.04))
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .background(RadarTheme.tintFaint)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(RadarTheme.borderSoft, lineWidth: 1)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .animation(RadarMotion.snappy, value: thread.run.eventCount)
     }
 }
 
 private struct AgentEmptyStateTemplates: View {
     @ObservedObject var viewModel: DashboardViewModel
     let templates: [AgentTaskTemplate]
+    @State private var previewIndex = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("把任务交给 Agent")
-                    .font(.system(size: 22, weight: .heavy, design: .rounded))
+                    .font(RadarFont.display(22, .bold))
                     .foregroundStyle(RadarTheme.primaryText)
                 Text("描述目标，也可以先选择模板、图片、能力包和上下文。模板只会填充输入框，不会自动执行。")
                     .font(.system(size: 12))
@@ -460,28 +493,67 @@ private struct AgentEmptyStateTemplates: View {
                     Button(action: { viewModel.applyAgentTemplate(template) }) {
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: template.icon)
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(RadarTheme.green)
-                                .frame(width: 22)
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(RadarTheme.blue)
+                                .frame(width: 24, height: 24)
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(template.title)
-                                    .font(.system(size: 12, weight: .bold))
+                                    .font(.system(size: 12.5, weight: .semibold))
                                     .foregroundStyle(RadarTheme.primaryText)
                                     .lineLimit(2)
                                 Text(template.subtitle)
-                                    .font(.system(size: 10))
+                                    .font(.system(size: 10.5))
                                     .foregroundStyle(RadarTheme.secondaryText)
                                     .lineLimit(2)
                             }
+                            Spacer(minLength: 0)
                         }
-                        .padding(12)
-                        .frame(maxWidth: .infinity, minHeight: 76, alignment: .topLeading)
-                        .background(RadarTheme.panelElevated.opacity(0.55))
-                        .researchPanel()
+                        .padding(13)
+                        .frame(maxWidth: .infinity, minHeight: 78, alignment: .topLeading)
+                        .interactiveCard(cornerRadius: 13, hoverScale: 1.012)
                     }
                     .buttonStyle(.plain)
                 }
             }
+
+            strategyPreview
+        }
+    }
+
+    /// Preview of the structured strategy result card (sample data). Lets the user see the
+    /// workbench output before a live CMC run; tapping opens the inspector.
+    @ViewBuilder
+    private var strategyPreview: some View {
+        let previews = viewModel.agentStrategyPreviews
+        if previews.indices.contains(previewIndex) {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack {
+                    Text("策略结果卡预览")
+                        .font(RadarFont.text(13, .semibold))
+                        .foregroundStyle(RadarTheme.primaryText)
+                    Spacer()
+                    Text("样例数据 · 运行 CMC 能力包后替换为真实结果")
+                        .font(.system(size: 10))
+                        .foregroundStyle(RadarTheme.mutedText)
+                }
+                Picker("preview", selection: $previewIndex) {
+                    Text("Alpha").tag(0)
+                    Text("Perp").tag(1)
+                    Text("Macro").tag(2)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 260)
+
+                let result = previews[previewIndex]
+                StrategyResultCard(result: result, onInspect: {
+                    viewModel.selectAgentInspector(.strategyResult(result.id))
+                })
+                .id(previewIndex)
+                .transition(.opacity.combined(with: .offset(y: 8)))
+            }
+            .padding(.top, 6)
+            .animation(RadarMotion.smooth, value: previewIndex)
         }
     }
 }
@@ -511,12 +583,15 @@ private struct AgentTaskTemplateStrip: View {
 private struct AgentThreadMessageRow: View {
     @ObservedObject var viewModel: DashboardViewModel
     let message: AgentThreadMessage
+    var isRunning: Bool = false
+    /// nil = follow run state (expanded while running, collapsed when done); set by user tap.
+    @State private var processExpandedOverride: Bool? = nil
 
     var body: some View {
         let isUser = message.role == .user
         HStack(alignment: .top) {
             if isUser { Spacer(minLength: 48) }
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: 8) {
                     Text(message.displayName)
                         .font(.system(size: 10, weight: .bold))
@@ -528,22 +603,115 @@ private struct AgentThreadMessageRow: View {
                     Spacer(minLength: 0)
                 }
 
-                ForEach(message.parts) { part in
-                    AgentMessagePartView(viewModel: viewModel, part: part)
+                if isUser {
+                    ForEach(message.parts) { part in
+                        AgentMessagePartView(viewModel: viewModel, part: part)
+                    }
+                } else {
+                    assistantBody
                 }
             }
             .padding(12)
             .frame(maxWidth: isUser ? 560 : .infinity, alignment: .leading)
             .background(isUser ? RadarTheme.panelElevated.opacity(0.72) : RadarTheme.panelElevated.opacity(0.42))
-            .researchPanel(glow: !isUser && message.parts.contains { part in
-                if case .finalOutput = part { return true }
-                return false
-            })
-            .onTapGesture {
-                viewModel.selectAgentInspector(.message(message.id))
-            }
+            .researchPanel(glow: hasConclusion)
             if !isUser { Spacer(minLength: 36) }
         }
+    }
+
+    // Conclusions / actions surface first; plan + tool-call steps collapse into 执行过程.
+    @ViewBuilder
+    private var assistantBody: some View {
+        let outcome = message.parts.filter { !isProcessPart($0) }
+        let process = message.parts.filter(isProcessPart)
+        let expanded = processExpandedOverride ?? isRunning
+
+        if outcome.isEmpty && !process.isEmpty {
+            HStack(spacing: 7) {
+                Image(systemName: "checkmark.seal")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(RadarTheme.secondaryText)
+                Text("已整理执行步骤；展开「执行过程」查看，或配置模型 Key 后生成文本结论。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(RadarTheme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            ForEach(outcome) { part in
+                AgentMessagePartView(viewModel: viewModel, part: part)
+            }
+        }
+
+        if !process.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    withAnimation(RadarMotion.snappy) { processExpandedOverride = !expanded }
+                } label: {
+                    HStack(spacing: 7) {
+                        if isRunning {
+                            StatusDot(color: RadarTheme.blue, size: 6, pulsing: true)
+                        } else {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9, weight: .bold))
+                                .rotationEffect(.degrees(expanded ? 90 : 0))
+                        }
+                        Image(systemName: "list.bullet.indent")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text(isRunning ? "执行过程 · 进行中" : "执行过程 · \(process.count) 步")
+                            .font(.system(size: 11, weight: .semibold))
+                        Spacer(minLength: 0)
+                        Text(expanded ? "收起" : "展开")
+                            .font(.system(size: 10))
+                            .foregroundStyle(RadarTheme.mutedText)
+                    }
+                    .foregroundStyle(RadarTheme.secondaryText)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(RadarTheme.tintFaint)
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                if expanded {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(process) { part in
+                            AgentMessagePartView(viewModel: viewModel, part: part)
+                        }
+                    }
+                    .padding(.leading, 4)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+        }
+    }
+
+    private var hasConclusion: Bool {
+        message.parts.contains { part in
+            switch part {
+            case .finalOutput, .strategyResult: return true
+            default: return false
+            }
+        }
+    }
+
+    /// Process = the "thinking / steps": plan summary, tool/capability calls, evidence chips,
+    /// and the deterministic plan-dump text. Outcome = strategy cards, final output, approval
+    /// requests, attachments, errors, and substantive model text.
+    private func isProcessPart(_ part: AgentMessagePart) -> Bool {
+        switch part {
+        case .planSummary, .capabilityCall, .evidence, .finalOutput:
+            // finalOutput here is just an artifact/record pointer ("结果已保存到…json"); it
+            // belongs in the collapsible process, not as a competing conclusion.
+            return true
+        case .text(_, let text):
+            return isPlanDump(text)
+        default:
+            return false
+        }
+    }
+
+    private func isPlanDump(_ text: String) -> Bool {
+        text.contains("Agent Runtime Host") || text.contains("已选择 Skill") || text.hasPrefix("我已通过本地")
     }
 }
 
@@ -564,6 +732,10 @@ private struct AgentMessagePartView: View {
         case .evidence(let chip):
             EvidenceSourceChips(chips: [chip], action: { chip in
                 viewModel.selectAgentInspector(.context(chip.id))
+            })
+        case .strategyResult(let result):
+            StrategyResultCard(result: result, onInspect: {
+                viewModel.selectAgentInspector(.strategyResult(result.id))
             })
         case .finalOutput(_, let title, let summary, let artifactPath):
             FinalOutputCard(text: "\(title)\n\(summary)", artifactPath: artifactPath, action: { path in
@@ -629,10 +801,11 @@ private struct CapabilityCallCard: View {
             }
             .buttonStyle(.plain)
 
-            Button(action: { expanded.toggle() }) {
-                Label(expanded ? "收起记录" : "查看记录", systemImage: expanded ? "chevron.up" : "chevron.down")
+            Button(action: { withAnimation(RadarMotion.snappy) { expanded.toggle() } }) {
+                Label(expanded ? "收起记录" : "查看记录", systemImage: "chevron.down")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(RadarTheme.secondaryText)
+                    .symbolEffect(.bounce, value: expanded)
             }
             .buttonStyle(.plain)
 
@@ -650,17 +823,19 @@ private struct CapabilityCallCard: View {
                     }
                 }
                 .padding(9)
-                .background(RadarTheme.background.opacity(0.28))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RadarTheme.tintFaint)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(10)
-        .background(RadarTheme.background.opacity(0.22))
+        .padding(11)
+        .background(RadarTheme.tintSoft)
         .overlay(
-            RoundedRectangle(cornerRadius: 7)
-                .stroke(RadarTheme.borderSoft, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(RadarTheme.borderSoft, lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
@@ -733,9 +908,9 @@ private struct AttachmentInlineCard: View {
                 }
                 Spacer()
             }
-            .padding(9)
-            .background(RadarTheme.background.opacity(0.25))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .padding(10)
+            .background(RadarTheme.tintSoft)
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -804,6 +979,7 @@ private struct AgentComposerBar: View {
     let thread: AgentThreadState
     @State private var abilityPalettePresented = false
     @State private var abilitySearch = ""
+    @FocusState private var composerFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -826,14 +1002,15 @@ private struct AgentComposerBar: View {
                     .font(.system(size: 13))
                     .scrollContentBackground(.hidden)
                     .foregroundStyle(RadarTheme.primaryText)
+                    .focused($composerFocused)
                     .frame(minHeight: 82, maxHeight: 130)
                     .padding(8)
-                    .background(RadarTheme.panelElevated.opacity(0.62))
+                    .background(RadarTheme.panelElevated.opacity(composerFocused ? 0.75 : 0.62))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(RadarTheme.borderSoft, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(composerFocused ? RadarTheme.blue.opacity(0.5) : RadarTheme.borderSoft, lineWidth: 1)
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(alignment: .topLeading) {
                         if viewModel.agentPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             Text("描述任务，输入 /add 添加能力…")
@@ -844,6 +1021,7 @@ private struct AgentComposerBar: View {
                                 .allowsHitTesting(false)
                         }
                     }
+                    .animation(RadarMotion.snappy, value: composerFocused)
 
                 HStack(spacing: 8) {
                     Button(action: {
@@ -1011,7 +1189,7 @@ private struct AbilityPaletteView: View {
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(RadarTheme.secondaryText)
                         .frame(width: 26, height: 26)
-                        .background(Color.white.opacity(0.055))
+                        .background(RadarTheme.tintSoft)
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -1025,7 +1203,7 @@ private struct AbilityPaletteView: View {
                     .font(.system(size: 12))
             }
             .padding(10)
-            .background(Color.white.opacity(0.055))
+            .background(RadarTheme.tintSoft)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             ScrollView {
@@ -1213,10 +1391,17 @@ private struct AgentInspectorV2Panel: View {
                 } else {
                     overview
                 }
+            case .strategyResult(let id):
+                if let result = viewModel.strategyResult(id: id) {
+                    StrategyInspectorView(result: result)
+                } else {
+                    overview
+                }
             }
 
             Spacer(minLength: 0)
         }
+        .animation(RadarMotion.smooth, value: viewModel.selectedAgentInspector)
         .padding(12)
         .researchPanel()
     }
@@ -1241,6 +1426,8 @@ private struct AgentInspectorV2Panel: View {
             return "任务"
         case .context:
             return "上下文"
+        case .strategyResult:
+            return "策略复核"
         }
     }
 
@@ -1315,8 +1502,8 @@ private struct AgentInspectorV2Panel: View {
     private func policyInspector(_ id: String) -> some View {
         InspectorSection(title: "安全边界", rows: [
             ("边界", id),
-            ("真实微信", "默认阻断，不直接访问客户端"),
-            ("外部动作", "交易、发消息、发布保持阻断"),
+            ("真实微信", "本机只读已授权（经 wechat-cli），不发送"),
+            ("外部动作", "交易、发消息、对外发布保持阻断"),
             ("Computer Use", "只生成申请，不直接控制 Mac"),
             ("密钥", "只读环境变量，不写入记录")
         ])
@@ -1907,16 +2094,37 @@ private enum AgentWorkspaceV2Copy {
     }
 }
 
-private extension View {
-    func railRow(selected: Bool) -> some View {
-        self
+private struct AgentRailRowModifier: ViewModifier {
+    let selected: Bool
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
+        content
             .padding(8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(selected ? RadarTheme.green.opacity(0.12) : RadarTheme.panelElevated.opacity(0.42))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(selected ? RadarTheme.green.opacity(0.55) : RadarTheme.borderSoft.opacity(0.6), lineWidth: 1)
+            .background(
+                shape.fill(
+                    selected ? RadarTheme.blue.opacity(0.14)
+                        : (hovering ? RadarTheme.tintSoft : RadarTheme.panelElevated.opacity(0.4))
+                )
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                shape.strokeBorder(
+                    selected ? RadarTheme.blue.opacity(0.5)
+                        : (hovering ? RadarTheme.borderStrong : RadarTheme.borderSoft.opacity(0.6)),
+                    lineWidth: 1
+                )
+            )
+            .clipShape(shape)
+            .animation(RadarMotion.snappy, value: hovering)
+            .animation(RadarMotion.spring, value: selected)
+            .onHover { hovering = $0 }
+    }
+}
+
+private extension View {
+    func railRow(selected: Bool) -> some View {
+        modifier(AgentRailRowModifier(selected: selected))
     }
 }
