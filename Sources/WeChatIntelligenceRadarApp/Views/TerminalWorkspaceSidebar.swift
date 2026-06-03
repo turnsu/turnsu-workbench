@@ -103,12 +103,12 @@ struct TerminalWorkspaceSidebar: View {
 
     private var brand: some View {
         HStack(spacing: 11) {
-            IconChip(systemName: "dot.radiowaves.left.and.right", size: 32, gradient: RadarTheme.brandGradient)
+            LooloomiBrandMark(size: 34)
             if !sidebarCollapsed {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("情报雷达")
-                        .font(RadarFont.display(15.5, .bold))
-                        .foregroundStyle(RadarTheme.primaryText)
+                    Text("looloomi")
+                        .font(RadarFont.display(18, .bold))
+                        .foregroundStyle(RadarTheme.brandGradient)
                     Text("本地优先 · 微信 × 链上")
                         .font(.system(size: 10.5))
                         .foregroundStyle(RadarTheme.mutedText)
@@ -152,6 +152,34 @@ struct TerminalWorkspaceSidebar: View {
 
     private var isLibrarySelected: Bool {
         selectedWorkspace == .inbox || selectedWorkspace == .token || selectedWorkspace == .watchlist
+    }
+}
+
+private struct LooloomiBrandMark: View {
+    let size: CGFloat
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: size * 0.31, style: .continuous)
+        ZStack {
+            shape
+                .fill(Color(hex: 0x061429))
+            shape
+                .strokeBorder(RadarTheme.brandGradient, lineWidth: 1.2)
+                .shadow(color: RadarTheme.cyan.opacity(0.55), radius: 7, x: 0, y: 0)
+            Image(systemName: "infinity")
+                .font(.system(size: size * 0.54, weight: .bold))
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(RadarTheme.cyan, RadarTheme.indigo)
+                .shadow(color: RadarTheme.cyan.opacity(0.8), radius: 7, x: 0, y: 0)
+        }
+        .frame(width: size, height: size)
+        .overlay(
+            shape
+                .strokeBorder(Color.white.opacity(0.24), lineWidth: 0.6)
+                .blendMode(.plusLighter)
+        )
+        .clipShape(shape)
+        .shadow(color: RadarTheme.blue.opacity(0.32), radius: 12, x: 0, y: 5)
     }
 }
 

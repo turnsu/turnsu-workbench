@@ -19,7 +19,7 @@ let package = Package(
             path: "Sources/WeChatIntelligenceRadarApp",
             resources: [
                 .process("Fixtures"),
-                .process("Resources/Fonts")
+                .process("Resources")
             ]
         ),
         .testTarget(

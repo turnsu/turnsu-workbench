@@ -18,6 +18,7 @@ MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 EXECUTABLE="$BUILD_DIR/WeChatIntelligenceRadar"
 RESOURCE_BUNDLE="$BUILD_DIR/WeChatIntelligenceRadarMVP_WeChatIntelligenceRadarApp.bundle"
+ICON_FILE="$ROOT_DIR/Sources/WeChatIntelligenceRadarApp/Resources/AppIcon.icns"
 
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
@@ -29,6 +30,10 @@ if [[ -d "$RESOURCE_BUNDLE" ]]; then
   cp -R "$RESOURCE_BUNDLE" "$RESOURCES_DIR/"
 fi
 
+if [[ -f "$ICON_FILE" ]]; then
+  cp -p "$ICON_FILE" "$RESOURCES_DIR/AppIcon.icns"
+fi
+
 cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -37,15 +42,17 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
   <key>CFBundleDevelopmentRegion</key>
   <string>zh_CN</string>
   <key>CFBundleDisplayName</key>
-  <string>WeChat Intelligence Radar</string>
+  <string>looloomi</string>
   <key>CFBundleExecutable</key>
   <string>WeChatIntelligenceRadar</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundleIdentifier</key>
   <string>local.wechat-intelligence-radar.mvp</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>WeChatIntelligenceRadar</string>
+  <string>looloomi</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

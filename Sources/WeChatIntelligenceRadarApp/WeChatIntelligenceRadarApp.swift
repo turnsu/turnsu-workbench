@@ -6,6 +6,7 @@ import SwiftUI
 @main
 @MainActor
 final class WeChatIntelligenceRadarApp: NSObject, NSApplicationDelegate {
+    private static let displayName = "looloomi"
     private static var retainedDelegate: WeChatIntelligenceRadarApp?
     private let uiSmokeCheck: Bool
     private var window: NSWindow?
@@ -80,7 +81,7 @@ final class WeChatIntelligenceRadarApp: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.center()
-        window.title = "WeChat Intelligence Radar"
+        window.title = Self.displayName
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.sharingType = .readWrite
@@ -104,7 +105,7 @@ final class WeChatIntelligenceRadarApp: NSObject, NSApplicationDelegate {
 
         let rootType = String(describing: type(of: window.contentView))
         let visible = window.isVisible
-        let validTitle = window.title == "WeChat Intelligence Radar"
+        let validTitle = window.title == Self.displayName
         let hasContent = window.contentView != nil
         let hasWindowNumber = window.windowNumber > 0
 
