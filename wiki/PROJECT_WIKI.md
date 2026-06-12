@@ -104,4 +104,4 @@ Historical directions such as Research OS, Apple minimal, Today Desk, Queue Canv
 
 - Branch: `codex/latest-intelligence-workbench-cleanup`.
 - Remote: `origin` (`https://github.com/DESONGs/intelligence-agent-web3.git`).
-- Cleanup commit: pending push record.
+- Cleanup commit pushed: `36f36cf` (`cleanup architecture and consolidate command desk runtime`).
