@@ -7,7 +7,6 @@ import SwiftUI
 /// evidence / audit. Never renders trade instructions.
 struct StrategyResultCard: View {
     let result: CMCStrategistResult
-    var onInspect: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 13) {
@@ -44,17 +43,14 @@ struct StrategyResultCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.thinMaterial)
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(RadarTheme.panelElevated))
+                .fill(RadarTheme.panelElevated)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(RadarTheme.blue.opacity(0.28), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: RadarTheme.cardShadow.opacity(0.7), radius: 16, x: 0, y: 8)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onInspect)
+        .shadow(color: RadarTheme.cardShadow.opacity(0.7), radius: 12, x: 0, y: 6)
     }
 
     private var header: some View {
@@ -155,7 +151,7 @@ struct StrategyResultCard: View {
                     }
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RadarTheme.panelElevated.opacity(0.5))
+                    .background(RadarTheme.tintFaint)
                     .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(RadarTheme.borderSoft, lineWidth: 1))
                     .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
@@ -213,11 +209,6 @@ struct StrategyResultCard: View {
                     .lineLimit(1)
             }
             Spacer()
-            Button(action: onInspect) {
-                Label("证据与复核", systemImage: "sidebar.right")
-            }
-            .buttonStyle(ResearchSecondaryButtonStyle())
-            .controlSize(.small)
         }
     }
 }

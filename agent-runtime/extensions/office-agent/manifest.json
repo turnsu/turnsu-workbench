@@ -1,0 +1,104 @@
+{
+  "id": "office-agent",
+  "schemaVersion": "agent-extension-package-v1",
+  "title": "Office / Meeting Agent Extension",
+  "description": "Unified Agent Office, Meeting, and Feishu dry-run capability package migrated into the current runtime harness without copying the assignment agent orchestrator.",
+  "sourceReference": {
+    "path": "assignment agent_\u526f\u672c/meeting-agent-pi-package",
+    "migrationMode": "capability_contract_and_dry_run_tools_only",
+    "notMigrated": [
+      "feishu live event runner",
+      "lark-cli live publish",
+      "local ASR service",
+      "Docker bounded worker",
+      "Hermes sidecar",
+      "second task orchestrator"
+    ]
+  },
+  "publicExtension": {
+    "extensionID": "office-meeting-agent",
+    "title": "Office / Meeting \u80fd\u529b\u5305",
+    "description": "\u63d0\u4f9b\u4f1a\u8bae\u7eaa\u8981\u3001\u6587\u6863\u8349\u7a3f\u3001\u6587\u6863\u4fee\u8ba2\u548c\u98de\u4e66\u901a\u9053 dry-run\uff1b\u4e0d\u53d1\u5e03\u3001\u4e0d\u56de\u590d\u3001\u4e0d\u8986\u76d6\u4e91\u6587\u6863\u3002",
+    "category": "office",
+    "defaultSelected": false,
+    "status": "available",
+    "permissionSummary": "\u53ea\u5199\u672c\u5730 draft/dry-run artifacts\uff1b\u771f\u5b9e\u98de\u4e66\u53d1\u5e03\u3001\u56de\u590d\u3001\u901a\u77e5\u548c\u5220\u9664\u7c7b\u52a8\u4f5c\u4fdd\u6301 blocked \u6216\u9700\u786e\u8ba4\u3002"
+  },
+  "publicSkills": [
+    {
+      "skillID": "meeting-minutes",
+      "title": "\u4f1a\u8bae\u7eaa\u8981",
+      "description": "\u57fa\u4e8e bounded context \u751f\u6210\u672c\u5730\u4f1a\u8bae\u7eaa\u8981\u8349\u7a3f\u548c\u5f85\u529e\u6458\u8981\u3002",
+      "category": "office",
+      "defaultSelected": false,
+      "status": "available",
+      "permissionSummary": "\u53ea\u751f\u6210\u672c\u5730\u8349\u7a3f artifact\uff0c\u4e0d\u5916\u53d1\u539f\u59cb\u9010\u5b57\u7a3f\u3002"
+    },
+    {
+      "skillID": "document-generation",
+      "title": "\u6587\u6863\u8349\u7a3f",
+      "description": "\u751f\u6210 PRD\u3001\u6280\u672f\u65b9\u6848\u3001\u8fd0\u8425\u65b9\u6848\u7b49\u672c\u5730\u6587\u6863\u8349\u7a3f read model\u3002",
+      "category": "office",
+      "defaultSelected": false,
+      "status": "available",
+      "permissionSummary": "\u53ea\u5199\u672c\u5730 draft artifact\uff0c\u53d1\u5e03/\u8986\u76d6\u9700 QA/Policy/channel readiness\u3002"
+    },
+    {
+      "skillID": "document-revision",
+      "title": "\u6587\u6863\u4fee\u8ba2",
+      "description": "\u57fa\u4e8e\u6279\u6ce8\u3001\u8bc4\u8bba\u6216\u4fee\u8ba2\u8981\u6c42\u751f\u6210\u672c\u5730\u4fee\u8ba2\u8349\u7a3f\u3002",
+      "category": "office",
+      "defaultSelected": false,
+      "status": "available",
+      "permissionSummary": "\u4e0d\u5220\u9664\u3001\u4e0d\u6e05\u7a7a\u3001\u4e0d\u76f4\u63a5\u8986\u76d6\u4e91\u6587\u6863\u3002"
+    },
+    {
+      "skillID": "feishu-agent-bridge",
+      "title": "\u98de\u4e66\u901a\u9053\u9884\u6f14",
+      "description": "\u628a\u98de\u4e66\u53d1\u5e03/\u56de\u590d\u610f\u56fe\u5199\u6210 dry-run artifact\uff0c\u7528\u4e8e\u540e\u7eed QA/Policy \u590d\u6838\u3002",
+      "category": "channel",
+      "defaultSelected": false,
+      "status": "dry_run",
+      "permissionSummary": "\u771f\u5b9e\u56de\u590d\u3001\u53d1\u5e03\u3001\u901a\u77e5\u5747\u4e0d\u6267\u884c\u3002"
+    }
+  ],
+  "internalTools": [
+    "office.meeting_minutes.draft",
+    "office.document.draft",
+    "office.document_revision.draft",
+    "channel.feishu.dry_run"
+  ],
+  "providers": [
+    "boundedContextProvider",
+    "localArtifactProvider",
+    "dryRunChannelProvider"
+  ],
+  "policies": {
+    "office_draft": "pass",
+    "office_revision_draft": "pass",
+    "feishu_dry_run": "pass",
+    "feishu_live_reply": "blocked",
+    "feishu_live_publish": "blocked",
+    "document_delete": "blocked",
+    "document_overwrite_live": "blocked"
+  },
+  "channelCapabilityMatrix": {
+    "feishu": {
+      "read_context": "dry_run_or_read_only_when_configured",
+      "write_private_draft": "pass",
+      "publish_customer_visible": "blocked_until_QA_Policy_channel_ready",
+      "notify_people": "needs_confirmation",
+      "delete_or_clear": "blocked"
+    },
+    "wechat": {
+      "read_context": "fixture_or_read_only_refresh",
+      "send_message": "blocked",
+      "publish_external": "blocked"
+    },
+    "local_file": {
+      "read_context": "pass",
+      "write_private_draft": "pass",
+      "delete_or_clear": "blocked"
+    }
+  }
+}

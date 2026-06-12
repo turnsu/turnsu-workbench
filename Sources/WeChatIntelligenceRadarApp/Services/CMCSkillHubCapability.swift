@@ -17,8 +17,8 @@ struct CMCSkillHubCapability: Hashable {
         symbols: ["BTC", "ETH", "SOL"],
         evidence: [
             "crypto_skill_hub.find_skill selected altcoin_token_profile for token market profiles.",
-            "crypto_skill_hub.execute_skill returned BTC, ETH, and SOL CoinMarketCap evidence packs.",
-            "Outputs are normalized into MarketDataSnapshot for agent enrichment."
+            "Historical sample output for BTC, ETH, and SOL was normalized for UI fallback only.",
+            "These values are fixture/sample evidence and must not be labeled live."
         ],
         normalizedAssets: [
             MarketAsset(
@@ -28,8 +28,8 @@ struct CMCSkillHubCapability: Hashable {
                 percentChange24h: 1.18,
                 volume24hUSD: 30_401_539_817.26,
                 marketCapUSD: 1_533_858_391_564.59,
-                source: "CMC Crypto Skill Hub / altcoin_token_profile",
-                isLive: true
+                source: "CMC Crypto Skill Hub sample / altcoin_token_profile",
+                isLive: false
             ),
             MarketAsset(
                 symbol: "ETH",
@@ -38,8 +38,8 @@ struct CMCSkillHubCapability: Hashable {
                 percentChange24h: 2.16,
                 volume24hUSD: 16_749_840_846.65,
                 marketCapUSD: 255_126_762_125.61,
-                source: "CMC Crypto Skill Hub / altcoin_token_profile",
-                isLive: true
+                source: "CMC Crypto Skill Hub sample / altcoin_token_profile",
+                isLive: false
             ),
             MarketAsset(
                 symbol: "SOL",
@@ -48,8 +48,8 @@ struct CMCSkillHubCapability: Hashable {
                 percentChange24h: 1.00,
                 volume24hUSD: 4_087_431_606.62,
                 marketCapUSD: 49_517_711_572.82,
-                source: "CMC Crypto Skill Hub / altcoin_token_profile",
-                isLive: true
+                source: "CMC Crypto Skill Hub sample / altcoin_token_profile",
+                isLive: false
             )
         ]
     )

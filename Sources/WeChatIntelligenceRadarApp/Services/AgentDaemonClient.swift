@@ -1,8 +1,28 @@
 import Foundation
 
+struct AgentDaemonAuthToken: Decodable {
+    let token: String
+}
+
+struct AgentDaemonAuth {
+    static func loadToken(pathResolver: RuntimePathResolver = RuntimePathResolver()) -> String? {
+        let url = pathResolver.runtimeDirectory
+            .appendingPathComponent("agent", isDirectory: true)
+            .appendingPathComponent("auth-token.json")
+        guard let data = try? Data(contentsOf: url),
+              let payload = try? JSONDecoder.agentArtifactDecoder().decode(AgentDaemonAuthToken.self, from: data),
+              !payload.token.isEmpty
+        else {
+            return nil
+        }
+        return payload.token
+    }
+}
+
 struct AgentDaemonClient {
     var baseURL: URL = URL(string: "http://127.0.0.1:8797")!
     var session: URLSession = .shared
+    var authToken: String? = AgentDaemonAuth.loadToken()
 
     func health() async throws -> AgentDaemonStatus {
         try await get("/health", as: AgentDaemonStatus.self)
@@ -16,8 +36,36 @@ struct AgentDaemonClient {
         try await post("/sessions", body: ["title": title], as: AgentSession.self)
     }
 
+    func listSessions() async throws -> [AgentSession] {
+        try await get("/sessions", as: AgentSessionListResponse.self).sessions
+    }
+
     func getSession(_ sessionID: String) async throws -> AgentSession {
         try await get("/sessions/\(sessionID)", as: AgentSession.self)
+    }
+
+    func renameSession(_ sessionID: String, title: String) async throws -> AgentSession {
+        try await patch("/sessions/\(sessionID)", body: ["title": title], as: AgentSession.self)
+    }
+
+    func deleteSession(_ sessionID: String) async throws -> AgentDeleteResult {
+        try await delete("/sessions/\(sessionID)", as: AgentDeleteResult.self)
+    }
+
+    func listTasks() async throws -> [AgentLongTask] {
+        try await get("/tasks", as: AgentTaskListResponse.self).tasks
+    }
+
+    func deleteTask(_ taskID: String) async throws -> AgentDeleteResult {
+        try await delete("/tasks/\(taskID)", as: AgentDeleteResult.self)
+    }
+
+    func deleteRun(_ runID: String) async throws -> AgentDeleteResult {
+        try await delete("/runs/\(runID)", as: AgentDeleteResult.self)
+    }
+
+    func resetRuntime() async throws -> AgentRuntimeResetResult {
+        try await post("/admin/runtime/reset", body: [String: String](), as: AgentRuntimeResetResult.self)
     }
 
     func postMessage(
@@ -70,6 +118,7 @@ struct AgentDaemonClient {
         let url = endpoint(path)
         var request = URLRequest(url: url, timeoutInterval: 3)
         request.httpMethod = "GET"
+        applyAuth(to: &request)
         let (data, response) = try await session.data(for: request)
         try validate(response: response, data: data)
         return try JSONDecoder.agentArtifactDecoder().decode(T.self, from: data)
@@ -80,7 +129,30 @@ struct AgentDaemonClient {
         var request = URLRequest(url: url, timeoutInterval: 90)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        applyAuth(to: &request)
         request.httpBody = try JSONEncoder.agentArtifactEncoder().encode(body)
+        let (data, response) = try await session.data(for: request)
+        try validate(response: response, data: data)
+        return try JSONDecoder.agentArtifactDecoder().decode(T.self, from: data)
+    }
+
+    private func patch<Body: Encodable, T: Decodable>(_ path: String, body: Body, as type: T.Type) async throws -> T {
+        let url = endpoint(path)
+        var request = URLRequest(url: url, timeoutInterval: 20)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        applyAuth(to: &request)
+        request.httpBody = try JSONEncoder.agentArtifactEncoder().encode(body)
+        let (data, response) = try await session.data(for: request)
+        try validate(response: response, data: data)
+        return try JSONDecoder.agentArtifactDecoder().decode(T.self, from: data)
+    }
+
+    private func delete<T: Decodable>(_ path: String, as type: T.Type) async throws -> T {
+        let url = endpoint(path)
+        var request = URLRequest(url: url, timeoutInterval: 20)
+        request.httpMethod = "DELETE"
+        applyAuth(to: &request)
         let (data, response) = try await session.data(for: request)
         try validate(response: response, data: data)
         return try JSONDecoder.agentArtifactDecoder().decode(T.self, from: data)
@@ -91,12 +163,42 @@ struct AgentDaemonClient {
         return URL(string: normalized, relativeTo: baseURL)!.absoluteURL
     }
 
+    private func applyAuth(to request: inout URLRequest) {
+        guard let authToken, !authToken.isEmpty else { return }
+        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+    }
+
     private func validate(response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let preview = String(data: data, encoding: .utf8)?.prefix(500) ?? ""
             throw AgentDaemonClientError.http(String(preview))
         }
     }
+}
+
+struct AgentSessionListResponse: Decodable {
+    let schemaVersion: String?
+    let sessions: [AgentSession]
+}
+
+struct AgentTaskListResponse: Decodable {
+    let schemaVersion: String?
+    let tasks: [AgentLongTask]
+}
+
+struct AgentDeleteResult: Codable, Hashable {
+    let schemaVersion: String?
+    let kind: String
+    let id: String
+    let runID: String?
+    let deletedRunCount: Int?
+    let status: String
+}
+
+struct AgentRuntimeResetResult: Codable, Hashable {
+    let schemaVersion: String?
+    let status: String
+    let resetAt: String?
 }
 
 private struct AgentMessageRequest: Encodable {
@@ -130,6 +232,7 @@ enum AgentDaemonClientError: LocalizedError {
 struct AgentEventStreamClient {
     var baseURL: URL = URL(string: "http://127.0.0.1:8797")!
     var session: URLSession = .shared
+    var authToken: String? = AgentDaemonAuth.loadToken()
 
     func events(runID: String) -> AsyncThrowingStream<AgentStreamEvent, Error> {
         AsyncThrowingStream { continuation in
@@ -139,6 +242,9 @@ struct AgentEventStreamClient {
                     var request = URLRequest(url: url, timeoutInterval: 300)
                     request.httpMethod = "GET"
                     request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                    if let authToken, !authToken.isEmpty {
+                        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+                    }
                     let (bytes, response) = try await session.bytes(for: request)
                     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                         throw AgentDaemonClientError.http("Agent event stream failed")

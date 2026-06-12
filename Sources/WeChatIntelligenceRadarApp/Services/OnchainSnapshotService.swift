@@ -15,7 +15,7 @@ struct OnchainSnapshotService {
                 contractRisk: hasContract ? "fixture_medium_check_required" : "degraded_missing_contract",
                 source: hasContract ? "fixture_onchain_snapshot" : "onchain_provider_not_configured",
                 freshness: hasContract ? "fixture" : "degraded",
-                confidence: hasContract ? 0.64 : 0.30,
+                confidence: hasContract ? 0.35 : 0.15,
                 generatedAt: AgentDateFormatting.isoString(generatedAt)
             )
         }

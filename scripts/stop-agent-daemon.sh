@@ -3,6 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PID_FILE="$ROOT_DIR/runtime/agent/daemon.pid"
+LAUNCH_LABEL="local.looloomi.agent-daemon"
+
+launchctl bootout "gui/$(id -u)/$LAUNCH_LABEL" >/dev/null 2>&1 || true
 
 if [[ ! -f "$PID_FILE" ]]; then
   echo "wechat-agent-daemon not running"

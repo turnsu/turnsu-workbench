@@ -26,22 +26,28 @@ private struct ProactiveSummaryStrip: View {
     @ObservedObject var viewModel: DashboardViewModel
 
     var body: some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible(), spacing: 10),
-            GridItem(.flexible(), spacing: 10),
-            GridItem(.flexible(), spacing: 10),
-            GridItem(.flexible(), spacing: 10)
-        ], spacing: 10) {
+        // One unified strip with hairline dividers (not 4 floating cards).
+        HStack(spacing: 0) {
             ProactiveMetric(title: "情报卡", value: "\(viewModel.terminalData.proactive.crystals.count)", detail: RuntimeStatusPresenter.label(viewModel.terminalData.proactive.freshness.rawValue))
+            MetricDivider()
             ProactiveMetric(title: "行动建议", value: "\(viewModel.terminalData.proactive.proposals.count)", detail: proposalStatusText)
+            MetricDivider()
             ProactiveMetric(title: "长期记忆", value: "\(viewModel.terminalData.proactive.memory.count)", detail: "本地")
+            MetricDivider()
             ProactiveMetric(title: "交接包", value: "\(viewModel.terminalData.proactive.handoffs.count)", detail: RuntimeStatusPresenter.label(viewModel.terminalData.proactive.latestSession?.healthStatus ?? "--"))
         }
+        .radarPanel()
     }
 
     private var proposalStatusText: String {
         let accepted = viewModel.terminalData.proactive.proposals.filter { $0.status == .accepted }.count
         return accepted == 0 ? "待处理" : "\(accepted) 已接受"
+    }
+}
+
+private struct MetricDivider: View {
+    var body: some View {
+        Rectangle().fill(RadarTheme.border).frame(width: 1, height: 44)
     }
 }
 
@@ -54,16 +60,16 @@ private struct ProactiveMetric: View {
         VStack(alignment: .leading, spacing: 6) {
             ResearchSectionEyebrow(text: title, icon: "bolt")
             Text(value)
-                .font(.system(size: 27, weight: .heavy, design: .rounded))
+                .font(.system(size: 26, weight: .heavy, design: .rounded))
                 .foregroundStyle(RadarTheme.primaryText)
             Text(detail)
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(RadarTheme.secondaryText)
+                .lineLimit(1)
         }
-        .padding(12)
+        .padding(.horizontal, 15)
+        .padding(.vertical, 13)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RadarTheme.panelElevated.opacity(0.72))
-        .researchPanel()
     }
 }
 
@@ -81,8 +87,8 @@ struct CrystalStreamView: View {
                     .foregroundStyle(RadarTheme.secondaryText)
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RadarTheme.panelElevated.opacity(0.5))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .background(RadarTheme.tintFaint)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             } else {
                 ForEach(crystals) { crystal in
                     CrystalCardView(
@@ -141,8 +147,7 @@ private struct CrystalCardView: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(selected ? RadarTheme.panelElevated : RadarTheme.panelElevated.opacity(0.62))
-            .researchPanel(glow: selected)
+            .quietRow(selected: selected, cornerRadius: 13)
         }
         .buttonStyle(.plain)
     }
@@ -326,7 +331,7 @@ private struct OpsRowCompact: View {
                 .lineLimit(2)
         }
         .padding(9)
-        .background(RadarTheme.panelElevated.opacity(0.58))
-        .researchPanel()
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(RadarTheme.tintFaint))
+        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(RadarTheme.borderSoft, lineWidth: 1))
     }
 }

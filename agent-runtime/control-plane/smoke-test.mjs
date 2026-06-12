@@ -37,6 +37,11 @@ try {
     result.contextManifest,
     result.contextBundle,
     result.retrievalPlan,
+    result.contextIndex,
+    result.retrievalResults,
+    result.contextPack,
+    result.sourceTrustReport,
+    result.memoryCompression,
     result.contextGate,
     result.toolIntentPlan,
     result.policyDecisions,
@@ -47,6 +52,10 @@ try {
     result.retryLedger,
   ];
   if (required.some((item) => item === null || item === undefined)) throw new Error("missing_control_plane_output");
+  if (!Array.isArray(result.contextIndex.chunks) || !result.contextIndex.chunks.length) throw new Error("context_index_missing_chunks");
+  if (!Array.isArray(result.retrievalResults.rankedChunks) || !result.retrievalResults.rankedChunks.length) throw new Error("retrieval_results_missing_ranked_chunks");
+  if (!Array.isArray(result.contextPack.selectedChunks) || !result.contextPack.selectedChunks.length) throw new Error("context_pack_missing_selected_chunks");
+  if (!Array.isArray(result.sourceTrustReport.sources) || !result.sourceTrustReport.sources.length) throw new Error("source_trust_report_missing_sources");
   if (result.controlPlaneManifest.internalToolsExposed !== false) throw new Error("internal_tools_exposed");
   if (!result.policyDecisions.some((item) => item.action === "wechat_cli.live_command" && item.status === "blocked")) {
     throw new Error("blocked_policy_missing");
@@ -55,4 +64,3 @@ try {
 } finally {
   rmSync(runDir, { recursive: true, force: true });
 }
-

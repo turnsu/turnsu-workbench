@@ -59,18 +59,37 @@ final class DashboardViewModel: ObservableObject {
     @Published var agentPrompt: String = ""
     @Published var agentAttachments: [AgentAttachment] = []
     @Published var agentSubmitStatus: String = "daemon_not_checked"
+    @Published private(set) var agentFinalizingRunIDs: Set<String> = []
+    @Published private(set) var agentFinalReadModelByRunID: [String: AgentFinalReadModel] = [:]
+    @Published private(set) var agentCMCCapabilitySummaryByRunID: [String: CMCCapabilitySummary] = [:]
+    @Published private(set) var agentCapabilityLoopByRunID: [String: CapabilityLoopReadModel] = [:]
+    @Published private(set) var agentMemoryReadModelByRunID: [String: AgentMemoryReadModel] = [:]
+    @Published private(set) var agentSubagentCoordinationByRunID: [String: SubagentCoordinationReadModel] = [:]
 
     private var backend: RuntimeBackend
     private let runDate: Date
     private var runCount = 0
     private let agentClient: AgentDaemonClient
-    private let agentEventClient: AgentEventStreamClient
-    private let agentStreamStore: AgentStreamStore
+    private let agentRunReadModelStore: AgentRunReadModelStore
+    private let agentRunStreamCoordinator: AgentRunStreamCoordinator
+    private let agentRunCompletionCoordinator: AgentRunCompletionCoordinator
     private let agentAttachmentStore: AgentAttachmentStore
     private let agentToolRegistryStore: AgentToolRegistryStore
     private let agentOpsRuntimeStore: AgentOpsRuntimeStore
     private let strategyResultStore = CMCStrategyResultStore()
-    private var agentEventStreamTask: Task<Void, Never>?
+    private var activeStreamRunID: String?
+
+    // === Filter memoization (perf) ===========================================================
+    // `filtered*` recomputed `.filter` on every body pass while searching. Cache by a signature
+    // of (data version, query); rebuild only when either changes.
+    private var filterDataVersion = 0
+    private var filterSignature: String?
+    private var memoFilteredMessages: [NormalizedWeChatMessage] = []
+    private var memoFilteredTokens: [TokenEntity] = []
+    private var memoFilteredCrystals: [IntelligenceCrystal] = []
+    private var memoFilteredProposals: [AgentProposal] = []
+    private var memoFilteredHandoffs: [HandoffPacket] = []
+    private var memoFilteredWatchlistItems: [WatchlistItem] = []
 
     init(
         backend: RuntimeBackend = RuntimeBackend(),
@@ -78,7 +97,9 @@ final class DashboardViewModel: ObservableObject {
         initialWorkspace: TerminalWorkspace = .home,
         agentClient: AgentDaemonClient = AgentDaemonClient(),
         agentEventClient: AgentEventStreamClient = AgentEventStreamClient(),
-        agentStreamStore: AgentStreamStore = AgentStreamStore(),
+        agentRunReadModelStore: AgentRunReadModelStore = AgentRunReadModelStore(),
+        agentRunStreamCoordinator: AgentRunStreamCoordinator? = nil,
+        agentRunCompletionCoordinator: AgentRunCompletionCoordinator = AgentRunCompletionCoordinator(),
         agentAttachmentStore: AgentAttachmentStore = AgentAttachmentStore(),
         agentToolRegistryStore: AgentToolRegistryStore = AgentToolRegistryStore(),
         agentOpsRuntimeStore: AgentOpsRuntimeStore = AgentOpsRuntimeStore()
@@ -87,8 +108,9 @@ final class DashboardViewModel: ObservableObject {
         self.runDate = runDate
         self.selectedWorkspace = initialWorkspace
         self.agentClient = agentClient
-        self.agentEventClient = agentEventClient
-        self.agentStreamStore = agentStreamStore
+        self.agentRunReadModelStore = agentRunReadModelStore
+        self.agentRunStreamCoordinator = agentRunStreamCoordinator ?? AgentRunStreamCoordinator(eventClient: agentEventClient)
+        self.agentRunCompletionCoordinator = agentRunCompletionCoordinator
         self.agentAttachmentStore = agentAttachmentStore
         self.agentToolRegistryStore = agentToolRegistryStore
         self.agentOpsRuntimeStore = agentOpsRuntimeStore
@@ -279,6 +301,15 @@ final class DashboardViewModel: ObservableObject {
         apply(backend.execute(.markCrystalFalsePositive(selectedCrystalID, reason: "Marked false positive from Crystal Stream.")))
     }
 
+    /// Per-id variants so inline card actions don't have to change the current selection.
+    func markCrystalUseful(_ id: UUID) {
+        apply(backend.execute(.markCrystalUseful(id)))
+    }
+
+    func markCrystalFalsePositive(_ id: UUID) {
+        apply(backend.execute(.markCrystalFalsePositive(id, reason: "Marked false positive inline.")))
+    }
+
     func refreshAgentWorkspace() {
         let registry = agentToolRegistryStore.read()
         agentSkills = registry.skills
@@ -289,20 +320,28 @@ final class DashboardViewModel: ObservableObject {
         if selectedAgentExtensionIDs.isEmpty {
             selectedAgentExtensionIDs = Set(registry.extensions.filter { $0.defaultSelected ?? false }.map(\.extensionID))
         }
-        agentSessions = agentStreamStore.readSessions()
-        agentTasks = agentStreamStore.readTasks()
+        agentSessions = []
+        agentTasks = []
         agentOpsSnapshot = agentOpsRuntimeStore.read()
-        if selectedAgentSessionID == nil {
-            selectedAgentSessionID = agentSessions.first?.sessionID
-        }
         reloadSelectedAgentSession()
         Task {
             do {
                 let status = try await agentClient.health()
                 let remoteRegistry = try? await agentClient.capabilities()
+                let remoteSessions = (try? await agentClient.listSessions()) ?? []
+                let remoteTasks = (try? await agentClient.listTasks()) ?? []
                 await MainActor.run {
                     self.agentDaemonStatus = status
                     self.agentSubmitStatus = "daemon:\(status.status)"
+                    self.agentSessions = remoteSessions
+                    self.agentTasks = remoteTasks
+                    if let selected = self.selectedAgentSessionID,
+                       !remoteSessions.contains(where: { $0.sessionID == selected }) {
+                        self.selectedAgentSessionID = remoteSessions.first?.sessionID
+                    } else if self.selectedAgentSessionID == nil {
+                        self.selectedAgentSessionID = remoteSessions.first?.sessionID
+                    }
+                    self.reloadSelectedAgentSession()
                     let remoteSkills = remoteRegistry?.skills ?? []
                     let remoteExtensions = remoteRegistry?.extensions ?? []
                     if !remoteSkills.isEmpty {
@@ -333,16 +372,62 @@ final class DashboardViewModel: ObservableObject {
     }
 
     func renameAgentSession(_ sessionID: String, title: String) {
-        do {
-            if let updated = try agentStreamStore.renameSession(sessionID: sessionID, title: title) {
-                agentSessions = agentStreamStore.readSessions()
-                if selectedAgentSessionID == sessionID {
-                    agentMessages = updated.messages
+        Task {
+            do {
+                let updated = try await agentClient.renameSession(sessionID, title: title)
+                let sessions = (try? await agentClient.listSessions()) ?? [updated]
+                await MainActor.run {
+                    self.agentSessions = sessions
+                    if self.selectedAgentSessionID == sessionID {
+                        self.agentMessages = updated.messages
+                    }
+                    self.agentSubmitStatus = "session_renamed"
                 }
-                agentSubmitStatus = "session_renamed"
+            } catch {
+                await MainActor.run {
+                    self.agentSubmitStatus = "session_rename_failed"
+                }
             }
-        } catch {
-            agentSubmitStatus = "session_rename_failed:\(error.localizedDescription)"
+        }
+    }
+
+    func deleteAgentSession(_ sessionID: String) {
+        Task {
+            do {
+                _ = try await agentClient.deleteSession(sessionID)
+                let sessions = (try? await agentClient.listSessions()) ?? []
+                let tasks = (try? await agentClient.listTasks()) ?? []
+                await MainActor.run {
+                    self.agentSessions = sessions
+                    self.agentTasks = tasks
+                    if self.selectedAgentSessionID == sessionID {
+                        self.selectedAgentSessionID = sessions.first?.sessionID
+                    }
+                    self.agentSubmitStatus = "session_deleted"
+                    self.reloadSelectedAgentSession()
+                }
+            } catch {
+                await MainActor.run {
+                    self.agentSubmitStatus = "session_delete_failed"
+                }
+            }
+        }
+    }
+
+    func deleteAgentTask(_ taskID: String) {
+        Task {
+            do {
+                _ = try await agentClient.deleteTask(taskID)
+                let tasks = (try? await agentClient.listTasks()) ?? []
+                await MainActor.run {
+                    self.agentTasks = tasks
+                    self.agentSubmitStatus = "task_deleted"
+                }
+            } catch {
+                await MainActor.run {
+                    self.agentSubmitStatus = "task_delete_failed"
+                }
+            }
         }
     }
 
@@ -438,6 +523,7 @@ final class DashboardViewModel: ObservableObject {
                     self.selectedAgentSessionID = response.session.sessionID
                     self.agentPrompt = ""
                     self.agentAttachments = []
+                    self.agentSessions = [response.session] + self.agentSessions.filter { $0.sessionID != response.session.sessionID }
                     self.agentMessages = response.session.messages
                     self.agentTasks = [response.task] + self.agentTasks.filter { $0.taskID != response.task.taskID }
                     self.agentStreamEvents = []
@@ -445,6 +531,7 @@ final class DashboardViewModel: ObservableObject {
                     self.agentRunManifest = nil
                     self.agentControlSummary = nil
                     self.agentContextSummary = nil
+                    self.selectedAgentEventID = nil
                     self.agentSubmitStatus = "run_started:\(response.runID)"
                     self.subscribeAgentEvents(runID: response.runID)
                     self.selectedAgentInspector = .task(response.task.taskID)
@@ -483,9 +570,54 @@ final class DashboardViewModel: ObservableObject {
     }
 
     var agentAssistantText: String {
-        let text = agentStreamEvents.compactMap(\.delta).joined()
-        if !text.isEmpty { return text }
-        return agentMessages.last(where: { $0.role == "assistant" })?.plainText ?? ""
+        agentAssistantText(for: activeStreamRunID)
+    }
+
+    func agentAssistantText(for runID: String?) -> String {
+        Self.assistantText(from: agentStreamEvents, runID: runID)
+    }
+
+    nonisolated static func assistantText(from events: [AgentStreamEvent], runID: String?) -> String {
+        guard let runID, !runID.isEmpty else { return "" }
+        return events
+            .filter { $0.runID == runID }
+            .compactMap(\.delta)
+            .joined()
+    }
+
+    func isAgentRunFinalizing(_ runID: String?) -> Bool {
+        guard let runID else { return false }
+        return agentFinalizingRunIDs.contains(runID)
+    }
+
+    func isActiveAgentStreamRun(_ runID: String?) -> Bool {
+        guard let runID, !runID.isEmpty else { return false }
+        return activeStreamRunID == runID
+    }
+
+    func agentRunMissingToolObservations(_ runID: String?) -> Bool {
+        guard let runID else { return false }
+        return !agentRunReadModelStore.hasToolObservations(runID: runID)
+    }
+
+    func agentFinalDiagnostics(runID: String?) -> [String] {
+        guard let runID, let model = agentFinalReadModelByRunID[runID] else { return [] }
+        var items: [String] = []
+        let researchStatus = model.cmcGateSummary?.researchEvidence?.status ?? model.cmcGateSummary?.researchEvidenceStatus
+        let allowConcretePrices = model.cmcGateSummary?.priceSnapshot?.allowConcretePrices ?? model.cmcGateSummary?.allowConcretePrices
+        if researchStatus == "empty" {
+            items.append("Evidence empty")
+        }
+        if allowConcretePrices == false {
+            items.append("Prices blocked")
+        }
+        if model.outputGuardStatus == "rewritten" {
+            items.append("Final rewritten")
+        }
+        if model.productMutationPolicy?.status == "discarded" {
+            items.append("Mutations discarded")
+        }
+        return items
     }
 
     var agentThreadState: AgentThreadState {
@@ -505,6 +637,7 @@ final class DashboardViewModel: ObservableObject {
             pendingAttachments: agentAttachments,
             draftPrompt: agentPrompt,
             selectedEventID: selectedAgentEventID,
+            finalReadModelsByRunID: agentFinalReadModelByRunID,
             strategyResults: agentStrategyResults
         )
     }
@@ -638,8 +771,53 @@ final class DashboardViewModel: ObservableObject {
     }
 
     var filteredMessages: [NormalizedWeChatMessage] {
-        guard hasSearch else { return terminalData.normalizedMessages }
-        return terminalData.normalizedMessages.filter { message in
+        rebuildFilterCacheIfNeeded()
+        return memoFilteredMessages
+    }
+
+    var filteredTokens: [TokenEntity] {
+        rebuildFilterCacheIfNeeded()
+        return memoFilteredTokens
+    }
+
+    var filteredCrystals: [IntelligenceCrystal] {
+        rebuildFilterCacheIfNeeded()
+        return memoFilteredCrystals
+    }
+
+    var filteredProposals: [AgentProposal] {
+        rebuildFilterCacheIfNeeded()
+        return memoFilteredProposals
+    }
+
+    var filteredHandoffs: [HandoffPacket] {
+        rebuildFilterCacheIfNeeded()
+        return memoFilteredHandoffs
+    }
+
+    var filteredWatchlistItems: [WatchlistItem] {
+        rebuildFilterCacheIfNeeded()
+        return memoFilteredWatchlistItems
+    }
+
+    /// Recompute all filtered lists only when the data version or search query changed.
+    /// Called from the `filtered*` getters (safe to mutate stored state from a class getter).
+    private func rebuildFilterCacheIfNeeded() {
+        let signature = "\(filterDataVersion)|\(normalizedSearchQuery)"
+        guard filterSignature != signature else { return }
+        filterSignature = signature
+
+        guard hasSearch else {
+            memoFilteredMessages = terminalData.normalizedMessages
+            memoFilteredTokens = terminalData.tokenEntities
+            memoFilteredCrystals = terminalData.proactive.crystals
+            memoFilteredProposals = terminalData.proactive.proposals
+            memoFilteredHandoffs = terminalData.proactive.handoffs
+            memoFilteredWatchlistItems = terminalData.watchlistItems
+            return
+        }
+
+        memoFilteredMessages = terminalData.normalizedMessages.filter { message in
             matchesSearch([
                 message.groupName,
                 message.sender,
@@ -649,11 +827,7 @@ final class DashboardViewModel: ObservableObject {
                 message.linkedTokenIDs.joined(separator: " ")
             ])
         }
-    }
-
-    var filteredTokens: [TokenEntity] {
-        guard hasSearch else { return terminalData.tokenEntities }
-        return terminalData.tokenEntities.filter { token in
+        memoFilteredTokens = terminalData.tokenEntities.filter { token in
             matchesSearch([
                 token.tokenID,
                 token.symbol,
@@ -663,11 +837,7 @@ final class DashboardViewModel: ObservableObject {
                 token.aliases.joined(separator: " ")
             ])
         }
-    }
-
-    var filteredCrystals: [IntelligenceCrystal] {
-        guard hasSearch else { return terminalData.proactive.crystals }
-        return terminalData.proactive.crystals.filter { crystal in
+        memoFilteredCrystals = terminalData.proactive.crystals.filter { crystal in
             matchesSearch([
                 crystal.title,
                 crystal.rationale,
@@ -676,11 +846,7 @@ final class DashboardViewModel: ObservableObject {
                 crystal.tokenRefs.map { "\($0.label) \($0.id) \($0.value ?? "")" }.joined(separator: " ")
             ])
         }
-    }
-
-    var filteredProposals: [AgentProposal] {
-        guard hasSearch else { return terminalData.proactive.proposals }
-        return terminalData.proactive.proposals.filter { proposal in
+        memoFilteredProposals = terminalData.proactive.proposals.filter { proposal in
             matchesSearch([
                 proposal.title,
                 proposal.summary,
@@ -689,11 +855,7 @@ final class DashboardViewModel: ObservableObject {
                 proposal.tokenRefs.map { "\($0.label) \($0.id) \($0.value ?? "")" }.joined(separator: " ")
             ])
         }
-    }
-
-    var filteredHandoffs: [HandoffPacket] {
-        guard hasSearch else { return terminalData.proactive.handoffs }
-        return terminalData.proactive.handoffs.filter { handoff in
+        memoFilteredHandoffs = terminalData.proactive.handoffs.filter { handoff in
             matchesSearch([
                 handoff.title,
                 handoff.summaryText,
@@ -702,11 +864,7 @@ final class DashboardViewModel: ObservableObject {
                 handoff.tokenRefs.map { "\($0.label) \($0.id) \($0.value ?? "")" }.joined(separator: " ")
             ])
         }
-    }
-
-    var filteredWatchlistItems: [WatchlistItem] {
-        guard hasSearch else { return terminalData.watchlistItems }
-        return terminalData.watchlistItems.filter { item in
+        memoFilteredWatchlistItems = terminalData.watchlistItems.filter { item in
             matchesSearch([
                 item.tokenID,
                 item.symbol,
@@ -737,8 +895,8 @@ final class DashboardViewModel: ObservableObject {
     private func reloadSelectedAgentSession() {
         if let session = selectedAgentSession {
             agentMessages = session.messages
-            agentStreamEvents = agentStreamStore.readEvents(runID: session.activeRunID)
-            agentToolCalls = agentStreamStore.readToolCalls(runID: session.activeRunID)
+            agentStreamEvents = agentRunReadModelStore.readEvents(runID: session.activeRunID)
+            agentToolCalls = agentRunReadModelStore.readToolCalls(runID: session.activeRunID)
             loadAgentRunReadModels(runID: session.activeRunID)
         } else {
             agentMessages = []
@@ -750,10 +908,25 @@ final class DashboardViewModel: ObservableObject {
     }
 
     private func loadAgentRunReadModels(runID: String?) {
-        agentRunManifest = agentStreamStore.readRunManifest(runID: runID)
-        agentControlSummary = agentStreamStore.readControlSummary(runID: runID)
-        agentContextSummary = agentStreamStore.readContextSummary(runID: runID)
+        agentRunManifest = agentRunReadModelStore.readRunManifest(runID: runID)
+        agentControlSummary = agentRunReadModelStore.readControlSummary(runID: runID)
+        agentContextSummary = agentRunReadModelStore.readContextSummary(runID: runID)
         agentStrategyResults = strategyResultStore.results(forRunID: runID)
+        if let runID, let finalReadModel = agentRunReadModelStore.readFinalReadModel(runID: runID) {
+            agentFinalReadModelByRunID[runID] = finalReadModel
+        }
+        if let runID, let cmcCapabilitySummary = agentRunReadModelStore.readCMCCapabilitySummary(runID: runID) {
+            agentCMCCapabilitySummaryByRunID[runID] = cmcCapabilitySummary
+        }
+        if let runID, let capabilityLoop = agentRunReadModelStore.readCapabilityLoopReadModel(runID: runID) {
+            agentCapabilityLoopByRunID[runID] = capabilityLoop
+        }
+        if let runID, let memoryReadModel = agentRunReadModelStore.readMemoryReadModel(runID: runID) {
+            agentMemoryReadModelByRunID[runID] = memoryReadModel
+        }
+        if let runID, let subagentCoordination = agentRunReadModelStore.readSubagentCoordinationReadModel(runID: runID) {
+            agentSubagentCoordinationByRunID[runID] = subagentCoordination
+        }
     }
 
     /// Sample strategy results used for previewing the workbench cards before a live CMC run
@@ -768,43 +941,81 @@ final class DashboardViewModel: ObservableObject {
     }
 
     private func subscribeAgentEvents(runID: String) {
-        agentEventStreamTask?.cancel()
-        let client = agentEventClient
-        agentEventStreamTask = Task { [weak self] in
-            do {
-                for try await event in client.events(runID: runID) {
-                    await MainActor.run {
-                        guard let self else { return }
-                        if !self.agentStreamEvents.contains(where: { $0.eventID == event.eventID }) {
-                            self.agentStreamEvents.append(event)
-                        }
-                        self.selectedAgentEventID = event.eventID
-                        self.agentToolCalls = self.agentStreamStore.readToolCalls(runID: runID)
+        agentRunStreamCoordinator.cancel()
+        agentRunCompletionCoordinator.cancelAll()
+        agentFinalizingRunIDs = agentRunCompletionCoordinator.finalizingRunIDs
+        activeStreamRunID = runID
+        agentRunStreamCoordinator.start(
+            runID: runID,
+            onFlush: { [weak self] events, terminal in
+                guard let self, self.activeStreamRunID == runID else { return }
+                if !events.isEmpty {
+                    self.agentStreamEvents.append(contentsOf: events)
+                    self.selectedAgentEventID = events.last?.eventID
+                    if terminal == nil {
+                        self.agentToolCalls = self.agentRunReadModelStore.readToolCalls(runID: runID)
                         self.loadAgentRunReadModels(runID: runID)
-                        if Self.isTerminalAgentEvent(event) {
-                            self.apply(self.backend.execute(.importAgentProductMutations(runID: runID)))
-                            self.agentSessions = self.agentStreamStore.readSessions()
-                            self.agentTasks = self.agentStreamStore.readTasks()
-                            if let session = self.agentSessions.first(where: { $0.sessionID == self.selectedAgentSessionID }) {
-                                self.agentMessages = session.messages
-                            }
-                            self.agentSubmitStatus = "run_\(event.status ?? "completed"):\(runID)"
-                        }
                     }
                 }
-            } catch {
-                await MainActor.run {
-                    self?.agentSubmitStatus = "stream_failed:\(error.localizedDescription)"
-                    self?.agentStreamEvents = self?.agentStreamStore.readEvents(runID: runID) ?? []
-                    self?.agentToolCalls = self?.agentStreamStore.readToolCalls(runID: runID) ?? []
-                    self?.loadAgentRunReadModels(runID: runID)
+                if let terminal {
+                    self.startAgentFinalization(runID: runID, terminal: terminal)
                 }
+            },
+            onFailure: { [weak self] error in
+                guard let self, self.activeStreamRunID == runID else { return }
+                self.agentSubmitStatus = "stream_failed:\(error.localizedDescription)"
+                self.agentStreamEvents = self.agentRunReadModelStore.readEvents(runID: runID)
+                self.agentToolCalls = self.agentRunReadModelStore.readToolCalls(runID: runID)
+                self.loadAgentRunReadModels(runID: runID)
             }
-        }
+        )
     }
 
-    private static func isTerminalAgentEvent(_ event: AgentStreamEvent) -> Bool {
-        ["run.completed", "run.failed", "run.cancelled"].contains(event.type)
+    private func startAgentFinalization(runID: String, terminal: AgentStreamEvent) {
+        agentRunCompletionCoordinator.start(
+            runID: runID,
+            terminal: terminal,
+            isRunActive: { [weak self] in
+                self?.activeStreamRunID == runID
+            },
+            loadLocalReadModels: { [weak self] in
+                guard let self, self.activeStreamRunID == runID else { return nil }
+                self.agentToolCalls = self.agentRunReadModelStore.readToolCalls(runID: runID)
+                self.loadAgentRunReadModels(runID: runID)
+                return self.agentFinalReadModelByRunID[runID]
+            },
+            importProductMutations: { [weak self] in
+                guard let self, self.activeStreamRunID == runID else { return }
+                let state = self.backend.execute(.importAgentProductMutations(runID: runID))
+                self.apply(state)
+            },
+            refreshRemoteState: { [weak self] in
+                await self?.refreshAgentRemoteState(runID: runID)
+            },
+            updateStatus: { [weak self] status, finalizingRunIDs in
+                guard let self else { return }
+                self.agentSubmitStatus = status
+                self.agentFinalizingRunIDs = finalizingRunIDs
+            }
+        )
+    }
+
+    private func refreshAgentRemoteState(runID: String) async {
+        let selectedID = selectedAgentSessionID
+        let sessions = (try? await agentClient.listSessions()) ?? []
+        let tasks = (try? await agentClient.listTasks()) ?? []
+        let selected: AgentSession?
+        if let selectedID {
+            selected = try? await agentClient.getSession(selectedID)
+        } else {
+            selected = nil
+        }
+        guard activeStreamRunID == runID else { return }
+        agentSessions = sessions
+        agentTasks = tasks
+        if let selected {
+            agentMessages = selected.messages
+        }
     }
 
     private func controlSelectedAgentRun(_ action: String) {
@@ -836,6 +1047,7 @@ final class DashboardViewModel: ObservableObject {
         syncState = state.result.syncState
         artifactStatus = state.result.artifactStatus
         terminalData = state.result.terminalData
+        filterDataVersion &+= 1   // invalidate filtered-list memo cache
         runtimeCommandStatus = state.commandStatus
         selectedMessageID = state.selection.selectedMessageID
         selectedTokenID = state.selection.selectedTokenID ?? selectedTokenID

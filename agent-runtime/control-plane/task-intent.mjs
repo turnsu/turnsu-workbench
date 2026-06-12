@@ -11,7 +11,17 @@ export function createTaskIntent(input) {
   const contextRefs = safeArray(input.contextRefs);
   let taskType = "daily_intelligence";
 
-  if (attachments.length > 0 || includesAny(text, [/image|图片|截图|视觉|vision/])) {
+  if (includesAny(text, [/revision|revise|comment|review comments|批注|评论|修订|改写|修改/])) {
+    taskType = "office_document_revision";
+  } else if (includesAny(text, [/meeting|minutes|transcript|会议|纪要|逐字稿/])) {
+    taskType = "office_meeting_minutes";
+  } else if (includesAny(text, [/document|doc|prd|方案|文档|撰写|起草/])) {
+    taskType = "office_document_generation";
+  } else if (includesAny(text, [/feishu|lark|飞书|云文档|wiki/])) {
+    taskType = "channel_feishu_dry_run";
+  } else if (includesAny(text, [/\b(equity|stock|stocks|aapl|nvda|msft|earnings|sector|company deep dive|thesis tracker|cross-asset|read-through)\b|美股|股票|财报|行业|公司深度|跨市场/])) {
+    taskType = "markets_equity_research";
+  } else if (attachments.length > 0 || includesAny(text, [/image|图片|截图|视觉|vision/])) {
     taskType = "image_context_analysis";
   } else if (includesAny(text, [/长期|持续|监控|watch|background|提醒|定期/])) {
     taskType = "long_running_watch";
@@ -44,9 +54,9 @@ export function createTaskIntent(input) {
       "frontend exposes skill/extension only",
       "live WeChat and live wechat-cli remain blocked",
       "trade, send message, and external publish remain blocked",
+      "Office/Meeting/Feishu capabilities must enter through the unified runtime harness and stay draft/dry-run unless QA, Policy, and channel readiness pass",
       "secrets and raw provider request bodies are not persisted",
     ],
     createdAt: nowISO(),
   };
 }
-

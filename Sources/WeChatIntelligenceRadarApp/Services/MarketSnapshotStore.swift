@@ -37,6 +37,15 @@ struct MarketSnapshotStore {
     }
 
     private func normalizeFreshness(_ snapshot: MarketDataSnapshot, now: Date) -> MarketDataSnapshot {
+        let liveProvider = ["cmcRestProvider", "mcpProvider"].contains(snapshot.provider ?? "")
+        let allAssetsLive = !snapshot.assets.isEmpty && snapshot.assets.allSatisfy(\.isLive)
+        if !liveProvider || !allAssetsLive || ["fixture", "mock", "blocked"].contains(snapshot.freshness) {
+            return snapshot.withStatus(
+                status: snapshot.status == "enabled" ? "degraded" : snapshot.status,
+                freshness: snapshot.freshness
+            )
+        }
+
         guard let expiresAt = AgentDateFormatting.parse(snapshot.expiresAt) else {
             return snapshot.withStatus(status: "degraded", freshness: "unknown_expiry")
         }
@@ -55,9 +64,12 @@ struct MarketSnapshotStore {
 extension MarketDataSnapshot {
     func withStatus(status: String, freshness: String) -> MarketDataSnapshot {
         MarketDataSnapshot(
+            schemaVersion: schemaVersion,
             status: status,
             sourceName: sourceName,
+            provider: provider,
             generatedAt: generatedAt,
+            observedAt: observedAt,
             expiresAt: expiresAt,
             freshness: freshness,
             lastVerifiedAt: lastVerifiedAt,

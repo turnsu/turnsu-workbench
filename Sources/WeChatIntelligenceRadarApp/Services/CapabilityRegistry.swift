@@ -1,7 +1,7 @@
 import Foundation
 
 struct CapabilityRegistry {
-    func capabilities(cmcStatus: String = "blocked", web3Status: String = "mock") -> [Capability] {
+    func capabilities(cmcStatus: String = "degraded", web3Status: String = "mock") -> [Capability] {
         [
             Capability(
                 id: "mock-wechat-adapter",
@@ -18,8 +18,8 @@ struct CapabilityRegistry {
             Capability(
                 id: "wechat-cli-live",
                 title: "wechat-cli Live Bridge",
-                state: "blocked",
-                detail: "仅预留接口；MVP 不读取当前电脑微信。"
+                state: "read_only",
+                detail: "由 daemon 按 WECHAT_LIVE_ENABLED 控制只读刷新；发送能力保持阻断。"
             ),
             Capability(
                 id: "cmc-mcp",

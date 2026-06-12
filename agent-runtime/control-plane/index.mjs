@@ -46,6 +46,26 @@ export function buildControlPlane(input) {
     ...contextPlane.retrievalPlan,
     artifactPath: `runtime/agent/runs/${runID}/retrieval-plan.json`,
   };
+  const contextIndex = {
+    ...contextPlane.contextIndex,
+    artifactPath: `runtime/agent/runs/${runID}/context-index.json`,
+  };
+  const retrievalResults = {
+    ...contextPlane.retrievalResults,
+    artifactPath: `runtime/agent/runs/${runID}/retrieval-results.json`,
+  };
+  const contextPack = {
+    ...contextPlane.contextPack,
+    artifactPath: `runtime/agent/runs/${runID}/context-pack.json`,
+  };
+  const sourceTrustReport = {
+    ...contextPlane.sourceTrustReport,
+    artifactPath: `runtime/agent/runs/${runID}/source-trust-report.json`,
+  };
+  const memoryCompression = {
+    ...contextPlane.memoryCompression,
+    artifactPath: `runtime/agent/runs/${runID}/memory-compression.json`,
+  };
   const contextGate = {
     ...contextPlane.contextGate,
     artifactPath: `runtime/agent/runs/${runID}/context-gate.json`,
@@ -73,10 +93,19 @@ export function buildControlPlane(input) {
       "task-intent.json",
       "execution-profile.json",
       "planner-envelope.json",
+      "planner-state.json",
+      "task-graph.json",
+      "agent-loop.ndjson",
+      "planner-decisions.ndjson",
       "tool-intent-plan.json",
       "context-manifest.json",
       "context-bundle.json",
       "retrieval-plan.json",
+      "context-index.json",
+      "retrieval-results.json",
+      "context-pack.json",
+      "source-trust-report.json",
+      "memory-compression.json",
       "context-gate.json",
       "policy-decisions.json",
       "approval-decisions.json",
@@ -105,6 +134,11 @@ export function buildControlPlane(input) {
     ["context-manifest.json", contextManifest],
     ["context-bundle.json", contextBundle],
     ["retrieval-plan.json", retrievalPlan],
+    ["context-index.json", contextIndex],
+    ["retrieval-results.json", retrievalResults],
+    ["context-pack.json", contextPack],
+    ["source-trust-report.json", sourceTrustReport],
+    ["memory-compression.json", memoryCompression],
     ["context-gate.json", contextGate],
     ["policy-decisions.json", policyDecisions],
     ["approval-decisions.json", approvalDecisions],
@@ -115,6 +149,9 @@ export function buildControlPlane(input) {
     ["retry-ledger.json", retryLedger],
   ];
   for (const [fileName, payload] of writes) {
+    writeJsonArtifact(join(runDir, fileName), payload);
+  }
+  for (const [fileName, payload] of contextPlane.contextChunkArtifacts || []) {
     writeJsonArtifact(join(runDir, fileName), payload);
   }
 
@@ -131,6 +168,11 @@ export function buildControlPlane(input) {
     contextManifest,
     contextBundle,
     retrievalPlan,
+    contextIndex,
+    retrievalResults,
+    contextPack,
+    sourceTrustReport,
+    memoryCompression,
     contextGate,
     qaGate,
     runtimeMetrics,
@@ -140,4 +182,3 @@ export function buildControlPlane(input) {
     runArtifactRoot: artifactPath(projectRoot, runDir),
   };
 }
-

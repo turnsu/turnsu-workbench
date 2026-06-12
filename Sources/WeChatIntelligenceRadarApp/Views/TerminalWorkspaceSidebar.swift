@@ -31,9 +31,8 @@ struct TerminalWorkspaceSidebar: View {
                         .padding(.leading, 11)
                         .padding(.bottom, 2)
                 }
-                MinimalNavRow(title: "今日", subtitle: "重点情报", icon: "sparkles", tint: RadarTheme.blue, badge: "", selected: selectedWorkspace == .home, collapsed: sidebarCollapsed, namespace: navAccent, action: { onSelectWorkspace(.home) })
-                MinimalNavRow(title: "Agent", subtitle: "任务与对话", icon: "bubble.left.and.text.bubble.right", tint: RadarTheme.indigo, badge: "", selected: selectedWorkspace == .agents, collapsed: sidebarCollapsed, namespace: navAccent, action: { onSelectWorkspace(.agents) })
-                MinimalNavRow(title: "资料库", subtitle: "微信 / Token / 观察", icon: "folder", tint: RadarTheme.cyan, badge: tokenCount > 0 ? "\(tokenCount)" : "", selected: isLibrarySelected, collapsed: sidebarCollapsed, namespace: navAccent, action: { onSelectWorkspace(.inbox) })
+                MinimalNavRow(title: "工作台", subtitle: "Crypto / Office 任务", icon: "rectangle.grid.2x2", tint: RadarTheme.blue, badge: "", selected: selectedWorkspace == .home || selectedWorkspace == .agents, collapsed: sidebarCollapsed, namespace: navAccent, action: { onSelectWorkspace(.home) })
+                MinimalNavRow(title: "历史", subtitle: "结果 / 草稿 / 追问", icon: "clock.arrow.circlepath", tint: RadarTheme.cyan, badge: "", selected: isLibrarySelected, collapsed: sidebarCollapsed, namespace: navAccent, action: { onSelectWorkspace(.inbox) })
                 MinimalNavRow(title: "设置", subtitle: "运行状态与隐私", icon: "gearshape", tint: RadarTheme.secondaryText, badge: alertCount > 0 ? "\(alertCount)" : "", selected: selectedWorkspace == .ops, collapsed: sidebarCollapsed, namespace: navAccent, action: { onSelectWorkspace(.ops) })
             }
             .animation(RadarMotion.spring, value: selectedWorkspace)
@@ -59,12 +58,6 @@ struct TerminalWorkspaceSidebar: View {
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .strokeBorder(RadarTheme.border, lineWidth: 1)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(LinearGradient(colors: [Color.white.opacity(0.22), .clear], startPoint: .top, endPoint: .center), lineWidth: 1)
-                .blendMode(.plusLighter)
-                .opacity(0.5)
         )
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(alignment: .trailing) {
@@ -108,8 +101,8 @@ struct TerminalWorkspaceSidebar: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("looloomi")
                         .font(RadarFont.display(18, .bold))
-                        .foregroundStyle(RadarTheme.brandGradient)
-                    Text("本地优先 · 微信 × 链上")
+                        .foregroundStyle(RadarTheme.primaryText)
+                    Text("本地优先 · 统一 Agent")
                         .font(.system(size: 10.5))
                         .foregroundStyle(RadarTheme.mutedText)
                 }
@@ -162,24 +155,16 @@ private struct LooloomiBrandMark: View {
         let shape = RoundedRectangle(cornerRadius: size * 0.31, style: .continuous)
         ZStack {
             shape
-                .fill(Color(hex: 0x061429))
+                .fill(RadarTheme.panelElevated)
             shape
-                .strokeBorder(RadarTheme.brandGradient, lineWidth: 1.2)
-                .shadow(color: RadarTheme.cyan.opacity(0.55), radius: 7, x: 0, y: 0)
+                .strokeBorder(RadarTheme.borderStrong, lineWidth: 1)
             Image(systemName: "infinity")
                 .font(.system(size: size * 0.54, weight: .bold))
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(RadarTheme.cyan, RadarTheme.indigo)
-                .shadow(color: RadarTheme.cyan.opacity(0.8), radius: 7, x: 0, y: 0)
+                .foregroundStyle(RadarTheme.blue)
         }
         .frame(width: size, height: size)
-        .overlay(
-            shape
-                .strokeBorder(Color.white.opacity(0.24), lineWidth: 0.6)
-                .blendMode(.plusLighter)
-        )
         .clipShape(shape)
-        .shadow(color: RadarTheme.blue.opacity(0.32), radius: 12, x: 0, y: 5)
+        .shadow(color: RadarTheme.cardShadow.opacity(0.18), radius: 4, x: 0, y: 2)
     }
 }
 
@@ -201,10 +186,8 @@ private struct MinimalNavRow: View {
                 IconChip(
                     systemName: icon,
                     tint: tint,
-                    size: collapsed ? 34 : 30,
-                    gradient: selected ? RadarTheme.brandGradient : nil
+                    size: collapsed ? 34 : 30
                 )
-                .symbolEffect(.bounce, value: selected)
                 if !collapsed {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(title)

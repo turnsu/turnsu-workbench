@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -35,7 +36,9 @@ function readJSON(path: string, fallback: any = null) {
 
 function writeJSON(path: string, value: unknown) {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  const tmp = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  renameSync(tmp, path);
 }
 
 function runArtifact(runID: string, name: string) {
@@ -48,21 +51,36 @@ function fixtureEvidence() {
 
 function providerEvidence() {
   if (existsSync(normalizedInputPath)) {
-    return { provider: "normalizedFileProvider", evidence: readJSON(normalizedInputPath, fixtureEvidence()) };
+    const evidence = readJSON(normalizedInputPath, fixtureEvidence());
+    return {
+      provider: "normalizedFileProvider",
+      evidence: {
+        ...evidence,
+        provider: "normalizedFileProvider",
+        status: "degraded",
+        freshness: evidence?.freshness === "fixture" ? "fixture" : "degraded",
+      },
+    };
   }
   return { provider: "fixtureProvider", evidence: fixtureEvidence() };
 }
 
 function marketSnapshotFromEvidence(evidence: any, provider: string) {
-  const generatedAt = now();
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const generatedAt = evidence.generatedAt || evidence.observedAt || now();
+  const expiresAt = evidence.expiresAt || new Date(Date.now() + 60 * 60 * 1000).toISOString();
   const watchlist = Array.isArray(evidence.watchlist) ? evidence.watchlist : [];
+  const liveProvider = ["cmcRestProvider", "mcpProvider"].includes(provider);
+  const expiresAtMs = Date.parse(expiresAt);
+  const fresh = liveProvider && Number.isFinite(expiresAtMs) && expiresAtMs >= Date.now();
   return {
-    status: evidence.status === "ok" ? "enabled" : "degraded",
+    schemaVersion: "market-data-snapshot-v2",
+    status: evidence.status === "ok" && fresh ? "enabled" : "degraded",
     sourceName: `CMC Skill Hub ${provider}`,
+    provider,
     generatedAt,
+    observedAt: evidence.observedAt || generatedAt,
     expiresAt,
-    freshness: provider === "fixtureProvider" ? "fixture" : "fresh",
+    freshness: provider === "fixtureProvider" ? "fixture" : fresh ? "fresh" : "stale",
     lastVerifiedAt: generatedAt,
     assets: watchlist.map((asset: any) => ({
       symbol: String(asset.symbol || "").toUpperCase(),
@@ -72,13 +90,14 @@ function marketSnapshotFromEvidence(evidence: any, provider: string) {
       volume24hUSD: Number(asset.volume24hUSD || 0),
       marketCapUSD: Number(asset.marketCapUSD || 0),
       source: `cmc_skill_hub_${provider}`,
-      isLive: provider !== "fixtureProvider",
+      isLive: fresh,
+      observedAt: asset.observedAt || evidence.observedAt || generatedAt,
     })),
     evidence: [
       evidence.market_read?.summary || "CMC Skill Hub evidence normalized locally.",
       ...(evidence.action_guidance || []),
     ],
-    upstreamStatus: provider === "fixtureProvider" ? "fixture_provider" : "normalized_provider",
+    upstreamStatus: provider === "fixtureProvider" ? "fixture_provider" : fresh ? "normalized_provider_fresh" : "normalized_provider_stale",
   };
 }
 
@@ -101,6 +120,50 @@ function writeCMCArtifacts(runID: string, evidence: any, provider: string, skill
 }
 
 export default function registerCMCSkillHubExtension(pi: ExtensionAPI) {
+  const registerDelegatedCMCTool = (name: string, skillName: string, description: string) => {
+    pi.registerTool({
+      name,
+      description,
+      parameters: TOOL_PARAMS,
+      execute: async (_toolCallID: string, params: any) => {
+        const request = {
+          schemaVersion: "cmc-live-refresh-delegated-v1",
+          runID: params.runID,
+          status: "delegated_to_daemon",
+          provider: "daemonProviderChain",
+          skillName,
+          artifactPath: `runtime/agent/runs/${params.runID}/tool-calls.json`,
+          generatedAt: now(),
+        };
+        return {
+          content: [{ type: "text", text: `${name} is delegated to the daemon CMC provider chain.` }],
+          details: { status: "delegated_to_daemon", provider: "daemonProviderChain", skillName, summary: request },
+        };
+      },
+    });
+  };
+
+  registerDelegatedCMCTool(
+    "cmc.live_market_refresh",
+    "daily_market_overview",
+    "Refresh CMC data through the daemon provider chain: MCP HTTP, MCP bridge, CMC REST, normalized file, then fixture."
+  );
+  registerDelegatedCMCTool(
+    "cmc.daily_market_overview",
+    "daily_market_overview",
+    "Run the CoinMarketCap daily market overview provider through the daemon boundary."
+  );
+  registerDelegatedCMCTool(
+    "cmc.crypto_macro_overview",
+    "crypto_macro_overview",
+    "Run the CoinMarketCap crypto macro overview provider through the daemon boundary."
+  );
+  registerDelegatedCMCTool(
+    "cmc.classify_kline_pattern_quality",
+    "classify_kline_pattern_quality",
+    "Classify K-line pattern quality through CMC Skill Hub bridge or safe daemon fallback."
+  );
+
   pi.registerTool({
     name: "cmc.read_market_evidence",
     description: "Read CMC Skill Hub style market evidence through fixture or normalized-file provider.",
@@ -161,22 +224,20 @@ export default function registerCMCSkillHubExtension(pi: ExtensionAPI) {
 
   pi.registerTool({
     name: "cmc.request_mcp_refresh",
-    description: "Create a request artifact for optional live CMC MCP refresh; does not call MCP unless an external connector is configured.",
+    description: "Compatibility alias for CMC MCP refresh. The daemon treats this as an automatic MCP HTTP / bridge provider refresh, not a user approval request.",
     parameters: TOOL_PARAMS,
     execute: async (_toolCallID: string, params: any) => {
-      const status = process.env.CMC_MCP_ENABLED === "1" ? "needs_confirmation" : "blocked_missing_provider_config";
       const request = {
-        schemaVersion: "cmc-mcp-refresh-request-v1",
+        schemaVersion: "cmc-mcp-refresh-delegated-v1",
         runID: params.runID,
-        status,
+        status: "delegated_to_daemon",
         candidateSkills: ["daily_market_overview", "detect_market_regime", "build_daily_market_brief", "track_social_price_divergence"],
-        reason: status === "needs_confirmation" ? "External CMC MCP connector is configured; operator confirmation required." : "CMC MCP connector is not configured in this local runtime.",
+        reason: "The daemon provider chain performs MCP HTTP, bridge, REST, normalized-file, or fixture fallback automatically.",
         generatedAt: now(),
       };
-      writeJSON(runArtifact(params.runID, "cmc-mcp-refresh-request.json"), request);
       return {
-        content: [{ type: "text", text: `CMC MCP refresh request ${status}.` }],
-        details: { status, artifactPath: `runtime/agent/runs/${params.runID}/cmc-mcp-refresh-request.json`, summary: request },
+        content: [{ type: "text", text: "CMC MCP refresh delegated to daemon provider chain." }],
+        details: { status: "delegated_to_daemon", provider: "daemonProviderChain", summary: request },
       };
     },
   });

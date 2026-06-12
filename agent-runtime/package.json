@@ -5,7 +5,7 @@
   "description": "Local Agent Runtime Host for the WeChat x on-chain agent console.",
   "type": "module",
   "scripts": {
-    "test": "node control-plane/smoke-test.mjs && node bin/wechat-agent-daemon.mjs --smoke-check && node bin/wechat-agent-daemon.mjs --async-smoke-check",
+    "test": "node core/run-loop/agent-runtime-core.test.mjs && node core/gates/gate-engine.test.mjs && node core/final-output/deterministic-final-copy.test.mjs && node core/capability/capability-loop-read-model.test.mjs && node core/providers/runtime-tool-executor.test.mjs && node control-plane/smoke-test.mjs && MONGODB_DB=looloomi_agent_test WECHAT_AGENT_TEST_MODE=1 node bin/wechat-agent-daemon.mjs --mongo-smoke-check && MONGODB_DB=looloomi_agent_test WECHAT_AGENT_TEST_MODE=1 node bin/wechat-agent-daemon.mjs --security-smoke-check && MONGODB_DB=looloomi_agent_test WECHAT_AGENT_TEST_MODE=1 node bin/wechat-agent-daemon.mjs --business-qa-check && MONGODB_DB=looloomi_agent_test WECHAT_AGENT_TEST_MODE=1 node bin/wechat-agent-daemon.mjs --smoke-check && MONGODB_DB=looloomi_agent_test WECHAT_AGENT_TEST_MODE=1 node bin/wechat-agent-daemon.mjs --async-smoke-check && MONGODB_DB=looloomi_agent_test WECHAT_AGENT_TEST_MODE=1 node bin/wechat-agent-daemon.mjs --mongo-test-cleanup",
     "control-plane:smoke": "node control-plane/smoke-test.mjs",
     "smoke": "node bin/wechat-agent-daemon.mjs --smoke-check",
     "async-smoke": "node bin/wechat-agent-daemon.mjs --async-smoke-check",
@@ -27,6 +27,8 @@
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.75.5",
-    "typebox": "1.1.38"
+    "mongodb": "6.16.0",
+    "typebox": "1.1.38",
+    "undici": "^6.21.3"
   }
 }

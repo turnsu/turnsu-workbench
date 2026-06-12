@@ -3,21 +3,353 @@ import Foundation
 
 let agentRuntimeChecks: Void = {
     checkWeb3SignalServiceDetectsCoreTickers()
-    checkPolicyGateBlocksLiveWechatAndRequiresExportConfirmation()
+    checkPolicyGateAllowsReadOnlyRefreshAndBlocksOutboundActions()
     try! checkFixtureFileAdapterLoadsSampleJSONAndContracts()
     try! checkCMCProviderUsesFreshStoreSnapshot()
     try! checkCMCProviderMarksExpiredStoreSnapshotStale()
+    try! checkCMCProviderDoesNotPromoteFixtureSnapshotToLive()
+    try! checkAgentDaemonAuthTokenLoadsFromRuntime()
+    try! checkRuntimeResolverFindsProjectRootFromBundledAppPath()
     checkTimeWindowFilteringChangesSnapshotSizeAndArtifactsWrite()
     checkDefaultMonthWindowGeneratesThreeCrystals()
     try! checkTerminalDataStoresCloseTheTokenLoop()
     checkRuntimeBackendProactiveCommands()
     checkAgentWorkspaceV2AdapterBuildsThreadAndApprovalCards()
+    checkAgentWorkspaceV2HidesPlannerAndNonInterruptingTools()
+    checkCompletedRunUsesAuthoritativeFinalReadModel()
+    checkTerminalRunWithoutFinalReadModelSuppressesStreamBlob()
+    checkCompletedRunIgnoresTerminalFinalTextWithoutFinalReadModel()
+    checkWorkbenchLayoutMetricsBreakpoints()
+    checkCMCGateSummaryDecodesNestedAndFlatFields()
+    try! checkHarnessReadModelsDecodeAndStoreReads()
     checkAgentRunManifestAndV2EventDecode()
     checkAgentWorkspaceAdapterUsesControlContextSummaries()
+    checkAgentOutputMarkdownAndSignals()
+    checkMarkdownParserDegradesToPlainText()
+    checkDenseAgentOutputUsesSharedRenderStructure()
+    checkAlphaCandidateOutputSplitsIntoReadableBlocks()
+    checkCompactHyphenBulletsParse()
+    checkAgentAssistantTextIsRunScoped()
+    checkProviderSummarySeparatesAgentDataSources()
+    try! checkAgentStreamStoreDetectsToolObservations()
+    print("agent_runtime_contracts=pass")
 }()
 
 private func require(_ condition: @autoclosure () -> Bool, _ message: String) {
     precondition(condition(), message)
+}
+
+private func checkWorkbenchLayoutMetricsBreakpoints() {
+    let compact900 = WorkbenchLayoutMetrics(contentWidth: 900)
+    let compact1024 = WorkbenchLayoutMetrics(contentWidth: 1024)
+    let regular1280 = WorkbenchLayoutMetrics(contentWidth: 1280)
+    let regular1440 = WorkbenchLayoutMetrics(contentWidth: 1440)
+    let wide1700 = WorkbenchLayoutMetrics(contentWidth: 1700)
+    let wide2200 = WorkbenchLayoutMetrics(contentWidth: 2200)
+
+    require(compact900.breakpoint == .compact, "900pt should use compact layout")
+    require(compact1024.breakpoint == .compact, "1024pt should use compact layout")
+    require(regular1280.breakpoint == .regular, "1280pt should use regular layout")
+    require(regular1440.breakpoint == .regular, "1440pt should use regular layout")
+    require(wide1700.breakpoint == .wide, "1700pt should use wide layout")
+    require(wide2200.breakpoint == .wide, "2200pt should use wide layout")
+    require(compact1024.queueColumnWidth == compact1024.contentWidth, "compact queue should span available width")
+    require(regular1280.queueColumnWidth == 320, "regular queue should use stable minimum width")
+    require(wide1700.queueColumnWidth > 360 && wide1700.queueColumnWidth <= 460, "wide queue should expand but remain clamped")
+    require(wide2200.supportColumnWidth == 460, "ultra-wide support column should clamp")
+}
+
+private func checkRuntimeResolverFindsProjectRootFromBundledAppPath() throws {
+    let fileManager = FileManager.default
+    let temp = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        .appendingPathComponent("looloomi-resolver-\(UUID().uuidString)", isDirectory: true)
+    let projectRoot = temp.appendingPathComponent("project", isDirectory: true)
+    let appBundle = projectRoot
+        .appendingPathComponent(".build/release-app/WeChatIntelligenceRadar.app", isDirectory: true)
+    try fileManager.createDirectory(at: appBundle, withIntermediateDirectories: true)
+    try "// test package\n".write(
+        to: projectRoot.appendingPathComponent("Package.swift"),
+        atomically: true,
+        encoding: .utf8
+    )
+    defer { try? fileManager.removeItem(at: temp) }
+
+    let found = RuntimePathResolver.projectRootCandidate(startingAt: appBundle, fileManager: fileManager)
+    require(found?.standardizedFileURL.path == projectRoot.standardizedFileURL.path,
+            "resolver should find project root from .build app bundle ancestors")
+}
+
+private func checkProviderSummarySeparatesAgentDataSources() {
+    let cmcMissing = AgentDaemonStatus.ProviderStatus(
+        provider: "coinmarketcap",
+        role: "market_data",
+        ready: false,
+        missingEnv: ["CMC_MCP_API_KEY"],
+        apiKeyEnv: "CMC_MCP_API_KEY",
+        baseUrlConfigured: true,
+        model: nil,
+        state: "degraded",
+        connectionState: "missing_key",
+        configured: false,
+        connected: false,
+        degraded: true,
+        providerType: "normalizedFileProvider",
+        rawSecretsReturned: false,
+        requestBodyReturned: false
+    )
+    let deepseekReady = AgentDaemonStatus.ProviderStatus(
+        provider: "deepseek",
+        role: "text_planner_tool_calling",
+        ready: true,
+        missingEnv: [],
+        apiKeyEnv: "DEEPSEEK_API_KEY",
+        baseUrlConfigured: true,
+        model: "deepseek-v4-pro",
+        state: "configured",
+        connectionState: "configured",
+        configured: true,
+        connected: nil,
+        degraded: false,
+        providerType: nil,
+        rawSecretsReturned: false,
+        requestBodyReturned: false
+    )
+    let degradedStatus = AgentDaemonStatus(
+        schemaVersion: "agent-runtime-host-health-v1",
+        status: "available",
+        daemon: nil,
+        providers: [cmcMissing],
+        capabilities: [],
+        skills: [],
+        extensions: [],
+        templates: [],
+        tools: [],
+        internalToolsExposed: false,
+        policy: nil
+    )
+    let mixedStatus = AgentDaemonStatus(
+        schemaVersion: "agent-runtime-host-health-v1",
+        status: "available",
+        daemon: nil,
+        providers: [deepseekReady, cmcMissing],
+        capabilities: [],
+        skills: [],
+        extensions: [],
+        templates: [],
+        tools: [],
+        internalToolsExposed: false,
+        policy: nil
+    )
+    let degradedSummary = AgentWorkspaceStateAdapter.providerSummary(degradedStatus)
+    require(degradedSummary.contains("Agent 能力源缺少 CMC_MCP_API_KEY"), "CMC missing key should be visible as an Agent data-source gap")
+    let mixedSummary = AgentWorkspaceStateAdapter.providerSummary(mixedStatus)
+    require(mixedSummary.contains("Agent 能力源可用：deepseek-v4-pro"), "ready model should still be shown")
+    require(!mixedSummary.contains("AI 模型可用"), "summary should not label every provider as only AI model availability")
+}
+
+/// Phase C: the compact agent markdown must parse into structured blocks (not one blob) and the
+/// best-effort signal extractor must surface assets / changes / freshness from the prose.
+private func checkAgentOutputMarkdownAndSignals() {
+    let sample = "**今日市场热门币种与信息简报**（基于本地运行时工时）---"
+        + "###一、资产热度概览####1.BTC—比特币-**实体状态**：symbol:BTC freshness:fresh，置信度0.78。"
+        + "####2.ETH—以太坊：ETH 紧随 BTC，置信度0.57。"
+        + "####4.热门主题币-**PEPE**：市场快照 24h 上涨17%，置信度0.69。BTC 日内下降1.3%。"
+
+    let blocks = MarkdownParser.parse(sample)
+    var headingCount = 0
+    for block in blocks { if case .heading = block { headingCount += 1 } }
+    require(headingCount >= 2, "compact markdown should split into multiple headings, got \(headingCount)")
+    require(blocks.count >= 3, "markdown should yield several blocks, got \(blocks.count)")
+
+    // Markdown tables must parse (and the separator row must be dropped, not mistaken for HRs).
+    let tableSrc = "标题\n| Source | Confidence |\n| --- | --- |\n| fused | 0.57 |\n尾注。"
+    let tableBlocks = MarkdownParser.parse(tableSrc)
+    var foundTable = false
+    for block in tableBlocks {
+        if case .table(let header, let rows) = block {
+            foundTable = true
+            require(header == ["Source", "Confidence"], "table header parsed")
+            require(rows.count == 1 && rows[0] == ["fused", "0.57"], "one data row, separator dropped")
+        }
+    }
+    require(foundTable, "a markdown table should be recognized")
+
+    let digest = AgentSignalExtractor.extract(from: sample)
+    require(!digest.assets.isEmpty, "should extract at least one asset confidence signal")
+    require(digest.assets.allSatisfy { $0.confidence >= 0 && $0.confidence <= 1 }, "confidence in 0...1")
+    require(digest.assets.contains { $0.symbol == "BTC" }, "BTC should be among extracted assets")
+    require(digest.changes.contains { $0.percent > 0 } && digest.changes.contains { $0.percent < 0 },
+            "should extract both an up and a down change")
+    require(digest.freshness.contains(.fresh), "freshness:fresh should be detected")
+
+    let rawToolText = """
+    我会直接读取数据。
+    <looloomi-tool-calls><callname="market.read_snapshot" parameters="{\\"symbol\\":\\"BTC\\"}"/></looloomi-tool-calls>
+    runtime/agent/runs/run-test/tool-calls.json
+    """
+    let cleaned = AgentOutputCopy.humanize(rawToolText)
+    require(!cleaned.contains("looloomi-tool-calls"), "raw tool markup must be hidden")
+    require(!cleaned.contains("runtime/agent"), "runtime paths must be hidden")
+    require(!cleaned.contains("parameters="), "raw tool parameters must be hidden")
+    require(cleaned.contains("后台调用参数已隐藏"), "empty raw-only output should show readable placeholder")
+
+    let rawFunctionCallText = """
+    <function_calls><invoke invokename="cmc.live_market_refresh"><parametername="symbol">SOL</parameter></invoke></function_calls>
+    """
+    let cleanedFunctionCall = AgentOutputCopy.humanize(rawFunctionCallText)
+    require(!cleanedFunctionCall.contains("function_calls"), "raw function-call markup must be hidden")
+    require(!cleanedFunctionCall.contains("invokename"), "raw function names must be hidden")
+    require(!cleanedFunctionCall.contains("parametername"), "raw function parameters must be hidden")
+    require(cleanedFunctionCall.contains("后台调用参数已隐藏"), "raw function-only output should show readable placeholder")
+
+    let safeInternalTerms = "CMC source mcpProvider returned cmc-skill-hub status."
+    let readableTerms = AgentOutputCopy.humanize(safeInternalTerms)
+    require(readableTerms.contains("CoinMarketCap MCP"), "provider IDs in safe lines should be humanized")
+    require(readableTerms.contains("CMC Skill Hub 能力包"), "capability IDs in safe lines should be humanized")
+    require(!readableTerms.contains("mcpProvider") && !readableTerms.contains("cmc-skill-hub"), "raw safe IDs should not remain")
+
+    let rawSkillLine = "Skill: cmc-skill-hub, cmc-market-radar"
+    let hiddenSkillLine = AgentOutputCopy.humanize(rawSkillLine)
+    require(hiddenSkillLine.contains("后台调用参数已隐藏"), "raw Skill ID list should still be hidden")
+}
+
+/// Degradation guarantee: plain prose with no markup must still render as one paragraph and an
+/// empty digest — never crash, never drop text.
+private func checkMarkdownParserDegradesToPlainText() {
+    let plain = "这是一段没有任何标记的普通说明文字，应当原样作为段落呈现。"
+    let blocks = MarkdownParser.parse(plain)
+    require(blocks.count == 1, "plain text should be a single paragraph block")
+    if case .paragraph(let text) = blocks[0] {
+        require(text == plain, "paragraph text must be preserved verbatim")
+    } else {
+        require(false, "plain text should classify as paragraph")
+    }
+    require(AgentSignalExtractor.extract(from: plain).isEmpty, "no signals in plain prose")
+}
+
+private func checkDenseAgentOutputUsesSharedRenderStructure() {
+    let dense = "结论 空头逻辑依然成立，但空头优势正在衰减。关键证据 ETF 流：近 3 个交易日持续流出。跨资产相关性：风险资产倾斜但未确认。行动建议 1.保留现有观察，不追空。2.监控 ETF 流出和资金费率。风险边界/数据缺口 CMC 数据可能延迟，需等待 fresh refresh。"
+    let normalized = AgentOutputCopy.humanize(dense)
+    let blocks = MarkdownParser.parse(normalized)
+    var headingCount = 0
+    var orderedCount = 0
+    for block in blocks {
+        if case .heading = block { headingCount += 1 }
+        if case .ordered = block { orderedCount += 1 }
+    }
+    require(headingCount >= 3, "dense output should split into section headings, got \(headingCount): \(normalized)")
+    require(orderedCount >= 2, "compact numbered actions should parse as ordered items")
+
+    let liveSegments = AgentOutputCopy.streamingSegments(dense)
+    require(liveSegments.contains { segment in
+        if case .heading = segment.kind { return true }
+        return false
+    }, "live renderer should use the same heading structure")
+    require(liveSegments.contains { segment in
+        if case .ordered = segment.kind { return true }
+        return false
+    }, "live renderer should use the same ordered structure")
+}
+
+private func checkAlphaCandidateOutputSplitsIntoReadableBlocks() {
+    let alpha = """
+    #
+    市场雷达 Alpha研究候选数据新鲜度：CMC 实时节点已刷新，市场体制、社交分歧、形态分类均已校验。盘面定性：BTC 主导高位震荡，山寨轮动加速，精选 3 个候选供进一步追踪。候选 1: SOL (Solana) 核心逻辑: 社交量单日 +140%，但价格滞后仅 +2.3%。关键价位: 阻力观察：172-175 支撑观察：158-160。反证：社交热度可能由 Meme/空投活动驱动，无基本面升级。后续观察条件：社交量持续高于均值 3 日，且不伴随价格集中派发。候选 2: LINK (Chainlink) 核心逻辑: K 线形态分类为“双底突破颈线”。关键价位：强弱突破区 13.8-14.1。反证：消息扩散但未充分定价。风险边界/数据缺口：本分析仅基于 CMC 实时数据，社交价格分歧模型与链上快照。
+    """
+    let normalized = AgentOutputCopy.humanize(alpha)
+    require(!normalized.contains("#\n"), "orphan markdown hash must be removed")
+    require(normalized.contains("### 候选 1:"), "candidate 1 should become a heading: \(normalized)")
+    require(normalized.contains("### 候选 2:"), "candidate 2 should become a heading")
+    require(normalized.contains("- **核心逻辑**："), "core logic should become a bullet")
+    require(normalized.contains("- **关键价位**："), "key level should become a bullet")
+    require(normalized.contains("- **反证**："), "counter-evidence should become a bullet")
+    require(normalized.contains("## 风险边界/数据缺口"), "risk/data gap should become a section")
+
+    let blocks = MarkdownParser.parse(alpha)
+    var headingCount = 0
+    var bulletCount = 0
+    for block in blocks {
+        if case .heading = block { headingCount += 1 }
+        if case .bullet = block { bulletCount += 1 }
+    }
+    require(headingCount >= 4, "alpha candidate output should split into headings, got \(headingCount): \(normalized)")
+    require(bulletCount >= 6, "alpha candidate output should split into bullets, got \(bulletCount): \(normalized)")
+
+    let liveSegments = AgentOutputCopy.streamingSegments(alpha)
+    require(liveSegments.contains { segment in
+        if case .heading = segment.kind { return segment.text.contains("候选 1") }
+        return false
+    }, "live renderer should show candidate heading immediately")
+    require(liveSegments.contains { segment in
+        if case .bullet = segment.kind { return segment.text.contains("核心逻辑") }
+        return false
+    }, "live renderer should show field bullets immediately")
+}
+
+private func checkCompactHyphenBulletsParse() {
+    let text = "cmc.live_market_refresh 完成后，我抓取了以下证据：\n-市场概览：BTC ETF 净流量。\n-宏观关联：BTC 与 DXY。"
+    let blocks = MarkdownParser.parse(text)
+    let bulletCount = blocks.filter {
+        if case .bullet = $0 { return true }
+        return false
+    }.count
+    require(bulletCount == 2, "compact hyphen bullets should parse, got \(bulletCount)")
+}
+
+private func checkAgentAssistantTextIsRunScoped() {
+    let events = [
+        makeDeltaEvent(id: "evt-btc", runID: "run-btc", delta: "BTC 旧结论"),
+        makeDeltaEvent(id: "evt-sol", runID: "run-sol", delta: "SOL 新结论")
+    ]
+    require(DashboardViewModel.assistantText(from: events, runID: "run-sol") == "SOL 新结论",
+            "live assistant text must be scoped to the requested run")
+    require(DashboardViewModel.assistantText(from: events, runID: "run-new").isEmpty,
+            "new run with no deltas must not fall back to previous assistant text")
+    require(DashboardViewModel.assistantText(from: events, runID: nil).isEmpty,
+            "nil run must not surface stale assistant text")
+}
+
+private func makeDeltaEvent(id: String, runID: String, delta: String) -> AgentStreamEvent {
+    AgentStreamEvent(
+        eventID: id,
+        timestamp: "2026-06-04T00:00:00.000Z",
+        type: "assistant.delta",
+        runID: runID,
+        taskID: "task-\(runID)",
+        sessionID: "session-test",
+        stage: "model_stream",
+        action: nil,
+        actionIntent: nil,
+        riskLevel: nil,
+        artifactKind: nil,
+        contextSourceCount: nil,
+        contextChunkCount: nil,
+        delta: delta,
+        toolName: nil,
+        status: nil,
+        permission: nil,
+        reason: nil,
+        provider: nil,
+        model: nil,
+        artifactPath: nil,
+        errorPreview: nil
+    )
+}
+
+private func checkAgentStreamStoreDetectsToolObservations() throws {
+    let root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        .appendingPathComponent("looloomi-agent-store-\(UUID().uuidString)", isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let resolver = AgentRuntimePathResolver(pathResolver: RuntimePathResolver(root: root))
+    let store = AgentStreamStore(resolver: resolver)
+    let runDir = resolver.runsDirectory.appendingPathComponent("run-history", isDirectory: true)
+    try FileManager.default.createDirectory(at: runDir, withIntermediateDirectories: true)
+
+    require(!store.hasToolObservations(runID: "run-history"), "history run starts without observations")
+    try "{}\n".write(to: runDir.appendingPathComponent("tool-observations.json"), atomically: true, encoding: .utf8)
+    require(store.hasToolObservations(runID: "run-history"), "tool observations should be detected")
+    require(!store.hasToolObservations(runID: nil), "nil run has no observations")
 }
 
 private func checkWeb3SignalServiceDetectsCoreTickers() {
@@ -27,13 +359,16 @@ private func checkWeb3SignalServiceDetectsCoreTickers() {
     require(symbols == ["BTC", "ETH", "SOL"], "Expected BTC/ETH/SOL detection")
 }
 
-private func checkPolicyGateBlocksLiveWechatAndRequiresExportConfirmation() {
+private func checkPolicyGateAllowsReadOnlyRefreshAndBlocksOutboundActions() {
     let gate = PolicyGate()
 
     require(gate.check(.runLiveWeChatCLI).status == "blocked", "run_live_wechat_cli must be blocked")
-    require(gate.check(.readLiveWeChat).status == "blocked", "read_live_wechat must be blocked")
-    require(gate.check(.readWeChatCLIExportFile).status == "needs_confirmation", "export file import must require confirmation")
+    require(gate.check(.readLiveWeChat).status == "pass", "read_live_wechat read-only refresh should pass")
+    require(gate.check(.readWeChatCLIExportFile).status == "pass", "export file import should pass within local boundary")
+    require(gate.check(.requestMarketBridgeRefresh).status == "pass", "CMC bridge refresh should pass")
     require(gate.check(.readFixtureFile).status == "pass", "fixture file read must pass")
+    require(gate.check(.sendMessage).status == "blocked", "send_message must remain blocked")
+    require(gate.check(.executeTrade).status == "blocked", "execute_trade must remain blocked")
 }
 
 private func checkAgentWorkspaceV2AdapterBuildsThreadAndApprovalCards() {
@@ -85,6 +420,524 @@ private func checkAgentWorkspaceV2AdapterBuildsThreadAndApprovalCards() {
     require(state.availableTemplates.count >= 4, "V2 adapter must provide task templates")
     require(state.messages.flatMap(\.parts).contains { $0.kind == .approvalRequest }, "Needs-confirmation tools must render as approval cards")
     require(state.run.displayID == "未开始", "Missing run should be user-readable")
+}
+
+private func checkAgentWorkspaceV2HidesPlannerAndNonInterruptingTools() {
+    let plannerEvent = AgentStreamEvent(
+        eventID: "evt-planner",
+        timestamp: "2026-06-04T00:00:00.000Z",
+        type: "planner.envelope.created",
+        runID: "run-test",
+        taskID: "task-test",
+        sessionID: "session-test",
+        stage: "planner",
+        action: nil,
+        actionIntent: nil,
+        riskLevel: nil,
+        artifactKind: "planner",
+        contextSourceCount: nil,
+        contextChunkCount: nil,
+        delta: nil,
+        toolName: nil,
+        status: "completed",
+        permission: nil,
+        reason: nil,
+        provider: nil,
+        model: nil,
+        artifactPath: "runtime/agent/runs/run-test/planner-envelope.json",
+        errorPreview: nil
+    )
+    let deltaEvent = AgentStreamEvent(
+        eventID: "evt-delta",
+        timestamp: "2026-06-04T00:00:01.000Z",
+        type: "assistant.delta",
+        runID: "run-test",
+        taskID: "task-test",
+        sessionID: "session-test",
+        stage: "model_stream",
+        action: nil,
+        actionIntent: nil,
+        riskLevel: nil,
+        artifactKind: nil,
+        contextSourceCount: nil,
+        contextChunkCount: nil,
+        delta: "结论：已读取 CMC 数据。",
+        toolName: nil,
+        status: nil,
+        permission: nil,
+        reason: nil,
+        provider: nil,
+        model: nil,
+        artifactPath: nil,
+        errorPreview: nil
+    )
+    let completedToolEvent = AgentStreamEvent(
+        eventID: "evt-tool-completed",
+        timestamp: "2026-06-04T00:00:02.000Z",
+        type: "tool.call",
+        runID: "run-test",
+        taskID: "task-test",
+        sessionID: "session-test",
+        stage: "tool_execution",
+        action: "cmc.live_market_refresh",
+        actionIntent: "external_provider_refresh",
+        riskLevel: "low",
+        artifactKind: "tool_calls",
+        contextSourceCount: nil,
+        contextChunkCount: nil,
+        delta: nil,
+        toolName: "cmc.live_market_refresh",
+        status: "completed",
+        permission: "pass",
+        reason: nil,
+        provider: nil,
+        model: nil,
+        artifactPath: "runtime/agent/runs/run-test/tool-calls.json",
+        errorPreview: nil
+    )
+    let completedCMC = CapabilityCallState(
+        id: "tool-cmc",
+        toolName: "cmc.live_market_refresh",
+        displayName: "CMC 行情刷新",
+        status: .completed,
+        statusText: "已完成",
+        summary: "已获取行情。",
+        policyDecision: nil,
+        inputSummary: "",
+        outputSummary: "",
+        artifactRefs: [],
+        rawStatus: "completed",
+        rawPermission: "pass",
+        createdAt: nil
+    )
+    let message = AgentWorkspaceStateAdapter.makeRunMessage(
+        streamEvents: [plannerEvent, deltaEvent, completedToolEvent],
+        capabilityCalls: [completedCMC],
+        approvals: [],
+        activeRunID: "run-test"
+    )
+    let kinds = message?.parts.map(\.kind) ?? []
+    require(kinds.contains(.text), "assistant stream text should remain visible")
+    require(!kinds.contains(.planSummary), "planner events must not become chat plan cards")
+    require(!kinds.contains(.toolCall), "completed pass tool calls should stay in trace/inspector, not main chat")
+    require(!kinds.contains(.finalOutput), "completed tool events must not become repeated result cards")
+}
+
+private func checkCompletedRunUsesAuthoritativeFinalReadModel() {
+    let denseDelta = makeAgentStreamEvent(
+        id: "evt-delta-dense",
+        type: "assistant.delta",
+        runID: "run-final",
+        delta: "cmc.live_market_refresh 完成后，我抓取了以下证据： -市场概览：BTC ETF 净流量。 -宏观关联：BTC 与 DXY。"
+    )
+    let completed = makeAgentStreamEvent(
+        id: "evt-run-completed",
+        type: "run.completed",
+        runID: "run-final",
+        status: "completed",
+        artifactPath: "runtime/agent/runs/run-final/final-output.md"
+    )
+    let mirroredSessionMessage = AgentMessage(
+        id: "msg-final",
+        role: "assistant",
+        content: [AgentContentPart(type: "text", text: "## 结论\n- session 镜像不应作为前端权威来源。")],
+        attachments: nil,
+        contextRefs: nil,
+        runID: "run-final",
+        createdAt: "2026-06-04T00:00:02.000Z"
+    )
+    let finalModel = makeAgentFinalReadModel(
+        runID: "run-final",
+        finalText: "## 结论\n- 已使用权威 final read model。"
+    )
+    let state = AgentWorkspaceStateAdapter.makeThreadState(
+        session: nil,
+        messages: [mirroredSessionMessage],
+        streamEvents: [denseDelta, completed],
+        toolCalls: [],
+        longTasks: [],
+        daemonStatus: .unavailable,
+        finalReadModelsByRunID: ["run-final": finalModel]
+    )
+    let textParts = state.messages.flatMap(\.parts).compactMap { part -> String? in
+        if case .text(_, let text) = part { return text }
+        return nil
+    }
+    require(textParts.count == 1, "completed run should show only authoritative final read model text")
+    require(textParts.first?.contains("权威 final read model") == true, "final read model should remain visible")
+    require(!textParts.contains { $0.contains("session 镜像") }, "session assistant mirror must not compete with final read model")
+    require(!textParts.contains { $0.contains("cmc.live_market_refresh 完成后") }, "dense stream blob must not be appended after completion")
+}
+
+private func checkTerminalRunWithoutFinalReadModelSuppressesStreamBlob() {
+    let denseDelta = makeAgentStreamEvent(
+        id: "evt-delta-pending",
+        type: "assistant.delta",
+        runID: "run-pending-final",
+        delta: "cmc.live_market_refresh 完成后，我抓取了以下证据： -市场概览：BTC ETF 净流量。 -宏观关联：BTC 与 DXY。"
+    )
+    let completed = makeAgentStreamEvent(
+        id: "evt-run-pending-completed",
+        type: "run.completed",
+        runID: "run-pending-final",
+        status: "completed",
+        artifactPath: "runtime/agent/runs/run-pending-final/final-output.md"
+    )
+    let message = AgentWorkspaceStateAdapter.makeRunMessage(
+        streamEvents: [denseDelta, completed],
+        capabilityCalls: [],
+        approvals: [],
+        activeRunID: "run-pending-final",
+        suppressAssistantStreamText: true,
+        finalReadModel: makeAgentFinalReadModel(
+            runID: "run-pending-final",
+            finalText: "## 结论\n- final read model 已显示。"
+        )
+    )
+    let kinds = message?.parts.map(\.kind) ?? []
+    require(kinds.contains(.text), "terminal run should show final read model text")
+    require(!kinds.contains(.notice), "final read model should replace finalizing-only notice")
+    let text = message?.parts.compactMap { part -> String? in
+        if case .text(_, let text) = part { return text }
+        return nil
+    }.joined(separator: "\n") ?? ""
+    require(text.contains("final read model 已显示"), "authoritative final text should be rendered")
+    require(!text.contains("cmc.live_market_refresh 完成后"), "dense stream blob must remain suppressed")
+
+    let pendingMessage = AgentWorkspaceStateAdapter.makeRunMessage(
+        streamEvents: [denseDelta, completed],
+        capabilityCalls: [],
+        approvals: [],
+        activeRunID: "run-pending-final",
+        suppressAssistantStreamText: true
+    )
+    let pendingKinds = pendingMessage?.parts.map(\.kind) ?? []
+    require(!pendingKinds.contains(.text), "terminal run without final read model must not show dense stream text")
+    require(pendingKinds.contains(.notice) || pendingKinds.contains(.finalOutput), "terminal run should show only short finalizing/status parts")
+}
+
+private func checkCompletedRunIgnoresTerminalFinalTextWithoutFinalReadModel() {
+    let denseDelta = makeAgentStreamEvent(
+        id: "evt-terminal-text-dense",
+        type: "assistant.delta",
+        runID: "run-terminal-text",
+        delta: "cmc.live_market_refresh 完成后，我抓取了以下证据： -市场概览：BTC ETF 净流量。 -宏观关联：BTC 与 DXY。"
+    )
+    let completed = makeAgentStreamEvent(
+        id: "evt-terminal-text-completed",
+        type: "run.completed",
+        runID: "run-terminal-text",
+        status: "completed",
+        artifactPath: "runtime/agent/runs/run-terminal-text/final-output.md",
+        finalText: "## 结论\n- 完成事件正文已直接显示。"
+    )
+    let state = AgentWorkspaceStateAdapter.makeThreadState(
+        session: nil,
+        messages: [],
+        streamEvents: [denseDelta, completed],
+        toolCalls: [],
+        longTasks: [],
+        daemonStatus: .unavailable
+    )
+    let text = state.messages.flatMap(\.parts).compactMap { part -> String? in
+        if case .text(_, let text) = part { return text }
+        return nil
+    }.joined(separator: "\n")
+    require(!text.contains("完成事件正文已直接显示"), "terminal finalText must not render without final read model")
+    require(!text.contains("cmc.live_market_refresh 完成后"), "dense stream blob must remain suppressed after terminal event")
+}
+
+private func checkCMCGateSummaryDecodesNestedAndFlatFields() {
+    let json = """
+    {
+      "schemaVersion": "agent-final-read-model-v1",
+      "runID": "run-cmc-gate",
+      "taskID": "task-cmc-gate",
+      "sessionID": "session-cmc-gate",
+      "status": "completed",
+      "finalText": "## 结论\\n- CMC evidence empty.",
+      "finalTextSource": "final_output_artifact",
+      "outputGuardStatus": "rewritten",
+      "outputGuardReason": "concrete_market_values_without_fresh_gate",
+      "cmcGateSummary": {
+        "status": "degraded",
+        "provider": "mcpProvider",
+        "freshness": "fresh",
+        "transportStatus": "ok",
+        "skillHubDisplay": {
+          "status": "usable",
+          "allowSkillHubResultDisplay": true,
+          "displayableResultText": "CMC Skill Hub 调用成功，返回通用结果摘要；App 未解析到更具体的结构化结论。",
+          "displayableResultSource": "genericSummary",
+          "parserEvidenceStatus": "empty",
+          "allowSkillHubReturnedPrices": true,
+          "skillHubReturnedPriceTokenCount": 1,
+          "skillHubReturnedTextSource": "cmc_skill_hub_returned_text",
+          "skillHubReturnedTextCharCount": 88
+        },
+        "skillHubDisplayStatus": "usable",
+        "allowSkillHubResultDisplay": true,
+        "displayableResultText": "CMC Skill Hub 调用成功，返回通用结果摘要；App 未解析到更具体的结构化结论。",
+        "displayableResultSource": "genericSummary",
+        "parserEvidenceStatus": "empty",
+        "allowSkillHubReturnedPrices": true,
+        "skillHubReturnedPriceTokenCount": 1,
+        "skillHubReturnedTextSource": "cmc_skill_hub_returned_text",
+        "skillHubReturnedTextCharCount": 88,
+        "researchEvidence": {
+          "status": "empty",
+          "readableEvidenceCount": 0,
+          "emptyEvidenceReason": "skill_hub_transport_ok_but_no_readable_evidence",
+          "source": "cmc_skill_hub",
+          "allowResearchConclusion": true
+        },
+        "researchEvidenceStatus": "empty",
+        "readableEvidenceCount": 0,
+        "emptyEvidenceReason": "skill_hub_transport_ok_but_no_readable_evidence",
+        "priceSnapshot": {
+          "status": "empty",
+          "assetCount": 0,
+          "allowConcretePrices": false,
+          "provider": "mcpProvider",
+          "freshness": "fresh"
+        },
+        "priceSnapshotStatus": "empty",
+        "assetCount": 0,
+        "allowResearchConclusion": true,
+        "allowConcretePrices": false,
+        "reason": "fresh_live_research_snapshot_no_concrete_prices"
+      },
+      "productMutationPolicy": {
+        "status": "discarded",
+        "reason": "price_snapshot_empty_or_parser_evidence_empty",
+        "decidedAt": "2026-06-05T00:00:00.000Z"
+      },
+      "generatedAt": "2026-06-05T00:00:00.000Z",
+      "artifactPath": "runtime/agent/runs/run-cmc-gate/agent-final-read-model.json"
+    }
+    """
+    let model = try! JSONDecoder.agentArtifactDecoder().decode(AgentFinalReadModel.self, from: Data(json.utf8))
+    require(model.cmcGateSummary?.transportStatus == "ok", "CMC gate should preserve transport status")
+    require(model.cmcGateSummary?.skillHubDisplay?.status == "usable", "CMC gate should decode nested skill hub display")
+    require(model.cmcGateSummary?.skillHubDisplayStatus == "usable", "CMC gate should preserve flat skill hub display status")
+    require(model.cmcGateSummary?.allowSkillHubResultDisplay == true, "CMC gate should allow displayable Skill Hub result")
+    require(model.cmcGateSummary?.parserEvidenceStatus == "empty", "CMC gate should keep parser evidence empty as diagnostic")
+    require(model.cmcGateSummary?.allowSkillHubReturnedPrices == true, "CMC gate should decode returned-price allowance")
+    require(model.cmcGateSummary?.skillHubReturnedPriceTokenCount == 1, "CMC gate should decode returned-price token count")
+    require(model.cmcGateSummary?.researchEvidence?.status == "empty", "CMC gate should decode nested research evidence")
+    require(model.cmcGateSummary?.researchEvidenceStatus == "empty", "CMC gate should preserve flat research evidence status")
+    require(model.cmcGateSummary?.priceSnapshot?.allowConcretePrices == false, "CMC gate should decode nested price snapshot")
+    require(model.productMutationPolicy?.status == "discarded", "empty CMC evidence should decode discarded mutation policy")
+}
+
+private func checkHarnessReadModelsDecodeAndStoreReads() throws {
+    let root = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let runID = "run-harness-read-model"
+    let runDir = root
+        .appendingPathComponent("runtime/agent/runs", isDirectory: true)
+        .appendingPathComponent(runID, isDirectory: true)
+    try FileManager.default.createDirectory(at: runDir, withIntermediateDirectories: true)
+
+    let sessionTreeJSON = """
+    {
+      "schemaVersion": "agent-harness-session-tree-v1",
+      "sessionID": "session-harness",
+      "rootRunID": "\(runID)",
+      "activeBranchID": "branch-main-\(runID)",
+      "branches": [
+        {
+          "branchID": "branch-main-\(runID)",
+          "runID": "\(runID)",
+          "parentBranchID": null,
+          "branchType": "main",
+          "status": "completed",
+          "sourceStepID": "step-plan-0",
+          "finalReadModelPath": "runtime/agent/runs/\(runID)/agent-final-read-model.json",
+          "reviewReadModelPath": null,
+          "createdAt": "2026-06-06T00:00:00.000Z",
+          "updatedAt": "2026-06-06T00:00:01.000Z"
+        }
+      ],
+      "reviewBranches": [
+        {
+          "branchID": "branch-review-\(runID)",
+          "runID": "review-\(runID)",
+          "parentBranchID": "branch-main-\(runID)",
+          "branchType": "review",
+          "status": "completed",
+          "sourceStepID": "step-final-output",
+          "finalReadModelPath": null,
+          "reviewReadModelPath": "runtime/agent/runs/\(runID)/review-read-model.json",
+          "createdAt": "2026-06-06T00:00:01.000Z",
+          "updatedAt": "2026-06-06T00:00:01.000Z"
+        }
+      ],
+      "terminalBranches": ["branch-main-\(runID)"],
+      "createdAt": "2026-06-06T00:00:00.000Z",
+      "updatedAt": "2026-06-06T00:00:01.000Z",
+      "artifactPath": "runtime/agent/runs/\(runID)/harness-session-tree.json"
+    }
+    """
+    let lineageJSON = """
+    {
+      "schemaVersion": "agent-harness-branch-lineage-v1",
+      "sessionID": "session-harness",
+      "runID": "\(runID)",
+      "branchID": "branch-main-\(runID)",
+      "parentBranchID": null,
+      "sourceRunID": null,
+      "sourceStepID": "step-plan-0",
+      "branchType": "main",
+      "mergeTargetBranchID": null,
+      "mergeDecision": "not_applicable",
+      "mergeReason": "main_branch_is_authoritative_until_explicit_merge_policy_exists",
+      "relatedBranches": [
+        {
+          "runID": "review-\(runID)",
+          "branchID": "branch-review-\(runID)",
+          "parentBranchID": "branch-main-\(runID)",
+          "sourceRunID": "\(runID)",
+          "sourceStepID": "step-final-output",
+          "branchType": "review",
+          "mergeTargetBranchID": "branch-main-\(runID)",
+          "mergeDecision": "pending",
+          "mergeReason": "deterministic_review_branch_does_not_auto_merge",
+          "reviewReadModelPath": "runtime/agent/runs/\(runID)/review-read-model.json",
+          "createdAt": "2026-06-06T00:00:01.000Z"
+        }
+      ],
+      "createdAt": "2026-06-06T00:00:00.000Z",
+      "updatedAt": "2026-06-06T00:00:01.000Z",
+      "artifactPath": "runtime/agent/runs/\(runID)/harness-branch-lineage.json"
+    }
+    """
+    let reviewJSON = """
+    {
+      "schemaVersion": "agent-review-read-model-v1",
+      "reviewRunID": "review-\(runID)",
+      "sourceRunID": "\(runID)",
+      "sourceBranchID": "branch-main-\(runID)",
+      "status": "insufficient_evidence",
+      "findings": [
+        {
+          "findingID": "cmc-evidence-empty",
+          "severity": "high",
+          "title": "CMC evidence is empty or unparseable",
+          "detail": "skill_hub_transport_ok_but_no_readable_evidence",
+          "artifactPath": "runtime/agent/runs/\(runID)/tool-observations.json"
+        }
+      ],
+      "checkedArtifacts": [
+        {
+          "name": "agent-final-read-model.json",
+          "artifactPath": "runtime/agent/runs/\(runID)/agent-final-read-model.json",
+          "status": "checked"
+        }
+      ],
+      "cmcGateSummary": null,
+      "outputGuardStatus": "rewritten",
+      "mutationPolicyAssessment": {
+        "status": "discarded",
+        "reason": "cmc_research_evidence_empty",
+        "importAllowed": false
+      },
+      "mergeRecommendation": "discard",
+      "generatedAt": "2026-06-06T00:00:01.000Z",
+      "artifactPath": "runtime/agent/runs/\(runID)/review-read-model.json"
+    }
+    """
+    try sessionTreeJSON.write(to: runDir.appendingPathComponent("harness-session-tree.json"), atomically: true, encoding: .utf8)
+    try lineageJSON.write(to: runDir.appendingPathComponent("harness-branch-lineage.json"), atomically: true, encoding: .utf8)
+    try reviewJSON.write(to: runDir.appendingPathComponent("review-read-model.json"), atomically: true, encoding: .utf8)
+
+    let resolver = AgentRuntimePathResolver(pathResolver: RuntimePathResolver(root: root))
+    let store = AgentRunReadModelStore(streamStore: AgentStreamStore(resolver: resolver))
+    let tree = store.readHarnessSessionTree(runID: runID)
+    require(tree?.branches.first?.status == "completed", "harness session tree should decode completed main branch")
+    require(tree?.reviewBranches.first?.reviewReadModelPath?.contains("review-read-model.json") == true, "harness session tree should decode review branch path")
+    let lineage = store.readHarnessBranchLineage(runID: runID)
+    require(lineage?.relatedBranches?.first?.mergeDecision == "pending", "branch lineage should preserve pending review merge decision")
+    let review = store.readReviewReadModel(runID: runID)
+    require(review?.status == "insufficient_evidence", "review read model should decode deterministic review status")
+    require(review?.mutationPolicyAssessment?.importAllowed == false, "review read model should preserve non-importable mutation assessment")
+}
+
+private func makeAgentStreamEvent(
+    id: String,
+    type: String,
+    runID: String,
+    delta: String? = nil,
+    status: String? = nil,
+    artifactPath: String? = nil,
+    finalText: String? = nil
+) -> AgentStreamEvent {
+    var event = AgentStreamEvent(
+        eventID: id,
+        timestamp: "2026-06-04T00:00:00.000Z",
+        type: type,
+        runID: runID,
+        taskID: "task-\(runID)",
+        sessionID: "session-test",
+        stage: "model_stream",
+        action: nil,
+        actionIntent: nil,
+        riskLevel: nil,
+        artifactKind: artifactPath == nil ? nil : "final_output",
+        contextSourceCount: nil,
+        contextChunkCount: nil,
+        delta: delta,
+        toolName: nil,
+        status: status,
+        permission: nil,
+        reason: nil,
+        provider: nil,
+        model: nil,
+        artifactPath: artifactPath,
+        errorPreview: nil
+    )
+    event.finalText = finalText
+    return event
+}
+
+private func makeAgentFinalReadModel(
+    runID: String,
+    finalText: String,
+    outputGuardStatus: String = "passed",
+    mutationPolicyStatus: String = "importable"
+) -> AgentFinalReadModel {
+    AgentFinalReadModel(
+        schemaVersion: "agent-final-read-model-v1",
+        runID: runID,
+        taskID: "task-\(runID)",
+        sessionID: "session-test",
+        status: "completed",
+        finalText: finalText,
+        finalTextSource: "final_output_artifact",
+        outputGuardStatus: outputGuardStatus,
+        outputGuardReason: nil,
+        cmcGateSummary: CMCGateSummary(
+            status: "pass",
+            provider: "mcpProvider",
+            freshness: "fresh",
+            transportStatus: "ok",
+            researchEvidenceStatus: "usable",
+            readableEvidenceCount: 1,
+            emptyEvidenceReason: nil,
+            priceSnapshotStatus: "empty",
+            assetCount: 0,
+            allowResearchConclusion: true,
+            allowConcretePrices: false,
+            reason: "fresh_live_research_snapshot_no_concrete_prices"
+        ),
+        productMutationPolicy: ProductMutationPolicy(
+            status: mutationPolicyStatus,
+            reason: mutationPolicyStatus == "discarded" ? "cmc_research_evidence_empty" : "cmc_evidence_or_price_snapshot_usable",
+            decidedAt: "2026-06-05T00:00:00.000Z"
+        ),
+        generatedAt: "2026-06-05T00:00:00.000Z",
+        artifactPath: "runtime/agent/runs/\(runID)/agent-final-read-model.json"
+    )
 }
 
 private func checkAgentRunManifestAndV2EventDecode() {
@@ -255,7 +1108,9 @@ private func checkCMCProviderUsesFreshStoreSnapshot() throws {
     let snapshot = MarketDataSnapshot(
         status: "enabled",
         sourceName: "Test Market Store",
+        provider: "cmcRestProvider",
         generatedAt: AgentDateFormatting.isoString(now),
+        observedAt: AgentDateFormatting.isoString(now),
         expiresAt: AgentDateFormatting.isoString(testDate("2026-05-25T00:00:00Z")),
         freshness: "fresh",
         lastVerifiedAt: AgentDateFormatting.isoString(now),
@@ -291,7 +1146,9 @@ private func checkCMCProviderMarksExpiredStoreSnapshotStale() throws {
     let snapshot = MarketDataSnapshot(
         status: "enabled",
         sourceName: "Expired Store",
+        provider: "cmcRestProvider",
         generatedAt: "2026-05-21T00:00:00.000Z",
+        observedAt: "2026-05-21T00:00:00.000Z",
         expiresAt: "2026-05-22T00:00:00.000Z",
         freshness: "fresh",
         lastVerifiedAt: "2026-05-21T00:00:00.000Z",
@@ -306,6 +1163,56 @@ private func checkCMCProviderMarksExpiredStoreSnapshotStale() throws {
 
     require(market.status == "degraded", "Expired store snapshot should be degraded")
     require(market.freshness == "stale", "Expired store snapshot should be stale")
+}
+
+private func checkCMCProviderDoesNotPromoteFixtureSnapshotToLive() throws {
+    let temp = temporaryDirectory()
+    let store = MarketSnapshotStore(snapshotURL: temp.appendingPathComponent("market.json"))
+    let now = testDate("2026-05-24T00:00:00Z")
+    let snapshot = MarketDataSnapshot(
+        status: "enabled",
+        sourceName: "Fixture Store",
+        provider: "fixtureProvider",
+        generatedAt: AgentDateFormatting.isoString(now),
+        observedAt: AgentDateFormatting.isoString(now),
+        expiresAt: AgentDateFormatting.isoString(testDate("2026-05-25T00:00:00Z")),
+        freshness: "fixture",
+        lastVerifiedAt: AgentDateFormatting.isoString(now),
+        assets: [
+            MarketAsset(
+                symbol: "BTC",
+                name: "Bitcoin",
+                priceUSD: 1,
+                percentChange24h: 2,
+                volume24hUSD: 3,
+                marketCapUSD: 4,
+                source: "fixture",
+                isLive: false
+            )
+        ],
+        evidence: ["fixture snapshot"],
+        upstreamStatus: "fixture"
+    )
+    try store.write(snapshot)
+
+    let market = CMCMarketDataProvider(refreshBridge: CMCRefreshBridge(store: store))
+        .fetchMarketData(for: ["BTC"], date: now)
+
+    require(market.status == "degraded", "Fixture snapshot must not remain enabled")
+    require(market.freshness == "fixture", "Fixture snapshot must not be promoted to fresh")
+    require(market.assets.allSatisfy { !$0.isLive }, "Fixture assets must not be live")
+}
+
+private func checkAgentDaemonAuthTokenLoadsFromRuntime() throws {
+    let temp = temporaryDirectory()
+    let authDir = temp.appendingPathComponent("runtime/agent", isDirectory: true)
+    try FileManager.default.createDirectory(at: authDir, withIntermediateDirectories: true)
+    let authURL = authDir.appendingPathComponent("auth-token.json")
+    let payload = #"{"schemaVersion":"agent-daemon-auth-token-v1","token":"test-token-123"}"#
+    try payload.data(using: .utf8)!.write(to: authURL)
+
+    let token = AgentDaemonAuth.loadToken(pathResolver: RuntimePathResolver(root: temp))
+    require(token == "test-token-123", "Agent daemon auth token should load from runtime/agent/auth-token.json")
 }
 
 private func checkTimeWindowFilteringChangesSnapshotSizeAndArtifactsWrite() {
@@ -508,7 +1415,12 @@ private func checkRuntimeBackendProactiveCommands() {
         memoryStore: MemoryStore(pathResolver: pathResolver),
         handoffStore: HandoffStore(pathResolver: pathResolver)
     )
-    var backend = RuntimeBackend(repository: repository)
+    let agentResolver = AgentRuntimePathResolver(pathResolver: pathResolver)
+    var backend = RuntimeBackend(
+        repository: repository,
+        agentRunReadModelStore: AgentRunReadModelStore(streamStore: AgentStreamStore(resolver: agentResolver)),
+        agentProductMutationStore: AgentProductMutationStore(resolver: agentResolver)
+    )
     var state = backend.execute(.refreshRun(reason: "test", selectedGroupID: nil, window: .year, date: testDate("2026-05-24T00:00:00Z")))
 
     let crystalID = state.result.terminalData.proactive.crystals.first!.id
@@ -540,6 +1452,51 @@ private func checkRuntimeBackendProactiveCommands() {
 
     state = backend.execute(.purgeArchivedHandoffs)
     require(!state.result.terminalData.proactive.handoffs.contains { $0.id == handoffID }, "purgeArchivedHandoffs should remove archived handoffs from runtime state")
+
+    let discardRunID = "discarded-mutation-run"
+    let discardRunDir = agentResolver.runsDirectory.appendingPathComponent(discardRunID, isDirectory: true)
+    try! FileManager.default.createDirectory(at: discardRunDir, withIntermediateDirectories: true)
+    let discardedFinal = makeAgentFinalReadModel(
+        runID: discardRunID,
+        finalText: "## 结论\n- 证据不足，产物丢弃。",
+        outputGuardStatus: "rewritten",
+        mutationPolicyStatus: "discarded"
+    )
+    try! JSONEncoder.agentArtifactEncoder().encode(discardedFinal)
+        .write(to: discardRunDir.appendingPathComponent("agent-final-read-model.json"), options: [.atomic])
+    let mutationTask = UserTask(
+        id: UUID(),
+        title: "Should not import",
+        detail: "Discarded policy should block this task.",
+        status: "open",
+        priority: 1,
+        source: "agent_product_mutation",
+        evidenceID: nil,
+        tokenID: nil,
+        messageID: nil,
+        generatedAt: "2026-06-05T00:00:00.000Z",
+        artifactPath: "runtime/agent/runs/\(discardRunID)/product-mutations.json"
+    )
+    let mutationPayload = AgentProductMutationPayload(
+        schemaVersion: "agent-product-mutations-v1",
+        runID: discardRunID,
+        source: "test",
+        createdAt: "2026-06-05T00:00:00.000Z",
+        updatedAt: "2026-06-05T00:00:00.000Z",
+        idempotencyKeys: ["task:\(mutationTask.id.uuidString)"],
+        tasks: [mutationTask],
+        watchlistItems: [],
+        crystals: [],
+        proposals: [],
+        memory: [],
+        handoffs: []
+    )
+    try! JSONEncoder.agentArtifactEncoder().encode(mutationPayload)
+        .write(to: discardRunDir.appendingPathComponent("product-mutations.json"), options: [.atomic])
+    let taskCountBeforeDiscardedImport = state.result.terminalData.tasks.count
+    state = backend.execute(.importAgentProductMutations(runID: discardRunID))
+    require(state.result.terminalData.tasks.count == taskCountBeforeDiscardedImport, "discarded final read model must block product mutation import")
+    require(state.commandStatus.contains("agent_mutations_discarded"), "discarded mutation policy should be visible in command status")
 }
 
 private func testDate(_ value: String) -> Date {

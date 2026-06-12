@@ -2,10 +2,18 @@ import Foundation
 
 struct RuntimeBackend {
     private let repository: RuntimeRepository
+    private let agentRunReadModelStore: AgentRunReadModelStore
+    private let agentProductMutationStore: AgentProductMutationStore
     private(set) var state: RuntimeBackendState = .empty
 
-    init(repository: RuntimeRepository = RuntimeRepository()) {
+    init(
+        repository: RuntimeRepository = RuntimeRepository(),
+        agentRunReadModelStore: AgentRunReadModelStore = AgentRunReadModelStore(),
+        agentProductMutationStore: AgentProductMutationStore = AgentProductMutationStore()
+    ) {
         self.repository = repository
+        self.agentRunReadModelStore = agentRunReadModelStore
+        self.agentProductMutationStore = agentProductMutationStore
     }
 
     mutating func execute(_ command: RuntimeCommand) -> RuntimeBackendState {
@@ -188,7 +196,19 @@ struct RuntimeBackend {
     }
 
     private mutating func importAgentProductMutations(runID: String) {
-        guard let payload = AgentProductMutationStore().read(runID: runID) else {
+        guard let finalReadModel = agentRunReadModelStore.readFinalReadModel(runID: runID) else {
+            state.commandStatus = "agent_final_read_model_missing:\(runID)"
+            return
+        }
+        if finalReadModel.productMutationPolicy?.status == "discarded" {
+            state.commandStatus = "agent_mutations_discarded:\(runID):\(finalReadModel.productMutationPolicy?.reason ?? "policy")"
+            return
+        }
+        guard finalReadModel.productMutationPolicy?.status == "importable" else {
+            state.commandStatus = "agent_mutations_blocked:\(runID):\(finalReadModel.productMutationPolicy?.status ?? "unknown")"
+            return
+        }
+        guard let payload = agentProductMutationStore.read(runID: runID) else {
             state.commandStatus = "agent_mutations_missing:\(runID)"
             return
         }

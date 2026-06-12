@@ -25,102 +25,98 @@ extension Color {
     }
 }
 
-/// App typeface — bundled Manrope (registered at launch), system font as graceful fallback.
+/// App typeface — native system UI. The workbench should feel like a durable macOS tool,
+/// so labels, buttons and dense status text use SF through SwiftUI's system font stack.
 enum RadarFont {
     static func display(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font {
-        .custom("Manrope", size: size).weight(weight)
+        .system(size: size, weight: weight)
     }
     static func text(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .custom("Manrope", size: size).weight(weight)
+        .system(size: size, weight: weight)
     }
 }
 
 enum RadarTheme {
-    // === Banking-blue + AI palette ===========================================
-    // Sober, trustworthy deep-blue (banking) with an electric-blue "AI" shimmer on gradients,
-    // on a calm neutral-graphite canvas. Tuned for long viewing: comfortable (non-glare)
-    // contrast, muted accents used sparingly, a STATIC background. green↑ / red↓ semantics.
-    // `blue`/`cyan`/`indigo` token NAMES are kept but hold BLUE hues so every accent shifts.
+    // Apple-minimal workbench: system-adaptive graphite surfaces, hairline separators and one
+    // restrained blue accent. Dark mode is parity, not a separate black-gold identity.
 
-    // Canvas — clean graphite with a faint cool-blue cast (the AI/tech undertone).
-    static let background = Color(lightHex: 0xF4F6FB, darkHex: 0x0F1117)
-    static let backgroundDeep = Color(lightHex: 0xE8ECF4, darkHex: 0x0A0C12)
-    static let cyanBase = Color(lightHex: 0xE2ECFB, darkHex: 0x141A2A)
-    static let purpleBase = Color(lightHex: 0xE6EAF6, darkHex: 0x161A28)
+    // Canvas — Light: bright cool-white. Dark: near-black metal, slightly lifted for depth.
+    static let background = Color(lightHex: 0xF7F9FC, darkHex: 0x0D0E12)
+    static let backgroundDeep = Color(lightHex: 0xEEF2F8, darkHex: 0x08090C)
+    static let cyanBase = Color(lightHex: 0xEAF1FC, darkHex: 0x101820)
+    static let purpleBase = Color(lightHex: 0xEEF1F8, darkHex: 0x14161C)
 
-    // Surfaces — calm and fairly solid (readable, not busy). White in light, graphite in dark.
-    static let sidebar = Color(lightHex: 0xFFFFFF, darkHex: 0x181C26, lightOpacity: 0.72, darkOpacity: 0.62)
-    static let panel = Color(lightHex: 0xFFFFFF, darkHex: 0x191D28, lightOpacity: 0.70, darkOpacity: 0.60)
-    static let panelElevated = Color(lightHex: 0xFFFFFF, darkHex: 0x232838, lightOpacity: 0.85, darkOpacity: 0.72)
-    static let panelWash = Color(lightHex: 0xEEF1F8, darkHex: 0x272D3C, lightOpacity: 0.5, darkOpacity: 0.3)
+    // Surfaces — FLAT & opaque. White cards in Light; in Dark, lifted graphite so panels read
+    // clearly ABOVE the canvas (the depth/contrast that was missing — no longer one flat slab).
+    static let sidebar = Color(lightHex: 0xFFFFFF, darkHex: 0x16181E)
+    static let panel = Color(lightHex: 0xFFFFFF, darkHex: 0x191B22)
+    static let panelElevated = Color(lightHex: 0xFFFFFF, darkHex: 0x21242E)
+    static let panelWash = Color(lightHex: 0xF1F4FA, darkHex: 0x23262F)
 
-    // Hairlines — soft, cool-neutral, low contrast.
-    static let border = Color(lightHex: 0x1E2A44, darkHex: 0xC9D4EC, lightOpacity: 0.10, darkOpacity: 0.10)
-    static let borderSoft = Color(lightHex: 0x1E2A44, darkHex: 0xC9D4EC, lightOpacity: 0.06, darkOpacity: 0.06)
-    static let borderStrong = Color(lightHex: 0x1E2A44, darkHex: 0xC9D4EC, lightOpacity: 0.15, darkOpacity: 0.18)
-    static let borderPurple = Color(lightHex: 0x1E2A44, darkHex: 0xC9D4EC, lightOpacity: 0.06, darkOpacity: 0.06)
+    static let border = Color(lightHex: 0x0F172A, darkHex: 0xFFFFFF, lightOpacity: 0.10, darkOpacity: 0.12)
+    static let borderSoft = Color(lightHex: 0x0F172A, darkHex: 0xFFFFFF, lightOpacity: 0.06, darkOpacity: 0.08)
+    static let borderStrong = Color(lightHex: 0x0F172A, darkHex: 0xFFFFFF, lightOpacity: 0.16, darkOpacity: 0.18)
+    static let borderPurple = Color(lightHex: 0x0F172A, darkHex: 0xFFFFFF, lightOpacity: 0.06, darkOpacity: 0.08)
 
-    // Neutral tints for hover/fill washes.
-    static let tintFaint = Color(lightHex: 0x1E2A44, darkHex: 0xC9D4EC, lightOpacity: 0.035, darkOpacity: 0.045)
-    static let tintSoft = Color(lightHex: 0x1E2A44, darkHex: 0xC9D4EC, lightOpacity: 0.055, darkOpacity: 0.06)
-    static let tintMedium = Color(lightHex: 0x1E2A44, darkHex: 0xC9D4EC, lightOpacity: 0.085, darkOpacity: 0.10)
-    static let tintStrong = Color(lightHex: 0x1E2A44, darkHex: 0xC9D4EC, lightOpacity: 0.12, darkOpacity: 0.13)
+    static let tintFaint = Color(lightHex: 0x0F172A, darkHex: 0xFFFFFF, lightOpacity: 0.04, darkOpacity: 0.04)
+    static let tintSoft = Color(lightHex: 0x0F172A, darkHex: 0xFFFFFF, lightOpacity: 0.06, darkOpacity: 0.06)
+    static let tintMedium = Color(lightHex: 0x0F172A, darkHex: 0xFFFFFF, lightOpacity: 0.09, darkOpacity: 0.09)
+    static let tintStrong = Color(lightHex: 0x0F172A, darkHex: 0xFFFFFF, lightOpacity: 0.13, darkOpacity: 0.13)
 
-    // Text — comfortable contrast (soft graphite / soft off-white, never pure black or white).
-    static let primaryText = Color(lightHex: 0x1E2330, darkHex: 0xE7EAF2)
-    static let secondaryText = Color(lightHex: 0x5A6271, darkHex: 0x99A1B2)
-    static let mutedText = Color(lightHex: 0x929AAB, darkHex: 0x69707F)
+    // Text — higher contrast both ways. Light: deeper graphite. Dark: brighter warm-white,
+    // FULLY OPAQUE (no alpha) so glyphs render crisp — fixes the "blurry / fatiguing" text.
+    static let primaryText = Color(lightHex: 0x16181F, darkHex: 0xF4F6FA)
+    static let secondaryText = Color(lightHex: 0x4B5563, darkHex: 0xB4BAC6)
+    static let mutedText = Color(lightHex: 0x8A92A0, darkHex: 0x7E8795)
 
-    // Accents — deep-to-electric blue family + green/red market semantics.
-    static let blue = Color(lightHex: 0x2D5BE6, darkHex: 0x5A86FF)   // primary, banking royal blue
-    static let cyan = Color(lightHex: 0x1E86E0, darkHex: 0x46B6FF)   // electric sky (AI shimmer)
-    static let indigo = Color(lightHex: 0x1B3FB0, darkHex: 0x2E55D8) // deep navy
-    static let lime = Color(lightHex: 0x6FA84A, darkHex: 0x8FC56A)   // sage (minor accent only)
+    static let blue = Color(lightHex: 0x2563EB, darkHex: 0x5EA0FF)
+    static let cyan = Color(lightHex: 0x0EA5E9, darkHex: 0x64D2FF)
+    static let indigo = Color(lightHex: 0x1D4ED8, darkHex: 0x8E8CFF)
+    static let lime = Color(lightHex: 0x6FA84A, darkHex: 0x8FC56A)   // minor accent only
     static let ink = Color(hex: 0x0C1426)
-    static let green = Color(lightHex: 0x2E9E63, darkHex: 0x43C281)  // positive / up
-    static let gold = Color(lightHex: 0xC6892F, darkHex: 0xE0AC55)   // warning
-    static let violet = Color(lightHex: 0x4E6A9E, darkHex: 0x6E8CC8) // steel-blue categorical (non-purple)
-    static let red = Color(lightHex: 0xD2564C, darkHex: 0xE87B70)    // negative / down
-    static let positive = Color(lightHex: 0x2E9E63, darkHex: 0x43C281)
-    static let negative = Color(lightHex: 0xD2564C, darkHex: 0xE87B70)
+    static let green = Color(lightHex: 0x15A34A, darkHex: 0x47CF88)  // positive / up
+    static let gold = Color(lightHex: 0xB45309, darkHex: 0xE8A93F)
+    static let violet = Color(lightHex: 0x4E6A9E, darkHex: 0xA78BFA)
+    static let red = Color(lightHex: 0xDC2626, darkHex: 0xEE8579)    // negative / down
+    static let positive = Color(lightHex: 0x15A34A, darkHex: 0x47CF88)
+    static let negative = Color(lightHex: 0xDC2626, darkHex: 0xEE8579)
 
-    /// Royal-blue → electric-sky. The "AI" shimmer — used on the brand mark, big numbers,
-    /// progress rings and gradient accents. Soft enough to live on screen all day.
     static let brandGradient = LinearGradient(
-        colors: [Color(lightHex: 0x2D5BE6, darkHex: 0x5A86FF), Color(lightHex: 0x1E86E0, darkHex: 0x46B6FF)],
+        colors: [Color(lightHex: 0x2563EB, darkHex: 0x5EA0FF), Color(lightHex: 0x0EA5E9, darkHex: 0x64D2FF)],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
     static let accentGradient = brandGradient
 
-    /// Deep navy → royal — for filled CTAs so white text stays legible in both appearances.
     static let ctaGradient = LinearGradient(
-        colors: [Color(lightHex: 0x1B3FB0, darkHex: 0x2E55D8), Color(lightHex: 0x2D5BE6, darkHex: 0x3E6BF0)],
+        colors: [Color(lightHex: 0x2563EB, darkHex: 0x5EA0FF), Color(lightHex: 0x2563EB, darkHex: 0x5EA0FF)],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
-    /// A *gentle* blue→indigo wash for the hero — present but quiet; no saturated slab.
+    /// A *gentle* hero wash — present but quiet; no saturated slab.
     static let heroGradient = LinearGradient(
         colors: [
-            Color(lightHex: 0x2D5BE6, darkHex: 0x5A86FF, lightOpacity: 0.13, darkOpacity: 0.18),
-            Color(lightHex: 0x1E86E0, darkHex: 0x46B6FF, lightOpacity: 0.08, darkOpacity: 0.11),
+            Color(lightHex: 0x2563EB, darkHex: 0x5EA0FF, lightOpacity: 0.08, darkOpacity: 0.08),
+            Color(lightHex: 0x0EA5E9, darkHex: 0x64D2FF, lightOpacity: 0.04, darkOpacity: 0.04),
             .clear
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
-    /// Soft ambient shadow — the wide, diffuse drop that gives a surface its float.
-    static let cardShadow = Color(lightHex: 0x1B2A4A, darkHex: 0x000000, lightOpacity: 0.10, darkOpacity: 0.28)
-    /// Tight contact shadow — the close, darker line directly under an element. Pairing the two
-    /// (contact + ambient) is what reads as real, layered depth rather than a flat blur.
-    static let contactShadow = Color(lightHex: 0x162542, darkHex: 0x000000, lightOpacity: 0.10, darkOpacity: 0.38)
+    /// Restrained ambient shadow — flat design uses ONE soft drop, kept tight.
+    static let cardShadow = Color(lightHex: 0x1B2A4A, darkHex: 0x000000, lightOpacity: 0.08, darkOpacity: 0.45)
+    /// Tight contact line directly under an element.
+    static let contactShadow = Color(lightHex: 0x162542, darkHex: 0x000000, lightOpacity: 0.06, darkOpacity: 0.55)
+
+    static let metalSheen = Color(lightHex: 0xFFFFFF, darkHex: 0xFFFFFF, lightOpacity: 0.0, darkOpacity: 0.08)
 }
 
-/// Shared frosted-glass recipe: a backmost material (blurs the real backdrop), a thin color
-/// wash to set the hue, and a top sheen. Used so every surface shares one consistent glass.
+/// Flat surface recipe (was frosted glass). A near-opaque solid fill + an optional thin metal
+/// highlight along the top edge. No backdrop blur, no plusLighter slabs — cheap to composite.
+/// Signature kept (`material`, `sheen`) so call sites compile unchanged; `material` is ignored.
 struct GlassSurface: View {
     var cornerRadius: CGFloat
     var material: Material
@@ -130,60 +126,47 @@ struct GlassSurface: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         shape
-            .fill(material)
-            .overlay(shape.fill(tint))
+            .fill(tint)
             .overlay(
+                // Thin brushed-metal lip — only visible in Dark (champagne), clear in Light.
                 shape
-                    .fill(LinearGradient(colors: [Color.white.opacity(sheen), .clear], startPoint: .top, endPoint: .center))
-                    .blendMode(.plusLighter)
+                    .fill(LinearGradient(colors: [RadarTheme.metalSheen, .clear], startPoint: .top, endPoint: .center))
             )
     }
 }
 
 /// Centralized motion curves — one cohesive sense of physics across the app.
 enum RadarMotion {
-    static let spring = Animation.spring(response: 0.36, dampingFraction: 0.82)
-    static let snappy = Animation.spring(response: 0.26, dampingFraction: 0.86)
-    static let gentle = Animation.spring(response: 0.5, dampingFraction: 0.88)
-    static let smooth = Animation.easeInOut(duration: 0.24)
+    static let spring = Animation.spring(response: 0.34, dampingFraction: 0.86)
+    static let snappy = Animation.spring(response: 0.24, dampingFraction: 0.9)
+    static let gentle = Animation.spring(response: 0.46, dampingFraction: 0.9)
+    static let smooth = Animation.easeInOut(duration: 0.2)
 }
 
 struct PanelModifier: ViewModifier {
     var glow: Bool = false
-    var cornerRadius: CGFloat = 18
+    var cornerRadius: CGFloat = 16
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         content
-            // Frosted glass: the material is the backmost layer, so it blurs the real backdrop.
-            // .thinMaterial lets the colorful aurora bleed through for true glassmorphism.
-            .background(GlassSurface(cornerRadius: cornerRadius, material: .thinMaterial, tint: RadarTheme.panel, sheen: 0.14))
+            // Flat, near-opaque surface — no material, no blur. This is the main perf win.
+            .background(GlassSurface(cornerRadius: cornerRadius, material: .thinMaterial, tint: RadarTheme.panel, sheen: 0))
             .overlay(
-                shape.strokeBorder(glow ? RadarTheme.blue.opacity(0.35) : RadarTheme.border, lineWidth: 1)
-            )
-            .overlay(
-                // Rim light along the top edge — the bright lip a glass panel catches.
-                shape
-                    .strokeBorder(
-                        LinearGradient(colors: [Color.white.opacity(0.28), .clear], startPoint: .top, endPoint: .center),
-                        lineWidth: 1
-                    )
-                    .blendMode(.plusLighter)
-                    .opacity(0.55)
+                shape.strokeBorder(glow ? RadarTheme.blue.opacity(0.40) : RadarTheme.border, lineWidth: 1)
             )
             .clipShape(shape)
-            .shadow(color: RadarTheme.contactShadow.opacity(glow ? 1 : 0.7), radius: 2, x: 0, y: 1)
-            // Calm base sheets sit low; the colorful `glow` (hero) floats high — elevation = hierarchy.
-            .shadow(color: RadarTheme.cardShadow.opacity(glow ? 1 : 0.7), radius: glow ? 32 : 13, x: 0, y: glow ? 18 : 7)
+            // Single restrained ambient shadow. `glow` accent surfaces lift slightly more.
+            .shadow(color: RadarTheme.cardShadow.opacity(glow ? 0.9 : 0.6), radius: glow ? 14 : 8, x: 0, y: glow ? 6 : 4)
     }
 }
 
 extension View {
-    func radarPanel(cornerRadius: CGFloat = 18) -> some View {
+    func radarPanel(cornerRadius: CGFloat = 16) -> some View {
         modifier(PanelModifier(cornerRadius: cornerRadius))
     }
 
-    func researchPanel(glow: Bool = false, cornerRadius: CGFloat = 18) -> some View {
+    func researchPanel(glow: Bool = false, cornerRadius: CGFloat = 16) -> some View {
         modifier(PanelModifier(glow: glow, cornerRadius: cornerRadius))
     }
 
@@ -191,18 +174,16 @@ extension View {
         padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(
-                Capsule()
-                    .fill(.ultraThinMaterial)
-                    .overlay(Capsule().fill(active ? RadarTheme.blue.opacity(0.20) : RadarTheme.tintFaint))
+                Capsule().fill(active ? RadarTheme.blue.opacity(0.16) : RadarTheme.tintFaint)
             )
             .overlay(
-                Capsule().strokeBorder(active ? RadarTheme.blue.opacity(0.40) : RadarTheme.borderSoft, lineWidth: 1)
+                Capsule().strokeBorder(active ? RadarTheme.blue.opacity(0.42) : RadarTheme.borderSoft, lineWidth: 1)
             )
             .clipShape(Capsule())
     }
 
     /// Tappable card with hover lift + clear selected state.
-    func interactiveCard(selected: Bool = false, cornerRadius: CGFloat = 16, hoverScale: CGFloat = 1.0) -> some View {
+    func interactiveCard(selected: Bool = false, cornerRadius: CGFloat = 14, hoverScale: CGFloat = 1.0) -> some View {
         modifier(InteractiveCardModifier(selected: selected, cornerRadius: cornerRadius, hoverScale: hoverScale))
     }
 
@@ -211,10 +192,9 @@ extension View {
         modifier(InteractiveRowModifier(selected: selected, cornerRadius: cornerRadius))
     }
 
-    /// Quiet list item — a flat, low-contrast well (NOT a floating glass card). Stays calm so a
+    /// Quiet list item — a flat, low-contrast well (NOT a floating card). Stays calm so a
     /// list reads as one surface; only the hovered / selected item gains color + a hairline.
-    /// This is what keeps lists from turning into a wall of competing glass tiles.
-    func quietRow(selected: Bool = false, cornerRadius: CGFloat = 14) -> some View {
+    func quietRow(selected: Bool = false, cornerRadius: CGFloat = 12) -> some View {
         modifier(QuietRowModifier(selected: selected, cornerRadius: cornerRadius))
     }
 }
@@ -230,7 +210,7 @@ struct QuietRowModifier: ViewModifier {
             .background(
                 shape.fill(
                     selected ? RadarTheme.blue.opacity(0.12)
-                        : (hovering ? RadarTheme.tintSoft : RadarTheme.tintFaint)
+                        : (hovering ? RadarTheme.tintSoft : Color.clear)
                 )
             )
             .overlay(
@@ -240,8 +220,6 @@ struct QuietRowModifier: ViewModifier {
                     lineWidth: 1
                 )
             )
-            // Selected item gets a thin colored glow to lift it just slightly off the surface.
-            .shadow(color: selected ? RadarTheme.blue.opacity(0.18) : .clear, radius: 10, x: 0, y: 4)
             .clipShape(shape)
             .animation(RadarMotion.snappy, value: hovering)
             .animation(RadarMotion.spring, value: selected)
@@ -258,10 +236,10 @@ struct InteractiveCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         content
-            // Frosted-glass tile (material backmost) that brightens + lifts on hover.
-            .background(GlassSurface(cornerRadius: cornerRadius, material: .thinMaterial, tint: RadarTheme.panelElevated, sheen: 0.14))
+            // Flat tile that warms + lifts a touch on hover. No material, no blur, no sheen slab.
+            .background(GlassSurface(cornerRadius: cornerRadius, material: .thinMaterial, tint: RadarTheme.panelElevated, sheen: 0))
             .overlay(shape.fill(hovering && !selected ? RadarTheme.tintFaint : Color.clear))
-            .overlay(shape.fill(RadarTheme.blue.opacity(selected ? 0.12 : 0)))
+            .overlay(shape.fill(RadarTheme.blue.opacity(selected ? 0.10 : 0)))
             .overlay(
                 shape.strokeBorder(
                     selected ? RadarTheme.blue.opacity(0.55)
@@ -269,19 +247,14 @@ struct InteractiveCardModifier: ViewModifier {
                     lineWidth: 1
                 )
             )
-            .overlay(
-                shape
-                    .strokeBorder(LinearGradient(colors: [Color.white.opacity(0.22), .clear], startPoint: .top, endPoint: .center), lineWidth: 0.8)
-                    .blendMode(.plusLighter)
-                    .opacity(0.5)
-            )
             .clipShape(shape)
-            .shadow(color: RadarTheme.contactShadow.opacity(hovering || selected ? 1 : 0.7), radius: 2, x: 0, y: 1)
+            // ONE light shadow whose opacity (not radius) reacts to state — avoids re-blurring
+            // per frame. Kept subtle so a grid of cards reads calm, not like a wall of boxes.
             .shadow(
-                color: RadarTheme.cardShadow.opacity(selected ? 1.0 : (hovering ? 0.9 : 0.6)),
-                radius: selected ? 24 : (hovering ? 20 : 12),
+                color: RadarTheme.cardShadow.opacity(selected ? 0.9 : (hovering ? 0.7 : 0.4)),
+                radius: 9,
                 x: 0,
-                y: selected ? 12 : (hovering ? 10 : 6)
+                y: selected ? 5 : 3
             )
             .scaleEffect(hovering ? hoverScale : 1)
             .animation(RadarMotion.snappy, value: hovering)
@@ -309,9 +282,8 @@ struct InteractiveRowModifier: ViewModifier {
     }
 }
 
-/// Calm, STATIC canvas tuned for long viewing — a near-neutral warm gradient with only a
-/// whisper of violet in the corners. No drifting, no saturated color: the background should
-/// recede completely so the eye rests on content, not the wallpaper.
+/// Calm, STATIC canvas. Flat near-solid base with a single whisper of accent in one corner —
+/// tech-blue in Light, champagne in Dark. Recedes completely so the eye rests on content.
 struct ResearchOSBackground: View {
     var body: some View {
         ZStack {
@@ -320,18 +292,11 @@ struct ResearchOSBackground: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            // Subtle, STATIC blue→indigo glow — a quiet "AI/tech" depth without arousal.
             RadialGradient(
-                colors: [RadarTheme.blue.opacity(0.07), .clear],
+                colors: [RadarTheme.blue.opacity(0.05), .clear],
                 center: .topLeading,
                 startRadius: 0,
-                endRadius: 740
-            )
-            RadialGradient(
-                colors: [RadarTheme.indigo.opacity(0.05), .clear],
-                center: .bottomTrailing,
-                startRadius: 0,
-                endRadius: 620
+                endRadius: 720
             )
         }
         .ignoresSafeArea()
@@ -405,7 +370,6 @@ struct IconChip: View {
             )
             .overlay(shape.strokeBorder(gradient == nil ? tint.opacity(0.18) : Color.white.opacity(0.18), lineWidth: 0.8))
             .clipShape(shape)
-            .shadow(color: gradient == nil ? .clear : tint.opacity(0.35), radius: 8, x: 0, y: 4)
     }
 }
 
@@ -534,9 +498,10 @@ struct ResearchSparkline: View {
 
 struct ResearchPrimaryButtonStyle: ButtonStyle {
     @State private var hovering = false
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
         return configuration.label
             .font(RadarFont.text(12.5, .semibold))
             .foregroundStyle(.white)
@@ -544,21 +509,20 @@ struct ResearchPrimaryButtonStyle: ButtonStyle {
             .padding(.vertical, 10)
             .background(
                 shape
-                    .fill(RadarTheme.ctaGradient)
-                    .overlay(
-                        shape
-                            .fill(LinearGradient(colors: [Color.white.opacity(0.20), .clear], startPoint: .top, endPoint: .center))
-                            .blendMode(.plusLighter)
-                    )
-                    .brightness(configuration.isPressed ? -0.05 : (hovering ? 0.05 : 0))
+                    .fill(isEnabled ? RadarTheme.blue : RadarTheme.tintStrong)
+                    .brightness(configuration.isPressed ? -0.06 : (hovering ? 0.03 : 0))
             )
             .overlay(
-                shape.strokeBorder(Color.white.opacity(0.22), lineWidth: 0.8)
+                shape.strokeBorder(Color.white.opacity(isEnabled ? 0.18 : 0), lineWidth: 0.8)
             )
             .clipShape(shape)
-            .shadow(color: .black.opacity(configuration.isPressed ? 0.08 : 0.12), radius: 2, x: 0, y: 1)
-            .shadow(color: RadarTheme.blue.opacity(configuration.isPressed ? 0.10 : (hovering ? 0.30 : 0.18)),
-                    radius: configuration.isPressed ? 5 : (hovering ? 14 : 9), x: 0, y: 5)
+            .shadow(
+                color: RadarTheme.blue.opacity(isEnabled ? (hovering ? 0.18 : 0.10) : 0),
+                radius: hovering ? 7 : 4,
+                x: 0,
+                y: hovering ? 3 : 2
+            )
+            .opacity(isEnabled ? 1 : 0.55)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(RadarMotion.snappy, value: configuration.isPressed)
             .animation(RadarMotion.snappy, value: hovering)
@@ -568,30 +532,26 @@ struct ResearchPrimaryButtonStyle: ButtonStyle {
 
 struct ResearchSecondaryButtonStyle: ButtonStyle {
     @State private var hovering = false
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
         return configuration.label
             .font(.system(size: 12.5, weight: .medium))
-            .foregroundStyle(RadarTheme.primaryText)
+            .foregroundStyle(isEnabled ? RadarTheme.primaryText : RadarTheme.mutedText)
             .padding(.horizontal, 13)
             .padding(.vertical, 9)
             .background(
-                // Frosted glass button — material backdrop + a hover-reactive wash + top sheen.
                 shape
-                    .fill(.thinMaterial)
-                    .overlay(shape.fill(configuration.isPressed ? RadarTheme.tintStrong : (hovering ? RadarTheme.tintMedium : RadarTheme.tintFaint)))
-                    .overlay(
-                        shape.fill(LinearGradient(colors: [Color.white.opacity(0.16), .clear], startPoint: .top, endPoint: .center))
-                            .blendMode(.plusLighter)
-                    )
+                    .fill(RadarTheme.panelElevated)
+                    .overlay(shape.fill(isEnabled ? (configuration.isPressed ? RadarTheme.tintStrong : (hovering ? RadarTheme.tintSoft : Color.clear)) : RadarTheme.tintFaint))
             )
             .overlay(
-                shape.strokeBorder(hovering ? RadarTheme.borderStrong : RadarTheme.borderSoft, lineWidth: 1)
+                shape.strokeBorder(hovering && isEnabled ? RadarTheme.borderStrong : RadarTheme.borderSoft, lineWidth: 1)
             )
             .clipShape(shape)
-            .shadow(color: RadarTheme.contactShadow.opacity(0.6), radius: 1, x: 0, y: 1)
-            .shadow(color: RadarTheme.cardShadow.opacity(hovering ? 0.8 : 0.45), radius: hovering ? 12 : 7, x: 0, y: hovering ? 6 : 3)
+            .shadow(color: RadarTheme.cardShadow.opacity(hovering && isEnabled ? 0.35 : 0.18), radius: 4, x: 0, y: 2)
+            .opacity(isEnabled ? 1 : 0.62)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(RadarMotion.snappy, value: configuration.isPressed)
             .animation(RadarMotion.snappy, value: hovering)
@@ -599,28 +559,26 @@ struct ResearchSecondaryButtonStyle: ButtonStyle {
     }
 }
 
-/// Compact glyph button — frosted glass with hover lift.
+/// Compact glyph button — flat surface with hover lift.
 struct HoverIconButtonStyle: ButtonStyle {
     var size: CGFloat = 32
     var circular: Bool = false
     @State private var hovering = false
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: circular ? size / 2 : 10, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: circular ? size / 2 : 9, style: .continuous)
         return configuration.label
             .frame(width: size, height: size)
             .background(
                 shape
-                    .fill(.thinMaterial)
-                    .overlay(shape.fill(configuration.isPressed ? RadarTheme.tintStrong : (hovering ? RadarTheme.tintMedium : RadarTheme.tintFaint)))
-                    .overlay(
-                        shape.fill(LinearGradient(colors: [Color.white.opacity(0.16), .clear], startPoint: .top, endPoint: .center))
-                            .blendMode(.plusLighter)
-                    )
+                    .fill(RadarTheme.panelElevated)
+                    .overlay(shape.fill(isEnabled ? (configuration.isPressed ? RadarTheme.tintStrong : (hovering ? RadarTheme.tintSoft : Color.clear)) : RadarTheme.tintFaint))
             )
-            .overlay(shape.strokeBorder(hovering ? RadarTheme.borderStrong : RadarTheme.borderSoft, lineWidth: 1))
+            .overlay(shape.strokeBorder(hovering && isEnabled ? RadarTheme.borderStrong : RadarTheme.borderSoft, lineWidth: 1))
             .clipShape(shape)
-            .shadow(color: RadarTheme.cardShadow.opacity(hovering ? 0.7 : 0.4), radius: hovering ? 10 : 5, x: 0, y: hovering ? 5 : 2)
+            .shadow(color: RadarTheme.cardShadow.opacity(hovering && isEnabled ? 0.3 : 0.12), radius: 4, x: 0, y: 2)
+            .opacity(isEnabled ? 1 : 0.55)
             .scaleEffect(configuration.isPressed ? 0.92 : 1)
             .animation(RadarMotion.snappy, value: configuration.isPressed)
             .animation(RadarMotion.snappy, value: hovering)
@@ -635,12 +593,12 @@ struct WorkspaceSurface<Content: View>: View {
         content
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(GlassSurface(cornerRadius: 18, material: .regularMaterial, tint: RadarTheme.panel, sheen: 0.12))
+            .background(GlassSurface(cornerRadius: 16, material: .regularMaterial, tint: RadarTheme.panel, sheen: 0))
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(RadarTheme.border, lineWidth: 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 

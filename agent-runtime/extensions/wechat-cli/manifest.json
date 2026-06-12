@@ -2,15 +2,15 @@
   "id": "wechat-cli",
   "schemaVersion": "agent-extension-package-v1",
   "title": "WeChatCLI Export Extension",
-  "description": "Migrates WeChatCLI command contracts and export normalization into the Agent Runtime Host without running live WeChat reads.",
+  "description": "Migrates WeChatCLI export normalization and daemon-managed read-only refresh contracts into the Agent Runtime Host.",
   "publicExtension": {
     "extensionID": "wechat-cli-export-bridge",
     "title": "WeChatCLI 能力包",
-    "description": "读取用户提供的导出/fixture 文件并归一化为 Agent 可用的微信消息。",
+    "description": "读取用户提供的导出/fixture 文件，或由 daemon 在本机开关启用时进行只读刷新并归一化为 Agent 可用的微信消息。",
     "category": "wechat",
     "defaultSelected": true,
     "status": "available",
-    "permissionSummary": "fixture/local normalized read is allowed; live init/history/search/sessions/new-messages are blocked."
+    "permissionSummary": "fixture/local/export/read-only refresh is allowed; raw live CLI commands and sending are blocked."
   },
   "publicSkills": [],
   "internalTools": [
@@ -24,9 +24,9 @@
   ],
   "policies": {
     "read_fixture_export": "pass",
-    "read_user_export_file": "needs_confirmation",
+    "read_user_export_file": "pass",
     "run_live_wechat_cli": "blocked",
-    "read_live_wechat": "blocked"
+    "read_live_wechat": "pass_when_WECHAT_LIVE_ENABLED"
   },
   "sourceReference": {
     "path": "wechat-cli_raw",

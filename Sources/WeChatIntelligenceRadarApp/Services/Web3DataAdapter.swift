@@ -16,22 +16,22 @@ struct CMCProviderConfiguration: Hashable {
     let discoveryEvidence: [String]
 
     static let currentEnvironment = CMCProviderConfiguration(
-        mcpToolAvailable: true,
-        apiKeyConfigured: true,
-        networkPermissionKnown: true,
+        mcpToolAvailable: false,
+        apiKeyConfigured: false,
+        networkPermissionKnown: false,
         skillsMarketplaceURL: "https://coinmarketcap.com/api/skills-marketplace/",
         skillHubCapability: .current,
         discoveryEvidence: [
-            "tool_search exposed mcp__crypto_skill_hub__ as a CoinMarketCap-powered Crypto Skill Hub.",
-            "Selected skill unique_name: altcoin_token_profile.",
-            "Executed skill for BTC, ETH, and SOL with convert=USD."
+            "Swift does not call CoinMarketCap, MCP, or external network providers directly.",
+            "Live CMC evidence must be written by the backend daemon into runtime/market/latest-market-snapshot.json.",
+            "Fixture/sample capability data is research UI fallback only and must not be labeled live."
         ]
     )
 }
 
 struct CMCMarketDataProvider: Web3DataAdapter {
     let providerName = "CoinMarketCap MCP"
-    let isLiveProvider = true
+    let isLiveProvider = false
     let configuration: CMCProviderConfiguration
     let refreshBridge: CMCRefreshBridge
 
@@ -58,29 +58,22 @@ struct CMCMarketDataProvider: Web3DataAdapter {
             }
         }
 
-        guard configuration.mcpToolAvailable else {
-            return MarketDataSnapshot(
-                status: "blocked",
-                sourceName: providerName,
-                generatedAt: AgentDateFormatting.isoString(date),
-                expiresAt: AgentDateFormatting.isoString(date),
-                freshness: "blocked",
-                lastVerifiedAt: "--",
-                assets: [],
-                evidence: configuration.discoveryEvidence + [
-                    "No live CMC request was attempted from the Swift app.",
-                    "Fallback data must be labeled mock/degraded."
-                ],
-                upstreamStatus: configuration.apiKeyConfigured ? "mcp_missing_api_key_present" : "mcp_missing_api_key_missing"
-            )
-        }
-
-        let fullSeededSnapshot = skillHubSnapshot(for: [], now: date)
-        _ = try? refreshBridge.store.write(fullSeededSnapshot)
-        let assets = fullSeededSnapshot.assets.filter {
-            requested.isEmpty || requested.contains($0.symbol)
-        }
-        return fullSeededSnapshot.withAssets(assets.isEmpty ? fullSeededSnapshot.assets : assets)
+        return MarketDataSnapshot(
+            status: "degraded",
+            sourceName: providerName,
+            provider: nil,
+            generatedAt: AgentDateFormatting.isoString(date),
+            observedAt: nil,
+            expiresAt: AgentDateFormatting.isoString(date),
+            freshness: "blocked",
+            lastVerifiedAt: "--",
+            assets: [],
+            evidence: configuration.discoveryEvidence + [
+                "No live CMC request was attempted from the Swift app.",
+                "Run backend CMC refresh to populate a fresh cmcRestProvider/mcpProvider snapshot."
+            ],
+            upstreamStatus: configuration.apiKeyConfigured ? "backend_refresh_required_key_present" : "backend_refresh_required_key_missing"
+        )
     }
 
     private func skillHubSnapshot(for symbols: [String], now: Date) -> MarketDataSnapshot {
@@ -90,13 +83,14 @@ struct CMCMarketDataProvider: Web3DataAdapter {
         }
         let lastVerifiedDate = AgentDateFormatting.parse(configuration.skillHubCapability.lastVerifiedAtUTC) ?? now
         let expiresAt = Calendar(identifier: .gregorian).date(byAdding: .hour, value: 24, to: lastVerifiedDate) ?? now
-        let freshness = expiresAt < now ? "stale" : "fresh"
-        let status = freshness == "fresh" ? "enabled" : "degraded"
+        let freshness = expiresAt < now ? "stale" : "fixture"
 
         return MarketDataSnapshot(
-            status: status,
-            sourceName: "CMC Crypto Skill Hub",
+            status: "degraded",
+            sourceName: "CMC Crypto Skill Hub Sample",
+            provider: "fixtureProvider",
             generatedAt: AgentDateFormatting.isoString(lastVerifiedDate),
+            observedAt: configuration.skillHubCapability.lastVerifiedAtUTC,
             expiresAt: AgentDateFormatting.isoString(expiresAt),
             freshness: freshness,
             lastVerifiedAt: configuration.skillHubCapability.lastVerifiedAtUTC,
@@ -105,7 +99,7 @@ struct CMCMarketDataProvider: Web3DataAdapter {
                 "Last verified at \(configuration.skillHubCapability.lastVerifiedAtUTC).",
                 "Swift runtime uses a loaded normalized snapshot; live refresh still belongs to the external agent/MCP execution boundary."
             ],
-            upstreamStatus: freshness == "fresh" ? "cmc_skill_hub_snapshot_loaded" : "cmc_skill_hub_snapshot_stale"
+            upstreamStatus: freshness == "fixture" ? "cmc_skill_hub_fixture_sample" : "cmc_skill_hub_fixture_stale"
         )
     }
 }
@@ -113,9 +107,12 @@ struct CMCMarketDataProvider: Web3DataAdapter {
 extension MarketDataSnapshot {
     func withAssets(_ assets: [MarketAsset], evidenceSuffix: String? = nil) -> MarketDataSnapshot {
         MarketDataSnapshot(
+            schemaVersion: schemaVersion,
             status: status,
             sourceName: sourceName,
+            provider: provider,
             generatedAt: generatedAt,
+            observedAt: observedAt,
             expiresAt: expiresAt,
             freshness: freshness,
             lastVerifiedAt: lastVerifiedAt,

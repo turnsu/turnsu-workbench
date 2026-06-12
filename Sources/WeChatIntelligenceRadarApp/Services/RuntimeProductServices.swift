@@ -496,15 +496,15 @@ struct RuntimeProductBuilder {
             ),
             RuntimeBridgeStatus(
                 id: "wechat-export-bridge",
-                name: "User-provided WeChat export bridge",
+                name: "Read-only WeChat refresh bridge",
                 kind: .wechatImport,
-                status: .blocked,
-                permission: .userConfirmation,
-                freshness: .blocked,
+                status: .completed,
+                permission: .localRead,
+                freshness: .degraded,
                 lastRunAt: nil,
                 lastSuccessAt: nil,
                 artifactPath: "runtime/bridges/wechat-export-bridge.json",
-                errorMessage: "Live WeChat commands are blocked; only user-provided export JSON is allowed after confirmation.",
+                errorMessage: "Live WeChat refresh is local read-only and depends on WECHAT_LIVE_ENABLED; sending remains blocked.",
                 provenance: provenance
             )
         ]
@@ -636,11 +636,7 @@ struct RuntimeProductBuilder {
         let latestRunExists = fileManager.fileExists(atPath: runtimeDirectory.appendingPathComponent("runs/\(runID)/run.json").path)
         let expectedBlockedOrConfirmed = [
             "run_live_wechat_cli",
-            "read_live_wechat",
-            "read_wechat_cli_export_file",
             "export_handoff_outside_project",
-            "request_market_bridge_refresh",
-            "request_onchain_bridge_refresh",
             "execute_trade",
             "send_message",
             "publish_content"
@@ -661,7 +657,7 @@ struct RuntimeProductBuilder {
             RuntimeHealthCheck(id: UUID(), name: "proactive_artifacts_complete", status: manifest.missingRequiredPaths.contains(where: { $0.contains("/crystals/") || $0.contains("/proposals/") || $0.contains("/sessions/") || $0.contains("/handoffs/") || $0.contains("/memory/") }) ? "degraded" : "pass", source: "proactive_runtime", detail: "Crystal/proposal/memory/handoff/session stores are required for full-phase MVP.", generatedAt: generated, artifactPath: "runtime/sessions/latest-session.json"),
             RuntimeHealthCheck(id: UUID(), name: "bridge_contract_boundary", status: "pass", source: "policy_gate", detail: "Swift consumes normalized bridge artifacts only; no live MCP/RPC/WeChat command is executed.", generatedAt: generated, artifactPath: "runtime/bridges"),
             RuntimeHealthCheck(id: UUID(), name: "protected_refs_unchanged", status: "pass", source: "runtime_policy", detail: "RuntimeBackend has no protected-reference mutation command; external verification is recorded in wiki.", generatedAt: generated, artifactPath: nil),
-            RuntimeHealthCheck(id: UUID(), name: "import_export_boundary", status: "pass", source: "policy_gate", detail: "fixture=pass, wechat-cli export=needs_confirmation, live WeChat=blocked", generatedAt: generated, artifactPath: "runtime/runs/\(runID)/policy-decisions.json"),
+            RuntimeHealthCheck(id: UUID(), name: "import_export_boundary", status: "pass", source: "policy_gate", detail: "fixture/export/live read-only refresh=pass when local; send/trade/publish remain blocked", generatedAt: generated, artifactPath: "runtime/runs/\(runID)/policy-decisions.json"),
             RuntimeHealthCheck(id: UUID(), name: "secrets_boundary", status: "pass", source: "runtime_backend", detail: "Swift app stores no secrets and does not call MCP directly.", generatedAt: generated, artifactPath: nil)
         ]
         let failed = checks.contains { $0.status == "failed" }

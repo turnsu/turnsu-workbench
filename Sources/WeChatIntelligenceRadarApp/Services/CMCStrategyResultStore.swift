@@ -14,6 +14,7 @@ struct CMCStrategyResultStore {
     }
 
     private struct ResultEnvelope: Decodable {
+        let provider: String?
         let strategyReadModel: CMCStrategistResult?
     }
 
@@ -33,6 +34,12 @@ struct CMCStrategyResultStore {
                 guard let data = try? Data(contentsOf: url),
                       let envelope = try? decoder.decode(ResultEnvelope.self, from: data),
                       var model = envelope.strategyReadModel else {
+                    return nil
+                }
+                let provider = envelope.provider ?? model.sourceMap.first?.provider
+                guard ["cmcRestProvider", "mcpProvider"].contains(provider ?? ""),
+                      model.dataFreshness == "fresh",
+                      model.sourceMap.allSatisfy({ $0.freshness == "fresh" }) else {
                     return nil
                 }
                 model.artifactPath = "runtime/agent/runs/\(runID)/\(url.lastPathComponent)"

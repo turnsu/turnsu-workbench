@@ -1,13 +1,39 @@
 {
-  "version": "wechat-agent-capability-registry-v1",
+  "version": "unified-agent-capability-registry-v2",
   "defaults": {
     "loadPolicy": "lazy-by-planner-and-policy-gate",
     "alwaysOn": [
       "planner-runtime",
+      "runtime-harness",
+      "context-plane",
+      "evidence-qa-gate",
       "policy-gate",
+      "output-guard",
       "runtime-observability",
       "capability-registry"
     ]
+  },
+  "decisionAuthority": {
+    "deciders": [
+      "planner-runtime",
+      "model-provider",
+      "prompt-registry",
+      "evidence-qa-gate",
+      "policy-gate",
+      "output-guard",
+      "harness-merge-controller"
+    ],
+    "nonDeciders": [
+      "capability-registry",
+      "tool-runner",
+      "provider-transport",
+      "normalizer",
+      "artifact-writer",
+      "channel-adapter",
+      "domain-read-model",
+      "swift-view-state"
+    ],
+    "notes": "Capability registry, providers, normalizers, artifact writers, and Swift views may describe, execute, transform, persist, or render. They must not decide final-output precedence, evidence usability, or product mutation eligibility."
   },
   "capabilities": [
     {
@@ -75,18 +101,195 @@
       "installState": "local",
       "status": "available",
       "securityReview": { "status": "passed", "summary": "Local HTTP/SSE daemon bound to 127.0.0.1." }
+    },
+    {
+      "capabilityId": "runtime-harness",
+      "title": "Production Runtime Harness",
+      "description": "Owns session tree, branch lineage, invocation ledger, context events, compaction summary, review branch, and final read-model authority.",
+      "toolIntents": ["read", "draft"],
+      "policy": ["review branches are read-only", "agent-final-read-model-v1 remains final authority"],
+      "observability": ["harnessSessionTree", "branchLineage", "invocationLedger", "contextEventLog", "reviewReadModel"],
+      "installState": "local",
+      "status": "available",
+      "securityReview": { "status": "passed", "summary": "Phase 1 harness artifacts are written and asserted by smoke/business QA." }
+    },
+    {
+      "capabilityId": "context-plane",
+      "title": "Unified Context Plane",
+      "description": "Builds bounded context packs, source trust summaries, context event logs, and compaction summaries for all domains.",
+      "toolIntents": ["read", "draft"],
+      "policy": ["raw transcript pointer-only", "secret material excluded", "provider request body excluded"],
+      "observability": ["contextPack", "sourceTrustReport", "contextEventLog", "compactionSummary"],
+      "installState": "local",
+      "status": "available",
+      "securityReview": { "status": "passed", "summary": "Host-only deterministic context pack; semantic retrieval remains future work." }
+    },
+    {
+      "capabilityId": "evidence-qa-gate",
+      "title": "Multi-domain Evidence / QA Gate",
+      "description": "Separates evidence usability and content quality from policy permissions across Web3 and Office/Meeting outputs.",
+      "toolIntents": ["read", "draft", "publish_customer_visible"],
+      "policy": ["QA judges content quality, Policy Gate judges action boundary"],
+      "observability": ["qaGate", "reviewReadModel", "checkedArtifacts"],
+      "installState": "local",
+      "status": "available",
+      "securityReview": { "status": "passed", "summary": "CMC split gate and deterministic reviewer are active; office QA starts as draft-only review contract." }
+    },
+    {
+      "capabilityId": "output-guard",
+      "title": "Output Guard",
+      "description": "Prevents raw internal fields, unsupported market numbers, provider payloads, or channel secrets from entering final output.",
+      "toolIntents": ["draft"],
+      "policy": ["rewrite unsupported sensitive output", "do not expose internal tools/providers"],
+      "observability": ["outputGuardStatus", "outputGuardReason", "finalReadModel"],
+      "installState": "local",
+      "status": "available",
+      "securityReview": { "status": "passed", "summary": "Final output guard is recorded in tool observations and final read model." }
+    },
+    {
+      "capabilityId": "prompt-registry",
+      "title": "Domain Prompt Registry",
+      "description": "Maps Web3, meeting minutes, document draft, document revision, and channel reply intents to bounded prompt contracts.",
+      "toolIntents": ["draft"],
+      "policy": ["prompt registry selects format only", "does not decide publish or final precedence"],
+      "observability": ["plannerDecisions", "domainReadModel"],
+      "installState": "local",
+      "status": "draft_only",
+      "securityReview": { "status": "passed", "summary": "Office prompt registry starts as local deterministic draft read-model contract." }
+    },
+    {
+      "capabilityId": "office.meeting-minutes",
+      "title": "Meeting Minutes Draft",
+      "description": "Creates local meeting-minutes draft read models from bounded context without publishing or exposing raw transcript.",
+      "toolIntents": ["read", "draft", "write_private"],
+      "policy": ["raw transcript local only", "publish requires QA/Policy/channel readiness"],
+      "observability": ["officeMeetingMinutesReadModel", "checkedArtifacts"],
+      "installState": "local_extension",
+      "status": "available",
+      "securityReview": { "status": "passed", "summary": "Dry-run local artifact only; assignment agent business runner is not copied." }
+    },
+    {
+      "capabilityId": "office.document-generation",
+      "title": "Office Document Draft",
+      "description": "Creates local PRD, technical plan, ops plan, or general document draft read models.",
+      "toolIntents": ["draft", "write_private"],
+      "policy": ["private drafts pass", "cloud publish/overwrite blocked until QA/Policy/channel readiness"],
+      "observability": ["officeDocumentReadModel", "policyDecisions"],
+      "installState": "local_extension",
+      "status": "available",
+      "securityReview": { "status": "passed", "summary": "Draft-only tool writes bounded read model and does not call Feishu." }
+    },
+    {
+      "capabilityId": "office.document-revision",
+      "title": "Office Document Revision Draft",
+      "description": "Creates non-destructive revision overlay read models for comment/review scenarios.",
+      "toolIntents": ["draft", "write_private", "publish_customer_visible"],
+      "policy": ["delete/clear/remove blocked", "overwrite requires explicit target and future QA/Policy/channel readiness"],
+      "observability": ["officeDocumentRevisionReadModel", "policyDecisions"],
+      "installState": "local_extension",
+      "status": "available",
+      "securityReview": { "status": "passed", "summary": "Revision starts as draft-only overlay; live overwrite tool is blocked." }
+    },
+    {
+      "capabilityId": "channel.feishu-agent-bridge",
+      "title": "Feishu Channel Dry-run Bridge",
+      "description": "Writes Feishu channel dry-run read models and channel capability matrix without invoking lark-cli, replying, publishing, or notifying.",
+      "toolIntents": ["read", "draft", "publish_customer_visible", "notify_people"],
+      "policy": ["live reply blocked", "live publish blocked", "notify needs confirmation", "tenant/user/auth summaries redacted"],
+      "observability": ["feishuChannelDryRunReadModel", "policyDecisions", "channelCapabilityMatrix"],
+      "installState": "local_extension",
+      "status": "dry_run",
+      "securityReview": { "status": "passed", "summary": "No live Feishu action is executed in Phase 2 dry-run package." }
+    },
+    {
+      "capabilityId": "markets.equity-research",
+      "title": "Markets Equity Research Draft",
+      "description": "Creates local equity and cross-asset research draft read models using prompt-framework and dispatcher taxonomy adapted into the current runtime.",
+      "toolIntents": ["read", "draft", "write_private"],
+      "policy": ["methodology does not equal evidence", "provider evidence and price snapshot are separately gated", "trading execution blocked"],
+      "observability": ["marketsCapabilitySummary", "equityResearchDraft", "equityEvidencePack", "policyDecisions"],
+      "installState": "local_extension",
+      "status": "available",
+      "securityReview": { "status": "passed", "summary": "No external CLI, slash command, or live equity MCP is exposed. Live provider remains deferred until adapter/auth/normalizer/gates/QA exist." }
+    },
+    {
+      "capabilityId": "markets.dispatcher",
+      "title": "Markets Research Dispatcher",
+      "description": "Maps compact user-facing Markets tasks to internal Discover, Analyze, Monitor, and Macro lanes without exposing raw workflow files.",
+      "toolIntents": ["draft"],
+      "policy": ["four-lane public surface", "raw workflow names are internal", "does not decide final output authority"],
+      "observability": ["marketsDispatcherPlan", "plannerDecisions"],
+      "installState": "local_extension",
+      "status": "available",
+      "securityReview": { "status": "passed", "summary": "Dispatcher writes a local plan and keeps final answer authority in agent-final-read-model-v1." }
+    },
+    {
+      "capabilityId": "markets.drillr-provider-deferred",
+      "title": "Equity Provider Deferred Marker",
+      "description": "Records that live equity MCP data integration is deferred until provider adapter, auth, normalizer, evidence gate, price gate, and QA are implemented.",
+      "toolIntents": ["read"],
+      "policy": ["no live MCP call", "no raw provider payload", "no provider credentials"],
+      "observability": ["marketsProviderDeferred"],
+      "installState": "roadmap_only",
+      "status": "deferred",
+      "securityReview": { "status": "deferred", "summary": "Provider integration is intentionally not enabled in this pass." }
+    },
+    {
+      "capabilityId": "learning.hermes-proposals",
+      "title": "Hermes Learning Proposals",
+      "description": "Future sidecar proposal lane for sanitized trajectory reflection; not active in the current runtime.",
+      "toolIntents": ["read", "draft"],
+      "policy": ["human review required", "does not auto-write prompt, memory, or registry"],
+      "observability": ["sanitizedTrajectory", "learningProposals"],
+      "installState": "roadmap_only",
+      "status": "disabled",
+      "securityReview": { "status": "deferred", "summary": "Kept as roadmap-only; no Hermes sidecar code is migrated in Phase 2." }
     }
   ],
+  "channelCapabilityMatrix": {
+    "feishu": {
+      "read_context": "read_only_when_configured",
+      "write_private_draft": "pass",
+      "publish_customer_visible": "blocked_until_QA_Policy_channel_ready",
+      "notify_people": "needs_confirmation",
+      "delete_or_clear": "blocked",
+      "phase2Mode": "dry_run_only"
+    },
+    "wechat": {
+      "read_context": "fixture_or_read_only_refresh",
+      "send_message": "blocked",
+      "publish_external": "blocked"
+    },
+    "local_file": {
+      "read_context": "pass",
+      "write_private_draft": "pass",
+      "delete_or_clear": "blocked"
+    }
+  },
   "tools": [
     { "name": "wechat.read_normalized_messages", "permission": "pass", "description": "Read local normalized WeChat fixture/runtime messages." },
     { "name": "token.resolve_entities", "permission": "pass", "description": "Read local token entity artifacts." },
     { "name": "market.read_snapshot", "permission": "pass", "description": "Read local CMC/market snapshot artifacts." },
+    { "name": "cmc.live_market_refresh", "permission": "pass", "description": "Refresh CoinMarketCap data through the local daemon provider and write normalized market artifacts." },
+    { "name": "cmc.daily_market_overview", "permission": "pass", "description": "Run CoinMarketCap daily market overview through daemon provider chain." },
+    { "name": "cmc.crypto_macro_overview", "permission": "pass", "description": "Run CoinMarketCap macro overview through daemon provider chain." },
+    { "name": "cmc.classify_kline_pattern_quality", "permission": "pass", "description": "Classify K-line pattern quality through daemon provider chain." },
+    { "name": "cmc.request_mcp_refresh", "permission": "pass", "description": "Compatibility alias for daemon-managed CMC MCP HTTP / bridge refresh." },
     { "name": "onchain.read_snapshot", "permission": "pass", "description": "Read local on-chain snapshot artifacts." },
     { "name": "crystal.create_or_update", "permission": "pass", "description": "Create or update a local IntelligenceCrystal." },
     { "name": "proposal.create", "permission": "pass", "description": "Create a local AgentProposal." },
     { "name": "memory.save", "permission": "pass", "description": "Write local MemoryEntry artifacts." },
     { "name": "handoff.write", "permission": "pass", "description": "Write a local HandoffPacket." },
     { "name": "image.analyze_with_kimi", "permission": "pass", "description": "Analyze user-provided image with configured Kimi vision provider." },
+    { "name": "office.meeting_minutes.draft", "permission": "pass", "description": "Write a local meeting-minutes draft read model without publishing or replying." },
+    { "name": "office.document.draft", "permission": "pass", "description": "Write a local office document draft read model." },
+    { "name": "office.document_revision.draft", "permission": "pass", "description": "Write a non-destructive local document revision draft read model." },
+    { "name": "channel.feishu.dry_run", "permission": "pass", "description": "Write a Feishu channel dry-run artifact; no lark-cli, publish, reply, or notify is executed." },
+    { "name": "markets.equity_dispatcher.plan", "permission": "pass", "description": "Write a compact Markets Research dispatcher plan without exposing raw slash commands." },
+    { "name": "markets.equity_research.draft", "permission": "pass", "description": "Write a local equity research draft and evidence/price gate summary." },
+    { "name": "markets.provider.drillr_deferred", "permission": "pass", "description": "Record that live equity MCP provider integration is deferred." },
+    { "name": "channel.feishu.publish_live", "permission": "blocked", "description": "Blocked live Feishu publish boundary reserved for future QA/Policy/channel-ready flow." },
+    { "name": "channel.feishu.reply_live", "permission": "blocked", "description": "Blocked live Feishu reply boundary reserved for future explicit channel-ready flow." },
     { "name": "computer_use.request", "permission": "needs_confirmation", "description": "Request a future Computer Use action; v1 does not execute it." }
   ]
 }

@@ -3,11 +3,10 @@ import SwiftUI
 struct AgentWorkspaceV2View: View {
     @ObservedObject var viewModel: DashboardViewModel
     @AppStorage("minimalWorkbench.agentRailCollapsed") private var agentRailCollapsed = false
+    @AppStorage("minimalWorkbench.phase3QueueCanvasPreferenceMigrated") private var phase3QueueCanvasPreferenceMigrated = false
 
     var body: some View {
         let thread = viewModel.agentThreadState
-        // HSplitView gives native, drag-resizable dividers between the three panes.
-        // Min/ideal/max widths keep the Inspector from getting cramped at any window size.
         HSplitView {
             AgentLeftRail(
                 viewModel: viewModel,
@@ -17,22 +16,22 @@ struct AgentWorkspaceV2View: View {
             )
             .frame(
                 minWidth: agentRailCollapsed ? 64 : 200,
-                idealWidth: agentRailCollapsed ? 64 : 248,
-                maxWidth: agentRailCollapsed ? 64 : 380,
+                idealWidth: agentRailCollapsed ? 64 : 300,
+                maxWidth: agentRailCollapsed ? 64 : 420,
                 maxHeight: .infinity
             )
 
             AgentThreadWorkspace(viewModel: viewModel, thread: thread)
-                .frame(minWidth: 420, idealWidth: 660, maxWidth: .infinity, maxHeight: .infinity)
+                .frame(minWidth: 420, idealWidth: 760, maxWidth: .infinity, maxHeight: .infinity)
                 .layoutPriority(1)
-
-            if viewModel.selectedAgentInspector != .overview {
-                AgentInspectorV2Panel(viewModel: viewModel, thread: thread)
-                    .frame(minWidth: 280, idealWidth: 340, maxWidth: 520, maxHeight: .infinity)
-            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(RadarMotion.gentle, value: agentRailCollapsed)
+        .onAppear {
+            guard !phase3QueueCanvasPreferenceMigrated else { return }
+            agentRailCollapsed = false
+            phase3QueueCanvasPreferenceMigrated = true
+        }
     }
 }
 
@@ -107,7 +106,7 @@ private struct AgentLeftRail: View {
         VStack(alignment: collapsed ? .center : .leading, spacing: 12) {
             HStack {
                 if !collapsed {
-                    Text("Agent")
+                    Text("工作队列")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(RadarTheme.primaryText)
                     Spacer()
@@ -126,26 +125,47 @@ private struct AgentLeftRail: View {
             if collapsed {
                 CollapsedRailButton(icon: "bubble.left.and.text.bubble.right", selected: viewModel.selectedAgentSessionID != nil, action: toggleCollapsed)
             } else {
-                RailSection(title: "Sessions", trailing: "\(viewModel.agentSessions.count)") {
-                    if viewModel.agentSessions.isEmpty {
-                        AgentSmallEmpty(text: "输入任务后会自动创建对话；历史任务会出现在这里。")
-                    } else {
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 7) {
-                                ForEach(viewModel.agentSessions) { session in
-                                    AgentSessionRailRow(
-                                        viewModel: viewModel,
-                                        session: session,
-                                        selected: viewModel.selectedAgentSessionID == session.sessionID,
-                                        renamingSessionID: $renamingSessionID,
-                                        titleDraft: $titleDraft
-                                    )
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        AgentQueueSummary(tasks: viewModel.agentTasks)
+
+                        RailSection(title: "QUEUE", trailing: "\(viewModel.agentTasks.count)") {
+                            if viewModel.agentTasks.isEmpty {
+                                AgentSmallEmpty(text: "暂无排队任务。")
+                            } else {
+                                LazyVStack(alignment: .leading, spacing: 7) {
+                                    ForEach(viewModel.agentTasks.prefix(8)) { task in
+                                        AgentTaskQueueRow(
+                                            viewModel: viewModel,
+                                            task: task,
+                                            selected: viewModel.selectedAgentSessionID == task.sessionID
+                                        )
+                                    }
                                 }
                             }
                         }
-                        .scrollIndicators(.hidden)
+
+                        RailSection(title: "SESSIONS", trailing: "\(viewModel.agentSessions.count)") {
+                            if viewModel.agentSessions.isEmpty {
+                                AgentSmallEmpty(text: "暂无会话。")
+                            } else {
+                                LazyVStack(alignment: .leading, spacing: 7) {
+                                    ForEach(viewModel.agentSessions.prefix(8)) { session in
+                                        AgentSessionRailRow(
+                                            viewModel: viewModel,
+                                            session: session,
+                                            selected: viewModel.selectedAgentSessionID == session.sessionID,
+                                            renamingSessionID: $renamingSessionID,
+                                            titleDraft: $titleDraft
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
+                    .padding(.bottom, 4)
                 }
+                .scrollIndicators(.hidden)
             }
 
             Spacer(minLength: 0)
@@ -167,6 +187,7 @@ private struct AgentAbilityPackage: Identifiable, Hashable {
     let status: String
     let selected: Bool
     let kind: Kind
+    let category: String?
 
     var kindLabel: String {
         switch kind {
@@ -186,7 +207,8 @@ private struct AgentAbilityPackage: Identifiable, Hashable {
                 description: skill.permissionSummary ?? skill.description,
                 status: skill.status,
                 selected: viewModel.selectedAgentSkillIDs.contains(skill.skillID),
-                kind: .skill
+                kind: .skill,
+                category: skill.category
             )
         }
         let extensions = viewModel.agentExtensions.map { item in
@@ -196,10 +218,202 @@ private struct AgentAbilityPackage: Identifiable, Hashable {
                 description: item.permissionSummary ?? item.description,
                 status: item.status,
                 selected: viewModel.selectedAgentExtensionIDs.contains(item.extensionID),
-                kind: .extensionPackage
+                kind: .extensionPackage,
+                category: item.category
             )
         }
         return skills + extensions
+    }
+
+    @MainActor
+    static func workbenchPackages(from viewModel: DashboardViewModel) -> [AgentAbilityPackage] {
+        packages(from: viewModel).filter(\.isWorkbenchVisible)
+    }
+
+    var isWorkbenchVisible: Bool {
+        let value = "\(id) \(title) \(category ?? "")".lowercased()
+        if value.contains("feishu") || value.contains("lark") || title.contains("飞书") {
+            return false
+        }
+        if category?.lowercased() == "channel" {
+            return false
+        }
+        return true
+    }
+
+    var domainLabel: String {
+        let value = "\(id) \(title) \(category ?? "")".lowercased()
+        if value.contains("office") || value.contains("meeting") || value.contains("document") || title.contains("会议") || title.contains("文档") {
+            return "Office / Meeting"
+        }
+        if value.contains("cmc") || value.contains("market") || value.contains("token") || value.contains("wechat") || value.contains("onchain") || value.contains("crypto") || title.contains("市场") || title.contains("链上") || title.contains("微信") {
+            return "Web3"
+        }
+        return "Local"
+    }
+}
+
+private struct AgentQueueSummary: View {
+    let tasks: [AgentLongTask]
+
+    var body: some View {
+        HStack(spacing: 8) {
+            QueueMetric(label: "运行", value: runningCount, color: RadarTheme.blue)
+            QueueMetric(label: "完成", value: completedCount, color: RadarTheme.green)
+            QueueMetric(label: "阻断", value: blockedCount, color: RadarTheme.red)
+        }
+    }
+
+    private var runningCount: Int {
+        tasks.filter { status($0).contains("running") || status($0).contains("started") || status($0).contains("queued") }.count
+    }
+
+    private var completedCount: Int {
+        tasks.filter { status($0).contains("completed") || status($0).contains("done") }.count
+    }
+
+    private var blockedCount: Int {
+        tasks.filter { status($0).contains("blocked") || status($0).contains("failed") || status($0).contains("error") }.count
+    }
+
+    private func status(_ task: AgentLongTask) -> String {
+        task.status.lowercased()
+    }
+}
+
+private struct QueueMetric: View {
+    let label: String
+    let value: Int
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("\(value)")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(color)
+                .contentTransition(.numericText())
+            Text(label)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(RadarTheme.mutedText)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RadarTheme.tintFaint)
+        .overlay(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(RadarTheme.borderSoft, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+}
+
+private struct AgentTaskQueueRow: View {
+    @ObservedObject var viewModel: DashboardViewModel
+    let task: AgentLongTask
+    let selected: Bool
+    @State private var confirmingDelete = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Button(action: { viewModel.selectAgentSession(task.sessionID) }) {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(task.prompt)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(RadarTheme.primaryText)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+
+                    HStack(spacing: 6) {
+                        StatusDot(color: statusColor, size: 6)
+                        Text(RuntimeStatusPresenter.label(task.status))
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(statusColor)
+                            .lineLimit(1)
+                        Text(shortRun(task.runID))
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(RadarTheme.mutedText)
+                            .lineLimit(1)
+                    }
+
+                    Text(capabilityLabel)
+                        .font(.system(size: 9))
+                        .foregroundStyle(RadarTheme.secondaryText)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+
+            Button(role: .destructive, action: { confirmingDelete = true }) {
+                Image(systemName: "trash")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(RadarTheme.red)
+                    .frame(width: 22, height: 22)
+                    .background(RadarTheme.red.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .help("删除任务记录")
+        }
+        .railRow(selected: selected)
+        .contextMenu {
+            Button("打开") {
+                viewModel.selectAgentSession(task.sessionID)
+            }
+            Button("删除", role: .destructive) {
+                confirmingDelete = true
+            }
+        }
+        .confirmationDialog("删除这个任务？", isPresented: $confirmingDelete) {
+            Button("删除", role: .destructive) {
+                viewModel.deleteAgentTask(task.taskID)
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("只删除任务记录，不会清理无关文件。")
+        }
+    }
+
+    private var statusColor: Color {
+        let value = task.status.lowercased()
+        if value.contains("blocked") || value.contains("failed") || value.contains("error") {
+            return RadarTheme.red
+        }
+        if value.contains("completed") || value.contains("done") {
+            return RadarTheme.green
+        }
+        if value.contains("running") || value.contains("started") || value.contains("queued") {
+            return RadarTheme.blue
+        }
+        return RadarTheme.secondaryText
+    }
+
+    private var capabilityLabel: String {
+        let ids = ((task.selectedSkillIDs ?? []) + (task.selectedExtensionIDs ?? []))
+            .filter { id in
+                let value = id.lowercased()
+                return !value.contains("feishu") && !value.contains("lark")
+            }
+        guard !ids.isEmpty else { return "默认能力" }
+        let domains = Set(ids.map(domainLabel)).sorted()
+        return domains.joined(separator: " / ")
+    }
+
+    private func domainLabel(_ id: String) -> String {
+        let value = id.lowercased()
+        if value.contains("office") || value.contains("meeting") || value.contains("document") {
+            return "Office"
+        }
+        if value.contains("cmc") || value.contains("market") || value.contains("token") || value.contains("wechat") || value.contains("onchain") {
+            return "Web3"
+        }
+        return "Local"
+    }
+
+    private func shortRun(_ runID: String?) -> String {
+        guard let runID else { return "未开始" }
+        return String(runID.replacingOccurrences(of: "run-", with: "").prefix(8))
     }
 }
 
@@ -261,6 +475,7 @@ private struct AgentSessionRailRow: View {
     let selected: Bool
     @Binding var renamingSessionID: String?
     @Binding var titleDraft: String
+    @State private var confirmingDelete = false
 
     private var isRenaming: Bool {
         renamingSessionID == session.sessionID
@@ -305,15 +520,29 @@ private struct AgentSessionRailRow: View {
                     }
                     .buttonStyle(.plain)
 
-                    Button(action: beginRename) {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(RadarTheme.mutedText)
-                            .frame(width: 22, height: 22)
-                            .background(RadarTheme.tintFaint)
-                            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    VStack(spacing: 5) {
+                        Button(action: beginRename) {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(RadarTheme.mutedText)
+                                .frame(width: 22, height: 22)
+                                .background(RadarTheme.tintFaint)
+                                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .help("重命名会话")
+
+                        Button(role: .destructive, action: { confirmingDelete = true }) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(RadarTheme.red)
+                                .frame(width: 22, height: 22)
+                                .background(RadarTheme.red.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .help("删除会话")
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -322,6 +551,17 @@ private struct AgentSessionRailRow: View {
             Button("重命名") {
                 beginRename()
             }
+            Button("删除", role: .destructive) {
+                confirmingDelete = true
+            }
+        }
+        .confirmationDialog("删除这个会话？", isPresented: $confirmingDelete) {
+            Button("删除", role: .destructive) {
+                viewModel.deleteAgentSession(session.sessionID)
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("会话、任务和本地运行记录会一起删除。")
         }
     }
 
@@ -350,33 +590,16 @@ private struct AgentSessionRailRow: View {
 private struct AgentThreadWorkspace: View {
     @ObservedObject var viewModel: DashboardViewModel
     let thread: AgentThreadState
+    @State private var followThreadBottom = true
+    @State private var viewportHeight: CGFloat = 0
+    @State private var bottomY: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(thread.title == "Agent 工作空间" ? "Agent" : thread.title)
-                        .font(RadarFont.display(20, .semibold))
-                        .foregroundStyle(RadarTheme.primaryText)
-                        .lineLimit(1)
-                    Text("描述任务，选择能力包，Agent 会在本地写入记录。")
-                        .font(.system(size: 12))
-                        .foregroundStyle(RadarTheme.mutedText)
-                        .lineLimit(1)
-                }
-                Spacer()
-                Button("详情") {
-                    if let event = viewModel.agentStreamEvents.last {
-                        viewModel.selectAgentInspector(.event(event.eventID))
-                    } else {
-                        viewModel.selectAgentInspector(.policy("agent-boundary"))
-                    }
-                }
-                .buttonStyle(ResearchSecondaryButtonStyle())
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 14)
-            .padding(.bottom, 10)
+            AgentCanvasHeader(viewModel: viewModel, thread: thread)
+                .padding(.horizontal, 14)
+                .padding(.top, 14)
+                .padding(.bottom, 10)
 
             Divider()
                 .overlay(RadarTheme.borderSoft)
@@ -399,7 +622,8 @@ private struct AgentThreadWorkspace: View {
                                 AgentThreadMessageRow(
                                     viewModel: viewModel,
                                     message: message,
-                                    isRunning: thread.status == .running && message.id == thread.messages.last?.id
+                                    isRunning: thread.status == .running && message.id == thread.messages.last?.id,
+                                    isFinalizing: viewModel.isAgentRunFinalizing(message.runID)
                                 )
                                     .id(message.id)
                                     .transition(.asymmetric(
@@ -407,17 +631,43 @@ private struct AgentThreadWorkspace: View {
                                         removal: .opacity
                                     ))
                             }
-                            Color.clear.frame(height: 1).id("threadBottom")
+                            Color.clear
+                                .frame(height: 1)
+                                .id("threadBottom")
+                                .background(
+                                    GeometryReader { markerProxy in
+                                        Color.clear.preference(
+                                            key: AgentThreadBottomYPreferenceKey.self,
+                                            value: markerProxy.frame(in: .named("agentThreadScroll")).maxY
+                                        )
+                                    }
+                                )
                         }
                         .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .animation(RadarMotion.spring, value: thread.messages.count)
                     }
+                    .coordinateSpace(name: "agentThreadScroll")
+                    .background(
+                        GeometryReader { viewportProxy in
+                            Color.clear.preference(key: AgentThreadViewportHeightPreferenceKey.self, value: viewportProxy.size.height)
+                        }
+                    )
+                    .onPreferenceChange(AgentThreadViewportHeightPreferenceKey.self) { height in
+                        viewportHeight = height
+                        updateFollowBottom()
+                    }
+                    .onPreferenceChange(AgentThreadBottomYPreferenceKey.self) { y in
+                        bottomY = y
+                        updateFollowBottom()
+                    }
                     .onChange(of: thread.messages.count) { _, _ in
+                        guard followThreadBottom else { return }
                         withAnimation(RadarMotion.gentle) { proxy.scrollTo("threadBottom", anchor: .bottom) }
                     }
                     .onChange(of: thread.run.eventCount) { _, _ in
-                        withAnimation(RadarMotion.gentle) { proxy.scrollTo("threadBottom", anchor: .bottom) }
+                        guard followThreadBottom else { return }
+                        proxy.scrollTo("threadBottom", anchor: .bottom)
                     }
                 }
                 .frame(minHeight: 200, maxHeight: .infinity)
@@ -436,6 +686,338 @@ private struct AgentThreadWorkspace: View {
         }
         .researchPanel()
         .frame(maxHeight: .infinity)
+    }
+
+    private func updateFollowBottom() {
+        guard viewportHeight > 0, bottomY > 0 else { return }
+        let nearBottom = bottomY <= viewportHeight + 88
+        if nearBottom != followThreadBottom {
+            followThreadBottom = nearBottom
+        }
+    }
+}
+
+private struct AgentCanvasHeader: View {
+    @ObservedObject var viewModel: DashboardViewModel
+    let thread: AgentThreadState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(canvasTitle)
+                        .font(RadarFont.display(20, .semibold))
+                        .foregroundStyle(RadarTheme.primaryText)
+                        .lineLimit(1)
+                    Text(canvasSubtitle)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(RadarTheme.mutedText)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 16)
+
+                AgentStatusPill(
+                    label: thread.statusText,
+                    systemImage: statusIcon,
+                    color: AgentUIStyle.threadColor(thread.status)
+                )
+                AgentStatusPill(
+                    label: queueLabel,
+                    systemImage: "tray.full",
+                    color: RadarTheme.secondaryText
+                )
+            }
+
+            HStack(spacing: 7) {
+                CanvasSignalPill(title: "Evidence", value: evidenceLabel, color: evidenceColor)
+                CanvasSignalPill(title: "Review", value: reviewLabel, color: reviewColor)
+                CanvasSignalPill(title: "Policy", value: policyLabel, color: policyColor)
+                diagnostics
+                Spacer(minLength: 0)
+            }
+
+            if let cmcStatusLine {
+                HStack(spacing: 7) {
+                    CanvasSignalPill(title: "CMC Skill Hub", value: cmcStatusLine, color: cmcStatusColor)
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var diagnostics: some View {
+        let items = viewModel.agentFinalDiagnostics(runID: thread.activeRunID)
+        if !items.isEmpty {
+            ForEach(items.prefix(3), id: \.self) { item in
+                CanvasSignalPill(title: item, value: "", color: diagnosticColor(item), compact: true)
+            }
+        }
+    }
+
+    private var canvasTitle: String {
+        thread.title == "Agent 工作空间" ? "Agent Work Canvas" : thread.title
+    }
+
+    private var canvasSubtitle: String {
+        if let runID = thread.activeRunID {
+            return "\(AgentWorkspaceV2Copy.runDisplay(runID)) · \(thread.run.latestStep)"
+        }
+        return "准备新任务"
+    }
+
+    private var queueLabel: String {
+        let running = viewModel.agentTasks.filter { task in
+            let value = task.status.lowercased()
+            return value.contains("running") || value.contains("started") || value.contains("queued")
+        }.count
+        return running > 0 ? "\(running) active" : "\(viewModel.agentTasks.count) tasks"
+    }
+
+    private var statusIcon: String {
+        switch thread.status {
+        case .running:
+            return "arrow.triangle.2.circlepath"
+        case .completed:
+            return "checkmark.seal"
+        case .failed, .blocked:
+            return "exclamationmark.triangle"
+        case .waitingForApproval:
+            return "hand.raised"
+        default:
+            return "circle.dotted"
+        }
+    }
+
+    private var evidenceLabel: String {
+        if let runID = thread.activeRunID,
+           let summary = viewModel.agentCMCCapabilitySummaryByRunID[runID],
+           summary.allowSkillHubResultDisplay == true {
+            return "result"
+        }
+        if let runID = thread.activeRunID,
+           let gate = viewModel.agentFinalReadModelByRunID[runID]?.cmcGateSummary,
+           gate.allowSkillHubResultDisplay == true {
+            return "result"
+        }
+        if let runID = thread.activeRunID,
+           let model = viewModel.agentFinalReadModelByRunID[runID],
+           let count = model.cmcGateSummary?.researchEvidence?.readableEvidenceCount ?? model.cmcGateSummary?.readableEvidenceCount {
+            return count == 0 ? "empty" : "\(count)"
+        }
+        if let context = thread.contextSummary {
+            return "\(context.sourceCount)"
+        }
+        return "--"
+    }
+
+    private var evidenceColor: Color {
+        if evidenceLabel == "result" {
+            return RadarTheme.green
+        }
+        if evidenceLabel == "empty" {
+            return RadarTheme.gold
+        }
+        if evidenceLabel == "--" {
+            return RadarTheme.secondaryText
+        }
+        return RadarTheme.green
+    }
+
+    private var cmcStatusLine: String? {
+        guard let runID = thread.activeRunID else { return nil }
+        if let summary = viewModel.agentCMCCapabilitySummaryByRunID[runID] {
+            return [
+                readableMountStatus(summary.mountStatus),
+                readableTransportStatus(summary.transportStatus),
+                readableResultStatus(summary.skillHubDisplayStatus, allowSkillHubResultDisplay: summary.allowSkillHubResultDisplay),
+                readablePriceStatus(summary.priceSnapshotStatus, allowConcretePrices: summary.allowConcretePrices)
+            ].joined(separator: " · ")
+        }
+        guard let gate = viewModel.agentFinalReadModelByRunID[runID]?.cmcGateSummary else { return nil }
+        return [
+            "mounted",
+            readableTransportStatus(gate.transportStatus),
+            readableResultStatus(gate.skillHubDisplayStatus ?? gate.skillHubDisplay?.status, allowSkillHubResultDisplay: gate.allowSkillHubResultDisplay ?? gate.skillHubDisplay?.allowSkillHubResultDisplay),
+            readablePriceStatus(gate.priceSnapshotStatus, allowConcretePrices: gate.allowConcretePrices)
+        ].joined(separator: " · ")
+    }
+
+    private var cmcStatusColor: Color {
+        guard let runID = thread.activeRunID else { return RadarTheme.secondaryText }
+        if let summary = viewModel.agentCMCCapabilitySummaryByRunID[runID] {
+            if summary.transportStatus == "failed" || summary.transportStatus == "missing" {
+                return RadarTheme.red
+            }
+            if summary.allowSkillHubResultDisplay == true || summary.skillHubDisplayStatus == "usable" || summary.priceSnapshotStatus == "usable" || summary.allowConcretePrices == true {
+                return RadarTheme.green
+            }
+            return RadarTheme.gold
+        }
+        if let gate = viewModel.agentFinalReadModelByRunID[runID]?.cmcGateSummary {
+            if gate.allowConcretePrices == true || gate.allowSkillHubResultDisplay == true || gate.skillHubDisplayStatus == "usable" || gate.researchEvidenceStatus == "usable" {
+                return RadarTheme.green
+            }
+            return RadarTheme.gold
+        }
+        return RadarTheme.secondaryText
+    }
+
+    private func readableMountStatus(_ value: String?) -> String {
+        value == "mounted" ? "mounted" : "not mounted"
+    }
+
+    private func readableTransportStatus(_ value: String?) -> String {
+        switch value {
+        case "ok":
+            return "transport ok"
+        case "failed":
+            return "transport failed"
+        case "missing", nil:
+            return "transport missing"
+        default:
+            return "transport \(value ?? "unknown")"
+        }
+    }
+
+    private func readableEvidenceStatus(_ value: String?, count: Int?) -> String {
+        switch value {
+        case "usable":
+            return (count ?? 0) > 0 ? "evidence usable \(count ?? 0)" : "evidence usable"
+        case "empty":
+            return "evidence empty"
+        case "missing", nil:
+            return "evidence missing"
+        default:
+            return "evidence \(value ?? "unknown")"
+        }
+    }
+
+    private func readableResultStatus(_ value: String?, allowSkillHubResultDisplay: Bool?) -> String {
+        if allowSkillHubResultDisplay == true || value == "usable" {
+            return "result usable"
+        }
+        switch value {
+        case "empty":
+            return "result empty"
+        case "failed":
+            return "result failed"
+        case "missing", nil:
+            return "result missing"
+        default:
+            return "result \(value ?? "unknown")"
+        }
+    }
+
+    private func readablePriceStatus(_ value: String?, allowConcretePrices: Bool?) -> String {
+        if allowConcretePrices == true || value == "usable" {
+            return "prices usable"
+        }
+        if value == "blocked" {
+            return "prices blocked"
+        }
+        if value == "missing" || value == nil {
+            return "prices missing"
+        }
+        return "prices \(value ?? "unknown")"
+    }
+
+    private var reviewLabel: String {
+        switch thread.run.status {
+        case .completed:
+            return "pass"
+        case .failed, .blocked:
+            return "hold"
+        case .running, .waitingForApproval:
+            return "open"
+        default:
+            return "--"
+        }
+    }
+
+    private var reviewColor: Color {
+        switch reviewLabel {
+        case "pass":
+            return RadarTheme.green
+        case "hold":
+            return RadarTheme.red
+        case "open":
+            return RadarTheme.blue
+        default:
+            return RadarTheme.secondaryText
+        }
+    }
+
+    private var policyLabel: String {
+        if let control = thread.controlSummary {
+            return control.blockedPolicyCount > 0 ? "blocked" : "safe"
+        }
+        if thread.approvals.contains(where: { $0.status == .needsApproval }) {
+            return "confirm"
+        }
+        return "safe"
+    }
+
+    private var policyColor: Color {
+        switch policyLabel {
+        case "blocked":
+            return RadarTheme.red
+        case "confirm":
+            return RadarTheme.gold
+        default:
+            return RadarTheme.green
+        }
+    }
+
+    private func diagnosticColor(_ item: String) -> Color {
+        item.contains("blocked") || item.contains("discarded") ? RadarTheme.gold : RadarTheme.secondaryText
+    }
+}
+
+private struct CanvasSignalPill: View {
+    let title: String
+    let value: String
+    let color: Color
+    var compact = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(color)
+                .frame(width: 5, height: 5)
+            Text(title)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(color)
+                .lineLimit(1)
+            if !value.isEmpty {
+                Text(value)
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .foregroundStyle(RadarTheme.secondaryText)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, compact ? 7 : 8)
+        .padding(.vertical, 5)
+        .background(color.opacity(0.09))
+        .overlay(
+            Capsule().strokeBorder(color.opacity(0.22), lineWidth: 1)
+        )
+        .clipShape(Capsule())
+    }
+}
+
+private struct AgentThreadViewportHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct AgentThreadBottomYPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
@@ -546,9 +1128,7 @@ private struct AgentEmptyStateTemplates: View {
                 .frame(width: 260)
 
                 let result = previews[previewIndex]
-                StrategyResultCard(result: result, onInspect: {
-                    viewModel.selectAgentInspector(.strategyResult(result.id))
-                })
+                StrategyResultCard(result: result)
                 .id(previewIndex)
                 .transition(.opacity.combined(with: .offset(y: 8)))
             }
@@ -580,12 +1160,362 @@ private struct AgentTaskTemplateStrip: View {
     }
 }
 
+/// Maps internal jargon the model occasionally leaks into user-facing product terms.
+/// Belt-and-suspenders alongside the system prompt — these tokens only ever mean the product
+/// concept in this app's domain, so the substitution is safe.
+enum AgentOutputCopy {
+    static func humanize(_ s: String) -> String {
+        let cleaned = normalizedMarkdown(s)
+        if cleaned.isEmpty && !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "后台调用参数已隐藏；请查看执行状态与最终结论。"
+        }
+        return cleaned
+    }
+
+    static func normalizedMarkdown(_ s: String) -> String {
+        let cleaned = stripInternalSurface(stripProcessPreamble(s.replacingOccurrences(of: "水晶", with: "情报卡")))
+        return normalizeMarkdownBoundaries(cleaned)
+            .replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func metadataLabel(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "--" }
+        if containsInternalSurface(trimmed) {
+            return "本机记录已保存"
+        }
+        return readableBackendTerms(trimmed)
+    }
+
+    private static func stripProcessPreamble(_ s: String) -> String {
+        s.components(separatedBy: .newlines)
+            .filter { line in
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return true }
+                if trimmed.range(of: #"^(计划|上下文验证)\s*\d*[:：]?"#, options: .regularExpression) != nil {
+                    return false
+                }
+                if trimmed.range(of: #"^(我将|我会|接下来|先).*(刷新|扫描|读取|拉取|调用|静默|过程|计划|上下文验证|开始)"#, options: .regularExpression) != nil {
+                    return false
+                }
+                if trimmed.contains("整个过程") && trimmed.contains("最终") {
+                    return false
+                }
+                return true
+            }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func stripInternalSurface(_ s: String) -> String {
+        var withoutToolBlocks = s
+        for pattern in [
+            #"<looloomi-tool-calls[\s\S]*?(?:</looloomi-tool-calls>|$)"#,
+            #"<function_calls[\s\S]*?(?:</function_calls>|$)"#,
+            #"<invoke\b[\s\S]*?(?:</invoke>|$)"#
+        ] {
+            withoutToolBlocks = withoutToolBlocks.replacingOccurrences(
+                of: pattern,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+        }
+        return withoutToolBlocks
+            .components(separatedBy: .newlines)
+            .compactMap { line -> String? in
+                if containsHardInternalSurface(line) {
+                    return nil
+                }
+                let readable = readableBackendTerms(line)
+                if containsHardInternalSurface(readable) || containsInternalSurface(readable) {
+                    return nil
+                }
+                return readable
+            }
+            .joined(separator: "\n")
+            .replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func containsHardInternalSurface(_ s: String) -> Bool {
+        let patterns = [
+            #"</?looloomi-tool-calls\b"#,
+            #"</?function_calls\b"#,
+            #"</?invoke\b"#,
+            #"</?callname\b"#,
+            #"\binvokename\s*="#,
+            #"\bparametername\s*="#,
+            #"\bparameters?\s*="#,
+            #"</?parameter\b"#,
+            #"\bruntime/(agent|market|runs|ops)/"#,
+            #"/Users/[^\s>\"']+"#,
+            #"\b(tool-observations|tool-calls|run-manifest|context-bundle|final-output|provider-status)\.json\b"#,
+            #"\b(office|channel\.feishu)\.[a-z0-9_.-]+\b"#,
+            #"\bmarkets\.[a-z0-9_.-]+\b"#,
+            #"^\s*[-*]?\s*(Skill|Extension)\s*[：:]\s*(自动判断|[a-z0-9_.-]+(\s*,\s*[a-z0-9_.-]+)*)\s*$"#,
+            #"\b(artifactPath|detailsArtifactPath|runID|taskID|sessionID|schemaVersion|cmcFreshnessGate|outputGuard|artifactKind|inputSummary|outputSummary|redactionStatus)\b"#
+        ]
+        return patterns.contains { pattern in
+            s.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+        }
+    }
+
+    private static func containsInternalSurface(_ s: String) -> Bool {
+        let patterns = [
+            #"</?looloomi-tool-calls\b"#,
+            #"</?function_calls\b"#,
+            #"</?invoke\b"#,
+            #"</?callname\b"#,
+            #"\binvokename\s*="#,
+            #"\bparametername\s*="#,
+            #"\bparameters?\s*="#,
+            #"</?parameter\b"#,
+            #"\bruntime/(agent|market|runs|ops)/"#,
+            #"/Users/[^\s>\"']+"#,
+            #"\b(tool-observations|tool-calls|run-manifest|context-bundle|final-output|provider-status)\.json\b"#,
+            #"\b(office|channel\.feishu)\.[a-z0-9_.-]+\b"#,
+            #"\bmarkets\.[a-z0-9_.-]+\b"#,
+            #"\b(mcpProvider|cmcRestProvider|normalizedFileProvider|fixtureProvider|mcpHttpProvider)\b"#,
+            #"^\s*[-*]?\s*(Skill|Extension)\s*[：:]\s*(自动判断|[a-z0-9_.-]+(\s*,\s*[a-z0-9_.-]+)*)\s*$"#,
+            #"\b(cmc-skill-hub|cmc-market-radar|wechat-cli-export-bridge|wechat-onchain-intelligence|market-regime-review|social-price-divergence|office-meeting-agent|feishu-agent-bridge|markets-research|equity-company-deep-dive|equity-earnings-review|equity-thesis-tracker|equity-sector-scan|macro-cross-asset-readthrough|drillr|cc-equity-research|InvestSkill)\b"#,
+            #"\b(artifactPath|detailsArtifactPath|runID|taskID|sessionID|schemaVersion|cmcFreshnessGate|outputGuard|artifactKind|inputSummary|outputSummary|redactionStatus)\b"#
+        ]
+        return patterns.contains { pattern in
+            s.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+        }
+    }
+
+    private static func readableBackendTerms(_ s: String) -> String {
+        s.replacingOccurrences(of: "normalizedFileProvider", with: "本地缓存")
+            .replacingOccurrences(of: "fixtureProvider", with: "样例数据")
+            .replacingOccurrences(of: "mcpHttpProvider", with: "CoinMarketCap MCP")
+            .replacingOccurrences(of: "cmcRestProvider", with: "CoinMarketCap 实时接口")
+            .replacingOccurrences(of: "mcpProvider", with: "CoinMarketCap MCP")
+            .replacingOccurrences(of: "cmc-skill-hub", with: "CMC Skill Hub 能力包")
+            .replacingOccurrences(of: "cmc-market-radar", with: "CMC 市场雷达")
+            .replacingOccurrences(of: "wechat-cli-export-bridge", with: "WeChat 能力包")
+            .replacingOccurrences(of: "wechat-onchain-intelligence", with: "WeChat 链上情报")
+            .replacingOccurrences(of: "market-regime-review", with: "市场体制复核")
+            .replacingOccurrences(of: "social-price-divergence", with: "社交价格分歧")
+            .replacingOccurrences(of: "office-meeting-agent", with: "Office / Meeting 能力包")
+            .replacingOccurrences(of: "feishu-agent-bridge", with: "Feishu dry-run 通道")
+            .replacingOccurrences(of: "markets-research", with: "Markets Research 能力包")
+            .replacingOccurrences(of: "equity-company-deep-dive", with: "Company Deep Dive")
+            .replacingOccurrences(of: "equity-earnings-review", with: "Earnings Review")
+            .replacingOccurrences(of: "equity-thesis-tracker", with: "Thesis Tracker")
+            .replacingOccurrences(of: "equity-sector-scan", with: "Sector Scan")
+            .replacingOccurrences(of: "macro-cross-asset-readthrough", with: "Macro / Cross-asset")
+            .replacingOccurrences(of: "cc-equity-research", with: "equity research workflow")
+            .replacingOccurrences(of: "InvestSkill", with: "equity research framework")
+            .replacingOccurrences(of: "investskill", with: "equity research framework")
+            .replacingOccurrences(of: "drillr", with: "equity provider")
+            .replacingOccurrences(of: "tool_observations_missing", with: "缺少可信工具观测记录")
+            .replacingOccurrences(of: "concrete_market_values_without_fresh_gate", with: "具体价位未通过实时数据校验")
+            .replacingOccurrences(of: "raw_internal_fields_removed", with: "已隐藏后台调用字段")
+            .replacingOccurrences(of: #"\bfresh\b"#, with: "最新", options: .regularExpression)
+            .replacingOccurrences(of: #"\blive\b"#, with: "实时", options: .regularExpression)
+            .replacingOccurrences(of: #"\bdegraded\b"#, with: "降级", options: .regularExpression)
+            .replacingOccurrences(of: "_", with: " ")
+    }
+
+    private static func normalizeMarkdownBoundaries(_ s: String) -> String {
+        var normalized = s
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+
+        normalized = normalized.replacingOccurrences(
+            of: #"(?m)^\s*#{1,6}\s*$\n?"#,
+            with: "",
+            options: .regularExpression
+        )
+        normalized = normalized.replacingOccurrences(
+            of: #"(?m)(市场雷达\s*Alpha\s*研究候选)(数据新鲜度\s*[:：])"#,
+            with: "## $1\n- **数据新鲜度**：",
+            options: .regularExpression
+        )
+
+        let sectionLabels = "(结论|关键证据|证据与来源|行动建议|风险边界/数据缺口|风险边界|数据缺口|数据来源与可信度说明|数据来源与可信度|三场景推演|场景推演|盘面定性)"
+        let fieldLabels = "(核心逻辑|关键价位|支撑观察|阻力观察|突破确认线|目标观察阻力|反证|后续观察条件|数据来源状态)"
+        let replacements: [(String, String)] = [
+            (#"(?m)([^\n])\s*(#{1,4}\s*\S)"#, "$1\n$2"),
+            (#"(?m)(^|[。；;])\s*__SECTION_LABELS__\s*[:：]\s*"#, "$1\n## $2\n"),
+            (#"(?m)^__SECTION_LABELS__\s+(\S)"#, "## $1\n$2"),
+            (#"(?m)([^\n])\s+__SECTION_LABELS__\s+(\S)"#, "$1\n## $2\n$3"),
+            (#"(?m)(^|[。；;])\s*(候选\s*\d{1,2}\s*[:：]\s*)"#, "$1\n### $2"),
+            (#"(?m)([^\n])\s+(候选\s*\d{1,2}\s*[:：]\s*)"#, "$1\n### $2"),
+            (#"(?m)(^|[。；;])\s*__FIELD_LABELS__\s*[:：]\s*"#, "$1\n- **$2**："),
+            (#"(?m)([^\n])\s+-\s*__FIELD_LABELS__\s*[:：]\s*"#, "$1\n- **$2**："),
+            (#"(?m)([^\n])\s+__FIELD_LABELS__\s*[:：]\s*"#, "$1\n- **$2**："),
+            (#"(?m)([。；;])\s*(\d{1,2}[.)]\s*\S)"#, "$1\n$2"),
+            (#"(?m)([^\n])(\s{1,3}[-*]\s+\S)"#, "$1\n$2"),
+            (#"(?m)([^\n])(\s{0,2}•\s*\S)"#, "$1\n$2")
+        ]
+        for (patternTemplate, template) in replacements {
+            let pattern = patternTemplate
+                .replacingOccurrences(of: "__SECTION_LABELS__", with: sectionLabels)
+                .replacingOccurrences(of: "__FIELD_LABELS__", with: fieldLabels)
+            normalized = normalized.replacingOccurrences(
+                of: pattern,
+                with: template,
+                options: .regularExpression
+            )
+        }
+        return normalized
+    }
+
+    static func streamingSegments(_ s: String) -> [LiveAssistantSegment] {
+        var segments: [LiveAssistantSegment] = []
+        for block in MarkdownParser.parse(s) {
+            switch block {
+            case .heading(_, let text):
+                append(stripInlineMarkdown(text), kind: .heading, to: &segments)
+            case .bullet(let text):
+                append(stripInlineMarkdown(text), kind: .bullet, to: &segments)
+            case .ordered(let marker, let text):
+                append(stripInlineMarkdown(text), kind: .ordered(marker), to: &segments)
+            case .table(let header, let rows):
+                let line = ([header] + rows)
+                    .prefix(3)
+                    .map { $0.prefix(4).joined(separator: "  ·  ") }
+                    .joined(separator: " / ")
+                append(stripInlineMarkdown(line), kind: .table, to: &segments)
+            case .paragraph(let text), .code(let text):
+                append(stripInlineMarkdown(text), kind: .text, to: &segments)
+            case .rule:
+                continue
+            }
+        }
+        return segments
+    }
+
+    private static func append(_ text: String, kind: LiveAssistantSegment.Kind, to segments: inout [LiveAssistantSegment]) {
+        for (offset, chunk) in sentenceChunks(text).enumerated() where !chunk.isEmpty {
+            let segmentKind = offset == 0 ? kind : .text
+            segments.append(.init(id: segments.count, kind: segmentKind, text: chunk))
+        }
+    }
+
+    private static func sentenceChunks(_ text: String, softLimit: Int = 92) -> [String] {
+        guard text.count > softLimit else { return [text] }
+        var chunks: [String] = []
+        var current = ""
+        for char in text {
+            current.append(char)
+            if current.count >= softLimit, "。；;.!?？".contains(char) {
+                chunks.append(current.trimmingCharacters(in: .whitespaces))
+                current.removeAll(keepingCapacity: true)
+            } else if current.count >= softLimit + 22 {
+                chunks.append(current.trimmingCharacters(in: .whitespaces))
+                current.removeAll(keepingCapacity: true)
+            }
+        }
+        let tail = current.trimmingCharacters(in: .whitespaces)
+        if !tail.isEmpty { chunks.append(tail) }
+        return chunks
+    }
+
+    private static func stripInlineMarkdown(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "__", with: "")
+            .replacingOccurrences(of: "`", with: "")
+            .trimmingCharacters(in: .whitespaces)
+    }
+}
+
+struct LiveAssistantSegment: Identifiable, Equatable {
+    enum Kind: Equatable {
+        case heading
+        case bullet
+        case ordered(String)
+        case table
+        case text
+    }
+
+    let id: Int
+    let kind: Kind
+    let text: String
+}
+
+/// Live model output during a run. Streaming uses a lightweight line renderer; the completed
+/// message still uses full MarkdownBlocksView. This avoids reparsing rich markdown/tables on
+/// every token flush while keeping the final answer polished.
+private struct LiveAssistantStream: View {
+    let text: String
+    var statusText: String = "正在生成"
+    var statusColor: Color = RadarTheme.blue
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            ForEach(AgentOutputCopy.streamingSegments(text)) { segment in
+                LiveAssistantSegmentView(segment: segment)
+            }
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 5, height: 5)
+                Text(statusText)
+                    .font(.system(size: 10))
+                    .foregroundStyle(RadarTheme.mutedText)
+            }
+            .padding(.top, 2)
+        }
+    }
+}
+
+private struct LiveAssistantSegmentView: View {
+    let segment: LiveAssistantSegment
+
+    var body: some View {
+        switch segment.kind {
+        case .heading:
+            Text(segment.text)
+                .font(.system(size: 13.5, weight: .bold))
+                .foregroundStyle(RadarTheme.primaryText)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+        case .bullet:
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Circle()
+                    .fill(RadarTheme.gold)
+                    .frame(width: 4, height: 4)
+                    .offset(y: -1)
+                liveText(segment.text, color: RadarTheme.secondaryText)
+            }
+        case .ordered(let marker):
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Text(marker)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(RadarTheme.blue)
+                liveText(segment.text, color: RadarTheme.secondaryText)
+            }
+        case .table:
+            liveText(segment.text, size: 11.5, color: RadarTheme.secondaryText)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(RadarTheme.tintFaint)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        case .text:
+            liveText(segment.text)
+        }
+    }
+
+    private func liveText(_ text: String, size: CGFloat = 12.5, color: Color = RadarTheme.primaryText) -> some View {
+        Text(text)
+            .font(.system(size: size, weight: .medium))
+            .foregroundStyle(color)
+            .lineSpacing(3)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
+    }
+}
+
 private struct AgentThreadMessageRow: View {
     @ObservedObject var viewModel: DashboardViewModel
     let message: AgentThreadMessage
     var isRunning: Bool = false
-    /// nil = follow run state (expanded while running, collapsed when done); set by user tap.
-    @State private var processExpandedOverride: Bool? = nil
+    var isFinalizing: Bool = false
 
     var body: some View {
         let isUser = message.role == .user
@@ -608,80 +1538,57 @@ private struct AgentThreadMessageRow: View {
                         AgentMessagePartView(viewModel: viewModel, part: part)
                     }
                 } else {
+                    if showHistoryGuardNotice {
+                        AgentNoticeBlock(
+                            title: "历史输出未通过当前数据门禁",
+                            summary: "这条历史结果缺少可信工具观测记录，只作为历史文本保留，不作为实时市场事实。",
+                            tone: .warning
+                        )
+                    }
                     assistantBody
                 }
             }
             .padding(12)
             .frame(maxWidth: isUser ? 560 : .infinity, alignment: .leading)
-            .background(isUser ? RadarTheme.panelElevated.opacity(0.72) : RadarTheme.panelElevated.opacity(0.42))
+            // User bubble gets a faint accent wash to read distinct; assistant is a clean panel.
+            .background(isUser ? RadarTheme.blue.opacity(0.07) : Color.clear)
             .researchPanel(glow: hasConclusion)
             if !isUser { Spacer(minLength: 36) }
         }
     }
 
-    // Conclusions / actions surface first; plan + tool-call steps collapse into 执行过程.
+    // Claude-style: while running, the live model text streams as the headline; tool/plan steps
+    // tuck into a collapsed 执行过程 (no longer a wall of cards). When done, the persisted
+    // conclusion parts take over.
     @ViewBuilder
     private var assistantBody: some View {
         let outcome = message.parts.filter { !isProcessPart($0) }
         let process = message.parts.filter(isProcessPart)
-        let expanded = processExpandedOverride ?? isRunning
+        let liveText = isRunning ? viewModel.agentAssistantText(for: message.runID) : ""
+        let showLive = isRunning && !liveText.isEmpty
 
-        if outcome.isEmpty && !process.isEmpty {
-            HStack(spacing: 7) {
-                Image(systemName: "checkmark.seal")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(RadarTheme.secondaryText)
-                Text("已整理执行步骤；展开「执行过程」查看，或配置模型 Key 后生成文本结论。")
-                    .font(.system(size: 12))
-                    .foregroundStyle(RadarTheme.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        if showLive {
+            LiveAssistantStream(
+                text: liveText,
+                statusText: isFinalizing ? "已完成，正在整理结果" : "正在生成",
+                statusColor: isFinalizing ? RadarTheme.green : RadarTheme.blue
+            )
+        } else if outcome.isEmpty && isFinalizing, !viewModel.agentAssistantText(for: message.runID).isEmpty {
+            LiveAssistantStream(
+                text: viewModel.agentAssistantText(for: message.runID),
+                statusText: "已完成，正在整理结果",
+                statusColor: RadarTheme.green
+            )
+        } else if outcome.isEmpty && !process.isEmpty {
+            AgentProcessStreamLine(parts: process, isRunning: isRunning)
         } else {
             ForEach(outcome) { part in
                 AgentMessagePartView(viewModel: viewModel, part: part)
             }
         }
 
-        if !process.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Button {
-                    withAnimation(RadarMotion.snappy) { processExpandedOverride = !expanded }
-                } label: {
-                    HStack(spacing: 7) {
-                        if isRunning {
-                            StatusDot(color: RadarTheme.blue, size: 6, pulsing: true)
-                        } else {
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 9, weight: .bold))
-                                .rotationEffect(.degrees(expanded ? 90 : 0))
-                        }
-                        Image(systemName: "list.bullet.indent")
-                            .font(.system(size: 10, weight: .semibold))
-                        Text(isRunning ? "执行过程 · 进行中" : "执行过程 · \(process.count) 步")
-                            .font(.system(size: 11, weight: .semibold))
-                        Spacer(minLength: 0)
-                        Text(expanded ? "收起" : "展开")
-                            .font(.system(size: 10))
-                            .foregroundStyle(RadarTheme.mutedText)
-                    }
-                    .foregroundStyle(RadarTheme.secondaryText)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(RadarTheme.tintFaint)
-                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                }
-                .buttonStyle(.plain)
-
-                if expanded {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(process) { part in
-                            AgentMessagePartView(viewModel: viewModel, part: part)
-                        }
-                    }
-                    .padding(.leading, 4)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-            }
+        if !process.isEmpty && (showLive || !outcome.isEmpty) {
+            AgentProcessStreamLine(parts: process, isRunning: isRunning || isFinalizing)
         }
     }
 
@@ -699,7 +1606,7 @@ private struct AgentThreadMessageRow: View {
     /// requests, attachments, errors, and substantive model text.
     private func isProcessPart(_ part: AgentMessagePart) -> Bool {
         switch part {
-        case .planSummary, .capabilityCall, .evidence, .finalOutput:
+        case .planSummary, .capabilityCall, .evidence, .finalOutput, .strategyResult:
             // finalOutput here is just an artifact/record pointer ("结果已保存到…json"); it
             // belongs in the collapsible process, not as a competing conclusion.
             return true
@@ -712,6 +1619,119 @@ private struct AgentThreadMessageRow: View {
 
     private func isPlanDump(_ text: String) -> Bool {
         text.contains("Agent Runtime Host") || text.contains("已选择 Skill") || text.hasPrefix("我已通过本地")
+    }
+
+    private var showHistoryGuardNotice: Bool {
+        guard !isRunning, !isFinalizing, message.role == .assistant, message.runID != nil else { return false }
+        guard !viewModel.isActiveAgentStreamRun(message.runID) else { return false }
+        guard isPersistedAssistantTextMessage else { return false }
+        return viewModel.agentRunMissingToolObservations(message.runID)
+    }
+
+    private var isPersistedAssistantTextMessage: Bool {
+        var hasText = false
+        for part in message.parts {
+            switch part {
+            case .text:
+                hasText = true
+            case .evidence:
+                continue
+            case .planSummary, .capabilityCall, .approvalRequest, .strategyResult, .finalOutput, .attachment, .error, .notice:
+                return false
+            }
+        }
+        return hasText
+    }
+}
+
+private struct AgentProcessStreamLine: View {
+    let parts: [AgentMessagePart]
+    let isRunning: Bool
+
+    var body: some View {
+        HStack(spacing: 7) {
+            StatusDot(color: isRunning ? RadarTheme.blue : RadarTheme.green, size: 6, pulsing: isRunning)
+            Text(statusText)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(RadarTheme.secondaryText)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(RadarTheme.tintFaint)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var statusText: String {
+        let labels = uniqueLabels.prefix(3).joined(separator: " / ")
+        if labels.isEmpty {
+            return isRunning ? "正在读取上下文并生成回复" : "执行记录已保存"
+        }
+        return isRunning ? "正在处理：\(labels)" : "已处理：\(labels)"
+    }
+
+    private var uniqueLabels: [String] {
+        var seen = Set<String>()
+        return parts.compactMap { label(for: $0) }.filter { seen.insert($0).inserted }
+    }
+
+    private func label(for part: AgentMessagePart) -> String? {
+        switch part {
+        case .capabilityCall(let call):
+            return call.displayName
+        case .planSummary:
+            return "内部编排"
+        case .evidence:
+            return "证据"
+        case .finalOutput:
+            return "结果记录"
+        case .strategyResult:
+            return "策略结果"
+        case .text:
+            return "上下文"
+        default:
+            return nil
+        }
+    }
+}
+
+private struct AgentNoticeBlock: View {
+    let title: String
+    let summary: String
+    let tone: AgentNoticeTone
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 7) {
+            Image(systemName: tone == .warning ? "exclamationmark.triangle.fill" : "info.circle.fill")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(tint)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 10.5, weight: .bold))
+                    .foregroundStyle(tint)
+                    .lineLimit(1)
+                Text(summary)
+                    .font(.system(size: 10))
+                    .foregroundStyle(RadarTheme.secondaryText)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(tint.opacity(0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(tint.opacity(0.24), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var tint: Color {
+        tone == .warning ? RadarTheme.gold : RadarTheme.blue
     }
 }
 
@@ -728,27 +1748,19 @@ private struct AgentMessagePartView: View {
         case .approvalRequest(let approval):
             ActionApprovalCard(viewModel: viewModel, approval: approval, call: nil)
         case .attachment(_, _, _, let attachment):
-            AttachmentInlineCard(viewModel: viewModel, attachment: attachment)
+            AttachmentInlineCard(attachment: attachment)
         case .evidence(let chip):
-            EvidenceSourceChips(chips: [chip], action: { chip in
-                viewModel.selectAgentInspector(.context(chip.id))
-            })
+            EvidenceSourceChips(chips: [chip])
         case .strategyResult(let result):
-            StrategyResultCard(result: result, onInspect: {
-                viewModel.selectAgentInspector(.strategyResult(result.id))
-            })
+            StrategyResultCard(result: result)
         case .finalOutput(_, let title, let summary, let artifactPath):
-            FinalOutputCard(text: "\(title)\n\(summary)", artifactPath: artifactPath, action: { path in
-                viewModel.selectAgentInspector(.artifact(path))
-            })
+            FinalOutputCard(text: "\(title)\n\(summary)", artifactPath: artifactPath)
+        case .notice(_, let title, let summary, let tone):
+            AgentNoticeBlock(title: title, summary: summary, tone: tone)
         case .error(_, let title, let message):
             AgentErrorBlock(text: "\(title)：\(message)")
         case .text(_, let text):
-            Text(text)
-                .font(.system(size: 12))
-                .foregroundStyle(RadarTheme.primaryText)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+            MarkdownBlocksView(raw: AgentOutputCopy.humanize(text))
         }
     }
 }
@@ -759,15 +1771,12 @@ private struct AgentPlanSummaryBlock: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("计划摘要", systemImage: "list.bullet.clipboard")
+            Label("内部编排记录", systemImage: "list.bullet.clipboard")
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(RadarTheme.green)
-            Text(text)
-                .font(.system(size: 12))
-                .foregroundStyle(RadarTheme.primaryText)
-                .fixedSize(horizontal: false, vertical: true)
+            MarkdownBlocksView(raw: AgentOutputCopy.humanize(text))
             if !evidenceRefs.isEmpty {
-                EvidenceSourceChips(chips: evidenceRefs, action: { _ in })
+                EvidenceSourceChips(chips: evidenceRefs)
             }
         }
     }
@@ -780,7 +1789,7 @@ private struct CapabilityCallCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button(action: { viewModel.selectAgentInspector(.toolCall(call.id)) }) {
+            Button(action: { withAnimation(RadarMotion.snappy) { expanded.toggle() } }) {
                 HStack(spacing: 8) {
                     AgentStatusDot(color: AgentUIStyle.capabilityColor(call.status))
                     VStack(alignment: .leading, spacing: 3) {
@@ -814,12 +1823,8 @@ private struct CapabilityCallCard: View {
                     InspectorRow(label: "权限", value: call.permissionLabel)
                     InspectorRow(label: "输入", value: call.inputsSummary)
                     InspectorRow(label: "输出", value: call.outputSummary)
-                    ForEach(call.artifactRefs, id: \.self) { artifact in
-                        let artifactText = artifact.path ?? artifact.label
-                        Button(action: { viewModel.selectAgentInspector(.artifact(artifactText)) }) {
-                            InspectorRow(label: "记录", value: artifactText)
-                        }
-                        .buttonStyle(.plain)
+                    if !call.artifactRefs.isEmpty {
+                        InspectorRow(label: "记录", value: "本机记录已保存")
                     }
                 }
                 .padding(9)
@@ -854,28 +1859,12 @@ private struct ActionApprovalCard: View {
                     .foregroundStyle(RadarTheme.primaryText)
                 Spacer()
             }
+            // Boundary detail is shown inline below — no side-panel needed.
             InspectorRow(label: "动作", value: approval.displayName)
             InspectorRow(label: "读取/写入", value: approval.dataBoundary)
             InspectorRow(label: "外发", value: approval.outboundBoundary)
             InspectorRow(label: "原因", value: approval.reason)
             InspectorRow(label: "拒绝后", value: approval.rejectionFallback)
-
-            HStack(spacing: 8) {
-                Button("查看边界") {
-                    viewModel.selectAgentInspector(.policy(approval.id))
-                }
-                Button("拒绝") {
-                    viewModel.selectAgentInspector(.policy(approval.id))
-                }
-                .disabled(approval.status == .blocked)
-                if let call {
-                    Button("查看能力") {
-                        viewModel.selectAgentInspector(.toolCall(call.id))
-                    }
-                }
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
         }
         .padding(10)
         .background((approval.status == .blocked ? RadarTheme.red : RadarTheme.gold).opacity(0.09))
@@ -888,55 +1877,49 @@ private struct ActionApprovalCard: View {
 }
 
 private struct AttachmentInlineCard: View {
-    @ObservedObject var viewModel: DashboardViewModel
     let attachment: AgentAttachment
 
     var body: some View {
-        Button(action: { viewModel.selectAgentInspector(.attachment(attachment.attachmentID)) }) {
-            HStack(spacing: 8) {
-                Image(systemName: "photo")
-                    .foregroundStyle(RadarTheme.blue)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(attachment.fileName)
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(RadarTheme.primaryText)
-                        .lineLimit(1)
-                    Text("\(attachment.mimeType) · sha256 \(attachment.sha256.prefix(10))")
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(RadarTheme.secondaryText)
-                        .lineLimit(1)
-                }
-                Spacer()
+        HStack(spacing: 8) {
+            Image(systemName: "photo")
+                .foregroundStyle(RadarTheme.blue)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(attachment.fileName)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(RadarTheme.primaryText)
+                    .lineLimit(1)
+                Text("\(attachment.mimeType) · sha256 \(attachment.sha256.prefix(10))")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(RadarTheme.secondaryText)
+                    .lineLimit(1)
             }
-            .padding(10)
-            .background(RadarTheme.tintSoft)
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            Spacer()
         }
-        .buttonStyle(.plain)
+        .padding(10)
+        .background(RadarTheme.tintSoft)
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
 }
 
 private struct FinalOutputCard: View {
     let text: String
     let artifactPath: String?
-    let action: (String) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Label("结果", systemImage: "checkmark.seal")
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(RadarTheme.green)
-            Text(text)
-                .font(.system(size: 12))
-                .foregroundStyle(RadarTheme.primaryText)
-                .fixedSize(horizontal: false, vertical: true)
-            if let artifactPath {
-                Button(action: { action(artifactPath) }) {
-                    Label("查看记录文件", systemImage: "doc.text.magnifyingglass")
-                        .font(.system(size: 10, weight: .semibold))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+            // Visual digest extracted from the prose (degrades to nothing if not found),
+            // then the markdown-rendered body — replaces the old raw-text dump.
+            let humanized = AgentOutputCopy.humanize(text)
+            AgentSignalDigestView(digest: AgentSignalExtractor.extract(from: humanized))
+            MarkdownBlocksView(raw: humanized)
+            if artifactPath != nil {
+                Label("本机结果记录已保存", systemImage: "doc.text")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(RadarTheme.mutedText)
+                    .lineLimit(1)
             }
         }
         .padding(10)
@@ -958,16 +1941,12 @@ private struct AgentErrorBlock: View {
 
 private struct EvidenceSourceChips: View {
     let chips: [AgentContextChip]
-    let action: (AgentContextChip) -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 ForEach(chips) { chip in
-                    Button(action: { action(chip) }) {
-                        AgentContextChipView(chip: chip, compact: true)
-                    }
-                    .buttonStyle(.plain)
+                    AgentContextChipView(chip: chip, compact: true)
                 }
             }
         }
@@ -984,16 +1963,14 @@ private struct AgentComposerBar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             if !viewModel.agentContextChips.isEmpty {
-                ContextChipBar(chips: viewModel.agentContextChips) { chip in
-                    viewModel.selectAgentInspector(.context(chip.id))
-                }
+                ContextChipBar(chips: viewModel.agentContextChips)
             }
 
             if !viewModel.agentAttachments.isEmpty {
-                AttachmentStrip(viewModel: viewModel, attachments: viewModel.agentAttachments)
+                AttachmentStrip(attachments: viewModel.agentAttachments)
             }
 
-            SelectedAbilityChipBar(viewModel: viewModel) {
+            WorkbenchAbilityStrip(viewModel: viewModel) {
                 abilityPalettePresented = true
             }
 
@@ -1005,7 +1982,7 @@ private struct AgentComposerBar: View {
                     .focused($composerFocused)
                     .frame(minHeight: 82, maxHeight: 130)
                     .padding(8)
-                    .background(RadarTheme.panelElevated.opacity(composerFocused ? 0.75 : 0.62))
+                    .background(RadarTheme.panelWash)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .strokeBorder(composerFocused ? RadarTheme.blue.opacity(0.5) : RadarTheme.borderSoft, lineWidth: 1)
@@ -1103,7 +2080,13 @@ private struct AgentComposerBar: View {
     }
 }
 
-private struct SelectedAbilityChipBar: View {
+private struct AgentAbilityGroup: Identifiable {
+    var id: String { label }
+    let label: String
+    let items: [AgentAbilityPackage]
+}
+
+private struct WorkbenchAbilityStrip: View {
     @ObservedObject var viewModel: DashboardViewModel
     let openPalette: () -> Void
 
@@ -1118,25 +2101,37 @@ private struct SelectedAbilityChipBar: View {
                 }
                 .buttonStyle(.plain)
 
-                ForEach(selectedAbilities) { ability in
-                    Button(action: { toggle(ability) }) {
-                        HStack(spacing: 5) {
-                            Image(systemName: "checkmark.circle.fill")
-                            Text(ability.title)
-                                .lineLimit(1)
+                ForEach(groupedAbilities) { group in
+                    Text(group.label)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(RadarTheme.mutedText)
+                        .padding(.leading, group.id == groupedAbilities.first?.id ? 0 : 4)
+
+                    ForEach(group.items) { ability in
+                        Button(action: { toggle(ability) }) {
+                            HStack(spacing: 5) {
+                                Image(systemName: ability.selected ? "checkmark.circle.fill" : "circle")
+                                Text(ability.title)
+                                    .lineLimit(1)
+                            }
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(ability.selected ? RadarTheme.blue : RadarTheme.secondaryText)
+                            .researchCapsule(active: ability.selected)
                         }
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(RadarTheme.blue)
-                        .researchCapsule(active: true)
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
     }
 
-    private var selectedAbilities: [AgentAbilityPackage] {
-        AgentAbilityPackage.packages(from: viewModel).filter(\.selected)
+    private var groupedAbilities: [AgentAbilityGroup] {
+        let packages = AgentAbilityPackage.workbenchPackages(from: viewModel)
+        let order = ["Web3", "Office / Meeting", "Local"]
+        return order.compactMap { label in
+            let items = packages.filter { $0.domainLabel == label }
+            return items.isEmpty ? nil : AgentAbilityGroup(label: label, items: items)
+        }
     }
 
     private func toggle(_ ability: AgentAbilityPackage) {
@@ -1220,7 +2215,7 @@ private struct AbilityPaletteView: View {
     }
 
     private var filteredAbilities: [AgentAbilityPackage] {
-        let packages = AgentAbilityPackage.packages(from: viewModel)
+        let packages = AgentAbilityPackage.workbenchPackages(from: viewModel)
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !query.isEmpty else { return packages }
         return packages.filter {
@@ -1281,7 +2276,6 @@ private struct SkillChipPicker: View {
 
 private struct ContextChipBar: View {
     let chips: [AgentContextChip]
-    let action: (AgentContextChip) -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -1290,10 +2284,7 @@ private struct ContextChipBar: View {
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(RadarTheme.mutedText)
                 ForEach(chips) { chip in
-                    Button(action: { action(chip) }) {
-                        AgentContextChipView(chip: chip, compact: true)
-                    }
-                    .buttonStyle(.plain)
+                    AgentContextChipView(chip: chip, compact: true)
                 }
             }
         }
@@ -1301,7 +2292,6 @@ private struct ContextChipBar: View {
 }
 
 private struct AttachmentStrip: View {
-    @ObservedObject var viewModel: DashboardViewModel
     let attachments: [AgentAttachment]
 
     var body: some View {
@@ -1311,253 +2301,23 @@ private struct AttachmentStrip: View {
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(RadarTheme.mutedText)
                 ForEach(attachments) { attachment in
-                    Button(action: { viewModel.selectAgentInspector(.attachment(attachment.attachmentID)) }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "photo")
-                            Text(attachment.fileName)
-                                .lineLimit(1)
-                            Text(attachment.sha256.prefix(8))
-                                .font(.system(size: 9, design: .monospaced))
-                                .foregroundStyle(RadarTheme.mutedText)
-                        }
-                        .font(.system(size: 10, weight: .semibold))
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 6)
-                        .background(RadarTheme.blue.opacity(0.12))
-                        .foregroundStyle(RadarTheme.blue)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    HStack(spacing: 6) {
+                        Image(systemName: "photo")
+                        Text(attachment.fileName)
+                            .lineLimit(1)
+                        Text(attachment.sha256.prefix(8))
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(RadarTheme.mutedText)
                     }
-                    .buttonStyle(.plain)
+                    .font(.system(size: 10, weight: .semibold))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(RadarTheme.blue.opacity(0.12))
+                    .foregroundStyle(RadarTheme.blue)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
             }
         }
-    }
-}
-
-private struct AgentInspectorV2Panel: View {
-    @ObservedObject var viewModel: DashboardViewModel
-    let thread: AgentThreadState
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                ResearchSectionEyebrow(text: "Inspector", icon: "sidebar.right")
-                Spacer()
-                Text(inspectorTitle)
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(RadarTheme.mutedText)
-            }
-
-            switch viewModel.selectedAgentInspector {
-            case .overview:
-                overview
-            case .message(let id):
-                if let message = thread.messages.first(where: { $0.id == id }) {
-                    messageInspector(message)
-                } else {
-                    overview
-                }
-            case .toolCall(let id):
-                if let call = toolCall(id) {
-                    toolInspector(call)
-                } else {
-                    overview
-                }
-            case .attachment(let id):
-                if let attachment = attachment(id) {
-                    attachmentInspector(attachment)
-                } else {
-                    overview
-                }
-            case .event(let id):
-                if let event = viewModel.agentStreamEvents.first(where: { $0.eventID == id }) {
-                    eventInspector(event)
-                } else {
-                    overview
-                }
-            case .policy(let id):
-                policyInspector(id)
-            case .artifact(let path):
-                artifactInspector(path)
-            case .task(let id):
-                if let task = viewModel.agentTasks.first(where: { $0.taskID == id }) {
-                    taskInspector(task)
-                } else {
-                    overview
-                }
-            case .context(let id):
-                if let chip = viewModel.agentContextChips.first(where: { $0.id == id }) {
-                    contextInspector(chip)
-                } else {
-                    overview
-                }
-            case .strategyResult(let id):
-                if let result = viewModel.strategyResult(id: id) {
-                    StrategyInspectorView(result: result)
-                } else {
-                    overview
-                }
-            }
-
-            Spacer(minLength: 0)
-        }
-        .animation(RadarMotion.smooth, value: viewModel.selectedAgentInspector)
-        .padding(12)
-        .researchPanel()
-    }
-
-    private var inspectorTitle: String {
-        switch viewModel.selectedAgentInspector {
-        case .overview:
-            return "总览"
-        case .message:
-            return "消息"
-        case .toolCall:
-            return "能力"
-        case .attachment:
-            return "图片"
-        case .event:
-            return "事件"
-        case .policy:
-            return "边界"
-        case .artifact:
-            return "记录"
-        case .task:
-            return "任务"
-        case .context:
-            return "上下文"
-        case .strategyResult:
-            return "策略复核"
-        }
-    }
-
-    private var overview: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            InspectorSection(title: "当前任务", rows: [
-                ("标题", thread.title),
-                ("状态", thread.statusText),
-                ("执行记录", AgentWorkspaceV2Copy.runDisplay(thread.compactRunState.runID)),
-                ("阶段", AgentWorkspaceStateAdapter.stageLabel(thread.runManifest?.currentStage ?? thread.controlSummary?.stage ?? "idle")),
-                ("上下文", thread.contextSummary.map { "\($0.sourceCount) 项 / \($0.chunkCount) 段" } ?? "--"),
-                ("风险", thread.controlSummary.map { $0.blockedPolicyCount > 0 ? "有阻断项" : "边界正常" } ?? "--"),
-                ("事件数", "\(thread.compactRunState.eventCount)")
-            ])
-
-            InspectorSection(title: "后台服务", rows: [
-                ("连接", AgentWorkspaceV2Copy.daemonSummary(viewModel.agentDaemonStatus)),
-                ("AI 模型", AgentWorkspaceV2Copy.providerSummary(viewModel.agentDaemonStatus)),
-                ("提交状态", viewModel.agentSubmitStatus)
-            ])
-
-            InspectorSection(title: "安全边界", rows: [
-                ("真实微信", RuntimeStatusPresenter.label(viewModel.agentDaemonStatus.policy?["liveWechat"] ?? "blocked")),
-                ("微信 CLI", RuntimeStatusPresenter.label(viewModel.agentDaemonStatus.policy?["liveWechatCLI"] ?? "blocked")),
-                ("交易/转账", RuntimeStatusPresenter.label(viewModel.agentDaemonStatus.policy?["trade"] ?? "blocked")),
-                ("电脑操作", RuntimeStatusPresenter.label(viewModel.agentDaemonStatus.policy?["computerUse"] ?? "needs_confirmation"))
-            ])
-        }
-    }
-
-    private func messageInspector(_ message: AgentThreadMessage) -> some View {
-        InspectorSection(title: "消息", rows: [
-            ("角色", message.displayName),
-            ("时间", message.createdAt),
-            ("内容块", "\(message.parts.count)"),
-            ("记录", message.linkedArtifacts.first?.path ?? message.linkedArtifacts.first?.label ?? "--")
-        ])
-    }
-
-    private func toolInspector(_ call: CapabilityCallState) -> some View {
-        InspectorSection(title: "能力调用", rows: [
-            ("能力", call.displayName),
-            ("状态", AgentWorkspaceV2Copy.statusLabel(call.status)),
-            ("权限", call.permissionLabel),
-            ("输入", call.inputsSummary),
-            ("输出", call.outputSummary),
-            ("记录", call.artifactRefs.first?.path ?? call.artifactRefs.first?.label ?? "--")
-        ])
-    }
-
-    private func attachmentInspector(_ attachment: AgentAttachment) -> some View {
-        InspectorSection(title: "图片附件", rows: [
-            ("文件", attachment.fileName),
-            ("类型", attachment.mimeType),
-            ("大小", "\(attachment.sizeBytes) bytes"),
-            ("sha256", attachment.sha256),
-            ("状态", RuntimeStatusPresenter.label(attachment.status)),
-            ("记录", attachment.artifactPath)
-        ])
-    }
-
-    private func eventInspector(_ event: AgentStreamEvent) -> some View {
-        InspectorSection(title: "运行事件", rows: [
-            ("类型", event.type),
-            ("状态", event.status ?? "--"),
-            ("能力", AgentWorkspaceV2Copy.toolName(event.toolName ?? "--")),
-            ("说明", event.reason ?? event.errorPreview ?? event.delta ?? "--"),
-            ("记录", event.artifactPath ?? "--")
-        ])
-    }
-
-    private func policyInspector(_ id: String) -> some View {
-        InspectorSection(title: "安全边界", rows: [
-            ("边界", id),
-            ("真实微信", "本机只读已授权（经 wechat-cli），不发送"),
-            ("外部动作", "交易、发消息、对外发布保持阻断"),
-            ("Computer Use", "只生成申请，不直接控制 Mac"),
-            ("密钥", "只读环境变量，不写入记录")
-        ])
-    }
-
-    private func artifactInspector(_ path: String) -> some View {
-        let item = thread.runManifest?.artifacts.first(where: { $0.artifactPath == path })
-        return InspectorSection(title: "记录文件", rows: [
-            ("路径", path),
-            ("类型", item?.kind ?? "--"),
-            ("阶段", item?.stage.map(AgentWorkspaceStateAdapter.stageLabel) ?? "--"),
-            ("说明", "本地 runtime artifact，可用于复盘和追踪"),
-            ("隐私", "不得包含 API key、Authorization header 或真实私聊原文")
-        ])
-    }
-
-    private func taskInspector(_ task: AgentLongTask) -> some View {
-        let selectedSurface = ((task.selectedSkillIDs ?? []) + (task.selectedExtensionIDs ?? []))
-        return InspectorSection(title: "长期任务", rows: [
-            ("目标", task.prompt),
-            ("状态", RuntimeStatusPresenter.label(task.status)),
-            ("执行记录", task.runID),
-            ("能力", selectedSurface.isEmpty ? "自动判断" : selectedSurface.map(AgentWorkspaceV2Copy.surfaceName).joined(separator: "、")),
-            ("记录", task.artifactPath)
-        ])
-    }
-
-    private func contextInspector(_ chip: AgentContextChip) -> some View {
-        InspectorSection(title: "上下文", rows: [
-            ("类型", AgentWorkspaceV2Copy.kindName(chip.kind)),
-            ("名称", chip.label),
-            ("状态", chip.detail),
-            ("置信度", chip.confidence.map { String(format: "%.2f", $0) } ?? "--"),
-            ("记录", chip.path ?? "--")
-        ])
-    }
-
-    private func toolCall(_ id: String) -> CapabilityCallState? {
-        thread.capabilityCalls.first(where: { $0.id == id })
-    }
-
-    private func attachment(_ id: String) -> AgentAttachment? {
-        if let pending = viewModel.agentAttachments.first(where: { $0.attachmentID == id }) {
-            return pending
-        }
-        return thread.messages
-            .flatMap(\.parts)
-            .compactMap { part -> AgentAttachment? in
-                if case .attachment(_, _, _, let attachment) = part {
-                    return attachment
-                }
-                return nil
-            }
-            .first(where: { $0.attachmentID == id })
     }
 }
 
@@ -1602,41 +2362,45 @@ private struct AgentCompactRunBar: View {
             .controlSize(.small)
 
             if viewModel.agentRunDetailsExpanded {
+                let diagnostics = viewModel.agentFinalDiagnostics(runID: thread.activeRunID)
+                if !diagnostics.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(diagnostics, id: \.self) { item in
+                            Text(item)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(RadarTheme.secondaryText)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(RadarTheme.tintFaint))
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(RadarTheme.borderSoft, lineWidth: 1))
+                        }
+                    }
+                }
                 LazyVGrid(columns: [
                     GridItem(.flexible(), spacing: 8),
                     GridItem(.flexible(), spacing: 8),
                     GridItem(.flexible(), spacing: 8)
                 ], spacing: 8) {
                     ForEach(viewModel.agentStreamEvents.suffix(9)) { event in
-                        Button(action: { viewModel.selectAgentInspector(.event(event.eventID)) }) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(AgentWorkspaceV2Copy.toolName(event.toolName ?? event.type))
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(RadarTheme.primaryText)
-                                    .lineLimit(1)
-                                Text(event.reason ?? event.delta ?? event.errorPreview ?? event.status ?? "--")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(RadarTheme.secondaryText)
-                                    .lineLimit(2)
-                            }
-                            .padding(8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(RadarTheme.panelElevated.opacity(0.5))
-                            .researchPanel()
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(AgentWorkspaceV2Copy.toolName(event.toolName ?? event.type))
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(RadarTheme.primaryText)
+                                .lineLimit(1)
+                            Text(event.reason ?? event.delta ?? event.errorPreview ?? event.status ?? "--")
+                                .font(.system(size: 9))
+                                .foregroundStyle(RadarTheme.secondaryText)
+                                .lineLimit(2)
                         }
-                        .buttonStyle(.plain)
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(RadarTheme.tintFaint))
+                        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(RadarTheme.borderSoft, lineWidth: 1))
                     }
                 }
             }
         }
         .padding(10)
-        .background(
-            LinearGradient(
-                colors: [RadarTheme.panel.opacity(0.72), RadarTheme.cyanBase.opacity(0.24), RadarTheme.purpleBase.opacity(0.18)],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-        )
         .researchPanel()
     }
 }
@@ -1768,31 +2532,6 @@ private struct AgentStatusDot: View {
     }
 }
 
-private struct AgentResultMiniRow: View {
-    let icon: String
-    let label: String
-    let count: Int
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .foregroundStyle(RadarTheme.green)
-                .frame(width: 14)
-            Text(label)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(RadarTheme.primaryText)
-            Spacer()
-            Text("\(count)")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(RadarTheme.secondaryText)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(RadarTheme.panelElevated.opacity(0.4))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-    }
-}
-
 private struct AgentSmallEmpty: View {
     let text: String
 
@@ -1802,24 +2541,8 @@ private struct AgentSmallEmpty: View {
             .foregroundStyle(RadarTheme.secondaryText)
             .padding(8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RadarTheme.panelElevated.opacity(0.32))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-    }
-}
-
-private struct InspectorSection: View {
-    let title: String
-    let rows: [(String, String)]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ResearchSectionEyebrow(text: title, icon: "square.text.square")
-            ForEach(rows, id: \.0) { row in
-                InspectorRow(label: row.0, value: row.1)
-            }
-        }
-        .padding(10)
-        .researchPanel()
+            .background(RadarTheme.tintFaint)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -1832,7 +2555,7 @@ private struct InspectorRow: View {
             Text(label)
                 .foregroundStyle(RadarTheme.mutedText)
                 .frame(width: 64, alignment: .leading)
-            Text(value.isEmpty ? "--" : value)
+            Text(AgentOutputCopy.metadataLabel(value))
                 .foregroundStyle(RadarTheme.primaryText)
                 .lineLimit(3)
                 .textSelection(.enabled)
@@ -1943,14 +2666,33 @@ private enum AgentWorkspaceV2Copy {
 
     static func providerSummary(_ status: AgentDaemonStatus) -> String {
         if status.providers.isEmpty {
-            return "AI 模型未检查"
+            return "Agent 能力源未检查"
         }
-        let ready = status.providers.filter(\.ready).map { $0.model ?? $0.provider }
+        let ready = status.providers
+            .filter { ($0.connected ?? $0.ready) && ($0.degraded ?? false) == false }
+            .map(providerDisplayName)
         if !ready.isEmpty {
-            return "AI 模型可用：\(ready.joined(separator: " / "))"
+            return "Agent 能力源可用：\(ready.joined(separator: " / "))"
         }
         let missing = status.providers.flatMap(\.missingEnv).joined(separator: ", ")
-        return missing.isEmpty ? "AI 模型未配置" : "AI 模型缺少 \(missing)"
+        return missing.isEmpty ? "Agent 能力源未配置" : "Agent 能力源缺少 \(missing)"
+    }
+
+    static func providerDisplayName(_ provider: AgentDaemonStatus.ProviderStatus) -> String {
+        switch provider.provider {
+        case "coinmarketcap":
+            if provider.connected == true {
+                return "CMC MCP"
+            }
+            if provider.configured == true {
+                return provider.providerType == "cmcRestProvider" ? "CMC REST" : "CMC 已配置"
+            }
+            return "CMC 未配置"
+        case "wechat-cli":
+            return provider.ready ? "WeChatCLI 只读" : "WeChatCLI 未启用"
+        default:
+            return provider.model ?? provider.provider
+        }
     }
 
     static func toolName(_ raw: String) -> String {
@@ -1987,6 +2729,14 @@ private enum AgentWorkspaceV2Copy {
             return "讨论与价格偏离"
         case "cmc.request_mcp_refresh":
             return "CMC Skill Hub"
+        case "office.meeting_minutes.draft":
+            return "会议纪要"
+        case "office.document.draft":
+            return "文档草稿"
+        case "office.document_revision.draft":
+            return "文档修订"
+        case "channel.feishu.dry_run":
+            return "后台通道预演"
         default:
             return raw.replacingOccurrences(of: "_", with: " ")
         }
@@ -2106,7 +2856,7 @@ private struct AgentRailRowModifier: ViewModifier {
             .background(
                 shape.fill(
                     selected ? RadarTheme.blue.opacity(0.14)
-                        : (hovering ? RadarTheme.tintSoft : RadarTheme.panelElevated.opacity(0.4))
+                        : (hovering ? RadarTheme.tintSoft : RadarTheme.tintFaint)
                 )
             )
             .overlay(

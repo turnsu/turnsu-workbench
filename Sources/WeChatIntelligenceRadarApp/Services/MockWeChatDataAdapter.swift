@@ -32,9 +32,9 @@ struct MockWeChatDataAdapter: WeChatDataAdapter {
             messages: filteredMessages,
             sourceMode: "mock_fixture_no_live_wechat",
             notes: [
-                "MVP uses local fixture data only.",
-                "wechat-cli_raw is a read-only reference for future CLI adapter wiring.",
-                "Live WeChat access is intentionally blocked until explicitly authorized."
+                "Local fixture data is used when live WeChat refresh is disabled or unavailable.",
+                "wechat-cli_raw remains a read-only reference for CLI adapter wiring.",
+                "Live WeChat refresh is read-only and controlled by WECHAT_LIVE_ENABLED."
             ]
         )
     }

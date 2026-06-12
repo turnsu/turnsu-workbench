@@ -7,91 +7,119 @@ struct TerminalTopCommandBar: View {
     @AppStorage("radar.appearance") private var appearancePref = "system"
 
     var body: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 9) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(searchFocused ? RadarTheme.blue : RadarTheme.mutedText)
-                TextField("搜索情报、Token、群聊…", text: $viewModel.searchQuery)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .focused($searchFocused)
-                if !viewModel.searchQuery.isEmpty {
-                    Button {
-                        viewModel.searchQuery = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(RadarTheme.mutedText)
-                    }
-                    .buttonStyle(.plain)
-                    .transition(.opacity.combined(with: .scale))
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                searchField
+                windowPicker
+                statusPill
+                appearanceButton
+                refreshButton
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                searchField
+                HStack(spacing: 10) {
+                    windowPicker
+                    statusPill
+                    Spacer(minLength: 0)
+                    appearanceButton
+                    refreshButton
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(searchFocused ? RadarTheme.tintMedium : RadarTheme.tintSoft)
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(searchFocused ? RadarTheme.blue.opacity(0.5) : RadarTheme.borderSoft, lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .frame(maxWidth: .infinity)
-            .animation(RadarMotion.snappy, value: searchFocused)
-            .animation(RadarMotion.snappy, value: viewModel.searchQuery.isEmpty)
-
-            Picker("Window", selection: Binding(
-                get: { viewModel.selectedWindow },
-                set: { viewModel.updateWindow($0) }
-            )) {
-                ForEach(TimeWindow.allCases) { window in
-                    Text(window.rawValue).tag(window)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: 180)
-
-            HStack(spacing: 7) {
-                StatusDot(
-                    color: RuntimeStatusPresenter.color(for: viewModel.syncState.status.rawValue),
-                    pulsing: viewModel.syncState.status == .running
-                )
-                Text(viewModel.wechatLiveStatus.isEmpty ? RuntimeStatusPresenter.label(viewModel.syncState.status.rawValue) : viewModel.wechatLiveStatus)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(RadarTheme.secondaryText)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 11)
-            .padding(.vertical, 8)
-            .background(RadarTheme.tintSoft)
-            .clipShape(Capsule())
-
-            Button {
-                withAnimation(RadarMotion.snappy) { appearancePref = nextAppearance(appearancePref) }
-            } label: {
-                Image(systemName: appearanceIcon)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(RadarTheme.secondaryText)
-                    .contentTransition(.symbolEffect(.replace))
-            }
-            .buttonStyle(HoverIconButtonStyle(size: 38))
-            .help("外观：跟随系统 / 浅色 / 深色")
-
-            Button {
-                withAnimation(RadarMotion.gentle) { refreshSpin += 360 }
-                Task { await viewModel.refreshWeChatLiveAndReload() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(RadarTheme.primaryText)
-                    .rotationEffect(.degrees(refreshSpin))
-            }
-            .buttonStyle(HoverIconButtonStyle(size: 38))
-            .help("刷新：拉取实时微信（wechat-cli 只读）并重新分析")
         }
         .padding(8)
         .researchPanel()
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(searchFocused ? RadarTheme.blue : RadarTheme.mutedText)
+            TextField("搜索任务、结果、草稿…", text: $viewModel.searchQuery)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .focused($searchFocused)
+            if !viewModel.searchQuery.isEmpty {
+                Button {
+                    viewModel.searchQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(RadarTheme.mutedText)
+                }
+                .buttonStyle(.plain)
+                .transition(.opacity.combined(with: .scale))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(searchFocused ? RadarTheme.tintMedium : RadarTheme.tintSoft)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(searchFocused ? RadarTheme.blue.opacity(0.5) : RadarTheme.borderSoft, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .frame(maxWidth: .infinity)
+        .animation(RadarMotion.snappy, value: searchFocused)
+        .animation(RadarMotion.snappy, value: viewModel.searchQuery.isEmpty)
+    }
+
+    private var windowPicker: some View {
+        Picker("Window", selection: Binding(
+            get: { viewModel.selectedWindow },
+            set: { viewModel.updateWindow($0) }
+        )) {
+            ForEach(TimeWindow.allCases) { window in
+                Text(window.rawValue).tag(window)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .frame(width: 180)
+    }
+
+    private var statusPill: some View {
+        HStack(spacing: 7) {
+            StatusDot(
+                color: RuntimeStatusPresenter.color(for: viewModel.syncState.status.rawValue),
+                pulsing: viewModel.syncState.status == .running
+            )
+            Text(viewModel.wechatLiveStatus.isEmpty ? RuntimeStatusPresenter.label(viewModel.syncState.status.rawValue) : viewModel.wechatLiveStatus)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(RadarTheme.secondaryText)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .background(RadarTheme.tintSoft)
+        .clipShape(Capsule())
+    }
+
+    private var appearanceButton: some View {
+        Button {
+            withAnimation(RadarMotion.snappy) { appearancePref = nextAppearance(appearancePref) }
+        } label: {
+            Image(systemName: appearanceIcon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(RadarTheme.secondaryText)
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(HoverIconButtonStyle(size: 38))
+        .help("外观：跟随系统 / 浅色 / 深色")
+    }
+
+    private var refreshButton: some View {
+        Button {
+            withAnimation(RadarMotion.gentle) { refreshSpin += 360 }
+            Task { await viewModel.refreshWeChatLiveAndReload() }
+        } label: {
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(RadarTheme.primaryText)
+                .rotationEffect(.degrees(refreshSpin))
+        }
+        .buttonStyle(HoverIconButtonStyle(size: 38))
+        .help("刷新：拉取实时微信（wechat-cli 只读）并重新分析")
     }
 
     private var appearanceIcon: String {
@@ -243,23 +271,14 @@ struct RuntimeRightInspectorView: View {
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(12)
-                .researchPanel()
             }
 
             Spacer(minLength: 0)
         }
         .animation(RadarMotion.smooth, value: inspectorKey)
-        .padding(14)
+        .padding(16)
         .frame(width: 320)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(
-            LinearGradient(
-                colors: [RadarTheme.sidebar.opacity(0.86), RadarTheme.cyanBase.opacity(0.20), RadarTheme.backgroundDeep.opacity(0.8)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
         .researchPanel()
     }
 
@@ -277,6 +296,8 @@ struct RuntimeRightInspectorView: View {
         ].compactMap { $0 }.joined(separator: "|")
     }
 
+    // Flat section — no nested panel. Sits directly inside the single Inspector surface,
+    // separated by a hairline + spacing. One surface, sectioned (not a stack of boxes).
     private func inspectorSection(_ title: String, rows: [(String, String)]) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             ResearchSectionEyebrow(text: title, icon: "square.text.square")
@@ -297,9 +318,7 @@ struct RuntimeRightInspectorView: View {
                 }
             }
         }
-        .padding(13)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .researchPanel()
         .transition(.opacity)
     }
 
@@ -343,13 +362,6 @@ struct BottomOperationsDeck: View {
                 .frame(maxWidth: .infinity, minHeight: 105, maxHeight: 125, alignment: .topLeading)
         }
         .padding(12)
-        .background(
-            LinearGradient(
-                colors: [RadarTheme.panel.opacity(0.84), RadarTheme.cyanBase.opacity(0.22), RadarTheme.purpleBase.opacity(0.24)],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-        )
         .researchPanel()
     }
 
@@ -410,10 +422,10 @@ struct BottomOperationsDeck: View {
                         .lineLimit(1)
                         .foregroundStyle(RadarTheme.secondaryText)
                 }
-                .padding(8)
+                .padding(9)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RadarTheme.panelElevated.opacity(0.58))
-                .researchPanel()
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(RadarTheme.tintFaint))
+                .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(RadarTheme.borderSoft, lineWidth: 1))
             }
         }
     }
@@ -435,8 +447,8 @@ private struct StatusPill: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 6)
-        .background(RadarTheme.panelElevated.opacity(0.8))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .background(RadarTheme.tintSoft)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 

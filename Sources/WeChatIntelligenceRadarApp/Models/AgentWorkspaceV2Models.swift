@@ -52,7 +52,7 @@ struct AgentTaskTemplate: Identifiable, Hashable {
 
 enum AgentWorkspaceTaskTemplates {
     /// CMC strategist templates (decision-support only). They fill the composer; the CMC
-    /// CoinMarketCap MCP 能力包 still enters via the composer Add / `/add`, not raw tools.
+    /// CMC Skill Hub 能力包 still enters via the composer Add / `/add`, not raw tools.
     static let strategist: [AgentTaskTemplate] = [
         AgentTaskTemplate(
             id: "cmc-alpha-scanner",
@@ -195,6 +195,7 @@ enum AgentMessagePart: Identifiable, Hashable {
         case evidence
         case strategyResult
         case finalOutput
+        case notice
         case error
     }
 
@@ -206,6 +207,7 @@ enum AgentMessagePart: Identifiable, Hashable {
     case evidence(AgentContextChip)
     case strategyResult(CMCStrategistResult)
     case finalOutput(id: String, title: String, summary: String, artifactPath: String?)
+    case notice(id: String, title: String, summary: String, tone: AgentNoticeTone)
     case error(id: String, title: String, message: String)
 
     var id: String {
@@ -214,6 +216,7 @@ enum AgentMessagePart: Identifiable, Hashable {
              .planSummary(let id, _, _, _),
              .attachment(let id, _, _, _),
              .finalOutput(let id, _, _, _),
+             .notice(let id, _, _, _),
              .error(let id, _, _):
             return id
         case .capabilityCall(let call):
@@ -245,10 +248,17 @@ enum AgentMessagePart: Identifiable, Hashable {
             return .strategyResult
         case .finalOutput:
             return .finalOutput
+        case .notice:
+            return .notice
         case .error:
             return .error
         }
     }
+}
+
+enum AgentNoticeTone: String, Hashable {
+    case warning
+    case info
 }
 
 struct CapabilityCallState: Identifiable, Hashable {
@@ -279,7 +289,9 @@ struct CapabilityCallState: Identifiable, Hashable {
     var technicalName: String { toolName }
     var inputsSummary: String { inputSummary }
     var permissionLabel: String { policyDecision?.statusText ?? AgentWorkspaceStateAdapter.permissionLabel(rawPermission) }
-    var requiresUserDecision: Bool { status == .waitingForApproval || status == .blocked }
+    var requiresUserDecision: Bool {
+        status == .waitingForApproval && AgentWorkspaceStateAdapter.isInterruptingAction(toolName)
+    }
 }
 
 typealias CapabilityCallDisplayStatus = CapabilityCallState.Status
@@ -391,7 +403,8 @@ struct AgentWorkspaceStateAdapter {
         daemonStatus: AgentDaemonStatus = .unavailable,
         selectedEventID: String? = nil,
         selectedMessageID: String? = nil,
-        selectedToolCallID: String? = nil
+        selectedToolCallID: String? = nil,
+        finalReadModelsByRunID: [String: AgentFinalReadModel] = [:]
     ) -> AgentThreadState {
         makeThreadState(
             selectedSession: session,
@@ -410,7 +423,8 @@ struct AgentWorkspaceStateAdapter {
             draftPrompt: "",
             selectedEventID: selectedEventID,
             selectedMessageID: selectedMessageID,
-            selectedToolCallID: selectedToolCallID
+            selectedToolCallID: selectedToolCallID,
+            finalReadModelsByRunID: finalReadModelsByRunID
         )
     }
 
@@ -432,6 +446,7 @@ struct AgentWorkspaceStateAdapter {
         selectedEventID: String? = nil,
         selectedMessageID: String? = nil,
         selectedToolCallID: String? = nil,
+        finalReadModelsByRunID: [String: AgentFinalReadModel] = [:],
         strategyResults: [CMCStrategistResult] = []
     ) -> AgentThreadState {
         let resolvedMessages = messages.isEmpty ? (selectedSession?.messages ?? []) : messages
@@ -460,6 +475,7 @@ struct AgentWorkspaceStateAdapter {
             approvals: approvals,
             pendingAttachments: pendingAttachments,
             activeRunID: activeRunID,
+            finalReadModelsByRunID: finalReadModelsByRunID,
             strategyResults: strategyResults
         )
         let status = threadStatus(
@@ -703,14 +719,30 @@ struct AgentWorkspaceStateAdapter {
             return "WeChatCLI 导出接入"
         case "wechat_cli.live_command":
             return "WeChatCLI 导出接入"
+        case "cmc.live_market_refresh":
+            return "CMC 行情刷新"
+        case "cmc.daily_market_overview":
+            return "CMC 市场概览"
+        case "cmc.crypto_macro_overview":
+            return "CMC 宏观概览"
         case "cmc.read_market_evidence":
             return "CMC 市场雷达"
         case "cmc.detect_market_regime":
             return "市场状态复核"
         case "cmc.track_social_price_divergence":
             return "讨论与价格偏离"
+        case "cmc.classify_kline_pattern_quality":
+            return "K 线形态质量"
         case "cmc.request_mcp_refresh":
             return "CMC Skill Hub"
+        case "office.meeting_minutes.draft":
+            return "会议纪要"
+        case "office.document.draft":
+            return "文档草稿"
+        case "office.document_revision.draft":
+            return "文档修订"
+        case "channel.feishu.dry_run":
+            return "后台通道预演"
         case "liveWechat":
             return "真实微信访问"
         case "liveWechatCLI":
@@ -778,14 +810,26 @@ extension AgentWorkspaceStateAdapter {
         approvals: [AgentApprovalState],
         pendingAttachments: [AgentAttachment],
         activeRunID: String?,
+        finalReadModelsByRunID: [String: AgentFinalReadModel] = [:],
         strategyResults: [CMCStrategistResult] = []
     ) -> [AgentThreadMessage] {
-        var threadMessages = messages.map(makeThreadMessage)
+        var threadMessages = messages
+            .filter { message in
+                guard message.role.lowercased() == "assistant",
+                      let runID = nonEmpty(message.runID) else { return true }
+                return finalReadModelsByRunID[runID] == nil
+            }
+            .map(makeThreadMessage)
+        let terminalEvent = streamEvents.last(where: isTerminalEvent)
+        let terminalRunID = terminalEvent?.runID ?? activeRunID
+        let finalReadModel = terminalRunID.flatMap { finalReadModelsByRunID[$0] }
         if let runMessage = makeRunMessage(
             streamEvents: streamEvents,
             capabilityCalls: capabilityCalls,
             approvals: approvals,
-            activeRunID: activeRunID
+            activeRunID: activeRunID,
+            suppressAssistantStreamText: terminalEvent != nil,
+            finalReadModel: finalReadModel
         ) {
             threadMessages.append(runMessage)
         }
@@ -860,29 +904,28 @@ extension AgentWorkspaceStateAdapter {
         streamEvents: [AgentStreamEvent],
         capabilityCalls: [CapabilityCallState],
         approvals: [AgentApprovalState],
-        activeRunID: String?
+        activeRunID: String?,
+        suppressAssistantStreamText: Bool = false,
+        finalReadModel: AgentFinalReadModel? = nil
     ) -> AgentThreadMessage? {
-        guard !streamEvents.isEmpty || !capabilityCalls.isEmpty || !approvals.isEmpty else {
+        guard !streamEvents.isEmpty || !capabilityCalls.isEmpty || !approvals.isEmpty || finalReadModel != nil else {
             return nil
         }
 
         var parts: [AgentMessagePart] = []
-        let runID = activeRunID ?? streamEvents.compactMap(\.runID).last
+        let runID = activeRunID ?? streamEvents.compactMap(\.runID).last ?? finalReadModel?.runID
+        let completedEvent = streamEvents.last(where: isCompletedEvent)
+        let terminalEvent = streamEvents.last(where: isTerminalEvent)
 
-        for event in streamEvents where event.type.lowercased().contains("planner") {
-            parts.append(.planSummary(
-                id: "\(event.eventID)-plan",
-                title: "计划摘要",
-                summary: "Agent 已把任务拆成可执行步骤，技术记录可在详情中查看。",
-                evidenceRefs: []
-            ))
-        }
-
-        parts.append(contentsOf: capabilityCalls.map(AgentMessagePart.capabilityCall))
-        parts.append(contentsOf: approvals.map(AgentMessagePart.approvalRequest))
+        let visibleCalls = capabilityCalls.filter(shouldShowCapabilityInConversation)
+        parts.append(contentsOf: visibleCalls.map(AgentMessagePart.capabilityCall))
+        parts.append(contentsOf: approvals.filter(\.isUserActionRequired).map(AgentMessagePart.approvalRequest))
 
         let assistantText = streamEvents.compactMap { nonEmpty($0.delta) }.joined()
-        if !assistantText.isEmpty {
+        if let finalReadModel,
+           let finalText = nonEmpty(finalReadModel.finalText) {
+            parts.append(.text(id: "\(runID ?? "agent-run")-authoritative-final", text: finalText))
+        } else if !assistantText.isEmpty && !suppressAssistantStreamText {
             parts.append(.text(id: "\(runID ?? "agent-run")-assistant-stream", text: assistantText))
         }
 
@@ -894,12 +937,28 @@ extension AgentWorkspaceStateAdapter {
             ))
         }
 
-        for event in streamEvents where isCompletedEvent(event) {
+        if let event = completedEvent, finalReadModel == nil {
             parts.append(.finalOutput(
                 id: "\(event.eventID)-final",
-                title: "已生成结果",
-                summary: finalOutputSummary(event),
+                title: "结果正在归档",
+                summary: "等待权威最终结果模型写入后显示。",
                 artifactPath: event.artifactPath
+            ))
+        }
+
+        if suppressAssistantStreamText, terminalEvent != nil, finalReadModel == nil, completedEvent == nil {
+            parts.append(.notice(
+                id: "\(runID ?? "agent-run")-terminal-notice",
+                title: "任务已结束",
+                summary: "正在整理最终结果，稍后会在当前对话中显示。",
+                tone: .info
+            ))
+        } else if suppressAssistantStreamText, completedEvent != nil, finalReadModel == nil {
+            parts.append(.notice(
+                id: "\(runID ?? "agent-run")-finalizing-notice",
+                title: "已完成，正在整理结果",
+                summary: "等待权威最终结果模型写入后显示。",
+                tone: .info
             ))
         }
 
@@ -925,14 +984,7 @@ extension AgentWorkspaceStateAdapter {
     /// links back to its source artifact; a final-output part points at the run record.
     static func makeStrategyMessage(_ results: [CMCStrategistResult], activeRunID: String?) -> AgentThreadMessage? {
         guard !results.isEmpty else { return nil }
-        var parts: [AgentMessagePart] = [
-            .planSummary(
-                id: "\(activeRunID ?? "strategy")-strategy-plan",
-                title: "策略读模型",
-                summary: "已根据 CMC 能力包生成结构化策略结果：结论、关键价位、场景、反证与风险边界。",
-                evidenceRefs: []
-            )
-        ]
+        var parts: [AgentMessagePart] = []
         parts.append(contentsOf: results.map(AgentMessagePart.strategyResult))
         if let source = results.first?.sourceMap.first {
             parts.append(.finalOutput(
@@ -1035,7 +1087,7 @@ extension AgentWorkspaceStateAdapter {
         streamEvents: [AgentStreamEvent]
     ) -> [AgentApprovalState] {
         let callApprovals = toolCalls.compactMap { call -> AgentApprovalState? in
-            guard approvalStatus(call.permission) != .allowed else { return nil }
+            guard shouldSurfaceApproval(action: call.toolName, rawStatus: call.permission) else { return nil }
             let artifacts = [call.artifactPath].compactMap { path -> RuntimeObjectReference? in
                 guard let path = nonEmpty(path) else { return nil }
                 return artifactReference(label: "\(toolDisplayName(call.toolName)) 记录", path: path, generatedAt: call.createdAt, runID: runIDFromArtifactPath(path))
@@ -1054,12 +1106,12 @@ extension AgentWorkspaceStateAdapter {
         let eventApprovals = streamEvents.compactMap { event -> AgentApprovalState? in
             guard event.type.lowercased().contains("policy"),
                   let rawStatus = nonEmpty(event.status),
-                  approvalStatus(rawStatus) != .allowed else {
+                  shouldSurfaceApproval(action: nonEmpty(event.toolName) ?? nonEmpty(event.action) ?? "policy", rawStatus: rawStatus) else {
                 return nil
             }
             return makeApprovalState(
                 id: "approval-\(event.eventID)",
-                action: nonEmpty(event.toolName) ?? "policy",
+                action: nonEmpty(event.toolName) ?? nonEmpty(event.action) ?? "policy",
                 rawStatus: rawStatus,
                 reason: event.reason,
                 artifactRefs: [event.artifactPath].compactMap { path in
@@ -1078,7 +1130,7 @@ extension AgentWorkspaceStateAdapter {
         (daemonStatus.policy ?? [:])
             .sorted { $0.key < $1.key }
             .compactMap { key, value -> AgentApprovalState? in
-                guard approvalStatus(value) != .allowed else { return nil }
+                guard shouldSurfaceApproval(action: key, rawStatus: value) else { return nil }
                 return makeApprovalState(
                     id: "policy-\(key)",
                     action: key,
@@ -1156,6 +1208,46 @@ extension AgentWorkspaceStateAdapter {
         return .allowed
     }
 
+    static func isInterruptingAction(_ action: String) -> Bool {
+        let value = action.lowercased()
+        let exact: Set<String> = [
+            "computer_use.request",
+            "computeruse",
+            "sendmessage",
+            "send_message",
+            "publishcontent",
+            "publish_external",
+            "publishexternal",
+            "trade",
+            "execute_trade",
+            "export_handoff_outside_project",
+            "destructive_file_operation",
+            "long_running_automation",
+        ]
+        if exact.contains(value) { return true }
+        return value.contains("computer_use") ||
+            value.contains("send_message") ||
+            value.contains("publish") ||
+            value.contains("trade") ||
+            value.contains("destructive") ||
+            value.contains("external_export")
+    }
+
+    static func shouldSurfaceApproval(action: String, rawStatus: String) -> Bool {
+        approvalStatus(rawStatus) == .needsApproval && isInterruptingAction(action)
+    }
+
+    static func shouldShowCapabilityInConversation(_ call: CapabilityCallState) -> Bool {
+        switch call.status {
+        case .running, .failed, .cancelled:
+            return true
+        case .waitingForApproval:
+            return isInterruptingAction(call.toolName)
+        case .blocked, .completed, .preparing:
+            return false
+        }
+    }
+
     static func threadStatus(
         sessionStatus: String?,
         runStatus: AgentCompactRunState.Status,
@@ -1165,9 +1257,6 @@ extension AgentWorkspaceStateAdapter {
     ) -> AgentThreadState.Status {
         if approvals.contains(where: { $0.status == .needsApproval }) {
             return .waitingForApproval
-        }
-        if approvals.contains(where: { $0.status == .blocked }) {
-            return .blocked
         }
         if runStatus != .idle {
             return AgentThreadState.Status(rawValue: runStatus.rawValue) ?? .running
@@ -1193,9 +1282,6 @@ extension AgentWorkspaceStateAdapter {
     ) -> AgentCompactRunState.Status {
         if approvals.contains(where: { $0.status == .needsApproval }) {
             return .waitingForApproval
-        }
-        if approvals.contains(where: { $0.status == .blocked }) {
-            return .blocked
         }
         if let latestEvent {
             if isFailedEvent(latestEvent) { return .failed }
@@ -1311,7 +1397,7 @@ extension AgentWorkspaceStateAdapter {
         case "run.started":
             return "开始执行"
         case "planner.envelope.created":
-            return "生成执行计划"
+            return "内部编排记录"
         case "policy.decision":
             return "安全检查"
         case "tool.call":
@@ -1340,8 +1426,8 @@ extension AgentWorkspaceStateAdapter {
         if let status = nonEmpty(event.status) {
             return statusLabel(status)
         }
-        if let artifactPath = nonEmpty(event.artifactPath) {
-            return "已写入本机记录：\(artifactPath)"
+        if nonEmpty(event.artifactPath) != nil {
+            return "已写入本机记录。"
         }
         return eventName(event.type)
     }
@@ -1389,7 +1475,7 @@ extension AgentWorkspaceStateAdapter {
         case "context":
             return "整理上下文"
         case "planner":
-            return "规划步骤"
+            return "内部编排"
         case "policy":
             return "安全边界"
         case "approval":
@@ -1466,12 +1552,14 @@ extension AgentWorkspaceStateAdapter {
         switch action {
         case "wechat.read_normalized_messages":
             return "读取本机微信消息（本地 normalized 文件，或经 wechat-cli 实时只读）。"
-        case "liveWechat":
-            return "读取本机微信数据（只读，经 wechat-cli），不发送。"
-        case "liveWechatCLI":
-            return "调用本机 wechat-cli 只读查询微信数据。"
+        case "liveWechat", "read_live_wechat":
+            return "读取本机微信数据（只读，经 daemon 刷新 artifact），不发送。"
+        case "liveWechatCLI", "run_live_wechat_cli", "wechat_cli.live_command":
+            return "原始 live wechat-cli 命令保持阻断；只允许 daemon 管理的只读 refresh。"
         case "computer_use.request", "computerUse":
             return "可能读取屏幕或操作本机应用；当前版本只记录申请。"
+        case "cmc.live_market_refresh", "cmc.daily_market_overview", "cmc.crypto_macro_overview", "cmc.detect_market_regime", "cmc.track_social_price_divergence", "cmc.classify_kline_pattern_quality", "cmc.read_market_evidence", "cmc.request_mcp_refresh":
+            return "读取 CMC / Crypto Skill Hub 市场数据，只写本机 normalized artifact。"
         case "trade":
             return "涉及交易、转账或资产操作。"
         case "sendMessage":
@@ -1520,8 +1608,8 @@ extension AgentWorkspaceStateAdapter {
     }
 
     static func finalOutputSummary(_ event: AgentStreamEvent) -> String {
-        if let artifactPath = nonEmpty(event.artifactPath) {
-            return "结果已保存到本机记录：\(artifactPath)"
+        if nonEmpty(event.artifactPath) != nil {
+            return "结果已保存到本机记录。"
         }
         return "Agent 已完成这次任务。"
     }
@@ -1585,14 +1673,33 @@ extension AgentWorkspaceStateAdapter {
 
     static func providerSummary(_ daemonStatus: AgentDaemonStatus) -> String {
         if daemonStatus.providers.isEmpty {
-            return "AI 模型未检查"
+            return "Agent 能力源未检查"
         }
-        let ready = daemonStatus.providers.filter(\.ready).map { $0.model ?? $0.provider }
-        if !ready.isEmpty {
-            return "AI 模型可用：\(ready.joined(separator: " / "))"
+        let connected = daemonStatus.providers
+            .filter { ($0.connected ?? $0.ready) && ($0.degraded ?? false) == false }
+            .map { providerDisplayName($0) }
+        if !connected.isEmpty {
+            return "Agent 能力源可用：\(connected.joined(separator: " / "))"
         }
         let missing = daemonStatus.providers.flatMap(\.missingEnv).joined(separator: ", ")
-        return missing.isEmpty ? "AI 模型未配置" : "AI 模型缺少 \(missing)"
+        return missing.isEmpty ? "Agent 能力源未配置" : "Agent 能力源缺少 \(missing)"
+    }
+
+    static func providerDisplayName(_ provider: AgentDaemonStatus.ProviderStatus) -> String {
+        switch provider.provider {
+        case "coinmarketcap":
+            if provider.connected == true {
+                return "CMC MCP"
+            }
+            if provider.configured == true {
+                return provider.providerType == "cmcRestProvider" ? "CMC REST" : "CMC 已配置"
+            }
+            return "CMC 未配置"
+        case "wechat-cli":
+            return provider.ready ? "WeChatCLI 只读" : "WeChatCLI 未启用"
+        default:
+            return provider.model ?? provider.provider
+        }
     }
 
     static func runDisplay(_ runID: String?) -> String {
@@ -1650,8 +1757,15 @@ extension AgentWorkspaceStateAdapter {
     }
 
     static func isCompletedEvent(_ event: AgentStreamEvent) -> Bool {
-        let value = "\(event.type) \(event.status ?? "")".lowercased()
-        return value.contains("completed")
+        let type = event.type.lowercased()
+        if type == "run.completed" { return true }
+        if type == "final_output.created" || type == "assistant.final" { return true }
+        return false
+    }
+
+    static func isTerminalEvent(_ event: AgentStreamEvent) -> Bool {
+        let type = event.type.lowercased()
+        return isCompletedEvent(event) || type == "run.failed" || type == "run.cancelled"
     }
 
     static func nonEmpty(_ value: String?) -> String? {

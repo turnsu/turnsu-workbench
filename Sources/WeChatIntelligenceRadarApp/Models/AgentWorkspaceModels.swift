@@ -18,6 +18,12 @@ struct AgentDaemonStatus: Codable, Hashable {
         let apiKeyEnv: String?
         let baseUrlConfigured: Bool?
         let model: String?
+        let state: String?
+        let connectionState: String?
+        let configured: Bool?
+        let connected: Bool?
+        let degraded: Bool?
+        let providerType: String?
         let rawSecretsReturned: Bool?
         let requestBodyReturned: Bool?
     }
@@ -46,8 +52,8 @@ struct AgentDaemonStatus: Codable, Hashable {
         tools: [],
         internalToolsExposed: false,
         policy: [
-            "liveWechat": "blocked",
-            "liveWechatCLI": "blocked",
+            "liveWechat": "read_only_auto_refresh_when_enabled",
+            "liveWechatCLI": "raw_cli_command_blocked",
             "trade": "blocked",
             "sendMessage": "blocked",
             "publishExternal": "blocked",
@@ -173,6 +179,8 @@ struct AgentStreamEvent: Codable, Hashable, Identifiable {
     let model: String?
     let artifactPath: String?
     let errorPreview: String?
+    var finalReadModelPath: String? = nil
+    var finalText: String? = nil
 
     var id: String { eventID }
 }
@@ -314,9 +322,328 @@ struct AgentRunManifest: Codable, Hashable {
     let artifacts: [AgentArtifactIndexItem]
     let redactionStatus: String?
     let finalOutputPath: String?
+    var finalReadModelPath: String? = nil
+    var productMutationPolicy: ProductMutationPolicy? = nil
     let toolCallCount: Int?
     let updatedAt: String?
     let completedAt: String?
+}
+
+struct AgentFinalReadModel: Codable, Hashable {
+    let schemaVersion: String
+    let runID: String
+    let taskID: String
+    let sessionID: String?
+    let status: String
+    let finalText: String
+    let finalTextSource: String
+    let outputGuardStatus: String
+    let outputGuardReason: String?
+    let cmcGateSummary: CMCGateSummary?
+    let productMutationPolicy: ProductMutationPolicy?
+    let generatedAt: String
+    let artifactPath: String?
+}
+
+struct CMCGateSummary: Codable, Hashable {
+    let status: String
+    let provider: String?
+    let freshness: String?
+    let transportStatus: String?
+    var skillHubDisplay: CMCSkillHubDisplaySummary? = nil
+    var skillHubDisplayStatus: String? = nil
+    var allowSkillHubResultDisplay: Bool? = nil
+    var displayableResultText: String? = nil
+    var displayableResultSource: String? = nil
+    var parserEvidenceStatus: String? = nil
+    var allowSkillHubReturnedPrices: Bool? = nil
+    var skillHubReturnedPriceTokenCount: Int? = nil
+    var skillHubReturnedTextSource: String? = nil
+    var skillHubReturnedTextCharCount: Int? = nil
+    var researchEvidence: CMCResearchEvidenceSummary? = nil
+    let researchEvidenceStatus: String?
+    let readableEvidenceCount: Int?
+    let emptyEvidenceReason: String?
+    var priceSnapshot: CMCPriceSnapshotSummary? = nil
+    let priceSnapshotStatus: String?
+    let assetCount: Int?
+    let allowResearchConclusion: Bool?
+    let allowConcretePrices: Bool?
+    let reason: String?
+}
+
+struct CMCSkillHubDisplaySummary: Codable, Hashable {
+    let status: String?
+    let allowSkillHubResultDisplay: Bool?
+    let displayableResultText: String?
+    let displayableResultSource: String?
+    let parserEvidenceStatus: String?
+    let allowSkillHubReturnedPrices: Bool?
+    let skillHubReturnedPriceTokenCount: Int?
+    let skillHubReturnedTextSource: String?
+    let skillHubReturnedTextCharCount: Int?
+}
+
+struct CMCResearchEvidenceSummary: Codable, Hashable {
+    let status: String?
+    let readableEvidenceCount: Int?
+    let emptyEvidenceReason: String?
+    let source: String?
+    let allowResearchConclusion: Bool?
+}
+
+struct CMCPriceSnapshotSummary: Codable, Hashable {
+    let status: String?
+    let assetCount: Int?
+    let allowConcretePrices: Bool?
+    let provider: String?
+    let freshness: String?
+}
+
+struct CMCCapabilitySummary: Codable, Hashable {
+    let schemaVersion: String?
+    let capabilityID: String
+    let displayName: String
+    let packageTitle: String
+    let runID: String?
+    let mountStatus: String?
+    let transportStatus: String?
+    let provider: String?
+    let skill: String?
+    let status: String?
+    let confidence: String?
+    let summary: String?
+    let readableEvidence: [CMCCapabilityEvidenceSection]?
+    let readableEvidenceCount: Int?
+    var skillHubDisplayStatus: String? = nil
+    var allowSkillHubResultDisplay: Bool? = nil
+    var displayableResultText: String? = nil
+    var displayableResultSource: String? = nil
+    var parserEvidenceStatus: String? = nil
+    var allowSkillHubReturnedPrices: Bool? = nil
+    var skillHubReturnedPriceTokenCount: Int? = nil
+    var skillHubReturnedTextSource: String? = nil
+    var skillHubReturnedTextCharCount: Int? = nil
+    let researchEvidenceStatus: String?
+    let emptyEvidenceReason: String?
+    let priceSnapshotStatus: String?
+    let assetCount: Int?
+    let allowResearchConclusion: Bool?
+    let allowConcretePrices: Bool?
+    let missingOrStaleInputs: [String]?
+    let notableAnomalies: [String]?
+    let generatedAt: String?
+    let sourceObservationCount: Int?
+}
+
+struct CMCCapabilityEvidenceSection: Codable, Hashable, Identifiable {
+    var id: String { title }
+    let title: String
+    let bullets: [String]
+}
+
+struct ProductMutationPolicy: Codable, Hashable {
+    let status: String
+    let reason: String?
+    let decidedAt: String?
+}
+
+struct HarnessSessionTreeReadModel: Codable, Hashable {
+    let schemaVersion: String
+    let sessionID: String
+    let rootRunID: String
+    let activeBranchID: String
+    let branches: [HarnessBranchReadModel]
+    let reviewBranches: [HarnessBranchReadModel]
+    let terminalBranches: [String]
+    let createdAt: String
+    let updatedAt: String
+    let artifactPath: String?
+}
+
+struct HarnessBranchReadModel: Codable, Hashable, Identifiable {
+    var id: String { branchID }
+    let branchID: String
+    let runID: String
+    let parentBranchID: String?
+    let branchType: String
+    let status: String
+    let sourceStepID: String?
+    let finalReadModelPath: String?
+    let reviewReadModelPath: String?
+    let createdAt: String
+    let updatedAt: String
+}
+
+struct HarnessBranchLineageReadModel: Codable, Hashable {
+    let schemaVersion: String
+    let sessionID: String
+    let runID: String
+    let branchID: String
+    let parentBranchID: String?
+    let sourceRunID: String?
+    let sourceStepID: String?
+    let branchType: String
+    let mergeTargetBranchID: String?
+    let mergeDecision: String
+    let mergeReason: String?
+    let relatedBranches: [HarnessBranchLineageBranch]?
+    let createdAt: String?
+    let updatedAt: String?
+    let artifactPath: String?
+}
+
+struct HarnessBranchLineageBranch: Codable, Hashable, Identifiable {
+    var id: String { branchID }
+    let runID: String
+    let branchID: String
+    let parentBranchID: String?
+    let sourceRunID: String?
+    let sourceStepID: String?
+    let branchType: String
+    let mergeTargetBranchID: String?
+    let mergeDecision: String
+    let mergeReason: String?
+    let reviewReadModelPath: String?
+    let createdAt: String?
+}
+
+struct ReviewReadModel: Codable, Hashable {
+    let schemaVersion: String
+    let reviewRunID: String
+    let sourceRunID: String
+    let sourceBranchID: String
+    let status: String
+    let findings: [ReviewFinding]
+    let checkedArtifacts: [ReviewCheckedArtifact]
+    let cmcGateSummary: CMCGateSummary?
+    let outputGuardStatus: String
+    let mutationPolicyAssessment: ReviewMutationPolicyAssessment?
+    let mergeRecommendation: String
+    let generatedAt: String
+    let artifactPath: String?
+}
+
+struct ReviewFinding: Codable, Hashable, Identifiable {
+    var id: String { findingID }
+    let findingID: String
+    let severity: String
+    let title: String
+    let detail: String
+    let artifactPath: String?
+}
+
+struct ReviewCheckedArtifact: Codable, Hashable {
+    let name: String
+    let artifactPath: String
+    let status: String
+}
+
+struct ReviewMutationPolicyAssessment: Codable, Hashable {
+    let status: String
+    let reason: String?
+    let importAllowed: Bool
+}
+
+struct CapabilityLoopReadModel: Codable, Hashable {
+    let schemaVersion: String
+    let runID: String
+    let taskID: String
+    let sessionID: String?
+    let loopType: String
+    let status: String
+    let title: String
+    let userGoal: String?
+    let capabilityPackages: [CapabilityLoopPackage]
+    let finalReadModelPath: String?
+    let review: CapabilityLoopReviewSummary
+    let followUpSuggestions: [CapabilityLoopSuggestion]
+    let cmcCapabilitySummaryPath: String?
+    let memoryReadModelPath: String?
+    let subagentCoordinationReadModelPath: String?
+    let generatedAt: String
+    let artifactPath: String?
+}
+
+struct CapabilityLoopPackage: Codable, Hashable, Identifiable {
+    var id: String { packageID }
+    let packageID: String
+    let displayName: String
+    let domain: String
+    let status: String
+    let summary: String?
+}
+
+struct CapabilityLoopReviewSummary: Codable, Hashable {
+    let status: String
+    let ready: Bool
+    let actionLabel: String?
+    let reviewReadModelPath: String?
+    let mergeRecommendation: String?
+}
+
+struct CapabilityLoopSuggestion: Codable, Hashable, Identifiable {
+    var id: String { suggestionID }
+    let suggestionID: String
+    let title: String
+    let prompt: String
+}
+
+struct AgentMemoryReadModel: Codable, Hashable {
+    let schemaVersion: String
+    let runID: String
+    let taskID: String
+    let sessionID: String?
+    let status: String
+    let adapter: String
+    let adapterPath: String?
+    let reason: String?
+    let writePolicy: AgentMemoryWritePolicy
+    let candidateMemories: [AgentMemoryCandidate]
+    let redaction: AgentMemoryRedaction
+    let generatedAt: String
+    let artifactPath: String?
+}
+
+struct AgentMemoryWritePolicy: Codable, Hashable {
+    let status: String
+    let reason: String?
+    let requiresHumanReview: Bool
+}
+
+struct AgentMemoryCandidate: Codable, Hashable, Identifiable {
+    var id: String { memoryID }
+    let memoryID: String
+    let type: String
+    let title: String
+    let preview: String
+    let sourceArtifactPath: String?
+    let reviewRequired: Bool
+}
+
+struct AgentMemoryRedaction: Codable, Hashable {
+    let rawProviderPayloadStored: Bool
+    let secretsStored: Bool
+    let privateTranscriptStored: Bool
+}
+
+struct SubagentCoordinationReadModel: Codable, Hashable {
+    let schemaVersion: String
+    let runID: String
+    let taskID: String
+    let sessionID: String?
+    let status: String
+    let coordinator: String
+    let tmuxVersion: String?
+    let namespace: String
+    let mode: String
+    let reason: String?
+    let plannedRoles: [String]
+    let allowedOperations: [String]
+    let blockedOperations: [String]
+    let sessions: [String]
+    let generatedAt: String
+    let artifactPath: String?
 }
 
 struct AgentToolRegistryPayload: Codable {
@@ -324,6 +651,37 @@ struct AgentToolRegistryPayload: Codable {
     let skills: [AgentSkillManifest]
     let extensions: [AgentExtensionManifest]
     let templates: [AgentSurfaceTemplateManifest]?
+    let providers: [AgentDaemonStatus.ProviderStatus]?
+    let extensionPackages: [AgentExtensionPackageStatus]?
     let tools: [AgentToolManifest]
     let internalToolsExposed: Bool?
+}
+
+struct AgentExtensionPackageStatus: Codable, Hashable, Identifiable {
+    var id: String { packageID }
+    let packageID: String
+    let extensionID: String?
+    let title: String?
+    let mountState: String?
+    let configuredState: String?
+    let publicStatus: String?
+    let publicSummary: String?
+    let manifestToolCount: Int?
+    let registeredToolCount: Int?
+    let missingInternalTools: [String]?
+    let piInitialized: Bool?
+
+    private enum CodingKeys: String, CodingKey {
+        case packageID = "id"
+        case extensionID
+        case title
+        case mountState
+        case configuredState
+        case publicStatus
+        case publicSummary
+        case manifestToolCount
+        case registeredToolCount
+        case missingInternalTools
+        case piInitialized
+    }
 }

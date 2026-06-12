@@ -42,8 +42,8 @@ struct PolicyGate {
         case .readWeChatCLIExportFile:
             return PolicyDecision(
                 action: action.rawValue,
-                status: "needs_confirmation",
-                reason: "仅允许用户主动提供的 wechat-cli export JSON；导入前需要确认隐私边界。"
+                status: "pass",
+                reason: "仅处理本机或用户提供的 wechat-cli export JSON，不发送、不外发。"
             )
         case .runLiveWeChatCLI:
             return PolicyDecision(
@@ -54,8 +54,8 @@ struct PolicyGate {
         case .readLiveWeChat:
             return PolicyDecision(
                 action: action.rawValue,
-                status: "blocked",
-                reason: "用户限制 MVP 阶段不能擅自接入当前电脑微信。"
+                status: "pass",
+                reason: "WECHAT_LIVE_ENABLED 启用后允许本机只读刷新微信 artifact；不发送、不注入原始聊天。"
             )
         case .generateBriefing:
             return PolicyDecision(
@@ -126,14 +126,14 @@ struct PolicyGate {
         case .requestMarketBridgeRefresh:
             return PolicyDecision(
                 action: action.rawValue,
-                status: "needs_confirmation",
-                reason: "外部 CMC/MCP refresh 必须由外部 agent 写 normalized JSON，Swift 不直连。"
+                status: "pass",
+                reason: "CMC/MCP refresh 由本地 daemon provider chain 执行，Swift 不直连外部网络。"
             )
         case .requestOnchainBridgeRefresh:
             return PolicyDecision(
                 action: action.rawValue,
-                status: "needs_confirmation",
-                reason: "外部 RPC/DEX bridge 必须由授权流程写 normalized JSON，Swift 不直连。"
+                status: "pass",
+                reason: "只允许本地 bridge 写 normalized on-chain artifact，不执行交易。"
             )
         case .executeTrade:
             return PolicyDecision(

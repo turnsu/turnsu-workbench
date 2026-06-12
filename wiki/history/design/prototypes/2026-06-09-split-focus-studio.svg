@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">Split Focus Studio prototype</title>
+  <desc id="desc">Apple minimal desktop prototype for research-heavy split focus workflow.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f6f7f9; }
+      .surface { fill: #ffffff; stroke: #dfe3ea; stroke-width: 1; }
+      .soft { fill: #f1f4f8; stroke: #e2e6ed; stroke-width: 1; }
+      .selected { fill: #e9f1ff; stroke: #9ec5ff; stroke-width: 1; }
+      .text { fill: #171923; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", sans-serif; }
+      .muted { fill: #687386; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif; }
+      .blue { fill: #2563eb; }
+      .green { fill: #16a34a; }
+      .amber { fill: #d97706; }
+      .red { fill: #dc2626; }
+      .title { font-size: 25px; font-weight: 650; }
+      .h2 { font-size: 19px; font-weight: 650; }
+      .body { font-size: 16px; }
+      .small { font-size: 14px; }
+      .tiny { font-size: 12px; }
+      .shadow { filter: drop-shadow(0 14px 28px rgba(15, 23, 42, .08)); }
+    </style>
+  </defs>
+  <rect class="bg" width="1440" height="900"/>
+
+  <rect x="24" y="24" width="1392" height="852" rx="30" class="surface shadow"/>
+  <rect x="52" y="52" width="1336" height="48" rx="16" class="soft"/>
+  <text x="78" y="82" class="muted body">looloomi · Split Focus Studio · Research session</text>
+  <rect x="1160" y="60" width="92" height="32" rx="12" class="surface"/>
+  <text x="1206" y="81" text-anchor="middle" class="muted tiny">Library</text>
+  <rect x="1264" y="60" width="98" height="32" rx="12" class="selected"/>
+  <text x="1313" y="81" text-anchor="middle" class="text tiny">Workbench</text>
+
+  <rect x="52" y="126" width="312" height="720" rx="24" class="soft"/>
+  <text x="84" y="168" class="text h2">Sources</text>
+  <rect x="84" y="198" width="248" height="42" rx="14" class="selected"/>
+  <text x="108" y="225" class="text small">CMC Skill Hub</text>
+  <rect x="84" y="252" width="248" height="42" rx="14" class="surface"/>
+  <text x="108" y="279" class="muted small">WeChat context</text>
+  <rect x="84" y="306" width="248" height="42" rx="14" class="surface"/>
+  <text x="108" y="333" class="muted small">Meeting draft</text>
+  <text x="84" y="388" class="muted tiny">CONTEXT PACK</text>
+  <rect x="84" y="410" width="248" height="86" rx="16" class="surface"/>
+  <text x="108" y="442" class="text small" font-weight="650">Macro regime notes</text>
+  <text x="108" y="470" class="muted tiny">3 snippets · trusted</text>
+  <rect x="84" y="512" width="248" height="86" rx="16" class="surface"/>
+  <text x="108" y="544" class="text small" font-weight="650">ETF flow references</text>
+  <text x="108" y="572" class="muted tiny">2 snippets · current</text>
+  <rect x="84" y="700" width="248" height="92" rx="18" class="surface"/>
+  <text x="108" y="734" class="text small" font-weight="650">Source trust</text>
+  <text x="108" y="762" class="muted tiny">No raw provider visible</text>
+
+  <rect x="388" y="126" width="646" height="720" rx="24" class="surface"/>
+  <text x="424" y="176" class="text title">BTC macro thesis review</text>
+  <text x="424" y="206" class="muted body">Active task canvas with authoritative final and inline deliverables.</text>
+  <rect x="424" y="240" width="152" height="34" rx="12" fill="#e9f7ef"/>
+  <text x="500" y="262" text-anchor="middle" class="text tiny">Result usable</text>
+  <rect x="588" y="240" width="140" height="34" rx="12" fill="#fff7ed"/>
+  <text x="658" y="262" text-anchor="middle" class="text tiny">Prices empty</text>
+  <rect x="740" y="240" width="142" height="34" rx="12" class="soft"/>
+  <text x="811" y="262" text-anchor="middle" class="muted tiny">Mutations off</text>
+
+  <rect x="424" y="316" width="574" height="262" rx="22" class="soft"/>
+  <text x="456" y="358" class="text h2">Final</text>
+  <text x="456" y="396" class="text body">Skill Hub 的返回摘要支持继续观察宏观结构，但不能从 App 侧新增价格位。</text>
+  <text x="456" y="430" class="muted body">Review branch 不覆盖主 final。证据和 policy 可从右侧复核。</text>
+  <rect x="456" y="490" width="160" height="38" rx="13" class="surface"/>
+  <text x="536" y="515" text-anchor="middle" class="muted small">复制结论</text>
+  <rect x="630" y="490" width="180" height="38" rx="13" class="surface"/>
+  <text x="720" y="515" text-anchor="middle" class="muted small">生成 follow-up</text>
+
+  <rect x="424" y="620" width="574" height="176" rx="22" class="surface"/>
+  <text x="456" y="662" class="text h2">Command Composer</text>
+  <text x="456" y="702" class="muted body">继续追问、加入上下文，或切换能力包...</text>
+  <rect x="456" y="734" width="132" height="32" rx="12" class="soft"/>
+  <text x="522" y="755" text-anchor="middle" class="muted tiny">CMC</text>
+  <rect x="600" y="734" width="160" height="32" rx="12" class="soft"/>
+  <text x="680" y="755" text-anchor="middle" class="muted tiny">Office / Meeting</text>
+  <rect x="834" y="724" width="132" height="42" rx="15" class="blue"/>
+  <text x="900" y="751" text-anchor="middle" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="15" font-weight="650">提交</text>
+
+  <rect x="1058" y="126" width="330" height="720" rx="24" class="soft"/>
+  <text x="1090" y="168" class="text h2">Review</text>
+  <rect x="1090" y="198" width="266" height="88" rx="16" class="surface"/>
+  <circle cx="1116" cy="228" r="6" class="green"/>
+  <text x="1134" y="233" class="text small" font-weight="650">Final read model</text>
+  <text x="1134" y="260" class="muted tiny">single source of truth</text>
+  <rect x="1090" y="302" width="266" height="88" rx="16" class="surface"/>
+  <circle cx="1116" cy="332" r="6" class="amber"/>
+  <text x="1134" y="337" class="text small" font-weight="650">Policy</text>
+  <text x="1134" y="364" class="muted tiny">No external publish</text>
+  <rect x="1090" y="406" width="266" height="88" rx="16" class="surface"/>
+  <circle cx="1116" cy="436" r="6" class="blue"/>
+  <text x="1134" y="441" class="text small" font-weight="650">Evidence</text>
+  <text x="1134" y="468" class="muted tiny">Display result, no new prices</text>
+  <rect x="1090" y="536" width="266" height="188" rx="18" class="surface"/>
+  <text x="1118" y="576" class="text small" font-weight="650">Branch lineage</text>
+  <line x1="1124" y1="612" x2="1124" y2="680" stroke="#cbd5e1" stroke-width="2"/>
+  <circle cx="1124" cy="612" r="7" class="blue"/>
+  <text x="1146" y="617" class="muted tiny">main run</text>
+  <circle cx="1124" cy="650" r="7" class="green"/>
+  <text x="1146" y="655" class="muted tiny">review branch</text>
+  <circle cx="1124" cy="688" r="7" class="amber"/>
+  <text x="1146" y="693" class="muted tiny">follow-up pending</text>
+</svg>

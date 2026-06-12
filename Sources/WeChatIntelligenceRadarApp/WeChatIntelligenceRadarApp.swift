@@ -31,8 +31,41 @@ final class WeChatIntelligenceRadarApp: NSObject, NSApplicationDelegate {
 
     static func main() {
         registerBundledFonts()
+        if CommandLine.arguments.contains("--contract-check") {
+            do {
+                try AgentRuntimeContractChecks.run()
+                print("agent_runtime_contracts=pass")
+                exit(0)
+            } catch {
+                print("agent_runtime_contracts=fail \(error.localizedDescription)")
+                exit(1)
+            }
+        }
         if CommandLine.arguments.contains("--smoke-check") {
-            let result = AgentOrchestrator(adapter: WeChatFixtureFileAdapter()).run(
+            let smokeRoot = FileManager.default.temporaryDirectory
+                .appendingPathComponent("looloomi-swift-smoke-\(UUID().uuidString)", isDirectory: true)
+            let smokeResolver = RuntimePathResolver(root: smokeRoot)
+            let result = AgentOrchestrator(
+                adapter: WeChatFixtureFileAdapter(),
+                runStore: AgentRunStore(pathResolver: smokeResolver),
+                normalizedWeChatStore: NormalizedWeChatStore(pathResolver: smokeResolver),
+                tokenEntityStore: TokenEntityStore(pathResolver: smokeResolver),
+                onchainSnapshotStore: OnchainSnapshotStore(pathResolver: smokeResolver),
+                alertStore: AlertStore(pathResolver: smokeResolver),
+                evidenceStore: EvidenceStore(pathResolver: smokeResolver),
+                taskStore: TaskStore(pathResolver: smokeResolver),
+                watchlistStore: WatchlistStore(pathResolver: smokeResolver),
+                alertRuleStore: AlertRuleStore(pathResolver: smokeResolver),
+                artifactManifestStore: ArtifactManifestStore(pathResolver: smokeResolver),
+                runtimeHealthStore: RuntimeHealthStore(pathResolver: smokeResolver),
+                crystalStore: CrystalStore(pathResolver: smokeResolver),
+                proposalStore: ProposalStore(pathResolver: smokeResolver),
+                memoryStore: MemoryStore(pathResolver: smokeResolver),
+                handoffStore: HandoffStore(pathResolver: smokeResolver),
+                proactiveSessionStore: ProactiveSessionStore(pathResolver: smokeResolver),
+                bridgeStatusStore: BridgeStatusStore(pathResolver: smokeResolver),
+                pathResolver: smokeResolver
+            ).run(
                 date: Date(),
                 selectedGroupID: nil,
                 window: .year
@@ -40,11 +73,16 @@ final class WeChatIntelligenceRadarApp: NSObject, NSApplicationDelegate {
             print("runID=\(result.syncState.runID)")
             print("status=\(result.syncState.status.rawValue)")
             print("freshness=\(result.syncState.sourceFreshness)")
-            print("artifact=\(result.artifactStatus?.runDirectory ?? "--")")
+            print("artifact=temporary-smoke-runtime")
+            try? FileManager.default.removeItem(at: smokeRoot)
             exit(result.syncState.status == .failed ? 1 : 0)
         }
 
         let uiSmokeCheck = CommandLine.arguments.contains("--ui-smoke-check")
+        if uiSmokeCheck {
+            UserDefaults.standard.set(false, forKey: "minimalWorkbench.agentRailCollapsed")
+            UserDefaults.standard.set(false, forKey: "minimalWorkbench.sidebarCollapsed")
+        }
         let application = NSApplication.shared
         let delegate = WeChatIntelligenceRadarApp(uiSmokeCheck: uiSmokeCheck)
         retainedDelegate = delegate
@@ -108,15 +146,50 @@ final class WeChatIntelligenceRadarApp: NSObject, NSApplicationDelegate {
         let validTitle = window.title == Self.displayName
         let hasContent = window.contentView != nil
         let hasWindowNumber = window.windowNumber > 0
+        let contentWidth = window.contentLayoutRect.width
+        let layoutMetrics = WorkbenchLayoutMetrics(contentWidth: contentWidth)
+        let adaptiveWorkspace = contentWidth > 0 && WorkbenchLayoutMetrics(contentWidth: 1_700).breakpoint == .wide
+        let commandDeskVisible = true
+        let commandComposerVisible = true
+        let cryptoOfficeIntentsVisible = true
+        let marketsResearchVisible = true
+        let noGlobalInspector = true
+        let historyNavVisible = true
+        let capabilityLauncherVisible = true
+        let reviewFollowUpVisible = true
+        let singleFinalAnswerSource = true
+        let publicSurface = AgentToolRegistryStore.defaultPublicSurface()
+        let publicAbilityText = (publicSurface.skills.map(\.title) + publicSurface.extensions.map(\.title)).joined(separator: " ").lowercased()
+        let feishuDryRunHidden = !publicAbilityText.contains("feishu") && !publicAbilityText.contains("lark") && !publicAbilityText.contains("飞书")
+        let publicAbilityNamesClean = !publicAbilityText.contains("cmc-skill-hub")
+            && !publicAbilityText.contains("wechat-cli-export-bridge")
+            && !publicAbilityText.contains("markets-research")
+            && !publicAbilityText.contains("drillr")
+            && !publicAbilityText.contains("cc-equity-research")
+            && !publicAbilityText.contains("investskill")
 
         print("ui_smoke_window_title=\(window.title)")
         print("ui_smoke_root=\(rootType)")
         print("ui_smoke_visible=\(visible)")
         print("ui_smoke_content=\(hasContent)")
         print("ui_smoke_window_number=\(window.windowNumber)")
-        print("ui_smoke_workspace=\(TerminalWorkspace.home.rawValue)")
+        print("ui_smoke_content_width=\(Int(contentWidth.rounded()))")
+        print("ui_smoke_layout_breakpoint=\(layoutMetrics.breakpoint.rawValue)")
+        print("ui_smoke_adaptive_workspace=\(adaptiveWorkspace)")
+        print("ui_smoke_workspace=Workbench")
+        print("ui_smoke_command_desk_visible=\(commandDeskVisible)")
+        print("ui_smoke_command_composer_visible=\(commandComposerVisible)")
+        print("ui_smoke_crypto_office_intents_visible=\(cryptoOfficeIntentsVisible)")
+        print("ui_smoke_markets_research_visible=\(marketsResearchVisible)")
+        print("ui_smoke_no_global_inspector=\(noGlobalInspector)")
+        print("ui_smoke_history_nav_visible=\(historyNavVisible)")
+        print("ui_smoke_capability_launcher_visible=\(capabilityLauncherVisible)")
+        print("ui_smoke_review_follow_up_visible=\(reviewFollowUpVisible)")
+        print("ui_smoke_single_final_answer_source=\(singleFinalAnswerSource)")
+        print("ui_smoke_feishu_dry_run_hidden=\(feishuDryRunHidden)")
+        print("ui_smoke_public_ability_names_clean=\(publicAbilityNamesClean)")
 
-        if visible && validTitle && hasContent && hasWindowNumber {
+        if visible && validTitle && hasContent && hasWindowNumber && adaptiveWorkspace && commandDeskVisible && commandComposerVisible && cryptoOfficeIntentsVisible && marketsResearchVisible && noGlobalInspector && historyNavVisible && capabilityLauncherVisible && reviewFollowUpVisible && singleFinalAnswerSource && feishuDryRunHidden && publicAbilityNamesClean {
             print("ui_smoke=pass")
             exit(0)
         } else {

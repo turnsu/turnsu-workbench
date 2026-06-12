@@ -153,12 +153,16 @@ struct MarketAsset: Identifiable, Hashable, Codable {
     let marketCapUSD: Double
     let source: String
     let isLive: Bool
+    var observedAt: String? = nil
 }
 
 struct MarketDataSnapshot: Hashable, Codable {
+    var schemaVersion: String? = nil
     let status: String
     let sourceName: String
+    var provider: String? = nil
     let generatedAt: String
+    var observedAt: String? = nil
     let expiresAt: String
     let freshness: String
     let lastVerifiedAt: String
@@ -169,7 +173,9 @@ struct MarketDataSnapshot: Hashable, Codable {
     static let blocked = MarketDataSnapshot(
         status: "blocked",
         sourceName: "CoinMarketCap MCP",
+        provider: nil,
         generatedAt: "--",
+        observedAt: nil,
         expiresAt: "--",
         freshness: "blocked",
         lastVerifiedAt: "--",
@@ -277,17 +283,17 @@ enum TerminalWorkspace: String, CaseIterable, Identifiable, Hashable, Codable {
     var displayName: String {
         switch self {
         case .home:
-            return "首页"
+            return "工作台"
         case .inbox:
-            return "微信收件箱"
+            return "历史"
         case .token:
             return "Token 详情"
         case .watchlist:
             return "观察列表"
         case .agents:
-            return "Agent 工作台"
+            return "Agent Console"
         case .ops:
-            return "数据与运维"
+            return "设置"
         }
     }
 
@@ -296,7 +302,7 @@ enum TerminalWorkspace: String, CaseIterable, Identifiable, Hashable, Codable {
         case .home:
             return "rectangle.grid.2x2"
         case .inbox:
-            return "tray.full"
+            return "clock.arrow.circlepath"
         case .token:
             return "bitcoinsign.circle"
         case .watchlist:

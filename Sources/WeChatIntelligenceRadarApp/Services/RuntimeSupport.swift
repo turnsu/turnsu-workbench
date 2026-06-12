@@ -48,18 +48,53 @@ struct RuntimePathResolver {
     }
 
     static func findProjectRoot(fileManager: FileManager = .default) -> URL {
-        var candidate = URL(fileURLWithPath: fileManager.currentDirectoryPath)
-        for _ in 0..<8 {
-            let packageFile = candidate.appendingPathComponent("Package.swift")
-            if fileManager.fileExists(atPath: packageFile.path) {
-                return candidate
+        let environment = ProcessInfo.processInfo.environment
+        for key in ["LOOLOOMI_PROJECT_ROOT", "WECHAT_INTELLIGENCE_PROJECT_ROOT", "WECHAT_RADAR_PROJECT_ROOT"] {
+            if let value = environment[key],
+               let root = projectRootCandidate(startingAt: URL(fileURLWithPath: value), fileManager: fileManager) {
+                return root
             }
-            candidate.deleteLastPathComponent()
+        }
+
+        if let value = Bundle.main.object(forInfoDictionaryKey: "LooloomiProjectRoot") as? String,
+           let root = projectRootCandidate(startingAt: URL(fileURLWithPath: value), fileManager: fileManager) {
+            return root
+        }
+
+        let candidates = [
+            URL(fileURLWithPath: fileManager.currentDirectoryPath),
+            Bundle.main.bundleURL,
+            Bundle.main.executableURL,
+            Bundle.main.resourceURL
+        ].compactMap { $0 }
+
+        for candidate in candidates {
+            if let root = projectRootCandidate(startingAt: candidate, fileManager: fileManager) {
+                return root
+            }
         }
 
         let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
         return support?.appendingPathComponent("WeChatIntelligenceRadarMVP", isDirectory: true)
             ?? URL(fileURLWithPath: fileManager.currentDirectoryPath)
+    }
+
+    static func projectRootCandidate(startingAt start: URL, fileManager: FileManager = .default) -> URL? {
+        var candidate = start.standardizedFileURL
+        var isDirectory = ObjCBool(false)
+        if fileManager.fileExists(atPath: candidate.path, isDirectory: &isDirectory), !isDirectory.boolValue {
+            candidate.deleteLastPathComponent()
+        }
+
+        for _ in 0..<12 {
+            if fileManager.fileExists(atPath: candidate.appendingPathComponent("Package.swift").path) {
+                return candidate
+            }
+            let previous = candidate
+            candidate.deleteLastPathComponent()
+            if candidate.path == previous.path { break }
+        }
+        return nil
     }
 }
 

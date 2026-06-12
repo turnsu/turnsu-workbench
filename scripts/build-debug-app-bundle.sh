@@ -69,6 +69,10 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+if [[ -x /usr/libexec/PlistBuddy ]]; then
+  /usr/libexec/PlistBuddy -c "Add :LooloomiProjectRoot string $ROOT_DIR" "$CONTENTS_DIR/Info.plist" >/dev/null 2>&1 || true
+fi
+
 if command -v codesign >/dev/null 2>&1; then
   codesign --force --deep --sign - "$APP_DIR" >/dev/null
 fi

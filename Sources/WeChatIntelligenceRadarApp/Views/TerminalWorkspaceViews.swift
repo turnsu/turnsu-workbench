@@ -2,88 +2,272 @@ import SwiftUI
 
 struct LibraryWorkspaceView: View {
     @ObservedObject var viewModel: DashboardViewModel
+    let metrics: WorkbenchLayoutMetrics
+    @State private var historyMode: HistoryWorkspaceMode = .results
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("资料库")
+                    Text("历史")
                         .font(RadarFont.display(24, .bold))
                         .foregroundStyle(RadarTheme.primaryText)
-                    Text("微信线索、Token 和观察项都收在这里，不打断今日工作台。")
+                    Text("恢复已完成结果、草稿和可继续追问的任务。资料连接器只作为后台能力保留。")
                         .font(.system(size: 12))
                         .foregroundStyle(RadarTheme.secondaryText)
                 }
                 Spacer()
-                Picker("Library", selection: Binding(
-                    get: { librarySelection },
-                    set: { viewModel.select(workspace: $0) }
-                )) {
-                    Text("微信").tag(TerminalWorkspace.inbox)
-                    Text("Token").tag(TerminalWorkspace.token)
-                    Text("观察").tag(TerminalWorkspace.watchlist)
+                Picker("历史筛选", selection: historyModeBinding) {
+                    ForEach(HistoryWorkspaceMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: 260)
+                .frame(maxWidth: metrics.isCompact ? 320 : 420)
+                ResearchStatusChip(label: "\(viewModel.agentTasks.count) 任务", color: RadarTheme.blue)
             }
             .padding(18)
             .researchPanel()
 
             Group {
-                switch librarySelection {
-                case .inbox:
-                    WeChatInboxWorkspaceView(viewModel: viewModel)
+                switch effectiveHistoryMode {
+                case .results:
+                    HistoryWorkspaceContent(viewModel: viewModel, metrics: metrics)
+                case .wechat:
+                    WeChatInboxWorkspaceView(viewModel: viewModel, metrics: metrics)
                 case .token:
-                    TokenTerminalWorkspaceView(viewModel: viewModel)
+                    TokenTerminalWorkspaceView(viewModel: viewModel, metrics: metrics)
                 case .watchlist:
-                    WatchlistWorkspaceView(viewModel: viewModel)
-                default:
-                    WeChatInboxWorkspaceView(viewModel: viewModel)
+                    WatchlistWorkspaceView(viewModel: viewModel, metrics: metrics)
                 }
             }
-            .id(librarySelection)
+            .id(effectiveHistoryMode)
             .transition(.opacity.combined(with: .offset(y: 8)))
         }
-        .animation(RadarMotion.smooth, value: librarySelection)
+        .animation(RadarMotion.smooth, value: effectiveHistoryMode)
     }
 
-    private var librarySelection: TerminalWorkspace {
+    private var effectiveHistoryMode: HistoryWorkspaceMode {
         switch viewModel.selectedWorkspace {
-        case .token, .watchlist:
-            return viewModel.selectedWorkspace
+        case .token:
+            return .token
+        case .watchlist:
+            return .watchlist
         default:
-            return .inbox
+            return historyMode
         }
+    }
+
+    private var historyModeBinding: Binding<HistoryWorkspaceMode> {
+        Binding(
+            get: { effectiveHistoryMode },
+            set: { mode in
+                historyMode = mode
+                switch mode {
+                case .results, .wechat:
+                    viewModel.select(workspace: .inbox)
+                case .token:
+                    viewModel.select(workspace: .token)
+                case .watchlist:
+                    viewModel.select(workspace: .watchlist)
+                }
+            }
+        )
+    }
+}
+
+private enum HistoryWorkspaceMode: String, CaseIterable, Identifiable {
+    case results
+    case wechat
+    case token
+    case watchlist
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .results: return "结果"
+        case .wechat: return "微信线索"
+        case .token: return "Token"
+        case .watchlist: return "观察"
+        }
+    }
+}
+
+private struct HistoryWorkspaceContent: View {
+    @ObservedObject var viewModel: DashboardViewModel
+    let metrics: WorkbenchLayoutMetrics
+
+    var body: some View {
+        if metrics.isCompact {
+            VStack(alignment: .leading, spacing: metrics.workspaceSpacing) {
+                resultsPanel
+                draftsPanel
+            }
+        } else {
+            HStack(alignment: .top, spacing: metrics.workspaceSpacing) {
+                resultsPanel
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                draftsPanel
+                    .frame(width: metrics.supportColumnWidth)
+            }
+        }
+    }
+
+    private var resultsPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            PanelHeader(icon: "checklist.checked", title: "结果记录", trailing: "\(viewModel.agentTasks.count)")
+            if viewModel.agentTasks.isEmpty {
+                EmptyStateText(text: "暂无任务记录")
+            } else {
+                ForEach(viewModel.agentTasks.sorted { $0.updatedAt > $1.updatedAt }.prefix(12)) { task in
+                    Button {
+                        viewModel.selectAgentSession(task.sessionID)
+                        viewModel.select(workspace: .agents)
+                    } label: {
+                        HStack(alignment: .top, spacing: 11) {
+                            IconChip(systemName: historyIcon(task.status), tint: historyColor(task.status), size: 32)
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(task.prompt)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(RadarTheme.primaryText)
+                                    .lineLimit(2)
+                                Text(historyDetail(for: task))
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(RadarTheme.secondaryText)
+                                    .lineLimit(2)
+                            }
+                            Spacer(minLength: 0)
+                            ResearchStatusChip(label: RuntimeStatusPresenter.label(task.status), color: historyColor(task.status))
+                        }
+                        .padding(12)
+                        .quietRow(cornerRadius: 13)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .radarPanel()
+    }
+
+    private var draftsPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            PanelHeader(icon: "doc.text", title: "草稿与交付", trailing: "\(draftCount)")
+            if viewModel.filteredProposals.isEmpty && viewModel.filteredHandoffs.isEmpty {
+                EmptyStateText(text: "暂无草稿或交付记录")
+            } else {
+                ForEach(viewModel.filteredProposals.prefix(6)) { proposal in
+                    HistoryDraftRow(title: proposal.title, detail: proposal.summary, icon: "doc.badge.clock", tint: RadarTheme.blue)
+                }
+                ForEach(viewModel.filteredHandoffs.prefix(4)) { handoff in
+                    HistoryDraftRow(title: handoff.title, detail: handoff.summaryText, icon: "arrow.triangle.branch", tint: RadarTheme.indigo)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .radarPanel()
+    }
+
+    private var draftCount: Int {
+        viewModel.filteredProposals.count + viewModel.filteredHandoffs.count
+    }
+
+    private func historyDetail(for task: AgentLongTask) -> String {
+        if let final = viewModel.agentFinalReadModelByRunID[task.runID],
+           !final.finalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return AgentOutputCopy.humanize(final.finalText)
+        }
+        return "Run \(task.runID) · \(task.updatedAt)"
+    }
+
+    private func historyColor(_ status: String) -> Color {
+        let value = status.lowercased()
+        if value.contains("blocked") || value.contains("failed") || value.contains("error") { return RadarTheme.red }
+        if value.contains("review") { return RadarTheme.gold }
+        if value.contains("completed") || value.contains("done") { return RadarTheme.green }
+        if value.contains("running") || value.contains("queued") || value.contains("started") { return RadarTheme.blue }
+        return RadarTheme.mutedText
+    }
+
+    private func historyIcon(_ status: String) -> String {
+        let value = status.lowercased()
+        if value.contains("blocked") || value.contains("failed") || value.contains("error") { return "exclamationmark.triangle" }
+        if value.contains("review") { return "checkmark.seal" }
+        if value.contains("completed") || value.contains("done") { return "checkmark.circle" }
+        if value.contains("running") || value.contains("queued") || value.contains("started") { return "bolt.horizontal" }
+        return "circle"
+    }
+}
+
+private struct HistoryDraftRow: View {
+    let title: String
+    let detail: String
+    let icon: String
+    let tint: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            IconChip(systemName: icon, tint: tint, size: 30)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(RadarTheme.primaryText)
+                    .lineLimit(1)
+                Text(detail)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(RadarTheme.secondaryText)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(11)
+        .quietRow(cornerRadius: 12)
     }
 }
 
 struct WeChatInboxWorkspaceView: View {
     @ObservedObject var viewModel: DashboardViewModel
+    let metrics: WorkbenchLayoutMetrics
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 10) {
-                let messages = viewModel.filteredMessages
-                PanelHeader(icon: "tray.full", title: "微信线索", trailing: "\(messages.count) 条")
-                if messages.isEmpty {
-                    EmptyStateText(text: viewModel.hasSearch ? "无匹配消息" : "暂无消息")
-                }
-                ForEach(messages) { message in
-                    MessageCard(
-                        message: message,
-                        selected: viewModel.selectedMessageID == message.id,
-                        onTapSymbol: { viewModel.openToken($0) },
-                        onTap: { viewModel.selectMessage(message.id) }
-                    )
-                }
+        if metrics.isCompact {
+            VStack(alignment: .leading, spacing: metrics.workspaceSpacing) {
+                messagesPanel
+                TokenListPane(viewModel: viewModel)
             }
-            .padding(14)
-            .radarPanel()
-
-            TokenListPane(viewModel: viewModel)
-                .frame(width: 330)
+        } else {
+            HStack(alignment: .top, spacing: metrics.workspaceSpacing) {
+                messagesPanel
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                TokenListPane(viewModel: viewModel)
+                    .frame(width: metrics.tokenColumnWidth)
+            }
         }
+    }
+
+    private var messagesPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            let messages = viewModel.filteredMessages
+            PanelHeader(icon: "tray.full", title: "微信线索", trailing: "\(messages.count) 条")
+            if messages.isEmpty {
+                EmptyStateText(text: viewModel.hasSearch ? "无匹配消息" : "暂无消息")
+            }
+            ForEach(messages) { message in
+                MessageCard(
+                    message: message,
+                    selected: viewModel.selectedMessageID == message.id,
+                    onTapSymbol: { viewModel.openToken($0) },
+                    onTap: { viewModel.selectMessage(message.id) }
+                )
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .radarPanel()
     }
 }
 
@@ -147,97 +331,128 @@ private struct MessageCard: View {
 
 struct TokenTerminalWorkspaceView: View {
     @ObservedObject var viewModel: DashboardViewModel
+    let metrics: WorkbenchLayoutMetrics
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            TokenListPane(viewModel: viewModel)
-                .frame(width: 300)
-
-            VStack(alignment: .leading, spacing: 14) {
-                if let token = viewModel.selectedToken {
-                    TokenIdentityPanel(token: token, market: viewModel.selectedTokenMarket, onchain: viewModel.selectedTokenOnchain)
-                        .id(token.tokenID)
-                        .transition(.opacity.combined(with: .offset(y: 8)))
-                    RelatedMessagesPanel(messages: viewModel.selectedTokenMessages)
-                } else {
-                    EmptyStateText(text: "未选择 Token")
-                }
+        if metrics.isCompact {
+            VStack(alignment: .leading, spacing: metrics.workspaceSpacing) {
+                TokenListPane(viewModel: viewModel)
+                tokenDetail
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .animation(RadarMotion.smooth, value: viewModel.selectedToken?.tokenID)
+        } else {
+            HStack(alignment: .top, spacing: metrics.workspaceSpacing) {
+                TokenListPane(viewModel: viewModel)
+                    .frame(width: metrics.tokenColumnWidth)
+                tokenDetail
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
         }
+    }
+
+    private var tokenDetail: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if let token = viewModel.selectedToken {
+                TokenIdentityPanel(token: token, market: viewModel.selectedTokenMarket, onchain: viewModel.selectedTokenOnchain)
+                    .id(token.tokenID)
+                    .transition(.opacity.combined(with: .offset(y: 8)))
+                RelatedMessagesPanel(messages: viewModel.selectedTokenMessages)
+            } else {
+                EmptyStateText(text: "未选择 Token")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .animation(RadarMotion.smooth, value: viewModel.selectedToken?.tokenID)
     }
 }
 
 struct WatchlistWorkspaceView: View {
     @ObservedObject var viewModel: DashboardViewModel
+    let metrics: WorkbenchLayoutMetrics
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 10) {
-                let items = viewModel.filteredWatchlistItems
-                PanelHeader(icon: "star.circle", title: "观察与预警", trailing: "\(items.count)")
-                if items.isEmpty {
-                    EmptyStateText(text: viewModel.hasSearch ? "无匹配观察项" : "暂无观察项")
+        if metrics.isCompact {
+            VStack(alignment: .leading, spacing: metrics.workspaceSpacing) {
+                watchlistPanel
+                alertPanel
+            }
+        } else {
+            HStack(alignment: .top, spacing: metrics.workspaceSpacing) {
+                watchlistPanel
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                alertPanel
+                    .frame(width: metrics.supportColumnWidth)
+            }
+        }
+    }
+
+    private var watchlistPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            let items = viewModel.filteredWatchlistItems
+            PanelHeader(icon: "star.circle", title: "观察与预警", trailing: "\(items.count)")
+            if items.isEmpty {
+                EmptyStateText(text: viewModel.hasSearch ? "无匹配观察项" : "暂无观察项")
+            }
+            ForEach(items) { item in
+                HStack(spacing: 11) {
+                    IconChip(systemName: "star.fill", tint: RadarTheme.cyan, size: 32)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("\(item.symbol) · \(item.chain)")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(RadarTheme.primaryText)
+                        Text(item.reason)
+                            .font(.system(size: 11))
+                            .foregroundStyle(RadarTheme.secondaryText)
+                            .lineLimit(2)
+                    }
+                    Spacer()
+                    ResearchStatusChip(label: RuntimeStatusPresenter.label(item.freshness), color: RuntimeStatusPresenter.color(for: item.freshness))
                 }
-                ForEach(items) { item in
-                    HStack(spacing: 11) {
-                        IconChip(systemName: "star.fill", tint: RadarTheme.cyan, size: 32)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("\(item.symbol) · \(item.chain)")
+                .padding(11)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .quietRow(selected: viewModel.selectedTokenID == item.tokenID, cornerRadius: 13)
+                .contentShape(Rectangle())
+                .onTapGesture { viewModel.openToken(item.tokenID) }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .radarPanel()
+    }
+
+    private var alertPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            PanelHeader(icon: "bell.badge", title: "风险规则 / 下一步动作", trailing: "\(viewModel.terminalData.alerts.count) open")
+            ForEach(viewModel.terminalData.alerts) { alert in
+                let alertColor = alert.severity == "medium" ? RadarTheme.gold : (alert.severity == "high" || alert.severity == "critical" ? RadarTheme.red : RadarTheme.green)
+                HStack(alignment: .top, spacing: 11) {
+                    IconChip(systemName: "bell.badge.fill", tint: alertColor, size: 32)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(alert.title)
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(RadarTheme.primaryText)
-                            Text(item.reason)
-                                .font(.system(size: 11))
-                                .foregroundStyle(RadarTheme.secondaryText)
-                                .lineLimit(2)
+                            Spacer()
+                            ResearchStatusChip(label: "\(RuntimeStatusPresenter.label(alert.severity)) · \(RuntimeStatusPresenter.label(alert.status))", color: alertColor)
                         }
-                        Spacer()
-                        ResearchStatusChip(label: RuntimeStatusPresenter.label(item.freshness), color: RuntimeStatusPresenter.color(for: item.freshness))
+                        Text(alert.reason)
+                            .font(.system(size: 11))
+                            .foregroundStyle(RadarTheme.secondaryText)
+                            .lineLimit(2)
                     }
-                    .padding(11)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .quietRow(selected: viewModel.selectedTokenID == item.tokenID, cornerRadius: 13)
-                    .contentShape(Rectangle())
-                    .onTapGesture { viewModel.openToken(item.tokenID) }
                 }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .quietRow(selected: viewModel.selectedAlertID == alert.id, cornerRadius: 14)
+                .contentShape(Rectangle())
+                .onTapGesture { viewModel.selectedAlertID = alert.id }
             }
-            .padding(14)
-            .radarPanel()
-
-            VStack(alignment: .leading, spacing: 10) {
-                PanelHeader(icon: "bell.badge", title: "风险规则 / 下一步动作", trailing: "\(viewModel.terminalData.alerts.count) open")
-                ForEach(viewModel.terminalData.alerts) { alert in
-                    let alertColor = alert.severity == "medium" ? RadarTheme.gold : (alert.severity == "high" || alert.severity == "critical" ? RadarTheme.red : RadarTheme.green)
-                    HStack(alignment: .top, spacing: 11) {
-                        IconChip(systemName: "bell.badge.fill", tint: alertColor, size: 32)
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(alert.title)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(RadarTheme.primaryText)
-                                Spacer()
-                                ResearchStatusChip(label: "\(RuntimeStatusPresenter.label(alert.severity)) · \(RuntimeStatusPresenter.label(alert.status))", color: alertColor)
-                            }
-                            Text(alert.reason)
-                                .font(.system(size: 11))
-                                .foregroundStyle(RadarTheme.secondaryText)
-                                .lineLimit(2)
-                        }
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .quietRow(selected: viewModel.selectedAlertID == alert.id, cornerRadius: 14)
-                    .contentShape(Rectangle())
-                    .onTapGesture { viewModel.selectedAlertID = alert.id }
-                }
-                ForEach(viewModel.terminalData.alertRules) { rule in
-                    OpsRow(label: RuntimeStatusPresenter.intentLabel(rule.ruleType), value: rule.thresholdDescription, status: RuntimeStatusPresenter.label(rule.status))
-                }
+            ForEach(viewModel.terminalData.alertRules) { rule in
+                OpsRow(label: RuntimeStatusPresenter.intentLabel(rule.ruleType), value: rule.thresholdDescription, status: RuntimeStatusPresenter.label(rule.status))
             }
-            .padding(14)
-            .radarPanel()
         }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .radarPanel()
     }
 }
 
@@ -251,6 +466,7 @@ struct AgentWorkspaceView: View {
 
 struct OpsWorkspaceView: View {
     @ObservedObject var viewModel: DashboardViewModel
+    let metrics: WorkbenchLayoutMetrics
     @AppStorage("radar.appearance") private var appearancePref = "system"
 
     private var daemon: AgentDaemonStatus { viewModel.agentDaemonStatus }
@@ -260,7 +476,7 @@ struct OpsWorkspaceView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
+            LazyVGrid(columns: settingsColumns, spacing: metrics.workspaceSpacing) {
                 appearanceCard
                 daemonCard
                 providersCard
@@ -269,7 +485,17 @@ struct OpsWorkspaceView: View {
             safetyCard
             runtimeCard
         }
-        .frame(maxWidth: 1000, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private var settingsColumns: [GridItem] {
+        if metrics.isCompact {
+            return [GridItem(.flexible(), spacing: metrics.workspaceSpacing)]
+        }
+        return [
+            GridItem(.flexible(), spacing: metrics.workspaceSpacing),
+            GridItem(.flexible(), spacing: metrics.workspaceSpacing),
+        ]
     }
 
     private var header: some View {
@@ -320,31 +546,45 @@ struct OpsWorkspaceView: View {
         }
     }
 
-    // MARK: AI 模型
+    // MARK: Agent 能力源
     private var providersCard: some View {
-        settingsCard("AI 模型", icon: "brain.head.profile", tint: RadarTheme.violet) {
+        settingsCard("Agent 能力源", icon: "brain.head.profile", tint: RadarTheme.violet) {
             if daemon.providers.isEmpty {
-                Text(daemonConnected ? "未检测到模型配置。" : "后台未连接，无法检查模型。")
+                Text(daemonConnected ? "未检测到能力源配置。" : "后台未连接，无法检查能力源。")
                     .font(.system(size: 11)).foregroundStyle(RadarTheme.secondaryText)
             } else {
                 ForEach(daemon.providers, id: \.provider) { p in
+                    let ok = (p.connected ?? p.ready) && (p.degraded ?? false) == false
                     HStack(spacing: 8) {
-                        StatusDot(color: p.ready ? RadarTheme.green : RadarTheme.gold)
+                        StatusDot(color: ok ? RadarTheme.green : RadarTheme.gold)
                         Text(p.provider.uppercased())
                             .font(.system(size: 11, weight: .semibold)).foregroundStyle(RadarTheme.primaryText)
                             .frame(width: 78, alignment: .leading)
-                        Text(p.ready ? (p.model ?? "可用") : "缺少 \(p.missingEnv.joined(separator: ", "))")
+                        Text(providerDetail(p))
                             .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(p.ready ? RadarTheme.secondaryText : RadarTheme.gold)
+                            .foregroundStyle(ok ? RadarTheme.secondaryText : RadarTheme.gold)
                             .lineLimit(1)
                         Spacer(minLength: 0)
                     }
                 }
             }
-            Text("在项目根目录 .env 填入 DEEPSEEK_API_KEY（可选 KIMI_API_KEY）后重启后台。")
+            Text("模型、CMC MCP、WeChatCLI 均由本地后台读取运行时配置；缺配置时会降级而不是伪装可用。")
                 .font(.system(size: 10.5)).foregroundStyle(RadarTheme.mutedText)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private func providerDetail(_ provider: AgentDaemonStatus.ProviderStatus) -> String {
+        if provider.provider == "coinmarketcap" {
+            if provider.connected == true { return "CMC MCP 已连接" }
+            if provider.configured == true { return provider.providerType == "cmcRestProvider" ? "CMC REST fallback" : "CMC 已配置" }
+            return "CMC MCP 未配置"
+        }
+        if provider.provider == "wechat-cli" {
+            return provider.ready ? "WeChatCLI 只读可用" : "live refresh 未启用"
+        }
+        if provider.ready { return provider.model ?? "可用" }
+        return provider.missingEnv.isEmpty ? "未配置" : "缺少 \(provider.missingEnv.joined(separator: ", "))"
     }
 
     // MARK: 实时微信
@@ -391,7 +631,7 @@ struct OpsWorkspaceView: View {
     // MARK: 运行与健康
     private var runtimeCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            PanelHeader(icon: "externaldrive.badge.gearshape", title: "运行与健康", trailing: RuntimeStatusPresenter.label(viewModel.syncState.status.rawValue))
+            PanelHeader(icon: "externaldrive.badge.gearshape", title: "Diagnostics / 运行健康", trailing: RuntimeStatusPresenter.label(viewModel.syncState.status.rawValue))
             OpsRow(label: "最近运行", value: viewModel.syncState.lastRunAt, status: RuntimeStatusPresenter.label(viewModel.syncState.sourceFreshness))
             OpsRow(label: "健康", value: "runtime/health/latest-health.json", status: RuntimeStatusPresenter.label(viewModel.terminalData.runtimeHealth.overallStatus))
             OpsRow(label: "存储", value: "runtime/wechat · entities · evidence · tasks · watchlist · alerts", status: "本地")
@@ -515,7 +755,7 @@ private struct RelatedMessagesPanel: View {
                 }
                 .padding(11)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RadarTheme.panelElevated.opacity(0.5))
+                .background(RadarTheme.tintFaint)
                 .overlay(
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
                         .strokeBorder(RadarTheme.borderSoft, lineWidth: 1)
@@ -551,7 +791,7 @@ private struct InfoColumn: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RadarTheme.panelElevated.opacity(0.55))
+        .background(RadarTheme.tintFaint)
         .overlay(
             RoundedRectangle(cornerRadius: 13, style: .continuous)
                 .strokeBorder(RadarTheme.borderSoft, lineWidth: 1)
@@ -583,7 +823,7 @@ private struct OpsRow: View {
         }
         .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RadarTheme.panelElevated.opacity(hovering ? 0.7 : 0.5))
+        .background(hovering ? RadarTheme.tintSoft : RadarTheme.tintFaint)
         .overlay(
             RoundedRectangle(cornerRadius: 11, style: .continuous)
                 .strokeBorder(hovering ? RadarTheme.borderStrong : RadarTheme.borderSoft, lineWidth: 1)
@@ -608,7 +848,7 @@ private struct EmptyStateText: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RadarTheme.panelElevated.opacity(0.4))
+        .background(RadarTheme.tintFaint)
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(RadarTheme.borderSoft, lineWidth: 1)

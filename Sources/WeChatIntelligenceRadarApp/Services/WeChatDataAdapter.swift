@@ -27,5 +27,5 @@ struct WeChatCLIAdapterBoundary {
         "wechat-cli history <group> --limit 100 --format json",
         "wechat-cli search <keyword> --chat <group>"
     ]
-    let liveIntegrationStatus = "blocked_for_mvp"
+    let liveIntegrationStatus = "read_only_refresh_when_enabled"
 }

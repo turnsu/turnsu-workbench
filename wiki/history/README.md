@@ -1,6 +1,6 @@
 # Wiki History Archive
 
-Updated: 2026-05-27
+Updated: 2026-06-12
 
 ## 归档规则
 
@@ -30,12 +30,17 @@ YYYY-MM-DD-{category}-{status}-{topic}.md
 | `wiki/history/qa/2026-05-26-qa-completed-computer-use-product-level-qa.md` | QA | Completed | Computer Use 产品级 QA 与修复前缺陷记录 | P0/P1 问题已修复并保留为历史 QA 基线 |
 | `wiki/history/qa/2026-05-27-qa-completed-assistant-ui-agent-workspace-v2-qa.md` | QA | Completed | Agent Workspace V2 QA | V2 前端验收已完成，作为历史质量记录归档 |
 | `wiki/history/architecture/2026-05-27-architecture-superseded-backend-agent-data-capability-audit.md` | Architecture | Superseded | 后端、Agent、数据能力审计 | 后续已采用 Pi SDK backed daemon，审计仍作为缺口来源和决策背景 |
+| `wiki/history/architecture/2026-05-28-architecture-superseded-research-os-frontend-redesign.md` | Architecture | Superseded | Research OS 高密度前端重设计 | 已被 Command Desk v2 默认工作台取代 |
+| `wiki/history/architecture/2026-05-29-architecture-superseded-apple-minimal-workbench-redesign.md` | Architecture | Superseded | Apple minimal workbench 早期简化方案 | 已被 Command Desk v2 默认工作台取代 |
+| `wiki/history/architecture/2026-06-09-architecture-superseded-apple-minimal-integrated-workbench-redesign.md` | Architecture | Superseded | Today Desk / Queue Canvas / Split Focus 设计门禁与落地记录 | 已被 Command Desk v2 默认工作台取代；原型保留在 `wiki/history/design/prototypes/` |
 
 ## 当前仍有效文档
 
 - `wiki/PROJECT_WIKI.md`：项目总索引、当前状态、决策、后续 TODO。
+- `wiki/architecture/2026-06-12-current-architecture-cleanup-sync.md`：当前 Command Desk + Agent Runtime Core + Pi Kernel + Capability Packages 架构同步。
 - `wiki/architecture/2026-05-27-project-structure-agent-capability-sync.md`：当前项目结构与 Agent 能力同步文档。
 - `wiki/architecture/2026-05-27-piagent-backed-runtime-adoption.md`：Pi SDK backed runtime 采纳决策与实现记录。
+- `wiki/architecture/2026-06-11-agent-workbench-interaction-redesign.md`：当前 Command Desk v2 工作台交互架构。
 
 ## 后续维护要求
 

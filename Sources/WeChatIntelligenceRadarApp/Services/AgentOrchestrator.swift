@@ -144,7 +144,7 @@ struct AgentOrchestrator {
 
         var logs: [AgentRunLog] = [
             makeLog(.planner, "Planner Envelope 已生成：\(envelope.taskType)。"),
-            makeLog(.policy, "Live WeChat policy: \(policyStatus(.runLiveWeChatCLI, in: policies))；仅使用 fixture。"),
+            makeLog(.policy, "Live WeChat policy: read-only refresh \(policyStatus(.readLiveWeChat, in: policies))；raw CLI \(policyStatus(.runLiveWeChatCLI, in: policies))。"),
             makeLog(.policy, "CMC Skill Hub policy: \(policyStatus(.queryCMCMCP, in: policies))；市场数据进入 normalized snapshot。")
         ]
 
