@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -39,6 +39,15 @@ function writeJSON(path: string, value: unknown) {
   renameSync(tmp, path);
 }
 
+function readJSON(path: string, fallback: any = null) {
+  if (!existsSync(path)) return fallback;
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return fallback;
+  }
+}
+
 function redactedPreview(value: unknown, maxChars = 360) {
   const text = String(value || "")
     .replace(/(api[_-]?key|token|secret|authorization)\s*[:=]\s*\S+/gi, "$1=[redacted]")
@@ -48,10 +57,19 @@ function redactedPreview(value: unknown, maxChars = 360) {
 }
 
 function evidenceRefs(params: any) {
+  const cloudASRSummary = readJSON(runArtifact(params.runID, "cloud-asr-summary.json"), null);
+  const meetingSourcePack = readJSON(runArtifact(params.runID, "meeting-source-pack.json"), null);
   return {
     contextManifestRef: params.contextManifestRef || `runtime/agent/runs/${params.runID}/context-manifest.json`,
     contextBundleRef: params.contextBundleRef || `runtime/agent/runs/${params.runID}/context-bundle.json`,
     contextRefCount: Array.isArray(params.contextRefs) ? params.contextRefs.length : 0,
+    cloudASRStatus: cloudASRSummary?.cloudASRStatus || "not_requested",
+    cloudASRSummaryRef: cloudASRSummary?.artifactPath || null,
+    meetingSourcePackRef: meetingSourcePack?.artifactPath || null,
+    asrTranscriptPath: cloudASRSummary?.transcriptPath || null,
+    speakerDiarizationStatus: cloudASRSummary?.speakerDiarizationStatus || "not_requested",
+    needsTranscriptReview: cloudASRSummary ? cloudASRSummary.needsTranscriptReview !== false : false,
+    cloudUploadLabel: cloudASRSummary?.userVisibleLabel || null,
     rawTranscriptIncluded: false,
     rawProviderRequestIncluded: false,
     secretsIncluded: false,
@@ -76,11 +94,12 @@ export default function registerOfficeAgentExtension(pi: ExtensionAPI) {
     parameters: TOOL_PARAMS,
     execute: async (_toolCallID: string, params: any) => {
       const artifactPath = `runtime/agent/runs/${params.runID}/office-meeting-minutes-draft.json`;
+      const evidence = evidenceRefs(params);
       const payload = {
         schemaVersion: "office-meeting-minutes-read-model-v1",
         runID: params.runID,
         sessionID: params.sessionID || null,
-        status: "draft_only",
+        status: evidence.cloudASRStatus === "degraded" ? "draft_only_transcript_missing_or_failed" : "draft_only",
         title: "Meeting minutes draft",
         promptPreview: redactedPreview(params.prompt),
         sections: [
@@ -89,7 +108,19 @@ export default function registerOfficeAgentExtension(pi: ExtensionAPI) {
           { id: "action_items", title: "Action Items", status: "needs_owner_due_date_review" },
           { id: "risks", title: "Risks / Open Questions", status: "needs_evidence_review" },
         ],
-        evidence: evidenceRefs(params),
+        evidence,
+        cloudASR: {
+          status: evidence.cloudASRStatus,
+          userVisibleLabel: evidence.cloudUploadLabel,
+          transcriptPath: evidence.asrTranscriptPath,
+          summaryPath: evidence.cloudASRSummaryRef,
+          sourcePackPath: evidence.meetingSourcePackRef,
+          speakerDiarizationStatus: evidence.speakerDiarizationStatus,
+          needsTranscriptReview: evidence.needsTranscriptReview,
+          rawAudioStored: false,
+          rawProviderRequestIncluded: false,
+          secretsIncluded: false,
+        },
         policy: basePolicy(),
         generatedAt: now(),
         artifactPath,

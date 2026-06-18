@@ -29,6 +29,7 @@ export function buildControlPlane(input) {
     policyForTool,
     providerReadiness = [],
     piStatus = null,
+    modelPreference = null,
   } = input;
 
   const taskIntent = createTaskIntent({ runID, taskID, sessionID, prompt, selectedSkillIDs, selectedExtensionIDs, attachments, contextRefs });
@@ -73,7 +74,7 @@ export function buildControlPlane(input) {
   const toolIntentPlan = createToolIntentPlan({ taskIntent, executionProfile, tools });
   const policyDecisions = createPolicyDecisions({ toolIntentPlan, policyForTool });
   const approvalDecisions = createApprovalDecisions({ policyDecisions });
-  const modelRoute = createModelRouteDecision({ runID, taskIntent, executionProfile, providerReadiness, piStatus, attachments });
+  const modelRoute = createModelRouteDecision({ runID, taskIntent, executionProfile, providerReadiness, piStatus, attachments, modelPreference, tools });
   const plannerEnvelope = createPlannerEnvelope({ taskIntent, executionProfile, contextManifest, toolIntentPlan });
   const qaGate = createQAGate({ runID, taskID, contextGate, policyDecisions, approvalDecisions, toolIntentPlan });
   const runtimeMetrics = createRuntimeMetrics({ runID, taskID, startedAt, contextBundle, toolIntentPlan, policyDecisions, approvalDecisions, modelRoute, qaGate });

@@ -32,12 +32,12 @@
       "capabilityID": "office-meeting-agent",
       "title": "Office / Meeting 能力包",
       "domain": "Office",
-      "taskIntents": ["meeting_minutes", "document_draft", "document_revision", "feishu_preview"],
-      "legacySkillIDs": ["meeting-minutes", "document-generation", "document-revision", "feishu-agent-bridge"],
+      "taskIntents": ["meeting_cloud_asr", "meeting_minutes", "document_draft", "document_revision", "feishu_preview"],
+      "legacySkillIDs": ["meeting-cloud-asr", "meeting-minutes", "document-generation", "document-revision", "feishu-agent-bridge"],
       "legacyExtensionIDs": ["office-meeting-agent"],
       "toolModuleRefs": ["office-agent"],
       "policyProfile": "draft_and_dry_run_only",
-      "readModelHints": ["office-meeting-minutes-draft.json", "office-document-draft.json", "feishu-channel-dry-run.json"]
+      "readModelHints": ["cloud-asr-summary.json", "cloud-asr-transcript.json", "meeting-source-pack.json", "office-meeting-minutes-draft.json", "office-document-draft.json", "feishu-channel-dry-run.json"]
     },
     {
       "capabilityID": "wechat-cli-export-bridge",

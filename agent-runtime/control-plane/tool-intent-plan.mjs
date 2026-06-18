@@ -16,6 +16,9 @@ export function classifyToolIntent(toolName) {
   if (/^office\.(meeting_minutes|document|document_revision)\.draft$/.test(toolName)) {
     return { actionIntent: "office_draft_artifact", riskLevel: "medium", payloadClass: "bounded_office_context" };
   }
+  if (toolName === "office.cloud_asr.transcribe") {
+    return { actionIntent: "provider_audio_transcription", riskLevel: "medium", payloadClass: "user_audio_video_cloud_transcription" };
+  }
   if (/^markets\.(equity_dispatcher|equity_research)\./.test(toolName)) {
     return { actionIntent: "markets_research_draft_artifact", riskLevel: "medium", payloadClass: "bounded_market_research_context" };
   }

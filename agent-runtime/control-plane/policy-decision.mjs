@@ -7,6 +7,7 @@ export function defaultPolicyStatus(toolName) {
   }
   if (toolName === "read_live_wechat") return "pass";
   if (toolName.startsWith("cmc.")) return "pass";
+  if (toolName === "office.cloud_asr.transcribe") return "pass";
   if (/^office\.(meeting_minutes|document|document_revision)\.draft$/.test(toolName)) return "pass";
   if (toolName === "channel.feishu.dry_run") return "pass";
   if (toolName === "computer_use.request") return "needs_confirmation";
@@ -24,6 +25,7 @@ function displayTitleFor(toolIntent, status) {
   if (status === "needs_confirmation") return "需要你确认";
   if (toolIntent.actionIntent === "import_user_or_fixture_wechat_export") return "导入微信导出记录";
   if (toolIntent.actionIntent === "external_provider_refresh") return "刷新 CMC 数据";
+  if (toolIntent.actionIntent === "provider_audio_transcription") return "云端转写会议音视频";
   if (toolIntent.actionIntent === "office_draft_artifact") return "生成办公草稿";
   if (toolIntent.actionIntent === "channel_feishu_dry_run") return "飞书通道预演";
   if (toolIntent.actionIntent === "live_wechat_read_only_refresh") return "读取本机微信";
@@ -36,6 +38,7 @@ function publicSummaryFor(toolIntent, status) {
   if (status === "blocked") return "这一步不会执行，可改用本地 fixture、导出文件或已归一化记录。";
   if (status === "needs_confirmation") return "Agent 已记录申请，等待确认前不会触达外部动作。";
   if (toolIntent.actionIntent === "external_provider_refresh") return "通过本地 daemon provider 刷新 CMC normalized artifact；Swift 不直连外部网络。";
+  if (toolIntent.actionIntent === "provider_audio_transcription") return "用户拖入的音视频会经 OSS 临时上传交给阿里云百炼转写；artifact 只保存转写文本和元数据。";
   if (toolIntent.actionIntent === "office_draft_artifact") return "只写本地 Office/Meeting draft read model，不发布、不覆盖云文档。";
   if (toolIntent.actionIntent === "channel_feishu_dry_run") return "只写飞书通道 dry-run artifact；真实回复、发布或通知保持阻断。";
   if (toolIntent.actionIntent === "live_wechat_read_only_refresh") return "经本地 daemon 刷新只读 WeChat artifact，不发送、不外发原始聊天。";

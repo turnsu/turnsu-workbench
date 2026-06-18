@@ -341,8 +341,54 @@ struct AgentFinalReadModel: Codable, Hashable {
     let outputGuardReason: String?
     let cmcGateSummary: CMCGateSummary?
     let productMutationPolicy: ProductMutationPolicy?
+    var workspaceMutationPolicy: ProductMutationPolicy? = nil
+    var modelRouteSummary: AgentModelRouteSummary? = nil
     let generatedAt: String
     let artifactPath: String?
+}
+
+struct AgentModelRouteSummary: Codable, Hashable {
+    let schemaVersion: String?
+    let selectedTextProvider: String?
+    let selectedTextModel: String?
+    let selectionSource: String?
+    let finalModel: String?
+    let fallbackUsed: Bool?
+    let userVisibleNoteRequired: Bool?
+    let attemptCount: Int?
+}
+
+struct AgentModelPreference: Codable, Hashable {
+    let mode: String
+    let textModel: String?
+    let fallbackPolicy: String
+}
+
+enum AgentModelPreferenceOption: String, CaseIterable, Identifiable {
+    case auto = "auto"
+    case deepseekV4Pro = "deepseek-v4-pro"
+    case deepseekV4Flash = "deepseek-v4-flash"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .auto: return "自动"
+        case .deepseekV4Pro: return "deepseek-v4-pro"
+        case .deepseekV4Flash: return "deepseek-v4-flash"
+        }
+    }
+
+    var requestPayload: AgentModelPreference {
+        switch self {
+        case .auto:
+            return AgentModelPreference(mode: "auto", textModel: nil, fallbackPolicy: "continue_with_eligible_models")
+        case .deepseekV4Pro:
+            return AgentModelPreference(mode: "explicit", textModel: rawValue, fallbackPolicy: "continue_with_eligible_models")
+        case .deepseekV4Flash:
+            return AgentModelPreference(mode: "explicit", textModel: rawValue, fallbackPolicy: "continue_with_eligible_models")
+        }
+    }
 }
 
 struct CMCGateSummary: Codable, Hashable {
@@ -402,6 +448,7 @@ struct CMCPriceSnapshotSummary: Codable, Hashable {
 
 struct CMCCapabilitySummary: Codable, Hashable {
     let schemaVersion: String?
+    var renderSchemaVersion: String? = nil
     let capabilityID: String
     let displayName: String
     let packageTitle: String
@@ -413,6 +460,10 @@ struct CMCCapabilitySummary: Codable, Hashable {
     let status: String?
     let confidence: String?
     let summary: String?
+    var returnedContent: CMCReturnedContent? = nil
+    var renderBlocks: [CMCRenderBlock]? = nil
+    var diagnostics: CMCRenderDiagnostics? = nil
+    var claimPolicy: CMCRenderClaimPolicy? = nil
     let readableEvidence: [CMCCapabilityEvidenceSection]?
     let readableEvidenceCount: Int?
     var skillHubDisplayStatus: String? = nil
@@ -434,6 +485,79 @@ struct CMCCapabilitySummary: Codable, Hashable {
     let notableAnomalies: [String]?
     let generatedAt: String?
     let sourceObservationCount: Int?
+    var workspaceMutationPolicy: CMCWorkspaceMutationPolicy? = nil
+}
+
+struct CMCReturnedContent: Codable, Hashable {
+    let summary: String?
+    let conclusion: String?
+    let marketRead: String?
+    let readableEvidence: [CMCCapabilityEvidenceSection]?
+}
+
+struct CMCRenderBlock: Codable, Hashable, Identifiable {
+    var id: String { "\(type ?? "block"):\(title ?? ""):\(body.prefix(32))" }
+    let type: String?
+    let title: String?
+    let body: String
+    let source: String?
+    let observedAt: String?
+}
+
+struct CMCRenderDiagnostics: Codable, Hashable {
+    let parserEvidenceStatus: String?
+    let researchEvidenceStatus: String?
+    let priceSnapshotStatus: String?
+    let assetCount: Int?
+    let emptyEvidenceReason: String?
+    let freshness: String?
+    let confidence: String?
+    let risk: String?
+    let sourceTrust: String?
+    let degraded: Bool?
+}
+
+struct CMCRenderClaimPolicy: Codable, Hashable {
+    let appMayAddConcretePrices: Bool?
+    let providerReturnedNumbersMayRender: Bool?
+    let appMayAddTradingLevels: Bool?
+}
+
+struct CloudASRSummary: Codable, Hashable {
+    let schemaVersion: String?
+    let runID: String
+    let sessionID: String?
+    let status: String
+    let cloudASRStatus: String?
+    let provider: String?
+    let providerID: String?
+    let model: String?
+    let uploadProvider: String?
+    let cloudUpload: Bool?
+    let userVisibleLabel: String?
+    let reason: String?
+    let speakerDiarizationStatus: String?
+    let needsTranscriptReview: Bool?
+    let transcriptPath: String?
+    let sourcePackPath: String?
+    let segmentCount: Int?
+    let boundedChunkCount: Int?
+    let sourceAttachmentIDs: [String]?
+    let rawAudioStored: Bool?
+    let rawProviderRequestIncluded: Bool?
+    let rawProviderResponseIncluded: Bool?
+    let secretsIncluded: Bool?
+    let generatedAt: String?
+    let artifactPath: String?
+
+    var displayStatus: String {
+        "\(userVisibleLabel ?? "云端转写 · 阿里云百炼") · \(cloudASRStatus ?? status)"
+    }
+}
+
+struct CMCWorkspaceMutationPolicy: Codable, Hashable {
+    let scope: String?
+    let displayEligibleEvenWhenDiscarded: Bool?
 }
 
 struct CMCCapabilityEvidenceSection: Codable, Hashable, Identifiable {

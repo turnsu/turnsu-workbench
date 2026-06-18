@@ -99,6 +99,7 @@ const localPassTools = new Set([
   "cmc.track_social_price_divergence",
   "cmc.classify_kline_pattern_quality",
   "cmc.request_mcp_refresh",
+  "office.cloud_asr.transcribe",
   "office.meeting_minutes.draft",
   "office.document.draft",
   "office.document_revision.draft",
@@ -129,6 +130,7 @@ const projectToolNames = [
   "cmc.track_social_price_divergence",
   "cmc.classify_kline_pattern_quality",
   "cmc.request_mcp_refresh",
+  "office.cloud_asr.transcribe",
   "office.meeting_minutes.draft",
   "office.document.draft",
   "office.document_revision.draft",
@@ -1478,8 +1480,28 @@ function cmcAPIKeyConfigured() {
   return Boolean(String(process.env.CMC_PRO_API_KEY || process.env.COINMARKETCAP_API_KEY || "").trim());
 }
 
+function cmcMcpAPIKeys() {
+  const values = [
+    process.env.CMC_MCP_API_KEY,
+    process.env.CMC_MCP_API_KEYS,
+    process.env.CMC_PRO_API_KEY,
+    process.env.COINMARKETCAP_API_KEY,
+  ];
+  const seen = new Set();
+  const keys = [];
+  for (const value of values) {
+    for (const item of String(value || "").split(/[,\s]+/)) {
+      const key = item.trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      keys.push(key);
+    }
+  }
+  return keys;
+}
+
 function cmcMcpAPIKey() {
-  return String(process.env.CMC_MCP_API_KEY || process.env.CMC_PRO_API_KEY || process.env.COINMARKETCAP_API_KEY || "").trim();
+  return cmcMcpAPIKeys()[0] || "";
 }
 
 function cmcMcpEndpointURL() {
@@ -1545,6 +1567,7 @@ function cmcCLIStatus() {
 
 function cmcProviderReadiness() {
   const normalizedPath = join(projectRoot, "runtime", "market", "cmc-skill-hub.normalized.json");
+  const mcpKeyCount = cmcMcpAPIKeys().length;
   const configuredProviders = [
     cmcMcpConfigured() ? "mcp_http" : null,
     cmcBridgeConfigured() ? "mcp_bridge" : null,
@@ -1578,6 +1601,7 @@ function cmcProviderReadiness() {
     providerOrder: cmcProviderOrder,
     mcpEndpointConfigured: Boolean(cmcMcpEndpointURL()),
     mcpHttpConfigured: cmcMcpConfigured(),
+    mcpKeyCount,
     mcpBridgeConfigured: cmcBridgeConfigured(),
     restAPIKeyConfigured: cmcAPIKeyConfigured(),
     cliConfigured: cmcCLIStatus().configured,
@@ -1937,6 +1961,7 @@ async function callOpenAICompatible({ providerName, messages, model, stream = tr
   const apiKey = String(process.env[provider.apiKeyEnv] || "").trim();
   const baseUrl = String(process.env[provider.baseUrlEnv] || provider.defaultBaseUrl || "").replace(/\/+$/, "");
   const selectedModel = model || String(process.env[provider.defaultModelEnv] || provider.defaultModel || "");
+  const temperature = providerName === "kimi" ? 1 : 0.2;
   if (!apiKey || !baseUrl || !selectedModel) {
     return { status: "blocked", reason: "blocked_missing_provider_config", provider: providerName, model: selectedModel };
   }
@@ -1954,7 +1979,7 @@ async function callOpenAICompatible({ providerName, messages, model, stream = tr
         model: selectedModel,
         messages,
         stream,
-        temperature: 0.2,
+        temperature,
       }),
       signal: controller.signal,
     });
@@ -2027,6 +2052,86 @@ async function streamProviderToEvents(providerResult, runDir, runID = null, task
     }
   }
   return finalText;
+}
+
+function modelAttemptCandidates(modelRoute = {}) {
+  const candidates = [
+    modelRoute.selectedTextModel,
+    ...(Array.isArray(modelRoute.eligibleFallbackModels) ? modelRoute.eligibleFallbackModels : []),
+  ]
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  return [...new Set(candidates)];
+}
+
+function modelFailureNote(modelRoute = {}) {
+  const attempts = Array.isArray(modelRoute.attempts) ? modelRoute.attempts : [];
+  if (attempts.length && attempts.every((item) => item.status !== "completed")) {
+    return "模型调用失败；以下仅为本地结构化摘要，不是 LLM 研究结论。";
+  }
+  if (modelRoute.fallbackUsed && modelRoute.finalModel && modelRoute.selectedTextModel) {
+    return `模型路由：${modelRoute.finalModel} · fallback from ${modelRoute.selectedTextModel}。`;
+  }
+  return "";
+}
+
+function finalizeModelRoute(modelRoute, attempts, finalModel = null) {
+  const fallbackUsed = Boolean(finalModel && modelRoute?.selectedTextModel && finalModel !== modelRoute.selectedTextModel);
+  return {
+    ...modelRoute,
+    attempts,
+    finalModel,
+    fallbackUsed,
+    userVisibleNoteRequired: fallbackUsed || (attempts.length > 0 && attempts.every((item) => item.status !== "completed")),
+    completedAt: now(),
+  };
+}
+
+async function callTextModelWithFallback({ modelRoute, messages, runDir, runID, taskID }) {
+  const candidates = modelAttemptCandidates(modelRoute);
+  const attempts = [];
+  for (const model of candidates) {
+    appendEvent(runDir, { type: "model.attempt.started", runID, taskID, stage: "model_route", provider: "deepseek", model });
+    const providerResult = await callOpenAICompatible({
+      providerName: "deepseek",
+      model,
+      stream: true,
+      messages,
+    });
+    if (providerResult.status !== "streaming") {
+      attempts.push({
+        provider: providerResult.provider || "deepseek",
+        model,
+        status: "failed",
+        reason: providerResult.reason || providerResult.status || "provider_unavailable",
+        statusCode: providerResult.statusCode || null,
+        errorPreview: providerResult.errorPreview || null,
+        attemptedAt: now(),
+      });
+      appendEvent(runDir, { type: "model.attempt.failed", runID, taskID, stage: "model_route", provider: "deepseek", model, status: providerResult.status, reason: providerResult.reason, errorPreview: providerResult.errorPreview });
+      continue;
+    }
+    const text = await streamProviderToEvents(providerResult, runDir, runID, taskID);
+    if (String(text || "").trim()) {
+      attempts.push({
+        provider: "deepseek",
+        model,
+        status: "completed",
+        reason: "ok",
+        attemptedAt: now(),
+      });
+      return { text, modelRoute: finalizeModelRoute(modelRoute, attempts, model) };
+    }
+    attempts.push({
+      provider: "deepseek",
+      model,
+      status: "failed",
+      reason: "empty_model_output",
+      attemptedAt: now(),
+    });
+    appendEvent(runDir, { type: "model.attempt.failed", runID, taskID, stage: "model_route", provider: "deepseek", model, status: "failed", reason: "empty_model_output" });
+  }
+  return { text: "", modelRoute: finalizeModelRoute(modelRoute, attempts, null) };
 }
 
 function finalCopyDeps() {
@@ -2325,8 +2430,28 @@ function buildCMCCapabilitySummary({ runID = null, toolObservations = null, tool
   const returnedPrice = skillHubReturnedPriceMetadata(observations);
   const allowSkillHubReturnedPrices = Boolean(gate.allowSkillHubReturnedPrices ?? returnedPrice.allowSkillHubReturnedPrices);
   const skillHubReturnedPriceTokenCount = firstNumber(gate.skillHubReturnedPriceTokenCount, returnedPrice.skillHubReturnedPriceTokenCount);
+  const returnedContent = buildCMCReturnedContent(picked);
+  const renderBlocks = buildCMCRenderBlocks(observations);
+  const diagnostics = {
+    parserEvidenceStatus,
+    researchEvidenceStatus,
+    priceSnapshotStatus,
+    assetCount: firstNumber(gate.assetCount, gate.priceSnapshot?.assetCount),
+    emptyEvidenceReason: picked?.emptyEvidenceReason || gate.emptyEvidenceReason || gate.researchEvidence?.emptyEvidenceReason || null,
+    freshness: gate.freshness || null,
+    confidence: picked?.confidence || null,
+    risk: gate.risk || null,
+    sourceTrust: gate.sourceTrust || null,
+    degraded: gate.status === "degraded",
+  };
+  const claimPolicy = {
+    appMayAddConcretePrices: Boolean(gate.allowConcretePrices),
+    providerReturnedNumbersMayRender: allowSkillHubReturnedPrices,
+    appMayAddTradingLevels: Boolean(gate.allowConcretePrices),
+  };
   return {
     schemaVersion: "cmc-capability-summary-v1",
+    renderSchemaVersion: "cmc-render-result-v1",
     capabilityID: "cmc-skill-hub",
     displayName: "CMC Skill Hub",
     packageTitle: "CMC Skill Hub 能力包",
@@ -2338,6 +2463,10 @@ function buildCMCCapabilitySummary({ runID = null, toolObservations = null, tool
     status: picked?.status || gate.status || "unknown",
     confidence: picked?.confidence || null,
     summary: picked?.summary || (observations.length > 0 ? toolObservations?.cmcSkillHub?.instruction || null : null),
+    returnedContent,
+    renderBlocks,
+    diagnostics,
+    claimPolicy,
     readableEvidence,
     readableEvidenceCount,
     skillHubDisplayStatus,
@@ -2359,6 +2488,10 @@ function buildCMCCapabilitySummary({ runID = null, toolObservations = null, tool
     notableAnomalies: safeArray(picked?.notableAnomalies || gate.notableAnomalies),
     generatedAt: now(),
     sourceObservationCount: observations.length,
+    workspaceMutationPolicy: {
+      scope: "persistent_workspace_state_only",
+      displayEligibleEvenWhenDiscarded: true,
+    },
   };
 }
 
@@ -2380,7 +2513,7 @@ function cmcCapabilitySummaryLine(summary) {
   return `CMC Skill Hub 能力包：${mountText}，${transportText}，${resultText}，${pricesText}。`;
 }
 
-async function runAgentTask({ session, prompt, selectedToolNames = [], selectedCapabilityIDs = [], selectedSkillIDs = [], selectedExtensionIDs = [], attachments = [], contextRefs = [], runID = safeId("run"), taskID = safeId("task") }) {
+async function runAgentTask({ session, prompt, selectedToolNames = [], selectedCapabilityIDs = [], selectedSkillIDs = [], selectedExtensionIDs = [], attachments = [], contextRefs = [], modelPreference = null, runID = safeId("run"), taskID = safeId("task") }) {
   const runDir = safeRunDir(runID);
   writeControlState(runDir, "running");
   const coreRoutePlan = agentRuntimeCore.planTools({ prompt, selectedToolNames, selectedCapabilityIDs, attachments, selectedSkillIDs, selectedExtensionIDs, projectToolNames });
@@ -2417,6 +2550,7 @@ async function runAgentTask({ session, prompt, selectedToolNames = [], selectedC
     policyForTool,
     providerReadiness: providerReadiness(),
     piStatus,
+    modelPreference,
   });
   const tools = controlPlane.tools;
   const policies = controlPlane.policyDecisions;
@@ -2530,6 +2664,9 @@ async function runAgentTask({ session, prompt, selectedToolNames = [], selectedC
       artifactRef(runID, "retry-ledger.json", "retry", "retry"),
       artifactRef(runID, "tool-calls.json", "tool_calls", "tool_execution"),
       artifactRef(runID, "tool-observations.json", "tool_observations", "tool_execution"),
+      artifactRef(runID, "cloud-asr-summary.json", "cloud_asr_summary", "tool_execution"),
+      artifactRef(runID, "cloud-asr-transcript.json", "cloud_asr_transcript", "tool_execution"),
+      artifactRef(runID, "meeting-source-pack.json", "meeting_source_pack", "context"),
       artifactRef(runID, "cmc-capability-summary.json", "cmc_capability_summary", "tool_execution"),
       artifactRef(runID, "final-output.md", "final_output", "final_output"),
       artifactRef(runID, "agent-final-read-model.json", "final_read_model", "final_output"),
@@ -2641,6 +2778,7 @@ async function runAgentTask({ session, prompt, selectedToolNames = [], selectedC
         prompt,
         idempotencyKey: `${toolName}:${runID}`,
         contextRefs,
+        attachments,
         contextManifestRef: `runtime/agent/runs/${runID}/context-manifest.json`,
         contextBundleRef: `runtime/agent/runs/${runID}/context-bundle.json`,
       });
@@ -2724,21 +2862,35 @@ async function runAgentTask({ session, prompt, selectedToolNames = [], selectedC
   const marketSensitiveRun = isMarketSensitiveRun(prompt, tools);
   const shouldCallLive = process.env.WECHAT_AGENT_MOCK_PROVIDER !== "1"
     && (!marketSensitiveRun || toolObservations.cmcFreshnessGate.status === "pass");
+  let activeModelRoute = modelRoute;
   if (shouldCallLive) {
-    const providerResult = await callOpenAICompatible({
-      providerName: "deepseek",
-      stream: true,
-      messages: [
-        { role: "system", content: readFileSync(join(agentRuntimeRoot, "prompts", "agent-system.md"), "utf8") },
-        { role: "user", content: `User prompt:\n${prompt}\n\nSelected skills:\n${selectedSkillIDs.join(", ")}\n\nSelected extensions:\n${selectedExtensionIDs.join(", ")}\n\nContext bundle artifact:\nruntime/agent/runs/${runID}/context-bundle.json\n\nTool observations artifact:\nruntime/agent/runs/${runID}/tool-observations.json\n\nContext bundle summary:\n${String(controlPlane.contextBundle.modelContext || "").slice(0, 3500)}\n\nTool observations:\n${JSON.stringify(toolObservations, null, 2).slice(0, 12000)}${liveWechat?.contextText || ""}` },
-      ],
+    const messages = [
+      { role: "system", content: readFileSync(join(agentRuntimeRoot, "prompts", "agent-system.md"), "utf8") },
+      { role: "user", content: `User prompt:\n${prompt}\n\nSelected skills:\n${selectedSkillIDs.join(", ")}\n\nSelected extensions:\n${selectedExtensionIDs.join(", ")}\n\nModel preference:\n${JSON.stringify(modelPreference || { mode: "auto" })}\n\nContext bundle artifact:\nruntime/agent/runs/${runID}/context-bundle.json\n\nTool observations artifact:\nruntime/agent/runs/${runID}/tool-observations.json\n\nContext bundle summary:\n${String(controlPlane.contextBundle.modelContext || "").slice(0, 3500)}\n\nTool observations:\n${JSON.stringify(toolObservations, null, 2).slice(0, 12000)}${liveWechat?.contextText || ""}` },
+    ];
+    const modelCall = await callTextModelWithFallback({
+      modelRoute: activeModelRoute,
+      messages,
+      runDir,
+      runID,
+      taskID,
     });
-    finalText = await streamProviderToEvents(providerResult, runDir, runID, taskID);
+    finalText = modelCall.text;
+    activeModelRoute = modelCall.modelRoute;
+    Object.assign(modelRoute, activeModelRoute);
+    writeJSON(join(runDir, "model-route.json"), activeModelRoute);
   }
   if (!finalText.trim()) {
     finalText = deterministicAssistantText(prompt, tools, policies, attachments, selectedSkillIDs, selectedExtensionIDs, toolObservations);
+    const note = modelFailureNote(activeModelRoute);
+    if (note) finalText = `${note}\n\n${finalText}`;
     for (const segment of finalText.match(/.{1,80}(\s|$)/g) || [finalText]) {
       appendEvent(runDir, { type: "assistant.delta", runID, taskID, stage: "model_stream", delta: segment });
+    }
+    if (shouldCallLive && (!activeModelRoute.attempts || !activeModelRoute.attempts.length)) {
+      activeModelRoute = finalizeModelRoute(activeModelRoute, [], null);
+      Object.assign(modelRoute, activeModelRoute);
+      writeJSON(join(runDir, "model-route.json"), activeModelRoute);
     }
   }
   const guardedFinal = guardFinalOutput({ text: finalText, prompt, tools, toolObservations });
@@ -2756,7 +2908,20 @@ async function runAgentTask({ session, prompt, selectedToolNames = [], selectedC
     };
   }
   toolObservations.outputGuard = guardedFinal.outputGuard;
+  toolObservations.modelRouteSummary = {
+    schemaVersion: activeModelRoute.schemaVersion || "agent-model-route-v3",
+    selectedTextProvider: activeModelRoute.selectedTextProvider || null,
+    selectedTextModel: activeModelRoute.selectedTextModel || null,
+    selectionSource: activeModelRoute.selectionSource || null,
+    finalModel: activeModelRoute.finalModel || null,
+    fallbackUsed: Boolean(activeModelRoute.fallbackUsed),
+    userVisibleNoteRequired: Boolean(activeModelRoute.userVisibleNoteRequired),
+    attemptCount: Array.isArray(activeModelRoute.attempts) ? activeModelRoute.attempts.length : 0,
+  };
   toolObservations.modelUsePolicy.allowSkillHubResultDisplay = Boolean(toolObservations.cmcFreshnessGate.allowSkillHubResultDisplay);
+  toolObservations.modelUsePolicy.allowCMCRenderBlocks = Array.isArray(cmcCapabilitySummary.renderBlocks) && cmcCapabilitySummary.renderBlocks.length > 0;
+  toolObservations.modelUsePolicy.cmcRenderSchemaVersion = cmcCapabilitySummary.renderSchemaVersion || null;
+  toolObservations.modelUsePolicy.cmcRenderBlockCount = Array.isArray(cmcCapabilitySummary.renderBlocks) ? cmcCapabilitySummary.renderBlocks.length : 0;
   toolObservations.modelUsePolicy.skillHubDisplayStatus = toolObservations.cmcFreshnessGate.skillHubDisplayStatus || "unknown";
   toolObservations.modelUsePolicy.displayableResultSource = toolObservations.cmcFreshnessGate.displayableResultSource || null;
   toolObservations.modelUsePolicy.allowSkillHubReturnedPrices = Boolean(toolObservations.cmcFreshnessGate.allowSkillHubReturnedPrices);
@@ -2953,6 +3118,7 @@ async function postMessage(sessionID, body) {
     selectedExtensionIDs: body.selectedExtensionIDs || [],
     attachments: body.attachments || [],
     contextRefs: body.contextRefs || [],
+    modelPreference: body.modelPreference || null,
   });
   return { ...result, message: userMessage };
 }
@@ -2986,6 +3152,7 @@ async function postMessageAsync(sessionID, body) {
     selectedCapabilityIDs: body.selectedCapabilityIDs || [],
     selectedSkillIDs: body.selectedSkillIDs || [],
     selectedExtensionIDs: body.selectedExtensionIDs || [],
+    modelPreference: body.modelPreference || null,
     attachmentIDs: (body.attachments || []).map((item) => item.attachmentID || item.id).filter(Boolean),
     artifactPath: `runtime/agent/runs/${runID}`,
     createdAt: now(),
@@ -3007,6 +3174,7 @@ async function postMessageAsync(sessionID, body) {
       selectedExtensionIDs: body.selectedExtensionIDs || [],
       attachments: body.attachments || [],
       contextRefs: body.contextRefs || [],
+      modelPreference: body.modelPreference || null,
       runID,
       taskID,
     }).catch((error) => {
@@ -3593,8 +3761,8 @@ function mcpContentError(result) {
   return { reason, message };
 }
 
-async function cmcMcpRequest(method, params = {}, { sessionID = null, notification = false } = {}) {
-  const key = cmcMcpAPIKey();
+async function cmcMcpRequest(method, params = {}, { sessionID = null, notification = false, apiKey = null } = {}) {
+  const key = String(apiKey || cmcMcpAPIKey()).trim();
   if (!key) return { ok: false, reason: "missing_cmc_mcp_api_key" };
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), Number(process.env.CMC_MCP_REQUEST_TIMEOUT_MS || "25000"));
@@ -3642,17 +3810,17 @@ async function cmcMcpRequest(method, params = {}, { sessionID = null, notificati
   }
 }
 
-async function cmcMcpClient() {
+async function cmcMcpClient({ apiKey = null } = {}) {
   const init = await cmcMcpRequest("initialize", {
     protocolVersion: "2025-03-26",
     capabilities: {},
     clientInfo: { name: "looloomi-agent-runtime", version: "0.1.0" },
-  });
+  }, { apiKey });
   let sessionID = init.sessionID || null;
   if (init.ok) {
-    await cmcMcpRequest("notifications/initialized", {}, { sessionID, notification: true });
+    await cmcMcpRequest("notifications/initialized", {}, { sessionID, notification: true, apiKey });
   }
-  const listed = await cmcMcpRequest("tools/list", {}, { sessionID });
+  const listed = await cmcMcpRequest("tools/list", {}, { sessionID, apiKey });
   const listedPayload = extractMcpToolPayload(listed.payload);
   const toolList = Array.isArray(listedPayload?.tools)
     ? listedPayload.tools
@@ -3690,9 +3858,9 @@ function extractMcpToolPayload(callPayload) {
   return callPayload;
 }
 
-async function callCMCMcpTool(tool, args, sessionID) {
+async function callCMCMcpTool(tool, args, sessionID, { apiKey = null } = {}) {
   if (!tool?.name) return { ok: false, reason: "cmc_mcp_tool_missing" };
-  const called = await cmcMcpRequest("tools/call", { name: tool.name, arguments: args }, { sessionID });
+  const called = await cmcMcpRequest("tools/call", { name: tool.name, arguments: args }, { sessionID, apiKey });
   if (!called.ok) return called;
   return { ok: true, payload: extractMcpToolPayload(called.payload), sessionID: called.sessionID };
 }
@@ -4032,14 +4200,60 @@ function runCMCBridge({ skill, symbols, prompt, runID, generatedAt }) {
   }
 }
 
+function cmcMcpShouldTryNextKey(result) {
+  if (!result || result.status === "ok") return false;
+  if ([401, 403, 429].includes(Number(result.statusCode))) return true;
+  const text = `${result.reason || ""} ${result.errorPreview || ""}`.toLowerCase();
+  return /quota|rate.?limit|too many requests|exhaust|credit|subscription|plan|unauthori[sz]ed|forbidden|auth|api.?key|cmc_mcp_subscription_unsupported/.test(text);
+}
+
 async function refreshCMCViaMcpHTTP(options, warnings) {
   const symbols = sanitizeSymbols(options.symbols || options.symbol || options.query);
   const generatedAt = now();
-  const skill = options.skill || cmcSkillForTool(options.toolName);
-  if (!cmcMcpConfigured()) {
+  const keys = cmcMcpAPIKeys();
+  if (!cmcMcpEndpointURL() || !keys.length) {
     return { status: "degraded", provider: "mcpProvider", providerType: "mcpHttpProvider", symbols, generatedAt, artifact: null, rawSecretsReturned: false, reason: "missing_cmc_mcp_api_key" };
   }
-  const client = await cmcMcpClient();
+
+  let lastResult = null;
+  for (let index = 0; index < keys.length; index += 1) {
+    const attemptWarnings = [];
+    const result = await refreshCMCViaMcpHTTPWithKey(options, attemptWarnings, {
+      apiKey: keys[index],
+      keyIndex: index,
+      keyCount: keys.length,
+    });
+    if (result.status === "ok") {
+      warnings.push(...attemptWarnings);
+      if (index > 0) warnings.push("cmc_mcp_key_fallback_used");
+      return {
+        ...result,
+        mcpKeyCount: keys.length,
+        mcpKeyFallbackUsed: index > 0,
+        upstreamWarnings: [...new Set([...(result.upstreamWarnings || []), ...attemptWarnings, ...(index > 0 ? ["cmc_mcp_key_fallback_used"] : [])])],
+      };
+    }
+    lastResult = result;
+    warnings.push(...attemptWarnings, `cmc_mcp_key_${index + 1}_${result.reason || "degraded"}`);
+    if (!cmcMcpShouldTryNextKey(result)) break;
+  }
+
+  return {
+    ...(lastResult || { status: "degraded", provider: "mcpProvider", providerType: "mcpHttpProvider", symbols, generatedAt, artifact: null, rawSecretsReturned: false, reason: "cmc_mcp_all_keys_failed" }),
+    mcpKeyCount: keys.length,
+    mcpKeyFallbackUsed: keys.length > 1,
+    upstreamWarnings: [...new Set([...(lastResult?.upstreamWarnings || []), ...warnings, keys.length > 1 ? "cmc_mcp_key_fallback_attempted" : null].filter(Boolean))],
+  };
+}
+
+async function refreshCMCViaMcpHTTPWithKey(options, warnings, { apiKey }) {
+  const symbols = sanitizeSymbols(options.symbols || options.symbol || options.query);
+  const generatedAt = now();
+  const skill = options.skill || cmcSkillForTool(options.toolName);
+  if (!apiKey) {
+    return { status: "degraded", provider: "mcpProvider", providerType: "mcpHttpProvider", symbols, generatedAt, artifact: null, rawSecretsReturned: false, reason: "missing_cmc_mcp_api_key" };
+  }
+  const client = await cmcMcpClient({ apiKey });
   if (!client.ok) {
     writeOpsStatus(health(), { status: "degraded", provider: "mcpProvider", providerType: "mcpHttpProvider", reason: client.reason, updatedAt: generatedAt });
     return { status: "degraded", provider: "mcpProvider", providerType: "mcpHttpProvider", symbols, generatedAt, artifact: null, rawSecretsReturned: false, reason: client.reason || "cmc_mcp_tools_list_failed", statusCode: client.statusCode, errorPreview: client.errorPreview };
@@ -4052,11 +4266,25 @@ async function refreshCMCViaMcpHTTP(options, warnings) {
       findSkillTool,
       buildCMCSkillHubFindArguments(findSkillTool, { symbols, skill, prompt: options.prompt || options.query }),
       client.sessionID,
+      { apiKey },
     );
     if (discovered.ok) {
       const discoveryError = cmcSkillHubPayloadError(discovered.payload);
       if (discoveryError) {
         warnings.push(discoveryError.code);
+        const degradedDiscovery = {
+          status: "degraded",
+          provider: "mcpProvider",
+          providerType: "mcpHttpProvider",
+          protocol: "skill_hub",
+          symbols,
+          generatedAt,
+          artifact: null,
+          rawSecretsReturned: false,
+          reason: discoveryError.code,
+          errorPreview: discoveryError.message,
+        };
+        if (cmcMcpShouldTryNextKey(degradedDiscovery)) return degradedDiscovery;
       } else {
       const candidate = selectCMCSkillHubCandidate(discovered.payload, skill);
       const uniqueName = candidate?.uniqueName || candidate?.unique_name;
@@ -4066,6 +4294,7 @@ async function refreshCMCViaMcpHTTP(options, warnings) {
           executeSkillTool,
           buildCMCSkillHubExecuteArguments(executeSkillTool, candidate, parameters),
           client.sessionID,
+          { apiKey },
         );
         if (executed.ok) {
           const executionError = cmcSkillHubPayloadError(executed.payload);
@@ -4126,25 +4355,54 @@ async function refreshCMCViaMcpHTTP(options, warnings) {
             rawSecretsReturned: false,
           };
         }
-        warnings.push(executed.reason || "cmc_skill_hub_execute_failed");
+        const degradedExecution = {
+          status: "degraded",
+          provider: "mcpProvider",
+          providerType: "mcpHttpProvider",
+          protocol: "skill_hub",
+          skill: uniqueName,
+          symbols,
+          generatedAt,
+          artifact: null,
+          rawSecretsReturned: false,
+          reason: executed.reason || "cmc_skill_hub_execute_failed",
+          statusCode: executed.statusCode,
+          errorPreview: executed.errorPreview,
+        };
+        if (cmcMcpShouldTryNextKey(degradedExecution)) return degradedExecution;
+        warnings.push(degradedExecution.reason);
       } else {
         warnings.push("cmc_skill_hub_candidate_missing");
       }
       }
     } else {
-      warnings.push(discovered.reason || "cmc_skill_hub_find_failed");
+      const degradedDiscoveryCall = {
+        status: "degraded",
+        provider: "mcpProvider",
+        providerType: "mcpHttpProvider",
+        protocol: "skill_hub",
+        symbols,
+        generatedAt,
+        artifact: null,
+        rawSecretsReturned: false,
+        reason: discovered.reason || "cmc_skill_hub_find_failed",
+        statusCode: discovered.statusCode,
+        errorPreview: discovered.errorPreview,
+      };
+      if (cmcMcpShouldTryNextKey(degradedDiscoveryCall)) return degradedDiscoveryCall;
+      warnings.push(degradedDiscoveryCall.reason);
     }
   }
 
   const quotesTool = selectCMCMcpTool(client.tools, "quotes", skill);
   if (quotesTool) {
-    const quotes = await callCMCMcpTool(quotesTool, buildCMCMcpArguments(quotesTool, { symbols, skill, prompt: options.prompt || options.query }), client.sessionID);
+    const quotes = await callCMCMcpTool(quotesTool, buildCMCMcpArguments(quotesTool, { symbols, skill, prompt: options.prompt || options.query }), client.sessionID, { apiKey });
     if (quotes.ok) {
       const globalTool = selectCMCMcpTool(client.tools, "global", skill);
       const fearTool = selectCMCMcpTool(client.tools, "fear_greed", skill);
       const [globalMetrics, fearGreed] = await Promise.all([
-        globalTool ? callCMCMcpTool(globalTool, buildCMCMcpArguments(globalTool, { symbols, skill, prompt: options.prompt || options.query }), client.sessionID) : Promise.resolve({ ok: false, reason: "cmc_mcp_global_tool_missing" }),
-        fearTool ? callCMCMcpTool(fearTool, buildCMCMcpArguments(fearTool, { symbols, skill, prompt: options.prompt || options.query }), client.sessionID) : Promise.resolve({ ok: false, reason: "cmc_mcp_fear_greed_tool_missing" }),
+        globalTool ? callCMCMcpTool(globalTool, buildCMCMcpArguments(globalTool, { symbols, skill, prompt: options.prompt || options.query }), client.sessionID, { apiKey }) : Promise.resolve({ ok: false, reason: "cmc_mcp_global_tool_missing" }),
+        fearTool ? callCMCMcpTool(fearTool, buildCMCMcpArguments(fearTool, { symbols, skill, prompt: options.prompt || options.query }), client.sessionID, { apiKey }) : Promise.resolve({ ok: false, reason: "cmc_mcp_fear_greed_tool_missing" }),
       ]);
       const snapshot = marketSnapshotFromCMC({
         symbols,
@@ -4192,14 +4450,27 @@ async function refreshCMCViaMcpHTTP(options, warnings) {
         rawSecretsReturned: false,
       };
     }
-    warnings.push(quotes.reason || "cmc_mcp_quotes_tool_failed");
+    const degradedQuotes = {
+      status: "degraded",
+      provider: "mcpProvider",
+      providerType: "mcpHttpProvider",
+      symbols,
+      generatedAt,
+      artifact: null,
+      rawSecretsReturned: false,
+      reason: quotes.reason || "cmc_mcp_quotes_tool_failed",
+      statusCode: quotes.statusCode,
+      errorPreview: quotes.errorPreview,
+    };
+    if (cmcMcpShouldTryNextKey(degradedQuotes)) return degradedQuotes;
+    warnings.push(degradedQuotes.reason);
   }
 
   const skillTool = selectCMCMcpTool(client.tools, "skill", skill);
   if (!skillTool) {
     return { status: "degraded", provider: "mcpProvider", providerType: "mcpHttpProvider", symbols, generatedAt, artifact: null, rawSecretsReturned: false, reason: "cmc_mcp_usable_tool_missing", availableToolCount: client.tools.length };
   }
-  const broad = await callCMCMcpTool(skillTool, buildCMCMcpArguments(skillTool, { symbols, skill, prompt: options.prompt || options.query }), client.sessionID);
+  const broad = await callCMCMcpTool(skillTool, buildCMCMcpArguments(skillTool, { symbols, skill, prompt: options.prompt || options.query }), client.sessionID, { apiKey });
   if (!broad.ok) {
     return { status: "degraded", provider: "mcpProvider", providerType: "mcpHttpProvider", symbols, generatedAt, artifact: null, rawSecretsReturned: false, reason: broad.reason || "cmc_mcp_skill_tool_failed", statusCode: broad.statusCode, errorPreview: broad.errorPreview };
   }
@@ -4760,6 +5031,83 @@ function skillHubReturnedPriceMetadata(observations = []) {
   };
 }
 
+function normalizedReadableEvidenceSections(item) {
+  return safeArray(item?.readableEvidence)
+    .map((section) => ({
+      title: safeSkillHubEvidenceText(section?.title || "Skill Hub 返回摘录"),
+      bullets: safeArray(section?.bullets).map((bullet) => safeSkillHubEvidenceText(bullet)).filter(Boolean),
+    }))
+    .filter((section) => section.title || section.bullets.length);
+}
+
+function buildCMCReturnedContent(item) {
+  if (!item) {
+    return { summary: null, conclusion: null, marketRead: null, readableEvidence: [] };
+  }
+  const summary = publicSkillHubSummary(item?.summary || "");
+  const conclusion = safeSkillHubEvidenceText(item?.conclusion || "", 1200);
+  const marketRead = safeSkillHubEvidenceText(item?.marketRead?.summary || item?.market_read?.summary || "", 1200);
+  return {
+    summary: summary || null,
+    conclusion: conclusion || null,
+    marketRead: marketRead || null,
+    readableEvidence: normalizedReadableEvidenceSections(item),
+  };
+}
+
+function buildCMCRenderBlocks(observations = []) {
+  const blocks = [];
+  for (const item of observations.filter((entry) => skillHubObservationSucceeded(entry))) {
+    const returnedContent = buildCMCReturnedContent(item);
+    const observedAt = item?.observedAt || item?.generatedAt || null;
+    const source = "CMC Skill Hub MCP";
+    if (returnedContent.summary) {
+      blocks.push({
+        type: isGenericSkillHubSummary(item?.summary) ? "provider_generic_summary" : "provider_summary",
+        title: "CMC Skill Hub 返回",
+        body: returnedContent.summary,
+        source,
+        observedAt,
+      });
+    }
+    if (returnedContent.conclusion && returnedContent.conclusion !== returnedContent.summary) {
+      blocks.push({
+        type: "provider_conclusion",
+        title: "CMC Skill Hub 结论",
+        body: returnedContent.conclusion,
+        source,
+        observedAt,
+      });
+    }
+    if (returnedContent.marketRead && returnedContent.marketRead !== returnedContent.summary && returnedContent.marketRead !== returnedContent.conclusion) {
+      blocks.push({
+        type: "provider_market_read",
+        title: "CMC Skill Hub Market Read",
+        body: returnedContent.marketRead,
+        source,
+        observedAt,
+      });
+    }
+    for (const section of returnedContent.readableEvidence.slice(0, 4)) {
+      if (!section.bullets.length) continue;
+      blocks.push({
+        type: "provider_evidence",
+        title: section.title || "CMC Skill Hub 证据",
+        body: section.bullets.slice(0, 4).join("\n"),
+        source,
+        observedAt,
+      });
+    }
+  }
+  const seen = new Set();
+  return blocks.filter((block) => {
+    const key = `${block.type}:${block.title}:${block.body}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return Boolean(block.body);
+  }).slice(0, 8);
+}
+
 function skillHubDisplayCandidate(observations = []) {
   const validObservations = observations.filter((item) => skillHubObservationSucceeded(item));
   for (const item of validObservations) {
@@ -4892,6 +5240,8 @@ function buildToolObservations(runDir, runID, toolCalls, policies, contextSummar
   const cmcGate = buildSplitCMCGate(cmcFreshnessGate(), cmcSkillHubObservations);
   const marketsSummary = readJSON(join(runDir, "markets-capability-summary.json"), null);
   const marketsRun = observations.some((item) => String(item.toolName || "").startsWith("markets."));
+  const cloudASRSummary = readJSON(join(runDir, "cloud-asr-summary.json"), null);
+  const cloudASRRun = observations.some((item) => item.toolName === "office.cloud_asr.transcribe") || Boolean(cloudASRSummary);
   const payload = {
     schemaVersion: "agent-tool-observations-v1",
     runID,
@@ -4934,6 +5284,32 @@ function buildToolObservations(runDir, runID, toolCalls, policies, contextSummar
           observations: [],
           instruction: "No Markets Research result is available in this run.",
         },
+    cloudASR: cloudASRRun
+      ? {
+          available: Boolean(cloudASRSummary),
+          summary: cloudASRSummary,
+          gate: {
+            status: cloudASRSummary?.status || "degraded",
+            cloudASRStatus: cloudASRSummary?.cloudASRStatus || "unknown",
+            provider: cloudASRSummary?.provider || "阿里云百炼",
+            model: cloudASRSummary?.model || null,
+            cloudUpload: cloudASRSummary?.cloudUpload === true,
+            uploadProvider: cloudASRSummary?.uploadProvider || "aliyun-oss",
+            segmentCount: Number(cloudASRSummary?.segmentCount || 0),
+            needsTranscriptReview: cloudASRSummary?.needsTranscriptReview !== false,
+            rawAudioStored: false,
+            rawProviderRequestIncluded: false,
+            secretsIncluded: false,
+          },
+          instruction: cloudASRSummary?.status === "completed"
+            ? "Use the bounded Cloud ASR transcript chunks as meeting source context. Label transcription as cloud ASR via Alibaba Bailian and do not expose provider internals."
+            : "Cloud ASR did not produce usable transcript chunks. Do not fabricate a transcript; ask for transcript review or another audio/video upload.",
+        }
+      : {
+          available: false,
+          observations: [],
+          instruction: "No Cloud ASR transcript is available in this run.",
+        },
     policyDecisions: policies.map((item) => ({
       action: item.action,
       status: item.status,
@@ -4955,6 +5331,9 @@ function buildToolObservations(runDir, runID, toolCalls, policies, contextSummar
       marketsResearchDraftAllowed: Boolean(marketsSummary?.allowResearchDraft),
       marketsResearchConclusionAllowed: Boolean(marketsSummary?.allowResearchConclusion),
       marketsConcretePricesAllowed: false,
+      cloudASRUploadAllowed: cloudASRRun,
+      cloudASRStatus: cloudASRSummary?.cloudASRStatus || "not_requested",
+      cloudASRUserVisibleLabel: cloudASRSummary?.userVisibleLabel || null,
       instruction: cmcGate.allowConcretePrices
         ? "Concrete CMC prices may be cited with provider/freshness attribution."
         : cmcGate.allowSkillHubResultDisplay
@@ -5501,7 +5880,7 @@ async function securitySmokeCheck() {
   if (ok !== null) throw new Error("security_smoke_expected_authorized");
   if (policyForTool("wechat_cli.live_command") !== "blocked") throw new Error("security_smoke_wechat_live_must_be_blocked");
   if (policyForTool("cmc.live_market_refresh") !== "pass") throw new Error("security_smoke_cmc_live_must_pass");
-  if (policyForTool("office.document.draft") !== "pass" || policyForTool("office.meeting_minutes.draft") !== "pass") {
+  if (policyForTool("office.document.draft") !== "pass" || policyForTool("office.meeting_minutes.draft") !== "pass" || policyForTool("office.cloud_asr.transcribe") !== "pass") {
     throw new Error("security_smoke_office_draft_must_pass");
   }
   if (policyForTool("markets.equity_research.draft") !== "pass" || policyForTool("markets.provider.drillr_deferred") !== "pass") {
@@ -5704,6 +6083,22 @@ process.stdin.on("end", () => {
   ) {
     throw new Error(`security_smoke_expected_displayable_skill_hub_result:${JSON.stringify(displayableSplitGate)}`);
   }
+  const displayableCapabilitySummary = buildCMCCapabilitySummary({
+    runID: "security-smoke-render",
+    toolObservations: { cmcFreshnessGate: displayableSplitGate, cmcSkillHub: { available: true, observations: [genericSkillHubObservation] } },
+    tools: ["cmc.crypto_macro_overview"],
+    selectedExtensionIDs: ["cmc-skill-hub"],
+  });
+  if (
+    displayableCapabilitySummary.renderSchemaVersion !== "cmc-render-result-v1"
+    || !Array.isArray(displayableCapabilitySummary.renderBlocks)
+    || displayableCapabilitySummary.renderBlocks.length < 1
+    || displayableCapabilitySummary.diagnostics?.parserEvidenceStatus !== "empty"
+    || displayableCapabilitySummary.diagnostics?.priceSnapshotStatus !== "empty"
+    || displayableCapabilitySummary.claimPolicy?.appMayAddConcretePrices !== false
+  ) {
+    throw new Error(`security_smoke_expected_cmc_render_contract:${JSON.stringify(displayableCapabilitySummary)}`);
+  }
   const displayableFinal = degradedMarketFinalText({
     prompt: "分析 BTC 宏观 thesis",
     tools: ["cmc.crypto_macro_overview"],
@@ -5783,24 +6178,29 @@ function assertBusinessRunArtifacts(result, { expectLiveCMC, caseID }) {
   const finalReadModelPath = join(runDir, "agent-final-read-model.json");
   const coreRoutePlanPath = join(runDir, "core-route-plan.json");
   const cmcCapabilitySummaryPath = join(runDir, "cmc-capability-summary.json");
+  const modelRoutePath = join(runDir, "model-route.json");
   const finalText = readFileSync(finalPath, "utf8");
   const observations = readJSON(observationsPath, null);
   const manifest = readJSON(manifestPath, null);
   const finalReadModel = readJSON(finalReadModelPath, null);
   const coreRoutePlan = readJSON(coreRoutePlanPath, null);
   const cmcCapabilitySummary = readJSON(cmcCapabilitySummaryPath, null);
+  const modelRoute = readJSON(modelRoutePath, null);
   if (result.task?.status !== "completed") throw new Error(`business_qa_${caseID}_task_not_completed`);
   if (manifest?.status !== "completed") throw new Error(`business_qa_${caseID}_manifest_not_completed`);
   if (!observations?.schemaVersion || !Array.isArray(observations.observations)) throw new Error(`business_qa_${caseID}_missing_tool_observations`);
   if (coreRoutePlan?.schemaVersion !== "core-route-plan-v1" || !Array.isArray(coreRoutePlan.tools)) throw new Error(`business_qa_${caseID}_missing_core_route_plan`);
   if (!observations.cmcFreshnessGate?.researchEvidence || !observations.cmcFreshnessGate?.priceSnapshot) throw new Error(`business_qa_${caseID}_missing_split_cmc_gate`);
   if (!finalReadModel?.schemaVersion || finalReadModel.finalText !== finalText.trim()) throw new Error(`business_qa_${caseID}_missing_or_mismatched_final_read_model`);
+  if (modelRoute?.schemaVersion !== "agent-model-route-v3" || !Array.isArray(modelRoute.attempts) || !modelRoute.fallbackPolicy?.deterministicOnlyAfterModelsExhausted) {
+    throw new Error(`business_qa_${caseID}_missing_model_route_v3:${JSON.stringify(modelRoute)}`);
+  }
   assertRunContextArtifacts(result.runID);
   assertRunLoopArtifacts(result.runID);
   assertRunHarnessArtifacts(result.runID);
   assertRunCapabilityLoopArtifacts(
     result.runID,
-    caseID === "btc_macro" ? "crypto_market_loop" : caseID === "office_meeting_draft" ? "office_work_loop" : caseID === "markets_equity_draft" ? "markets_research_loop" : null
+    caseID === "btc_macro" ? "crypto_market_loop" : caseID.startsWith("office_meeting") ? "office_work_loop" : caseID === "markets_equity_draft" ? "markets_research_loop" : null
   );
   if (!finalText.includes("## 结论") || !finalText.includes("## 关键证据")) throw new Error(`business_qa_${caseID}_final_not_structured`);
   if (internalSurfaceViolations(finalText).length) throw new Error(`business_qa_${caseID}_raw_internal_surface:${internalSurfaceViolations(finalText).join(",")}`);
@@ -5811,6 +6211,9 @@ function assertBusinessRunArtifacts(result, { expectLiveCMC, caseID }) {
     if (!cmcCapabilitySummary?.schemaVersion) throw new Error(`business_qa_${caseID}_missing_cmc_capability_summary`);
     if (cmcCapabilitySummary.schemaVersion !== "cmc-capability-summary-v1" || cmcCapabilitySummary.capabilityID !== "cmc-skill-hub") {
       throw new Error(`business_qa_${caseID}_invalid_cmc_capability_summary:${JSON.stringify(cmcCapabilitySummary)}`);
+    }
+    if (cmcCapabilitySummary.renderSchemaVersion !== "cmc-render-result-v1" || !Array.isArray(cmcCapabilitySummary.renderBlocks)) {
+      throw new Error(`business_qa_${caseID}_missing_cmc_render_contract:${JSON.stringify(cmcCapabilitySummary)}`);
     }
     if (observations.cmcSkillHub?.available && Number(cmcCapabilitySummary.sourceObservationCount || 0) < 1) {
       throw new Error(`business_qa_${caseID}_cmc_summary_missing_real_observation:${JSON.stringify(cmcCapabilitySummary)}`);
@@ -5834,7 +6237,7 @@ function assertBusinessRunArtifacts(result, { expectLiveCMC, caseID }) {
   if (caseID === "btc_macro" && observations.toolSelectionDiagnostic?.preferredTool !== "cmc.crypto_macro_overview") {
     throw new Error(`business_qa_${caseID}_macro_tool_selection_mismatch:${JSON.stringify(observations.toolSelectionDiagnostic)}`);
   }
-  if (caseID === "office_meeting_draft") {
+  if (caseID === "office_meeting_draft" || caseID === "office_meeting_cloud_asr") {
     const officeArtifacts = [
       "office-meeting-minutes-draft.json",
       "office-document-draft.json",
@@ -5850,6 +6253,22 @@ function assertBusinessRunArtifacts(result, { expectLiveCMC, caseID }) {
     }
     if (/office\.|channel\.feishu|tool-observations|tool-calls|lark-cli/i.test(finalText)) {
       throw new Error(`business_qa_${caseID}_final_exposes_internal_tools`);
+    }
+    if (caseID === "office_meeting_cloud_asr") {
+      for (const name of ["cloud-asr-summary.json", "cloud-asr-transcript.json", "meeting-source-pack.json"]) {
+        if (!existsSync(join(runDir, name))) throw new Error(`business_qa_${caseID}_missing_cloud_asr_artifact:${name}`);
+      }
+      const asrSummary = readJSON(join(runDir, "cloud-asr-summary.json"), null);
+      const asrTranscript = readJSON(join(runDir, "cloud-asr-transcript.json"), null);
+      if (asrSummary?.cloudASRStatus !== "completed" || asrSummary?.cloudUpload !== true || asrSummary?.rawProviderRequestIncluded !== false || asrSummary?.secretsIncluded !== false) {
+        throw new Error(`business_qa_${caseID}_invalid_cloud_asr_summary:${JSON.stringify(asrSummary)}`);
+      }
+      if (asrTranscript?.rawAudioStored !== false || !Array.isArray(asrTranscript?.segments) || asrTranscript.segments.length < 1) {
+        throw new Error(`business_qa_${caseID}_invalid_cloud_asr_transcript:${JSON.stringify(asrTranscript)}`);
+      }
+      if (observations.cloudASR?.gate?.cloudUpload !== true || observations.modelUsePolicy?.cloudASRStatus !== "completed") {
+        throw new Error(`business_qa_${caseID}_missing_cloud_asr_observation:${JSON.stringify(observations.cloudASR)}`);
+      }
     }
   }
   if (caseID === "markets_equity_draft") {
@@ -5967,6 +6386,33 @@ async function businessQACheck() {
     expectLiveCMC: null,
   }));
 
+  const previousMockCloudASR = process.env.WECHAT_AGENT_MOCK_CLOUD_ASR;
+  process.env.WECHAT_AGENT_MOCK_CLOUD_ASR = "1";
+  try {
+    summaries.push(await runBusinessCase({
+      caseID: "office_meeting_cloud_asr",
+      title: "Office meeting cloud ASR",
+      prompt: "请把我拖入的会议录音做云端转写，再生成会议纪要、文档骨架和飞书 dry-run 预览；不要真实发布。",
+      selectedSkillIDs: ["meeting-cloud-asr", "meeting-minutes", "document-generation", "document-revision", "feishu-agent-bridge"],
+      selectedExtensionIDs: ["office-meeting-agent"],
+      attachments: [{
+        attachmentID: "qa-audio-1",
+        fileName: "meeting.m4a",
+        mimeType: "audio/mp4",
+        artifactPath: "runtime/agent/attachments/qa-audio-1/original.m4a",
+        originalPath: "runtime/agent/attachments/qa-audio-1/original.m4a",
+        status: "ready_for_cloud_asr",
+      }],
+      expectLiveCMC: null,
+    }));
+  } finally {
+    if (previousMockCloudASR === undefined) {
+      delete process.env.WECHAT_AGENT_MOCK_CLOUD_ASR;
+    } else {
+      process.env.WECHAT_AGENT_MOCK_CLOUD_ASR = previousMockCloudASR;
+    }
+  }
+
   summaries.push(await runBusinessCase({
     caseID: "markets_equity_draft",
     title: "Markets equity research draft",
@@ -5978,10 +6424,12 @@ async function businessQACheck() {
   }));
 
   const previousMcpKey = process.env.CMC_MCP_API_KEY;
+  const previousMcpKeys = process.env.CMC_MCP_API_KEYS;
   const previousProKey = process.env.CMC_PRO_API_KEY;
   const previousCoinKey = process.env.COINMARKETCAP_API_KEY;
   const previousBridge = process.env.CMC_SKILL_HUB_BRIDGE_CMD;
   delete process.env.CMC_MCP_API_KEY;
+  delete process.env.CMC_MCP_API_KEYS;
   delete process.env.CMC_PRO_API_KEY;
   delete process.env.COINMARKETCAP_API_KEY;
   delete process.env.CMC_SKILL_HUB_BRIDGE_CMD;
@@ -5996,12 +6444,13 @@ async function businessQACheck() {
     }));
   } finally {
     if (previousMcpKey === undefined) delete process.env.CMC_MCP_API_KEY; else process.env.CMC_MCP_API_KEY = previousMcpKey;
+    if (previousMcpKeys === undefined) delete process.env.CMC_MCP_API_KEYS; else process.env.CMC_MCP_API_KEYS = previousMcpKeys;
     if (previousProKey === undefined) delete process.env.CMC_PRO_API_KEY; else process.env.CMC_PRO_API_KEY = previousProKey;
     if (previousCoinKey === undefined) delete process.env.COINMARKETCAP_API_KEY; else process.env.COINMARKETCAP_API_KEY = previousCoinKey;
     if (previousBridge === undefined) delete process.env.CMC_SKILL_HUB_BRIDGE_CMD; else process.env.CMC_SKILL_HUB_BRIDGE_CMD = previousBridge;
   }
 
-  if (summaries.length !== 7) throw new Error(`business_qa_expected_7_cases:${summaries.length}`);
+  if (summaries.length !== 8) throw new Error(`business_qa_expected_8_cases:${summaries.length}`);
   writeJSON(join(opsRoot, "business-qa-summary.json"), {
     schemaVersion: "agent-business-qa-summary-v1",
     generatedAt: now(),

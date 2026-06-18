@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { cmcSkillForTool, executeRuntimeToolViaCore, extractSymbolsFromPrompt } from "./runtime-tool-executor.mjs";
 
@@ -64,6 +66,68 @@ assert.equal(cmcSkillForTool("cmc.track_social_price_divergence"), "track_social
   });
   assert.equal(result.toolName, "office.document.draft");
   assert.equal(result.details.source, "pi");
+}
+
+{
+  const runID = "run-provider-cloud-asr-test";
+  const attachmentID = "attachment-cloud-asr-test";
+  const projectRoot = resolve(new URL("../../..", import.meta.url).pathname);
+  const runtimeRoot = resolve(projectRoot, "runtime", "agent");
+  const attachmentDir = resolve(runtimeRoot, "attachments", attachmentID);
+  const runDir = resolve(runtimeRoot, "runs", runID);
+  rmSync(runDir, { recursive: true, force: true });
+  mkdirSync(attachmentDir, { recursive: true });
+  const sourcePath = resolve(attachmentDir, "original.m4a");
+  writeFileSync(sourcePath, "mock audio bytes");
+  const previousMock = process.env.WECHAT_AGENT_MOCK_CLOUD_ASR;
+  process.env.WECHAT_AGENT_MOCK_CLOUD_ASR = "1";
+  try {
+    const result = await executeRuntimeToolViaCore("office.cloud_asr.transcribe", {
+      prompt: "转写会议录音并生成纪要",
+      runID,
+      sessionID: "session-provider-test",
+      attachments: [{
+        attachmentID,
+        fileName: "meeting.m4a",
+        originalPath: sourcePath,
+        artifactPath: `runtime/agent/attachments/${attachmentID}/original.m4a`,
+        mimeType: "audio/mp4",
+        sha256: "mock",
+        sizeBytes: 16,
+        status: "ready_for_cloud_asr",
+      }],
+    }, {
+      refreshCMCLive: async () => {
+        throw new Error("cmc_should_not_handle_cloud_asr_tool");
+      },
+      piKernel: {
+        executeTool: async () => {
+          throw new Error("pi_should_not_handle_cloud_asr_tool");
+        },
+      },
+    });
+    assert.equal(result.status, "completed");
+    const summaryPath = resolve(runDir, "cloud-asr-summary.json");
+    const transcriptPath = resolve(runDir, "cloud-asr-transcript.json");
+    assert.ok(existsSync(summaryPath));
+    assert.ok(existsSync(transcriptPath));
+    const summary = JSON.parse(readFileSync(summaryPath, "utf8"));
+    const transcript = JSON.parse(readFileSync(transcriptPath, "utf8"));
+    assert.equal(summary.schemaVersion, "cloud-asr-summary-v1");
+    assert.equal(summary.cloudUpload, true);
+    assert.equal(summary.rawProviderRequestIncluded, false);
+    assert.equal(summary.secretsIncluded, false);
+    assert.equal(transcript.rawAudioStored, false);
+    assert.ok(transcript.segments.length >= 1);
+  } finally {
+    if (previousMock === undefined) {
+      delete process.env.WECHAT_AGENT_MOCK_CLOUD_ASR;
+    } else {
+      process.env.WECHAT_AGENT_MOCK_CLOUD_ASR = previousMock;
+    }
+    rmSync(runDir, { recursive: true, force: true });
+    rmSync(attachmentDir, { recursive: true, force: true });
+  }
 }
 
 console.log("agent_runtime_core_provider_executor=pass");

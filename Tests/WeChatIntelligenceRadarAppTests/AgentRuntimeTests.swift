@@ -21,6 +21,9 @@ let agentRuntimeChecks: Void = {
     checkCompletedRunIgnoresTerminalFinalTextWithoutFinalReadModel()
     checkWorkbenchLayoutMetricsBreakpoints()
     checkCMCGateSummaryDecodesNestedAndFlatFields()
+    checkAgentModelPreferencePayloads()
+    checkCMCCapabilitySummaryDecodesRenderContract()
+    try! checkCloudASRSummaryDecodesAndStoreReads()
     try! checkHarnessReadModelsDecodeAndStoreReads()
     checkAgentRunManifestAndV2EventDecode()
     checkAgentWorkspaceAdapterUsesControlContextSummaries()
@@ -37,6 +40,56 @@ let agentRuntimeChecks: Void = {
 
 private func require(_ condition: @autoclosure () -> Bool, _ message: String) {
     precondition(condition(), message)
+}
+
+private func checkCloudASRSummaryDecodesAndStoreReads() throws {
+    let root = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let runID = "run-cloud-asr-test"
+    let runDir = root
+        .appendingPathComponent("runtime", isDirectory: true)
+        .appendingPathComponent("agent", isDirectory: true)
+        .appendingPathComponent("runs", isDirectory: true)
+        .appendingPathComponent(runID, isDirectory: true)
+    try FileManager.default.createDirectory(at: runDir, withIntermediateDirectories: true)
+    let payload = """
+    {
+      "schemaVersion": "cloud-asr-summary-v1",
+      "runID": "\(runID)",
+      "sessionID": "session-cloud-asr-test",
+      "status": "completed",
+      "cloudASRStatus": "completed",
+      "provider": "阿里云百炼",
+      "providerID": "aliyun-bailian-dashscope",
+      "model": "fun-asr",
+      "uploadProvider": "aliyun-oss",
+      "cloudUpload": true,
+      "userVisibleLabel": "云端转写 · 阿里云百炼 · OSS 临时上传",
+      "reason": null,
+      "speakerDiarizationStatus": "provider_supported",
+      "needsTranscriptReview": false,
+      "transcriptPath": "runtime/agent/runs/\(runID)/cloud-asr-transcript.json",
+      "sourcePackPath": "runtime/agent/runs/\(runID)/meeting-source-pack.json",
+      "segmentCount": 2,
+      "boundedChunkCount": 2,
+      "sourceAttachmentIDs": ["attachment-audio"],
+      "rawAudioStored": false,
+      "rawProviderRequestIncluded": false,
+      "rawProviderResponseIncluded": false,
+      "secretsIncluded": false,
+      "generatedAt": "2026-06-12T00:00:00.000Z",
+      "artifactPath": "runtime/agent/runs/\(runID)/cloud-asr-summary.json"
+    }
+    """.data(using: .utf8)!
+    try payload.write(to: runDir.appendingPathComponent("cloud-asr-summary.json"))
+
+    let resolver = AgentRuntimePathResolver(pathResolver: RuntimePathResolver(root: root))
+    let store = AgentRunReadModelStore(streamStore: AgentStreamStore(resolver: resolver))
+    let summary = store.readCloudASRSummary(runID: runID)
+    require(summary?.cloudASRStatus == "completed", "Cloud ASR summary should decode completed status")
+    require(summary?.cloudUpload == true, "Cloud ASR summary should preserve cloud upload marker")
+    require(summary?.rawAudioStored == false, "Cloud ASR summary must not mark raw audio as stored")
+    require(summary?.displayStatus.contains("云端转写") == true, "Cloud ASR display status should be user-readable")
 }
 
 private func checkWorkbenchLayoutMetricsBreakpoints() {
@@ -728,6 +781,102 @@ private func checkCMCGateSummaryDecodesNestedAndFlatFields() {
     require(model.cmcGateSummary?.researchEvidenceStatus == "empty", "CMC gate should preserve flat research evidence status")
     require(model.cmcGateSummary?.priceSnapshot?.allowConcretePrices == false, "CMC gate should decode nested price snapshot")
     require(model.productMutationPolicy?.status == "discarded", "empty CMC evidence should decode discarded mutation policy")
+}
+
+private func checkAgentModelPreferencePayloads() {
+    let auto = AgentModelPreferenceOption.auto.requestPayload
+    require(auto.mode == "auto", "auto model preference should use auto mode")
+    require(auto.textModel == nil, "auto model preference should omit explicit model")
+    require(auto.fallbackPolicy == "continue_with_eligible_models", "model preference should request fallback chain")
+
+    let pro = AgentModelPreferenceOption.deepseekV4Pro.requestPayload
+    require(pro.mode == "explicit", "pro model preference should be explicit")
+    require(pro.textModel == "deepseek-v4-pro", "pro model preference should encode deepseek-v4-pro")
+
+    let flash = AgentModelPreferenceOption.deepseekV4Flash.requestPayload
+    require(flash.mode == "explicit", "flash model preference should be explicit")
+    require(flash.textModel == "deepseek-v4-flash", "flash model preference should encode deepseek-v4-flash")
+}
+
+private func checkCMCCapabilitySummaryDecodesRenderContract() {
+    let json = """
+    {
+      "schemaVersion": "cmc-capability-summary-v1",
+      "renderSchemaVersion": "cmc-render-result-v1",
+      "capabilityID": "cmc-skill-hub",
+      "displayName": "CMC Skill Hub",
+      "packageTitle": "CMC Skill Hub 能力包",
+      "runID": "run-cmc-render",
+      "mountStatus": "mounted",
+      "transportStatus": "ok",
+      "provider": "mcpProvider",
+      "skill": "crypto_macro_overview",
+      "status": "ok",
+      "confidence": "medium",
+      "summary": "BTC is trading near 69,000 while ETF flow remains mixed.",
+      "returnedContent": {
+        "summary": "BTC is trading near 69,000 while ETF flow remains mixed.",
+        "conclusion": "Keep BTC on research watch.",
+        "marketRead": "Macro liquidity is mixed.",
+        "readableEvidence": []
+      },
+      "renderBlocks": [
+        {
+          "type": "provider_summary",
+          "title": "CMC Skill Hub 返回",
+          "body": "BTC is trading near 69,000 while ETF flow remains mixed.",
+          "source": "CMC Skill Hub MCP",
+          "observedAt": "2026-06-12T00:00:00.000Z"
+        }
+      ],
+      "diagnostics": {
+        "parserEvidenceStatus": "empty",
+        "researchEvidenceStatus": "empty",
+        "priceSnapshotStatus": "empty",
+        "assetCount": 0,
+        "emptyEvidenceReason": "parser_did_not_extract_structured_sections",
+        "freshness": "fresh",
+        "confidence": "medium",
+        "risk": null,
+        "sourceTrust": null,
+        "degraded": false
+      },
+      "claimPolicy": {
+        "appMayAddConcretePrices": false,
+        "providerReturnedNumbersMayRender": true,
+        "appMayAddTradingLevels": false
+      },
+      "readableEvidence": [],
+      "readableEvidenceCount": 0,
+      "skillHubDisplayStatus": "usable",
+      "allowSkillHubResultDisplay": true,
+      "displayableResultText": "BTC is trading near 69,000 while ETF flow remains mixed.",
+      "displayableResultSource": "summary",
+      "parserEvidenceStatus": "empty",
+      "allowSkillHubReturnedPrices": true,
+      "skillHubReturnedPriceTokenCount": 1,
+      "researchEvidenceStatus": "empty",
+      "emptyEvidenceReason": "parser_did_not_extract_structured_sections",
+      "priceSnapshotStatus": "empty",
+      "assetCount": 0,
+      "allowResearchConclusion": true,
+      "allowConcretePrices": false,
+      "missingOrStaleInputs": [],
+      "notableAnomalies": [],
+      "generatedAt": "2026-06-12T00:00:00.000Z",
+      "sourceObservationCount": 1,
+      "workspaceMutationPolicy": {
+        "scope": "persistent_workspace_state_only",
+        "displayEligibleEvenWhenDiscarded": true
+      }
+    }
+    """
+    let model = try! JSONDecoder.agentArtifactDecoder().decode(CMCCapabilitySummary.self, from: Data(json.utf8))
+    require(model.renderSchemaVersion == "cmc-render-result-v1", "CMC summary should decode render schema")
+    require(model.renderBlocks?.first?.body.contains("69,000") == true, "CMC render block should preserve provider-returned number")
+    require(model.diagnostics?.parserEvidenceStatus == "empty", "parser empty should decode as diagnostic")
+    require(model.claimPolicy?.providerReturnedNumbersMayRender == true, "provider-returned numbers should be displayable")
+    require(model.workspaceMutationPolicy?.scope == "persistent_workspace_state_only", "workspace mutation policy scope should decode")
 }
 
 private func checkHarnessReadModelsDecodeAndStoreReads() throws {

@@ -2,7 +2,7 @@
 
 - Date: 2026-06-12
 - Status: implemented in this iteration
-- Scope: Agent Runtime Host, Command Desk, public Skill/Extension surface, QA gates
+- Scope: Agent Runtime Host, Blocks Workbench, public Skill/Extension surface, QA gates
 - References:
   - `https://github.com/yennanliu/InvestSkill`
   - `https://github.com/prof-little-bear/cc-equity-research`
@@ -14,13 +14,13 @@
 The product model becomes:
 
 ```text
-Command Desk
+Blocks Workbench
 ├── Crypto       -> CMC Skill Hub / WeChat evidence / market loops
 ├── Markets      -> Equity Research / Macro / Cross-asset drafts
 └── Office       -> Meeting notes / document drafts / Feishu preview
 ```
 
-`Markets` is a task lane inside the composer. It is not a new top-level product area and it does not expose raw skills, providers, slash commands, prompt filenames, or repository names.
+`Markets` is a Domain Block with a small set of Loop Templates. It is not a new top-level product area and it does not expose raw skills, providers, slash commands, prompt filenames, or repository names.
 
 ## 2. Source Assessment
 
@@ -59,7 +59,7 @@ The current Agent Runtime Host remains the only orchestrator.
 
 ```mermaid
 flowchart LR
-  U["Command Desk prompt"] --> P["Existing planner / tool selection"]
+  U["Blocks Workbench loop prompt"] --> P["Existing planner / tool selection"]
   P --> E["markets-research extension"]
   E --> D["Dispatcher plan artifact"]
   E --> R["Equity research draft artifact"]
@@ -67,7 +67,7 @@ flowchart LR
   E --> X["Provider deferred marker"]
   G --> O["tool-observations.json"]
   O --> F["agent-final-read-model.json"]
-  F --> UI["Command Desk result canvas"]
+  F --> UI["Blocks Workbench result canvas"]
 ```
 
 New internal artifacts:
@@ -120,21 +120,21 @@ Forbidden user-visible surfaces:
 - prompt filenames
 - `BUY / HOLD / SELL` as action buttons
 
-## 6. Command Desk Integration
+## 6. Blocks Workbench Integration
 
-Command Desk keeps three top-level navigation items only:
+Blocks Workbench keeps three top-level navigation items only:
 
 - Workbench
 - History
 - Settings
 
-Inside Workbench, the composer adds a third task intent:
+Inside Workbench, Markets is one of the three Domain Blocks:
 
 - `Crypto`
 - `Markets`
 - `Office`
 
-Markets quick actions are compact and task-oriented:
+Markets Loop Templates are compact and task-oriented:
 
 - Company deep dive
 - Earnings review
@@ -163,5 +163,5 @@ Until then, Markets Research is a methodology-backed research draft lane.
 - `agent-final-read-model.json` includes `marketsGateSummary`.
 - Final output does not expose raw internal tools, provider names, repo names, slash command language, or `BUY / HOLD / SELL`.
 - Product mutations are discarded when provider evidence and price snapshot are empty.
-- Command Desk shows Markets as a composer lane and ability palette group.
+- Blocks Workbench shows Markets as a Domain Block and loop template group.
 - UI smoke verifies `ui_smoke_markets_research_visible=true`.

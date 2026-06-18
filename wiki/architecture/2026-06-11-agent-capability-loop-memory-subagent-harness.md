@@ -8,7 +8,7 @@
 
 The current project already has the correct high-level ownership:
 
-- Swift Command Desk is the product surface.
+- Swift Blocks Workbench is the product surface.
 - Agent Runtime Host owns planning, tool execution, gates, artifacts, and final read models.
 - Skill/Extension packages are the user-facing capability layer.
 - Internal tools/providers/normalizers/workers remain hidden.
@@ -90,7 +90,7 @@ Rules:
 
 Swift should read the three new artifacts through `AgentRunReadModelStore`.
 
-Command Desk can display:
+Blocks Workbench can display:
 
 - Capability loop status near result/review.
 - Memory status in task detail.
@@ -140,4 +140,4 @@ Follow-up is a new task or continuation request, not a hidden mutation of the pr
 - Runtime writes `capability-loop-read-model.json`, `memory-read-model.json`, and `subagent-coordination-read-model.json` for completed runs.
 - `run-manifest.json` includes `capabilityLoopSummary`, `memorySummary`, and `subagentCoordinationSummary`.
 - Business QA asserts crypto runs classify as `crypto_market_loop` and office meeting/document runs classify as `office_work_loop`.
-- Swift reads the new artifacts through `AgentRunReadModelStore` and displays them only in task-local Command Desk surfaces.
+- Swift reads the new artifacts through `AgentRunReadModelStore` and displays them only in task-local Blocks Workbench surfaces.

@@ -104,7 +104,7 @@ struct DashboardView: View {
     private func workspaceContent(metrics: WorkbenchLayoutMetrics) -> some View {
         switch viewModel.selectedWorkspace {
         case .home:
-            CommandDeskWorkspaceView(viewModel: viewModel, metrics: metrics)
+            BlocksWorkbenchView(viewModel: viewModel, metrics: metrics)
         case .inbox, .token, .watchlist:
             LibraryWorkspaceView(viewModel: viewModel, metrics: metrics)
         case .agents:
@@ -160,6 +160,7 @@ private struct CommandDeskWorkspaceView: View {
                 task: selectedTask,
                 finalReadModel: selectedTask.flatMap { viewModel.agentFinalReadModelByRunID[$0.runID] },
                 cmcSummary: selectedTask.flatMap { viewModel.agentCMCCapabilitySummaryByRunID[$0.runID] },
+                cloudASRSummary: selectedTask.flatMap { viewModel.agentCloudASRSummaryByRunID[$0.runID] },
                 capabilityLoop: selectedTask.flatMap { viewModel.agentCapabilityLoopByRunID[$0.runID] },
                 memoryReadModel: selectedTask.flatMap { viewModel.agentMemoryReadModelByRunID[$0.runID] },
                 subagentCoordination: selectedTask.flatMap { viewModel.agentSubagentCoordinationByRunID[$0.runID] },
@@ -226,6 +227,7 @@ private struct CommandDeskWorkspaceView: View {
             task: selectedTask,
             finalReadModel: selectedTask.flatMap { viewModel.agentFinalReadModelByRunID[$0.runID] },
             cmcSummary: selectedTask.flatMap { viewModel.agentCMCCapabilitySummaryByRunID[$0.runID] },
+            cloudASRSummary: selectedTask.flatMap { viewModel.agentCloudASRSummaryByRunID[$0.runID] },
             capabilityLoop: selectedTask.flatMap { viewModel.agentCapabilityLoopByRunID[$0.runID] },
             diagnostics: selectedTask.map { viewModel.agentFinalDiagnostics(runID: $0.runID) } ?? [],
             openTask: {
@@ -550,6 +552,7 @@ private struct CommandDeskResultCanvas: View {
     let task: AgentLongTask?
     let finalReadModel: AgentFinalReadModel?
     let cmcSummary: CMCCapabilitySummary?
+    let cloudASRSummary: CloudASRSummary?
     let capabilityLoop: CapabilityLoopReadModel?
     let diagnostics: [String]
     let openTask: () -> Void
@@ -585,12 +588,39 @@ private struct CommandDeskResultCanvas: View {
                         .lineSpacing(3)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
+                    if !cmcRenderBlocks.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(cmcRenderBlocks.prefix(2)) { block in
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(block.title ?? "CMC Skill Hub 返回")
+                                        .font(.system(size: 11.5, weight: .semibold))
+                                        .foregroundStyle(RadarTheme.blue)
+                                    Text(block.body)
+                                        .font(.system(size: 12.5))
+                                        .foregroundStyle(RadarTheme.secondaryText)
+                                        .lineLimit(3)
+                                        .lineSpacing(2)
+                                }
+                            }
+                        }
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RadarTheme.tintFaint)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 7)], alignment: .leading, spacing: 7) {
                         if let capabilityLoop {
                             CommandDeskStatusPill(label: loopStatus(capabilityLoop), color: RadarTheme.blue, icon: "arrow.triangle.2.circlepath")
                         }
                         if let cmcStatus {
                             CommandDeskStatusPill(label: cmcStatus, color: RadarTheme.blue, icon: "chart.line.uptrend.xyaxis")
+                        }
+                        if let cloudASRStatus {
+                            CommandDeskStatusPill(label: cloudASRStatus, color: RadarTheme.blue, icon: "waveform.badge.magnifyingglass")
+                        }
+                        if let modelStatus {
+                            CommandDeskStatusPill(label: modelStatus, color: RadarTheme.secondaryText, icon: "cpu")
                         }
                         ForEach(diagnostics.prefix(3), id: \.self) { item in
                             CommandDeskStatusPill(label: item, color: diagnosticColor(item), icon: "info.circle")
@@ -650,9 +680,33 @@ private struct CommandDeskResultCanvas: View {
 
     private var cmcStatus: String? {
         guard let cmcSummary else { return nil }
-        let result = cmcSummary.skillHubDisplayStatus ?? cmcSummary.researchEvidenceStatus ?? "unknown"
-        let prices = cmcSummary.priceSnapshotStatus ?? (cmcSummary.allowConcretePrices == true ? "usable" : "blocked")
+        let result = (cmcSummary.renderBlocks?.isEmpty == false ? "renderable" : nil)
+            ?? cmcSummary.skillHubDisplayStatus
+            ?? cmcSummary.researchEvidenceStatus
+            ?? "unknown"
+        let prices = cmcSummary.priceSnapshotStatus ?? cmcSummary.diagnostics?.priceSnapshotStatus ?? (cmcSummary.allowConcretePrices == true ? "usable" : "blocked")
         return "CMC Skill Hub · result \(result) · prices \(prices)"
+    }
+
+    private var cmcRenderBlocks: [CMCRenderBlock] {
+        cmcSummary?.renderBlocks?.filter { !$0.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? []
+    }
+
+    private var cloudASRStatus: String? {
+        guard let summary = cloudASRSummary else { return nil }
+        let status = summary.cloudASRStatus ?? summary.status
+        let segments = summary.segmentCount ?? 0
+        return "Cloud ASR · \(status) · \(segments) segments"
+    }
+
+    private var modelStatus: String? {
+        guard let route = finalReadModel?.modelRouteSummary else { return nil }
+        let final = route.finalModel ?? route.selectedTextModel
+        guard let final, !final.isEmpty else { return nil }
+        if route.fallbackUsed == true, let selected = route.selectedTextModel, selected != final {
+            return "Model \(final) · fallback from \(selected)"
+        }
+        return "Model \(final)"
     }
 
     private func loopStatus(_ loop: CapabilityLoopReadModel) -> String {
@@ -805,12 +859,14 @@ private struct CommandDeskComposer: View {
             HStack(spacing: 8) {
                 composerTitle
                 Spacer(minLength: 12)
+                modelPicker
                 modePicker
                 CommandDeskAbilityStrip(packages: CommandDeskAbilityPackage.workbenchPackages(from: viewModel))
             }
             VStack(alignment: .leading, spacing: 9) {
                 composerTitle
                 HStack(spacing: 8) {
+                    modelPicker
                     modePicker
                     CommandDeskAbilityStrip(packages: CommandDeskAbilityPackage.workbenchPackages(from: viewModel))
                     Spacer(minLength: 0)
@@ -844,6 +900,17 @@ private struct CommandDeskComposer: View {
         .frame(width: metrics.isCompact ? 246 : 294)
     }
 
+    private var modelPicker: some View {
+        Picker("Model", selection: $viewModel.selectedAgentModelPreference) {
+            ForEach(AgentModelPreferenceOption.allCases) { item in
+                Text(item.title).tag(item)
+            }
+        }
+        .pickerStyle(.menu)
+        .frame(width: metrics.isCompact ? 128 : 168)
+        .help("选择文本模型；失败时后端会按安全 fallback 链继续尝试")
+    }
+
     @ViewBuilder
     private var composerInput: some View {
         if metrics.isCompact {
@@ -852,6 +919,9 @@ private struct CommandDeskComposer: View {
                 HStack(spacing: 9) {
                     addAbilityButton
                     imageAttachmentButton
+                    if mode == .office {
+                        mediaAttachmentButton
+                    }
                     Spacer(minLength: 0)
                     clearPromptButton
                     submitButton
@@ -861,6 +931,9 @@ private struct CommandDeskComposer: View {
             HStack(alignment: .bottom, spacing: 10) {
                 addAbilityButton
                 imageAttachmentButton
+                if mode == .office {
+                    mediaAttachmentButton
+                }
                 promptEditor
                 clearPromptButton
                 submitButton
@@ -889,6 +962,17 @@ private struct CommandDeskComposer: View {
             Image(systemName: "photo.on.rectangle")
         }
         .help("添加图片附件")
+        .buttonStyle(HoverIconButtonStyle(size: 38))
+        .disabled(submitting)
+    }
+
+    private var mediaAttachmentButton: some View {
+        Button {
+            viewModel.pickAgentMediaAttachmentForCloudASR()
+        } label: {
+            Image(systemName: "waveform")
+        }
+        .help("添加会议音视频附件；将通过云端转写 · 阿里云百炼 · OSS 临时上传")
         .buttonStyle(HoverIconButtonStyle(size: 38))
         .disabled(submitting)
     }
@@ -967,6 +1051,7 @@ private struct CommandDeskComposer: View {
         if raw.contains("submitting") { return "正在交给 Agent" }
         if raw.contains("run_completed") { return "任务记录已生成" }
         if raw.contains("draft_ready") { return "草稿已填入" }
+        if raw.contains("cloud_asr_attachment_ready") { return "云端转写附件已就绪" }
         if raw.contains("prompt_empty") { return "请输入任务" }
         return "就绪"
     }
@@ -1203,6 +1288,7 @@ private struct CommandDeskTaskDetailSheet: View {
     let task: AgentLongTask?
     let finalReadModel: AgentFinalReadModel?
     let cmcSummary: CMCCapabilitySummary?
+    let cloudASRSummary: CloudASRSummary?
     let capabilityLoop: CapabilityLoopReadModel?
     let memoryReadModel: AgentMemoryReadModel?
     let subagentCoordination: SubagentCoordinationReadModel?
@@ -1261,6 +1347,11 @@ private struct CommandDeskTaskDetailSheet: View {
                         detailBlock(
                             title: "CMC Skill Hub",
                             lines: cmcLines
+                        )
+                    case .asr:
+                        detailBlock(
+                            title: "Cloud ASR",
+                            lines: asrLines
                         )
                     case .loop:
                         detailBlock(
@@ -1372,6 +1463,24 @@ private struct CommandDeskTaskDetailSheet: View {
         ]
     }
 
+    private var asrLines: [String] {
+        guard let cloudASRSummary else {
+            return ["Cloud ASR summary unavailable for this run."]
+        }
+        var lines = [
+            "Status: \(cloudASRSummary.cloudASRStatus ?? cloudASRSummary.status)",
+            "Provider: \(cloudASRSummary.provider ?? "阿里云百炼")",
+            "Model: \(cloudASRSummary.model ?? "unknown")",
+            "Upload: \(cloudASRSummary.userVisibleLabel ?? "云端转写 · 阿里云百炼 · OSS 临时上传")",
+            "Segments: \(cloudASRSummary.segmentCount ?? 0)",
+            "Transcript review: \(cloudASRSummary.needsTranscriptReview == true ? "needed" : "not required")"
+        ]
+        if let reason = cloudASRSummary.reason, !reason.isEmpty {
+            lines.append("Reason: \(reason)")
+        }
+        return lines
+    }
+
     private var loopLines: [String] {
         guard let capabilityLoop else {
             return ["Capability loop read model unavailable for this run."]
@@ -1426,6 +1535,7 @@ private enum CommandDeskDetailTab: String, CaseIterable, Identifiable {
     case review
     case policy
     case cmc
+    case asr
     case loop
     case memory
     case subagents
@@ -1438,6 +1548,7 @@ private enum CommandDeskDetailTab: String, CaseIterable, Identifiable {
         case .review: return "Review"
         case .policy: return "Policy"
         case .cmc: return "CMC"
+        case .asr: return "ASR"
         case .loop: return "Loop"
         case .memory: return "Memory"
         case .subagents: return "Subagents"

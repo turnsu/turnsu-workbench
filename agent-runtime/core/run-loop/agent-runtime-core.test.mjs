@@ -54,6 +54,25 @@ function toolsFor(request) {
 
 {
   const plan = toolsFor({
+    prompt: "把我拖入的会议录音转写成逐字稿，再整理成会议纪要。",
+    selectedCapabilityIDs: ["office-meeting-agent"],
+    attachments: [{
+      attachmentID: "attachment-audio-1",
+      fileName: "meeting.m4a",
+      mimeType: "audio/mp4",
+      artifactPath: "runtime/agent/attachments/attachment-audio-1/original.m4a",
+      status: "ready_for_cloud_asr",
+    }],
+  });
+  assert.deepEqual(plan.resolvedCapabilityIDs, ["office-meeting-agent"]);
+  assert.ok(plan.tools.includes("office.cloud_asr.transcribe"));
+  assert.ok(plan.tools.includes("office.meeting_minutes.draft"));
+  assert.ok(plan.tools.indexOf("office.cloud_asr.transcribe") < plan.tools.indexOf("office.meeting_minutes.draft"));
+  assert.ok(!plan.tools.includes("image.analyze_with_kimi"));
+}
+
+{
+  const plan = toolsFor({
     prompt: "复核 BTC 宏观 thesis，覆盖 ETF、跨资产相关性和反证。",
     selectedCapabilityIDs: ["cmc-skill-hub"],
   });

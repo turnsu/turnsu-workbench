@@ -11,6 +11,7 @@ export function buildAgentFinalReadModelV1({
   productMutationPolicyForRun,
 }) {
   const gate = toolObservations?.cmcFreshnessGate || {};
+  const productMutationPolicy = productMutationPolicyForRun(toolObservations);
   return {
     schemaVersion: "agent-final-read-model-v1",
     runID,
@@ -48,7 +49,13 @@ export function buildAgentFinalReadModelV1({
       reason: gate.reason || null,
     },
     marketsGateSummary: toolObservations?.marketsResearch?.gate || null,
-    productMutationPolicy: productMutationPolicyForRun(toolObservations),
+    productMutationPolicy,
+    workspaceMutationPolicy: {
+      ...productMutationPolicy,
+      scope: "persistent_workspace_state_only",
+      displayEligibleEvenWhenDiscarded: true,
+    },
+    modelRouteSummary: toolObservations?.modelRouteSummary || null,
     generatedAt: now(),
     artifactPath,
   };

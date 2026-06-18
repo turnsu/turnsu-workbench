@@ -9,7 +9,6 @@
     "notMigrated": [
       "feishu live event runner",
       "lark-cli live publish",
-      "local ASR service",
       "Docker bounded worker",
       "Hermes sidecar",
       "second task orchestrator"
@@ -18,13 +17,22 @@
   "publicExtension": {
     "extensionID": "office-meeting-agent",
     "title": "Office / Meeting \u80fd\u529b\u5305",
-    "description": "\u63d0\u4f9b\u4f1a\u8bae\u7eaa\u8981\u3001\u6587\u6863\u8349\u7a3f\u3001\u6587\u6863\u4fee\u8ba2\u548c\u98de\u4e66\u901a\u9053 dry-run\uff1b\u4e0d\u53d1\u5e03\u3001\u4e0d\u56de\u590d\u3001\u4e0d\u8986\u76d6\u4e91\u6587\u6863\u3002",
+    "description": "\u63d0\u4f9b\u4f1a\u8bae\u97f3\u89c6\u9891\u4e91\u7aef\u8f6c\u5199\u3001\u4f1a\u8bae\u7eaa\u8981\u3001\u6587\u6863\u8349\u7a3f\u3001\u6587\u6863\u4fee\u8ba2\u548c\u98de\u4e66\u901a\u9053 dry-run\uff1b\u4e0d\u53d1\u5e03\u3001\u4e0d\u56de\u590d\u3001\u4e0d\u8986\u76d6\u4e91\u6587\u6863\u3002",
     "category": "office",
     "defaultSelected": false,
     "status": "available",
-    "permissionSummary": "\u53ea\u5199\u672c\u5730 draft/dry-run artifacts\uff1b\u771f\u5b9e\u98de\u4e66\u53d1\u5e03\u3001\u56de\u590d\u3001\u901a\u77e5\u548c\u5220\u9664\u7c7b\u52a8\u4f5c\u4fdd\u6301 blocked \u6216\u9700\u786e\u8ba4\u3002"
+    "permissionSummary": "\u4f1a\u8bae\u97f3\u89c6\u9891\u53ef\u901a\u8fc7 OSS \u4e34\u65f6\u4e0a\u4f20\u5230\u963f\u91cc\u4e91\u767e\u70bc\u505a\u975e\u5b9e\u65f6\u8f6c\u5199\uff1b\u5176\u4ed6\u8f93\u51fa\u53ea\u5199\u672c\u5730 draft/dry-run artifacts\uff1b\u771f\u5b9e\u98de\u4e66\u53d1\u5e03\u3001\u56de\u590d\u3001\u901a\u77e5\u548c\u5220\u9664\u7c7b\u52a8\u4f5c\u4fdd\u6301 blocked \u6216\u9700\u786e\u8ba4\u3002"
   },
   "publicSkills": [
+    {
+      "skillID": "meeting-cloud-asr",
+      "title": "\u4f1a\u8bae\u97f3\u89c6\u9891\u8f6c\u5199",
+      "description": "\u5bf9\u7528\u6237\u62d6\u5165\u7684\u4f1a\u8bae\u97f3\u9891/\u89c6\u9891\u6267\u884c\u963f\u91cc\u4e91\u767e\u70bc\u975e\u5b9e\u65f6\u4e91\u7aef\u8f6c\u5199\uff0c\u7528\u4e8e\u540e\u7eed\u7eaa\u8981\u548c\u6587\u6863\u8349\u7a3f\u3002",
+      "category": "office",
+      "defaultSelected": false,
+      "status": "available",
+      "permissionSummary": "\u4f7f\u7528 OSS \u4e34\u65f6\u4e0a\u4f20\u548c\u963f\u91cc\u4e91\u767e\u70bc\uff1bartifact \u53ea\u4fdd\u5b58\u8f6c\u5199\u6587\u672c\u548c\u5143\u6570\u636e\uff0c\u4e0d\u4fdd\u5b58\u539f\u59cb\u97f3\u89c6\u9891\u6216 provider request\u3002"
+    },
     {
       "skillID": "meeting-minutes",
       "title": "\u4f1a\u8bae\u7eaa\u8981",
@@ -63,17 +71,21 @@
     }
   ],
   "internalTools": [
+    "office.cloud_asr.transcribe",
     "office.meeting_minutes.draft",
     "office.document.draft",
     "office.document_revision.draft",
     "channel.feishu.dry_run"
   ],
   "providers": [
+    "aliyunBailianCloudASRProvider",
+    "aliyunOSSUploadProvider",
     "boundedContextProvider",
     "localArtifactProvider",
     "dryRunChannelProvider"
   ],
   "policies": {
+    "office_cloud_asr_transcribe": "pass_with_cloud_upload_label",
     "office_draft": "pass",
     "office_revision_draft": "pass",
     "feishu_dry_run": "pass",

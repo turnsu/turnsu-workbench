@@ -38,6 +38,7 @@ export function buildDeterministicAssistantText({
   const hasCmcTools = tools.some((tool) => tool.startsWith("cmc.") || tool === "market.read_snapshot");
   const marketsSummary = toolObservations?.marketsResearch?.summary || null;
   const marketsGate = toolObservations?.marketsResearch?.gate || null;
+  const cloudASRSummary = toolObservations?.cloudASR?.summary || null;
   const gate = toolObservations?.cmcFreshnessGate || cmcFreshnessGate();
   const skillHub = toolObservations?.cmcSkillHub?.observations?.[0] || null;
   const cmcSummary = buildCMCCapabilitySummary({ toolObservations, tools, selectedSkillIDs, selectedExtensionIDs });
@@ -48,7 +49,11 @@ export function buildDeterministicAssistantText({
   const creditExhausted = /CREDIT_EXHAUSTED|credit exhausted|weekly limit/i.test(String(gate.reason || ""));
   const evidenceEmpty = gate.researchEvidenceStatus === "empty" || gate.reason === "degraded_empty_evidence";
   const rawSkillHubSummary = redact(skillHub?.summary || "").trim();
-  const skillHubDisplayText = cmcSummary.displayableResultText
+  const skillHubRenderText = Array.isArray(cmcSummary.renderBlocks) && cmcSummary.renderBlocks.length
+    ? cmcSummary.renderBlocks.map((block) => block?.body).filter(Boolean).slice(0, 2).join("；")
+    : "";
+  const skillHubDisplayText = skillHubRenderText
+    || cmcSummary.displayableResultText
     || (rawSkillHubSummary ? publicSkillHubSummary(rawSkillHubSummary) : "");
   const allowSkillHubReturnedPrices = Boolean(cmcSummary.allowSkillHubReturnedPrices);
   const marketLine = gate.allowConcretePrices
@@ -78,7 +83,9 @@ export function buildDeterministicAssistantText({
     publicCapabilityLines.push("- WeChat 能力包：只读取本地/导出/只读刷新产物；发送保持阻断。");
   }
   if (tools.some((tool) => tool.startsWith("office."))) {
-    publicCapabilityLines.push("- Office / Meeting 能力包：只生成本地草稿结果；不发布、不覆盖云文档。");
+    publicCapabilityLines.push(cloudASRSummary
+      ? `- Office / Meeting 能力包：${cloudASRSummary.userVisibleLabel || "云端转写"} · ${cloudASRSummary.cloudASRStatus || cloudASRSummary.status}；草稿仅写本地结果，不发布、不覆盖云文档。`
+      : "- Office / Meeting 能力包：只生成本地草稿结果；不发布、不覆盖云文档。");
   }
   if (tools.some((tool) => tool.startsWith("channel.feishu."))) {
     publicCapabilityLines.push("- Feishu 通道：仅生成 dry-run 预演结果；未执行真实通道调用、未回复、未发布、未通知。");
@@ -135,6 +142,12 @@ export function buildDeterministicAssistantText({
     dataLines.push(`- Equity provider：${marketsSummary?.providerDeferredReason || "live provider deferred；本轮未连接结构化股票数据源。"}`);
     dataLines.push("- 价格快照：未获得独立 equity price snapshot，因此不输出支撑阻力、入场出场、止损止盈或交易区间。");
   }
+  if (cloudASRSummary) {
+    dataLines.push(`- 云端转写：${cloudASRSummary.userVisibleLabel || "阿里云百炼"} · ${cloudASRSummary.cloudASRStatus || cloudASRSummary.status} · segment ${cloudASRSummary.segmentCount || 0}。`);
+    if (cloudASRSummary.needsTranscriptReview) {
+      dataLines.push("- 转写复核：需要人工检查 transcript 后再作为会议纪要依据。");
+    }
+  }
   const lines = [
     "## 结论",
     conclusionLine,
@@ -144,7 +157,7 @@ export function buildDeterministicAssistantText({
     marketsLine ? `- ${marketsLine}` : null,
     skillHub && skillHubDisplayText ? `- Skill Hub 返回：${skillHub.status}${skillHub.confidence ? ` · ${skillHub.confidence}` : ""} · ${skillHubDisplayText}` : null,
     ...(publicCapabilityLines.length ? publicCapabilityLines : ["- 能力包：已通过本地 runtime harness 记录允许的读取、草稿或预演动作。"]),
-    safeAttachments.length > 0 ? `- 图片附件：${safeAttachments.length} 个，已进入本地附件记录。` : "- 图片附件：无。",
+    safeAttachments.length > 0 ? `- 附件：${safeAttachments.length} 个，已进入本地附件记录。` : "- 附件：无。",
     ...(evidenceLines.length ? ["", "## Skill Hub 返回摘录", ...evidenceLines] : []),
     ...(dataLines.length ? ["", "## 数据说明", ...dataLines] : []),
     "",
@@ -185,6 +198,9 @@ export function buildDegradedMarketFinalText({ prompt = "", tools = [], toolObse
     : "市场工具未形成可信快照";
   const cmcSummary = buildCMCCapabilitySummary({ toolObservations, tools });
   const allowSkillHubReturnedPrices = Boolean(cmcSummary.allowSkillHubReturnedPrices);
+  const skillHubRenderText = Array.isArray(cmcSummary.renderBlocks) && cmcSummary.renderBlocks.length
+    ? cmcSummary.renderBlocks.map((block) => block?.body).filter(Boolean).slice(0, 2).join("；")
+    : "";
   if (cmcSummary.allowSkillHubResultDisplay) {
     return [
       "## 结论",
@@ -193,7 +209,7 @@ export function buildDegradedMarketFinalText({ prompt = "", tools = [], toolObse
         : "CMC Skill Hub 调用成功，返回了可展示结果；本轮不引用具体价格、关键价位或交易区间。",
       "",
       "## 关键证据",
-      `- Skill Hub 返回：${cmcSummary.displayableResultText}`,
+      `- Skill Hub 返回：${skillHubRenderText || cmcSummary.displayableResultText}`,
       `- 市场数据状态：${provider} · ${freshness}。`,
       "",
       "## 数据说明",

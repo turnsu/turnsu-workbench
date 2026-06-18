@@ -32,7 +32,7 @@ Phase 2 的合并目标是把这些能力压入当前统一 Agent runtime，而�
 | Context Offload | `memory-compression`/context artifacts | Phase 1 后接入 compaction policy | 不把 raw private payload 写入模型上下文 |
 | Feishu Agent Bridge | 当前无 Feishu live package | Phase 2 后作为 channel package | 只在 QA/Policy pass 后 publish/reply |
 | File Context | 当前 attachment/image/local artifacts | 合并为 file/source package | unsupported 明确返回，不猜测 |
-| Local ASR / Media | 当前无 ASR | Phase 2 optional package | raw audio local-only |
+| Cloud ASR / Media | `office.cloud_asr.transcribe` + `cloud-asr-summary.json` | 已接入 Office/Meeting 能力包 | 用户音视频经 OSS 临时上传到阿里云百炼；artifact 只存转写和元数据 |
 | Docker Worker | 当前 roadmap-only | Phase 2/long-term, not Phase 1 | bounded worker 不持有 token 或发布权 |
 | Hermes Sidecar | 当前 local memory/proposals | Phase 2/3 later learning package | 只写 human-review proposal |
 
@@ -160,7 +160,7 @@ Phase 1 暂不接入：
 - document worker。
 - Docker worker。
 - Hermes sidecar。
-- local ASR。
+- local ASR。2026-06-12 已被云端非实时 ASR 方案 supersede；当前不接本地固定 ASR 线程。
 - external publish/reply。
 
 Phase 2 初期仍可暂不接入：
@@ -170,7 +170,7 @@ Phase 2 初期仍可暂不接入：
 - destructive document operations。
 - automatic long-term memory persistence。
 - remote handler mode。
-- raw media external upload。
+- raw media external upload。2026-06-12 起对用户拖入的会议音视频允许阿里云百炼云端转写，但必须强标记 `云端转写 · 阿里云百炼 · OSS 临时上传`，且 run artifact 不保存原始音视频、raw request、headers、API key 或 provider 私有 payload。
 
 ## 5. Unified Capability Registry 目标
 
@@ -191,7 +191,7 @@ office.meeting-minutes
 office.document-generation
 office.document-revision
 office.source-context
-office.local-asr
+office.cloud-asr
 channel.feishu-agent-bridge
 channel.wechat-adapter
 memory.local-memory

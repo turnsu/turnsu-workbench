@@ -74,14 +74,16 @@ struct AgentDaemonClient {
         selectedSkillIDs: [String],
         selectedExtensionIDs: [String],
         attachments: [AgentAttachment],
-        contextRefs: [RuntimeObjectReference]
+        contextRefs: [RuntimeObjectReference],
+        modelPreference: AgentModelPreference = AgentModelPreferenceOption.auto.requestPayload
     ) async throws -> AgentMessageResponse {
         let body = AgentMessageRequest(
             prompt: prompt,
             selectedSkillIDs: selectedSkillIDs,
             selectedExtensionIDs: selectedExtensionIDs,
             attachments: attachments,
-            contextRefs: contextRefs
+            contextRefs: contextRefs,
+            modelPreference: modelPreference
         )
         return try await post("/sessions/\(sessionID)/messages", body: body, as: AgentMessageResponse.self)
     }
@@ -92,14 +94,16 @@ struct AgentDaemonClient {
         selectedSkillIDs: [String],
         selectedExtensionIDs: [String],
         attachments: [AgentAttachment],
-        contextRefs: [RuntimeObjectReference]
+        contextRefs: [RuntimeObjectReference],
+        modelPreference: AgentModelPreference = AgentModelPreferenceOption.auto.requestPayload
     ) async throws -> AgentAsyncMessageResponse {
         let body = AgentMessageRequest(
             prompt: prompt,
             selectedSkillIDs: selectedSkillIDs,
             selectedExtensionIDs: selectedExtensionIDs,
             attachments: attachments,
-            contextRefs: contextRefs
+            contextRefs: contextRefs,
+            modelPreference: modelPreference
         )
         return try await post("/sessions/\(sessionID)/messages/async", body: body, as: AgentAsyncMessageResponse.self)
     }
@@ -207,6 +211,7 @@ private struct AgentMessageRequest: Encodable {
     let selectedExtensionIDs: [String]
     let attachments: [AgentAttachment]
     let contextRefs: [RuntimeObjectReference]
+    let modelPreference: AgentModelPreference
 }
 
 struct WeChatLiveRefreshResult: Decodable {

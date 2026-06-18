@@ -160,13 +160,13 @@
     {
       "capabilityId": "office.meeting-minutes",
       "title": "Meeting Minutes Draft",
-      "description": "Creates local meeting-minutes draft read models from bounded context without publishing or exposing raw transcript.",
-      "toolIntents": ["read", "draft", "write_private"],
-      "policy": ["raw transcript local only", "publish requires QA/Policy/channel readiness"],
-      "observability": ["officeMeetingMinutesReadModel", "checkedArtifacts"],
+      "description": "Creates local meeting-minutes draft read models from bounded context and optional Alibaba Bailian cloud ASR transcripts.",
+      "toolIntents": ["read", "draft", "write_private", "provider_audio_transcription"],
+      "policy": ["audio/video upload is explicitly labeled as Alibaba Bailian cloud ASR via temporary OSS URL", "raw audio/video not stored in artifacts", "publish requires QA/Policy/channel readiness"],
+      "observability": ["cloudASRSummary", "cloudASRTranscript", "meetingSourcePack", "officeMeetingMinutesReadModel", "checkedArtifacts"],
       "installState": "local_extension",
       "status": "available",
-      "securityReview": { "status": "passed", "summary": "Dry-run local artifact only; assignment agent business runner is not copied." }
+      "securityReview": { "status": "passed", "summary": "Cloud ASR stores transcript and metadata only; raw media, provider request bodies, headers, and secrets are excluded." }
     },
     {
       "capabilityId": "office.document-generation",

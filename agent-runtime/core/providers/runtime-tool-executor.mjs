@@ -1,3 +1,5 @@
+import { CLOUD_ASR_TOOL_NAME, executeCloudASRTranscription } from "./cloud-asr-provider.mjs";
+
 export const cmcRuntimeToolNames = new Set([
   "cmc.live_market_refresh",
   "cmc.daily_market_overview",
@@ -14,6 +16,9 @@ export async function executeRuntimeToolViaCore(toolName, params = {}, {
   piKernel,
   cmcDefaultSymbols = ["BTC", "ETH", "SOL"],
 } = {}) {
+  if (toolName === CLOUD_ASR_TOOL_NAME) {
+    return executeCloudASRTranscription(params);
+  }
   if (cmcRuntimeToolNames.has(toolName)) {
     if (typeof refreshCMCLive !== "function") throw new Error("core_provider_missing_cmc_refresh");
     const result = await refreshCMCLive({

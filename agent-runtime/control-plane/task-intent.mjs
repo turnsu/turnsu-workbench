@@ -4,6 +4,16 @@ function includesAny(text, patterns) {
   return patterns.some((pattern) => pattern.test(text));
 }
 
+function hasAudioVideoAttachment(attachments = []) {
+  return attachments.some((attachment) => {
+    const mime = String(attachment?.mimeType || "").toLowerCase();
+    const name = String(attachment?.fileName || attachment?.originalPath || attachment?.artifactPath || "").toLowerCase();
+    return mime.startsWith("audio/")
+      || mime.startsWith("video/")
+      || /\.(?:aac|aiff|amr|avi|flac|flv|m4a|m4v|mkv|mov|mp3|mp4|mpeg|mpg|ogg|opus|pcm|wav|webm|wma|wmv)$/.test(name);
+  });
+}
+
 export function createTaskIntent(input) {
   const prompt = String(input.prompt || "");
   const text = prompt.toLowerCase();
@@ -11,7 +21,9 @@ export function createTaskIntent(input) {
   const contextRefs = safeArray(input.contextRefs);
   let taskType = "daily_intelligence";
 
-  if (includesAny(text, [/revision|revise|comment|review comments|批注|评论|修订|改写|修改/])) {
+  if (hasAudioVideoAttachment(attachments) && includesAny(text, [/meeting|minutes|transcript|asr|audio|video|会议|纪要|逐字稿|转写|录音|音频|视频|总结/])) {
+    taskType = "office_meeting_minutes";
+  } else if (includesAny(text, [/revision|revise|comment|review comments|批注|评论|修订|改写|修改/])) {
     taskType = "office_document_revision";
   } else if (includesAny(text, [/meeting|minutes|transcript|会议|纪要|逐字稿/])) {
     taskType = "office_meeting_minutes";

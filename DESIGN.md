@@ -29,18 +29,18 @@ Workbench 是默认产品表面。Home、Agent、Library、Ops 不应继续像�
 
 ## 布局
 
-Workbench 当前实现方向：Command Desk v2。
+Workbench 当前实现方向：Blocks Workbench。
 
-Command Desk 布局：
+Blocks Workbench 布局：
 
-- 左侧任务栈：只显示正在推进、待复核和已完成的少量任务。
-- 中央结果画布：Crypto 显示 CMC returned result、Markdown answer 和追问；Markets 显示 equity / cross-asset research draft、evidence gaps、review tasks；Office 显示会议提要、文档草稿和交付预览。
-- 底部 Command Composer：`Crypto` / `Markets` / `Office` 意图切换、Capability Launcher、自然语言输入、文件/图片/音频附件、快捷任务和 `Cmd+Return` 提交。
+- 左侧 Block Rail：固定展示 `Crypto`、`Markets`、`Office` 三个 Domain Blocks；每个 block 内展示少量可执行 Loop Templates 和当前 Active Loops。
+- 中央结果画布：根据当前 block 渲染结果。Crypto 显示 CMC returned result、market markdown、价格/证据说明和下一轮追问；Markets 显示 equity / macro / cross-asset research draft、evidence gaps 和 review tasks；Office 显示会议提要、文档草稿、Cloud ASR 状态和 Feishu preview/confirmation。
+- 底部 Loop Composer：当前选中 block 决定 placeholder、quick prompts、附件 affordance 和默认能力包；`/add` 打开当前 Domain 的 Loop Template selector，不展示 raw skills。
 - 详情 sheet：数据说明、复核、Policy、CMC、Loop、Memory、Subagents 只在 task-local sheet 中打开，不常驻为运维面板。
 
 Adaptive layout rules:
 
-- Primary workspace content must fill the available window width; do not cap Command Desk with a small fixed `maxWidth`.
+- Primary workspace content must fill the available window width; do not cap Blocks Workbench with a small fixed `maxWidth`.
 - Breakpoints: compact `< 1100pt`, regular `1100..<1500pt`, wide `>= 1500pt`.
 - Compact: task stack, result canvas, and composer stack vertically; controls wrap instead of compressing titles.
 - Regular: task stack keeps a stable minimum width while result canvas and composer fill remaining space.
@@ -107,14 +107,16 @@ Dark mode：
 核心组件：
 
 - Sidebar row。
-- Queue row。
+- Block row。
+- Loop template row。
+- Active loop row。
 - Status pill。
 - Capability package chip。
 - Intent segmented control。
 - Attachment chip。
 - Result canvas。
 - Follow-up prompt chip。
-- Capability Launcher action。
+- Loop template launcher action。
 - Delivery preview row。
 - Evidence/review/policy summary row。
 - Detail sheet。
@@ -149,11 +151,10 @@ Dark mode：
 
 ## 原型方向
 
-当前重构探索已收敛为 Command Desk v2：
+当前重构探索已收敛为 Blocks Workbench：
 
-- Command Desk：当前实现方向。它作为默认工作台首屏，服务快速布置任务、连续追问、结果阅读和交付动作。
-- Crypto Answer Loop：Crypto 任务深化稿，展示 CMC 返回内容、Markdown 渲染和追问。
-- Markets Research Loop：Markets 任务深化稿，展示 company deep dive、earnings review、thesis tracker、sector scan 和 cross-asset read-through 的研究草稿与复核任务。
-- Office Writing Loop：Office 任务深化稿，展示拖入材料、会议提要、文档草稿和飞书预览。
+- Block Rail Workbench：当前实现方向。左侧 Domain Blocks + Loop Templates + Active Loops，右侧 block-aware result canvas，底部 Loop Composer。
+- Loop Board Workbench：备选原型。中间以 loop 卡片和状态流为主，适合同时管理多个并行研究/办公 loop。
+- Focused Run Workbench：备选原型。当前 run 画布最大化，blocks 作为紧凑 launcher，适合深度研究或长文档草稿。
 
-Swift 实现状态：Command Desk v2 已落地。Today Desk、Queue Canvas 2.0、Split Focus Studio 和上一版 Unified Workstream Desk 已归档为历史参考，不再作为 active 原型。
+Swift 实现状态：Blocks Workbench 已落地为默认 Workbench。Command Desk v2、Today Desk、Queue Canvas 2.0、Split Focus Studio 和上一版 Unified Workstream Desk 已归档为历史参考，不再作为 active 原型。

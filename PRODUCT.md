@@ -22,12 +22,12 @@ looloomi 是一个本地优先的统一 Agent 工作台。它把任务布置、�
 
 成功状态是：这个 App 像一个完整的 macOS 工作应用，而不是终端、聊天记录或运维控制台。
 
-当前实现状态：Command Desk v2 已进入 SwiftUI 默认工作台。主导航为 Workbench / History / Settings；Workbench 由任务栈、结果画布和 Crypto / Markets / Office command composer 组成，并已加入 Capability Launcher、task-local Review / Follow-up、memory read model 和 tmux/subagent coordination 只读状态。WeChatCLI、CMC、Markets Research、Office/Meeting、Feishu 继续作为后台能力或任务状态出现。
+当前实现状态：Blocks Workbench 是 SwiftUI 默认工作台。主导航保持 Workbench / History / Settings；Workbench 由 Domain Blocks、Loop Templates、Active Loops、block-aware result canvas 和 Loop Composer 组成。Crypto、Markets、Office 是用户可见的垂直 block；CMC、Markets Research、Office/Meeting、Cloud ASR、Feishu、WeChatCLI、memory 和 subagent coordination 继续作为后台能力或任务状态出现。Command Desk v2 是上一版可用基线，不再是最终 active design。
 
 - 首屏是可工作的界面，而不是系统说明页、日志页或运行监控页。
 - 用户不需要理解实现细节，也能开始新任务或恢复旧任务。
 - 当前任务、最终答案、草稿正文和下一步动作可以一眼扫到。
-- 常用 crypto market loop、markets research loop、office drafting loop 可以从 GUI 快速启动，并能在结果上继续追问。
+- 常用 crypto market loop、markets research loop、office drafting loop 可以从 Domain Block 内快速启动，并能在结果上 review、continue、refine 或 prepare delivery。
 - 内部 runtime 概念只出现在 artifact、诊断或设置中。
 
 ## 品牌个性

@@ -9,6 +9,31 @@ export const externalCMCToolNames = new Set([
   "cmc.request_mcp_refresh",
 ]);
 
+const AUDIO_VIDEO_EXTENSIONS = new Set(["aac", "aiff", "amr", "avi", "flac", "flv", "m4a", "m4v", "mkv", "mov", "mp3", "mp4", "mpeg", "mpg", "ogg", "opus", "pcm", "wav", "webm", "wma", "wmv"]);
+const IMAGE_EXTENSIONS = new Set(["gif", "jpeg", "jpg", "png", "webp"]);
+
+function attachmentExtension(attachment = {}) {
+  const value = String(attachment.fileName || attachment.originalPath || attachment.artifactPath || "");
+  const match = value.toLowerCase().match(/\.([a-z0-9]+)(?:$|\?)/);
+  return match ? match[1] : "";
+}
+
+export function isImageAttachment(attachment = {}) {
+  const mime = String(attachment.mimeType || "").toLowerCase();
+  return mime.startsWith("image/") || IMAGE_EXTENSIONS.has(attachmentExtension(attachment));
+}
+
+export function isAudioVideoAttachment(attachment = {}) {
+  const mime = String(attachment.mimeType || "").toLowerCase();
+  return mime.startsWith("audio/") || mime.startsWith("video/") || AUDIO_VIDEO_EXTENSIONS.has(attachmentExtension(attachment));
+}
+
+export function shouldRouteCloudASR({ prompt = "", attachments = [] } = {}) {
+  const textValue = String(prompt || "").toLowerCase();
+  const meetingIntent = /meeting|minutes|transcript|asr|audio|video|会议|纪要|逐字稿|转写|录音|音频|视频/.test(textValue);
+  return meetingIntent && attachments.some(isAudioVideoAttachment);
+}
+
 export function toolsForSkill(skillID) {
   switch (skillID) {
     case "wechat-onchain-intelligence":
@@ -25,6 +50,8 @@ export function toolsForSkill(skillID) {
       return ["wechat.read_normalized_messages", "token.resolve_entities", "onchain.read_snapshot", "memory.save", "handoff.write"];
     case "handoff-writer":
       return ["handoff.write", "memory.save"];
+    case "meeting-cloud-asr":
+      return ["office.cloud_asr.transcribe"];
     case "meeting-minutes":
       return ["office.meeting_minutes.draft"];
     case "document-generation":
@@ -119,6 +146,17 @@ export function pruneDefaultCMCToolFanout(selected, prompt, selectedSkillIDs = [
   }
 }
 
+function orderCloudASRBeforeOfficeDrafts(tools) {
+  if (!tools.includes("office.cloud_asr.transcribe")) return tools;
+  const priority = (tool) => {
+    if (tool === "office.cloud_asr.transcribe") return 0;
+    if (tool === "office.meeting_minutes.draft") return 1;
+    if (tool.startsWith("office.")) return 2;
+    return 3;
+  };
+  return [...tools].sort((a, b) => priority(a) - priority(b));
+}
+
 export function inferTools({ prompt, selectedToolNames = [], attachments = [], selectedSkillIDs = [], selectedExtensionIDs = [], projectToolNames = [] }) {
   const textValue = String(prompt || "").toLowerCase();
   const selected = new Set();
@@ -127,7 +165,8 @@ export function inferTools({ prompt, selectedToolNames = [], attachments = [], s
   for (const legacyTool of selectedToolNames) {
     if (projectToolNames.includes(legacyTool)) selected.add(legacyTool);
   }
-  if (attachments.length > 0) selected.add("image.analyze_with_kimi");
+  if (attachments.some(isImageAttachment)) selected.add("image.analyze_with_kimi");
+  if (shouldRouteCloudASR({ prompt, attachments })) selected.add("office.cloud_asr.transcribe");
   if (/cmc|coinmarketcap|market regime|行情|价格|市场|大盘|price|流动性/.test(textValue)) {
     selected.add("cmc.live_market_refresh");
     selected.add("cmc.daily_market_overview");
@@ -162,5 +201,5 @@ export function inferTools({ prompt, selectedToolNames = [], attachments = [], s
     selected.add("proposal.create");
   }
   pruneDefaultCMCToolFanout(selected, prompt, selectedSkillIDs, selectedToolNames);
-  return [...selected];
+  return orderCloudASRBeforeOfficeDrafts([...selected]);
 }

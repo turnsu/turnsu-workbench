@@ -2,25 +2,25 @@
 
 - Date: 2026-06-12
 - Status: current active architecture baseline
-- Scope: Command Desk App, Agent Runtime Core, Pi Kernel, daemon host shell, capability packages, wiki cleanup
+- Scope: Blocks Workbench App, Agent Runtime Core, Pi Kernel, daemon host shell, capability packages, wiki cleanup
 
 ## Summary
 
 The project is now organized around one product surface and one runtime brain:
 
-- Product surface: `Command Desk` in the macOS SwiftUI App.
+- Product surface: `Blocks Workbench` in the macOS SwiftUI App.
 - Runtime brain: `Agent Runtime Core`.
 - Agentic execution kernel: Pi SDK behind `Pi Kernel`.
 - Host process: local daemon shell.
 - User-facing abilities: capability packages.
 
-Older product forms such as Research OS, Apple minimal Today Desk, Queue Canvas, Split Focus, Unified Workstream, source browser, and global Inspector are historical references only. They must not be used as active implementation targets.
+Older product forms such as Research OS, Apple minimal Today Desk, Queue Canvas, Split Focus, Unified Workstream, Command Desk v2, source browser, and global Inspector are historical references only. They must not be used as active implementation targets.
 
 ## Swift App
 
 The Swift App is a local-first macOS workbench. It has three user-facing areas:
 
-- `Workbench`: default Command Desk for Crypto, Markets, and Office tasks.
+- `Workbench`: default Blocks Workbench for Crypto, Markets, and Office loops.
 - `History`: completed answers, drafts, follow-ups, and task-local compatibility detail. WeChat, Token, and Watchlist are internal history filters, not top-level products.
 - `Settings`: runtime readiness, privacy, provider status, and diagnostics.
 

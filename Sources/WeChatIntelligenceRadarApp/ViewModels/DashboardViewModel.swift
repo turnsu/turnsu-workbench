@@ -58,10 +58,12 @@ final class DashboardViewModel: ObservableObject {
     @Published var agentRunDetailsExpanded: Bool = false
     @Published var agentPrompt: String = ""
     @Published var agentAttachments: [AgentAttachment] = []
+    @Published var selectedAgentModelPreference: AgentModelPreferenceOption = .auto
     @Published var agentSubmitStatus: String = "daemon_not_checked"
     @Published private(set) var agentFinalizingRunIDs: Set<String> = []
     @Published private(set) var agentFinalReadModelByRunID: [String: AgentFinalReadModel] = [:]
     @Published private(set) var agentCMCCapabilitySummaryByRunID: [String: CMCCapabilitySummary] = [:]
+    @Published private(set) var agentCloudASRSummaryByRunID: [String: CloudASRSummary] = [:]
     @Published private(set) var agentCapabilityLoopByRunID: [String: CapabilityLoopReadModel] = [:]
     @Published private(set) var agentMemoryReadModelByRunID: [String: AgentMemoryReadModel] = [:]
     @Published private(set) var agentSubagentCoordinationByRunID: [String: SubagentCoordinationReadModel] = [:]
@@ -463,6 +465,29 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
+    func pickAgentMediaAttachmentForCloudASR() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [
+            UTType.audio,
+            UTType.movie,
+            UTType.mpeg4Movie
+        ] + ["mp3", "wav", "m4a", "aac", "flac", "ogg", "opus", "mov", "mp4", "webm", "mkv"]
+            .compactMap { UTType(filenameExtension: $0) }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let attachment = try agentAttachmentStore.copyMediaForCloudASR(from: url)
+            agentAttachments.append(attachment)
+            selectedAgentSkillIDs.insert("meeting-cloud-asr")
+            selectedAgentSkillIDs.insert("meeting-minutes")
+            selectedAgentExtensionIDs.insert("office-meeting-agent")
+            agentSubmitStatus = "cloud_asr_attachment_ready"
+        } catch {
+            agentSubmitStatus = "attachment_failed:\(error.localizedDescription)"
+        }
+    }
+
     func clearAgentAttachments() {
         agentAttachments = []
         agentSubmitStatus = "attachments_cleared"
@@ -502,6 +527,7 @@ final class DashboardViewModel: ObservableObject {
         let selectedExtensions = Array(selectedAgentExtensionIDs).sorted()
         let attachments = agentAttachments
         let refs = agentContextRefs
+        let modelPreference = selectedAgentModelPreference.requestPayload
         Task {
             do {
                 let sessionID: String
@@ -517,7 +543,8 @@ final class DashboardViewModel: ObservableObject {
                     selectedSkillIDs: selectedSkills,
                     selectedExtensionIDs: selectedExtensions,
                     attachments: attachments,
-                    contextRefs: refs
+                    contextRefs: refs,
+                    modelPreference: modelPreference
                 )
                 await MainActor.run {
                     self.selectedAgentSessionID = response.session.sessionID
@@ -917,6 +944,9 @@ final class DashboardViewModel: ObservableObject {
         }
         if let runID, let cmcCapabilitySummary = agentRunReadModelStore.readCMCCapabilitySummary(runID: runID) {
             agentCMCCapabilitySummaryByRunID[runID] = cmcCapabilitySummary
+        }
+        if let runID, let cloudASRSummary = agentRunReadModelStore.readCloudASRSummary(runID: runID) {
+            agentCloudASRSummaryByRunID[runID] = cloudASRSummary
         }
         if let runID, let capabilityLoop = agentRunReadModelStore.readCapabilityLoopReadModel(runID: runID) {
             agentCapabilityLoopByRunID[runID] = capabilityLoop

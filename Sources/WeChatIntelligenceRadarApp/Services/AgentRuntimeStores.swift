@@ -164,6 +164,10 @@ struct AgentRunReadModelStore {
         streamStore.readRunArtifact(runID: runID, name: "cmc-capability-summary.json", as: CMCCapabilitySummary.self)
     }
 
+    func readCloudASRSummary(runID: String?) -> CloudASRSummary? {
+        streamStore.readRunArtifact(runID: runID, name: "cloud-asr-summary.json", as: CloudASRSummary.self)
+    }
+
     func readCapabilityLoopReadModel(runID: String?) -> CapabilityLoopReadModel? {
         streamStore.readRunArtifact(runID: runID, name: "capability-loop-read-model.json", as: CapabilityLoopReadModel.self)
     }
@@ -466,6 +470,14 @@ struct AgentAttachmentStore {
     }
 
     func copyImage(from sourceURL: URL) throws -> AgentAttachment {
+        try copyAttachment(from: sourceURL, status: "ready_for_kimi_analysis", analysisPathKind: "analysis.json")
+    }
+
+    func copyMediaForCloudASR(from sourceURL: URL) throws -> AgentAttachment {
+        try copyAttachment(from: sourceURL, status: "ready_for_cloud_asr", analysisPathKind: nil)
+    }
+
+    private func copyAttachment(from sourceURL: URL, status: String, analysisPathKind: String?) throws -> AgentAttachment {
         let attachmentID = "attachment-\(UUID().uuidString)"
         let directory = resolver.attachmentsDirectory.appendingPathComponent(attachmentID, isDirectory: true)
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -487,8 +499,8 @@ struct AgentAttachmentStore {
             mimeType: mimeType(for: ext),
             sha256: digest,
             sizeBytes: data.count,
-            status: "ready_for_kimi_analysis",
-            analysisPath: "runtime/agent/attachments/\(attachmentID)/analysis.json",
+            status: status,
+            analysisPath: analysisPathKind.map { "runtime/agent/attachments/\(attachmentID)/\($0)" },
             createdAt: AgentDateFormatting.isoString(Date())
         )
         try JSONEncoder.agentArtifactEncoder().encode(attachment).write(to: metadataURL, options: [.atomic])
@@ -505,6 +517,26 @@ struct AgentAttachmentStore {
             return "image/gif"
         case "webp":
             return "image/webp"
+        case "mp3":
+            return "audio/mpeg"
+        case "m4a":
+            return "audio/mp4"
+        case "wav":
+            return "audio/wav"
+        case "aac":
+            return "audio/aac"
+        case "flac":
+            return "audio/flac"
+        case "ogg", "opus":
+            return "audio/ogg"
+        case "mp4", "m4v":
+            return "video/mp4"
+        case "mov":
+            return "video/quicktime"
+        case "webm":
+            return "video/webm"
+        case "mkv":
+            return "video/x-matroska"
         default:
             return "application/octet-stream"
         }

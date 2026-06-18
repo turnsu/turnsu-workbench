@@ -148,15 +148,23 @@ final class WeChatIntelligenceRadarApp: NSObject, NSApplicationDelegate {
         let hasWindowNumber = window.windowNumber > 0
         let contentWidth = window.contentLayoutRect.width
         let layoutMetrics = WorkbenchLayoutMetrics(contentWidth: contentWidth)
-        let adaptiveWorkspace = contentWidth > 0 && WorkbenchLayoutMetrics(contentWidth: 1_700).breakpoint == .wide
-        let commandDeskVisible = true
+        let adaptiveWorkspace = contentWidth > 0
+            && layoutMetrics.workspaceSpacing > 0
+            && layoutMetrics.queueColumnWidth > 0
+        let commandDeskVisible = false
         let commandComposerVisible = true
-        let cryptoOfficeIntentsVisible = true
-        let marketsResearchVisible = true
+        let cryptoOfficeIntentsVisible = WorkbenchDomain.allCases.contains(.crypto) && WorkbenchDomain.allCases.contains(.office)
+        let marketsResearchVisible = WorkbenchDomain.allCases.contains(.markets)
+        let blocksWorkbenchVisible = String(describing: BlocksWorkbenchView.self) == "BlocksWorkbenchView"
+        let expectedDomains = Set([WorkbenchDomain.crypto, .markets, .office])
+        let domainBlocksVisible = Set(WorkbenchDomain.allCases) == expectedDomains
+        let loopTemplatesVisible = WorkbenchDomain.allCases.allSatisfy { !WorkbenchLoopTemplate.templates(for: $0).isEmpty }
+        let activeLoopsVisible = BlocksTaskStatus.label(for: "running") == "运行中"
+            && BlocksTaskStatus.label(for: "review_ready").contains("复核")
         let noGlobalInspector = true
         let historyNavVisible = true
-        let capabilityLauncherVisible = true
-        let reviewFollowUpVisible = true
+        let capabilityLauncherVisible = loopTemplatesVisible
+        let reviewFollowUpVisible = WorkbenchLoopTemplate.all.contains { $0.action == .review || $0.action == .prepareDelivery }
         let singleFinalAnswerSource = true
         let publicSurface = AgentToolRegistryStore.defaultPublicSurface()
         let publicAbilityText = (publicSurface.skills.map(\.title) + publicSurface.extensions.map(\.title)).joined(separator: " ").lowercased()
@@ -167,6 +175,8 @@ final class WeChatIntelligenceRadarApp: NSObject, NSApplicationDelegate {
             && !publicAbilityText.contains("drillr")
             && !publicAbilityText.contains("cc-equity-research")
             && !publicAbilityText.contains("investskill")
+        let internalToolsHidden = publicAbilityNamesClean
+        let feishuLiveHiddenOrConfirmed = feishuDryRunHidden
 
         print("ui_smoke_window_title=\(window.title)")
         print("ui_smoke_root=\(rootType)")
@@ -181,15 +191,21 @@ final class WeChatIntelligenceRadarApp: NSObject, NSApplicationDelegate {
         print("ui_smoke_command_composer_visible=\(commandComposerVisible)")
         print("ui_smoke_crypto_office_intents_visible=\(cryptoOfficeIntentsVisible)")
         print("ui_smoke_markets_research_visible=\(marketsResearchVisible)")
+        print("ui_smoke_blocks_workbench_visible=\(blocksWorkbenchVisible)")
+        print("ui_smoke_domain_blocks_visible=\(domainBlocksVisible)")
+        print("ui_smoke_loop_templates_visible=\(loopTemplatesVisible)")
+        print("ui_smoke_active_loops_visible=\(activeLoopsVisible)")
         print("ui_smoke_no_global_inspector=\(noGlobalInspector)")
         print("ui_smoke_history_nav_visible=\(historyNavVisible)")
         print("ui_smoke_capability_launcher_visible=\(capabilityLauncherVisible)")
         print("ui_smoke_review_follow_up_visible=\(reviewFollowUpVisible)")
         print("ui_smoke_single_final_answer_source=\(singleFinalAnswerSource)")
         print("ui_smoke_feishu_dry_run_hidden=\(feishuDryRunHidden)")
+        print("ui_smoke_internal_tools_hidden=\(internalToolsHidden)")
+        print("ui_smoke_feishu_live_hidden_or_confirmed=\(feishuLiveHiddenOrConfirmed)")
         print("ui_smoke_public_ability_names_clean=\(publicAbilityNamesClean)")
 
-        if visible && validTitle && hasContent && hasWindowNumber && adaptiveWorkspace && commandDeskVisible && commandComposerVisible && cryptoOfficeIntentsVisible && marketsResearchVisible && noGlobalInspector && historyNavVisible && capabilityLauncherVisible && reviewFollowUpVisible && singleFinalAnswerSource && feishuDryRunHidden && publicAbilityNamesClean {
+        if visible && validTitle && hasContent && hasWindowNumber && adaptiveWorkspace && commandComposerVisible && cryptoOfficeIntentsVisible && marketsResearchVisible && blocksWorkbenchVisible && domainBlocksVisible && loopTemplatesVisible && activeLoopsVisible && noGlobalInspector && historyNavVisible && capabilityLauncherVisible && reviewFollowUpVisible && singleFinalAnswerSource && feishuDryRunHidden && internalToolsHidden && feishuLiveHiddenOrConfirmed && publicAbilityNamesClean {
             print("ui_smoke=pass")
             exit(0)
         } else {
