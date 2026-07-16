@@ -38,9 +38,16 @@ import {
   createDeterministicSkillBackend,
   ExecutionBroker,
   MongoExecutionPersistence,
+  ProductToolGateway,
+  UnixToolGatewayServer,
 } from "./execution/index.mjs";
 import { createWorkflowRunner } from "./runner/index.mjs";
-import { createDockerSkillExecutor, createInProcessAgentAdapter } from "./runtime/index.mjs";
+import {
+  AgentContainerSandbox,
+  createAgentContainerBackend,
+  createDockerSkillExecutor,
+  createInProcessAgentAdapter,
+} from "./runtime/index.mjs";
 import { MongoWorkbenchSessionStore } from "./security/mongo-workbench-session-store.mjs";
 import {
   createGitHubSkillRepositorySource,
@@ -199,6 +206,10 @@ export function createWorkbenchComposition({
   executionBackends = [],
   agentTurnRunner,
   agentExecutor = null,
+  agentSandbox = null,
+  toolGateway = null,
+  gatewayModelExecutor = null,
+  gatewayToolExecutor = null,
   memoryService,
   runner,
   skillUploadService,
@@ -219,8 +230,9 @@ export function createWorkbenchComposition({
       idFactory,
       uploadedSkillRuntime: skillValidationService,
     });
+  const executionPersistence = executionBroker ? null : new MongoExecutionPersistence({ store });
   const productExecutionBroker = executionBroker ?? new ExecutionBroker({
-    persistence: new MongoExecutionPersistence({ store }),
+    persistence: executionPersistence,
     clock,
     idFactory,
   });
@@ -230,6 +242,36 @@ export function createWorkbenchComposition({
       isolation: "process",
       backend: createDeterministicSkillBackend({ agentRuntime: runtimeBundle.agentRuntime }),
     });
+  }
+  const productToolGateway = toolGateway ?? (executionPersistence ? new ProductToolGateway({
+    persistence: executionPersistence,
+    modelExecutor: gatewayModelExecutor,
+    toolExecutor: gatewayToolExecutor,
+    clock,
+  }) : null);
+  const productAgentSandbox = agentSandbox ?? (
+    env.WORKBENCH_AGENT_IMAGE && productToolGateway
+      ? new AgentContainerSandbox({
+        image: env.WORKBENCH_AGENT_IMAGE,
+        gatewayServer: new UnixToolGatewayServer({
+          gateway: productToolGateway,
+          ...(env.WORKBENCH_AGENT_GATEWAY_ROOT ? { tempRoot: env.WORKBENCH_AGENT_GATEWAY_ROOT } : {}),
+        }),
+        ...(env.WORKBENCH_AGENT_SANDBOX_ROOT ? { tempRoot: env.WORKBENCH_AGENT_SANDBOX_ROOT } : {}),
+      })
+      : null
+  );
+  if (productAgentSandbox) {
+    for (const mode of ["bounded_agent", "agent_orchestrator"]) {
+      const explicitlyRegistered = executionBackends.some((item) => item.mode === mode && item.isolation === "container");
+      if (!explicitlyRegistered) {
+        productExecutionBroker.registerBackend({
+          mode,
+          isolation: "container",
+          backend: createAgentContainerBackend({ sandbox: productAgentSandbox }),
+        });
+      }
+    }
   }
   for (const registration of executionBackends) {
     productExecutionBroker.registerBackend(registration);
@@ -290,6 +332,8 @@ export function createWorkbenchComposition({
     store,
     agentRuntime: runtimeBundle.agentRuntime,
     executionBroker: productExecutionBroker,
+    toolGateway: productToolGateway,
+    agentSandbox: productAgentSandbox,
     agentTurnRunner: productAgentTurnRunner,
     memoryService: productMemoryService,
     piRuntime: runtimeBundle.piRuntime,
@@ -306,6 +350,10 @@ export function createWorkbenchServer({
   executionBackends,
   agentTurnRunner,
   agentExecutor,
+  agentSandbox,
+  toolGateway,
+  gatewayModelExecutor,
+  gatewayToolExecutor,
   memoryService,
   runner,
   distDirectory = defaultDistDirectory,
@@ -351,7 +399,7 @@ export function createWorkbenchServer({
     idFactory,
   });
   const composition = application
-    ? { store: productStore, agentRuntime, runner, piRuntime: null, disposeRuntime: null, application }
+    ? { store: productStore, agentRuntime, agentSandbox, runner, piRuntime: null, disposeRuntime: null, application }
     : createWorkbenchComposition({
       store: productStore,
       agentRuntime,
@@ -359,6 +407,10 @@ export function createWorkbenchServer({
       executionBackends,
       agentTurnRunner,
       agentExecutor,
+      agentSandbox,
+      toolGateway,
+      gatewayModelExecutor,
+      gatewayToolExecutor,
       memoryService,
       runner,
       skillUploadService: upload.service,
@@ -392,6 +444,9 @@ export function createWorkbenchServer({
     : Promise.resolve();
   const ready = Promise.all([storeReady, catalogReady, identityReady, upload.ready, validation.ready, validation.recovery, recoveryReady, resources.ready])
     .then(async () => {
+      if (typeof composition.agentSandbox?.scavenge === "function") {
+        await composition.agentSandbox.scavenge();
+      }
       if (typeof composition.runner?.recover === "function") {
         await composition.runner.recover();
       }

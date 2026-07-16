@@ -16,8 +16,11 @@ import {
 } from "../skills/skill-package-format.mjs";
 import { inspectSkillPackage } from "../validation/skill-package-inspector.mjs";
 import { parseStrictJson } from "../validation/strict-json-parser.mjs";
+import {
+  buildContainerIsolationArguments,
+  DIGEST_PINNED_CONTAINER_IMAGE,
+} from "./container-sandbox-policy.mjs";
 
-const DIGEST_PINNED_IMAGE = /^[A-Za-z0-9][A-Za-z0-9._/+:~-]*@sha256:[a-f0-9]{64}$/;
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
 const SAFE_PART = /^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$/;
 export const DOCKER_SKILL_OWNER_LABEL = "com.looloomi.workbench.skill-executor";
@@ -76,7 +79,7 @@ export class DockerSkillExecutor {
   } = {}) {
     if (!objectStore?.read) throw new TypeError("docker_skill_executor_object_store_required");
     const configuredImage = image ?? imageDigest;
-    if (typeof configuredImage !== "string" || !DIGEST_PINNED_IMAGE.test(configuredImage)) {
+    if (typeof configuredImage !== "string" || !DIGEST_PINNED_CONTAINER_IMAGE.test(configuredImage)) {
       throw new TypeError("docker_skill_executor_digest_pinned_image_required");
     }
     if (typeof dockerBinary !== "string" || dockerBinary.length === 0 || typeof spawnProcess !== "function") {
@@ -194,29 +197,23 @@ export function buildDockerSkillArguments({
   runtimeManifest,
   limits = DEFAULT_LIMITS,
 } = {}) {
-  if (!DIGEST_PINNED_IMAGE.test(image || "") || !SAFE_PART.test(containerName || "") || typeof packageRoot !== "string") {
+  if (!DIGEST_PINNED_CONTAINER_IMAGE.test(image || "") || !SAFE_PART.test(containerName || "") || typeof packageRoot !== "string") {
     throw new TypeError("docker_skill_executor_arguments_invalid");
   }
   const checkedManifest = parseSkillRuntimeManifest(JSON.stringify(runtimeManifest));
   const checked = validateLimits({ ...DEFAULT_LIMITS, ...limits });
   return [
-    "run",
-    "--pull", "never",
-    "--name", containerName,
-    "--label", `${DOCKER_SKILL_OWNER_LABEL}=${DOCKER_SKILL_OWNER_VALUE}`,
-    "--label", `${DOCKER_SKILL_INVOCATION_LABEL}=${containerName}`,
-    "--interactive",
-    "--network", "none",
-    "--read-only",
-    "--cap-drop", "ALL",
-    "--security-opt", "no-new-privileges",
-    "--user", "65534:65534",
-    "--pids-limit", String(checked.pids),
-    "--memory", String(checked.memoryBytes),
-    "--cpus", String(checked.cpus),
-    "--ulimit", "nofile=64:64",
-    "--ulimit", "core=0:0",
-    "--tmpfs", `/tmp:rw,noexec,nosuid,nodev,size=${checked.tmpfsBytes},mode=1777`,
+    ...buildContainerIsolationArguments({
+      containerName,
+      labels: [
+        `${DOCKER_SKILL_OWNER_LABEL}=${DOCKER_SKILL_OWNER_VALUE}`,
+        `${DOCKER_SKILL_INVOCATION_LABEL}=${containerName}`,
+      ],
+      limits: checked,
+      tmpfsBytes: checked.tmpfsBytes,
+      fileSizeBytes: checked.maxOutputBytes,
+      interactive: true,
+    }),
     "--mount", `type=bind,src=${packageRoot},dst=/skill,readonly`,
     "--workdir", "/skill",
     image,

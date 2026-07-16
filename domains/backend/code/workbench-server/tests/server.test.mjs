@@ -111,6 +111,31 @@ test("composition allows a Mongo-style store to bind Runner repositories during 
   assert.equal(typeof composed.runner.startRun, "function");
 });
 
+test("composition registers one shared Agent sandbox for bounded and orchestrator container modes", () => {
+  const registrations = [];
+  const executionBroker = {
+    registerBackend(registration) { registrations.push(registration); return () => {}; },
+  };
+  const store = { async connect() {} };
+  const agentRuntime = { async probeSkill() {} };
+  const agentSandbox = { async run() {}, async scavenge() {} };
+  const composed = createWorkbenchComposition({
+    store,
+    agentRuntime,
+    executionBroker,
+    agentSandbox,
+    agentTurnRunner: {},
+    memoryService: {},
+    runner: {},
+  });
+  assert.equal(composed.agentSandbox, agentSandbox);
+  assert.deepEqual(registrations.map(({ mode, isolation }) => ({ mode, isolation })), [
+    { mode: "bounded_agent", isolation: "container" },
+    { mode: "agent_orchestrator", isolation: "container" },
+  ]);
+  assert.ok(registrations.every(({ backend }) => typeof backend.execute === "function"));
+});
+
 test("server readiness recovers durable RunJobs before serving requests", async (t) => {
   let recoverCalls = 0;
   const composed = createWorkbenchServer({
@@ -138,6 +163,21 @@ test("server readiness scavenges owned Skill containers before recovering durabl
   t.after(() => composed.server.close());
   await composed.ready;
   assert.deepEqual(order, ["docker", "runner"]);
+});
+
+test("server readiness scavenges the Agent sandbox before Runner recovery", async (t) => {
+  const order = [];
+  const composed = createWorkbenchServer({
+    application: {},
+    agentSandbox: { async scavenge() { order.push("agent-sandbox"); } },
+    runner: { async recover() { order.push("runner"); return { recoveredRunIds: [] }; } },
+    bootstrapCatalog: false,
+    distDirectory: null,
+    httpHandler: async (_req, res) => { res.writeHead(204); res.end(); },
+  });
+  t.after(() => composed.server.close());
+  await composed.ready;
+  assert.deepEqual(order, ["agent-sandbox", "runner"]);
 });
 
 test("an injected application can host API tests without constructing runtime dependencies", async (t) => {
