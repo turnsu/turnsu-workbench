@@ -36,6 +36,7 @@ import { createWorkbenchHttpHandler } from "./http/workbench-http-handler.mjs";
 import { MongoMemoryPersistence, ProductMemoryService } from "./memory/index.mjs";
 import {
   createDeterministicSkillBackend,
+  createRemoteExecutionBackend,
   ExecutionBroker,
   MongoExecutionPersistence,
   ProductToolGateway,
@@ -204,6 +205,7 @@ export function createWorkbenchComposition({
   agentRuntime,
   executionBroker,
   executionBackends = [],
+  remoteTransport = null,
   agentTurnRunner,
   agentExecutor = null,
   agentSandbox = null,
@@ -273,6 +275,15 @@ export function createWorkbenchComposition({
       }
     }
   }
+  if (remoteTransport) {
+    const remoteBackend = createRemoteExecutionBackend({ transport: remoteTransport });
+    for (const mode of ["deterministic_skill", "bounded_agent", "agent_orchestrator"]) {
+      const explicitlyRegistered = executionBackends.some((item) => item.mode === mode && item.isolation === "remote");
+      if (!explicitlyRegistered) {
+        productExecutionBroker.registerBackend({ mode, isolation: "remote", backend: remoteBackend });
+      }
+    }
+  }
   for (const registration of executionBackends) {
     productExecutionBroker.registerBackend(registration);
   }
@@ -334,6 +345,7 @@ export function createWorkbenchComposition({
     executionBroker: productExecutionBroker,
     toolGateway: productToolGateway,
     agentSandbox: productAgentSandbox,
+    remoteTransport,
     agentTurnRunner: productAgentTurnRunner,
     memoryService: productMemoryService,
     piRuntime: runtimeBundle.piRuntime,
@@ -348,6 +360,7 @@ export function createWorkbenchServer({
   agentRuntime,
   executionBroker,
   executionBackends,
+  remoteTransport,
   agentTurnRunner,
   agentExecutor,
   agentSandbox,
@@ -405,6 +418,7 @@ export function createWorkbenchServer({
       agentRuntime,
       executionBroker,
       executionBackends,
+      remoteTransport,
       agentTurnRunner,
       agentExecutor,
       agentSandbox,

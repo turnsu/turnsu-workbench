@@ -1,6 +1,6 @@
 # Project Wiki
 
-Updated: 2026-07-10
+Updated: 2026-07-16
 
 ## Product Direction
 
@@ -42,8 +42,9 @@ but its old layout and generated screenshot matrix are not current design eviden
 The current dependency direction is:
 
 ```text
-Web -> Product API/BFF -> Product Store + Compiler/Runner
-    -> Agent Runtime Core -> PI Kernel -> Skill adapters
+Web -> Product API/BFF -> Product Store + Compiler/Runner/AgentTurnRunner
+    -> Execution Broker -> process/container/remote adapter
+    -> Agent Runtime Core -> PI Kernel/AgwaB -> Skill adapters
 ```
 
 The target extends this boundary with identity/workspaces, package ingestion, object storage,
@@ -67,6 +68,7 @@ Loop creation and Team library discovery.
 - Product server: [../domains/backend/code/workbench-server/](../domains/backend/code/workbench-server/)
 - Agent Runtime: [../domains/agent/code/agent-runtime/](../domains/agent/code/agent-runtime/)
 - P0 acceptance: [qa/2026-07-10-skill-workflow-loop-first-slice-acceptance.md](qa/2026-07-10-skill-workflow-loop-first-slice-acceptance.md)
+- Backend/Agent Slice 0–4 acceptance: [qa/2026-07-16-backend-agent-slices-0-4-acceptance.md](qa/2026-07-16-backend-agent-slices-0-4-acceptance.md)
 
 ## Historical Boundary
 

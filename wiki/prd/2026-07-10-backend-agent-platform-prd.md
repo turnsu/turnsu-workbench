@@ -1,7 +1,7 @@
 # Backend and Agent Platform PRD
 
-- Date: 2026-07-10
-- Status: target product requirements
+- Date: 2026-07-10; updated 2026-07-16
+- Status: target requirements with backend and Agent Slice 0–4 implemented
 - Parent: [Skill & Loop Cloud Workbench Master PRD](2026-07-10-skill-loop-cloud-workbench-master-prd.md)
 - Current implementation: [Current System Architecture](../architecture/CURRENT_SYSTEM_ARCHITECTURE.md)
 
@@ -16,7 +16,7 @@ execution, resumable product events, and authoritative final results.
 
 ## 2. Current Baseline
 
-Implemented P0 foundations include:
+Implemented foundations now include:
 
 - same-origin `/api/workbench/v1` Product API;
 - TypeBox product contracts;
@@ -26,12 +26,19 @@ Implemented P0 foundations include:
 - Review Gate decisions;
 - SSE cursor and product-safe Run read model;
 - Agent Runtime Core and PI Kernel bridge;
-- one test-only conformance Skill through the real loader/executor path.
+- Pi `0.80.7` and AgwaB compatibility gates on repository Node `22.22.3`;
+- Product-owned Execution Broker with deterministic, bounded-Agent and orchestrator modes;
+- personal Main/Module Agent Sessions, FIFO Turns, isolated branches, structured proposals and
+  three-way conflict persistence;
+- governed Product Memory with candidate promotion, scoped authorization, TTL and deletion;
+- shared script/Agent container policy and product-owned Tool Gateway;
+- an internal Remote transport boundary with a loopback fault backend.
 
-The visible non-test catalog intentionally contains a blocked sample. The platform does not
-yet provide generic Skill mutation/import/publish, generic Loop creation, cloud package
-storage, identity/team authorization, Builder proposals, real business Skill activation,
-durable unfinished-job recovery, or review feedback injection.
+Generic Skill mutation/import/publish, Loop creation, Builder proposals, durable unfinished-job
+recovery, review feedback injection, workspace authorization and one bounded business Skill are
+implemented. Remaining deployment work includes a real secret backend, live Agent container image
+proof on a Docker host, real remote devices, vector retrieval, production quotas and public cloud
+operations. The Remote adapter is intentionally not a public product option.
 
 ## 3. Target Platform Topology
 
@@ -349,6 +356,49 @@ reconstruct a different answer from raw tool output.
 input/context, retained in history, and visible in the next review packet. It must not overwrite
 the prior attempt or merely record the note.
 
+### 7.6 Product-Owned Execution Fabric
+
+- Product Runner remains the only owner of the outer Loop Run and immutable plan.
+- Every compiled V2 step fixes execution mode, isolation, limits, capabilities, result schema,
+  and evidence requirements.
+- The Execution Broker persists invocation, attempt, event, checkpoint, capability lease and
+  fence state; it does not expose a general Worker HTTP endpoint.
+- Cancellation order is record intent, revoke lease, interrupt Worker/children, then reject late
+  results by fence.
+- Missing Provider, permission, sandbox, or Remote backend is an explicit product state and never
+  a silent host-process fallback.
+
+### 7.7 Personal Agent Sessions and Proposals
+
+- Main Session scope is `user × workspace`; Module scope is
+  `user × workspace × object × branch`.
+- Collaborators use separate Sessions, transcripts, PI Sessions, permission leases and temporary
+  branches even when editing the same object.
+- One Session executes Turns FIFO; one Turn may launch multiple Workers concurrently.
+- Module Agents return structured proposals only. Non-overlapping changes may auto-rebase;
+  same-path conflicts are durable and cannot mutate the canonical Draft.
+- Handoff transfers important state, decisions, risks and Artifact references, not a transcript.
+
+### 7.8 Governed Product Memory
+
+- Mongo is the sole durable Memory authority; PI compaction is Session-local context management.
+- Agents and Workers submit candidates only. Automatic promotion is limited to verified,
+  low-sensitivity canonical-object facts with complete evidence.
+- `personal`, `object`, and `workspace` scopes enforce separate read, approval and deletion rules.
+- Retrieval must filter authorization before ranking and inject only bounded Context Capsules.
+- V1 has an embedding adapter boundary but cannot generate embeddings or send Memory content to
+  an external model automatically.
+
+### 7.9 Container and Remote Adapters
+
+- Uploaded scripts and Agent Workers use separate digest-pinned images under one shared isolation
+  policy. Agent containers have no source checkout, Provider/Mongo/Connection/user secrets or
+  network access.
+- A product-owned local Gateway holds credentials and validates the active invocation, attempt,
+  lease, allowlist, child capability subset and budget for every model/tool request.
+- Remote transport is an internal adapter with probe/dispatch/event/checkpoint/cancel/resume/dispose
+  semantics. V1 contains only a loopback/fake backend and no real-device control plane.
+
 ## 8. Cloud and Multi-Tenant Security
 
 - tenant identity is carried through HTTP, jobs, repositories, caches, events, blobs, audit,
@@ -457,5 +507,7 @@ review, update, final-result authority, restart readback, and tenant-denial evid
 - arbitrary uploaded code running outside quarantine/sandbox;
 - graph reordering by the Agent;
 - duplicate Loop and Workflow persistence systems;
+- real remote-device registration, mTLS relay, NAT traversal, fleet scheduling or device upgrade;
+- vector Memory retrieval or an external community Memory store as product truth;
 - enterprise identity suite before minimal workspace collaboration works;
 - unrelated monitoring dashboards or vertical-product backends.

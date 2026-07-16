@@ -7,6 +7,7 @@ import {
   createWorkbenchComposition,
   createWorkbenchServer,
 } from "../src/server.mjs";
+import { LoopbackRemoteWorkerTransport } from "../src/execution/index.mjs";
 
 test("the Product server uses the frozen local port", () => {
   assert.equal(DEFAULT_WORKBENCH_PORT, 8798);
@@ -134,6 +135,30 @@ test("composition registers one shared Agent sandbox for bounded and orchestrato
     { mode: "agent_orchestrator", isolation: "container" },
   ]);
   assert.ok(registrations.every(({ backend }) => typeof backend.execute === "function"));
+});
+
+test("composition registers an injected Remote transport internally for every compiled execution mode", () => {
+  const registrations = [];
+  const executionBroker = {
+    registerBackend(registration) { registrations.push(registration); return () => {}; },
+  };
+  const remoteTransport = new LoopbackRemoteWorkerTransport();
+  const composed = createWorkbenchComposition({
+    store: { async connect() {} },
+    agentRuntime: { async probeSkill() {} },
+    executionBroker,
+    remoteTransport,
+    agentTurnRunner: {},
+    memoryService: {},
+    runner: {},
+  });
+  assert.equal(composed.remoteTransport, remoteTransport);
+  assert.deepEqual(registrations.map(({ mode, isolation }) => ({ mode, isolation })), [
+    { mode: "deterministic_skill", isolation: "remote" },
+    { mode: "bounded_agent", isolation: "remote" },
+    { mode: "agent_orchestrator", isolation: "remote" },
+  ]);
+  assert.equal(new Set(registrations.map(({ backend }) => backend)).size, 1);
 });
 
 test("server readiness recovers durable RunJobs before serving requests", async (t) => {
