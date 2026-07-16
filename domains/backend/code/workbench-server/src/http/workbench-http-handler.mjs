@@ -6,6 +6,7 @@ import {
   WORKBENCH_V1_AGENT_ENDPOINTS,
   WORKBENCH_V1_ENDPOINTS,
   WORKBENCH_V1_LIFECYCLE_ENDPOINTS,
+  WORKBENCH_V1_MEMORY_ENDPOINTS,
 } from "@looloomi/workbench-contracts";
 
 import { ProductStoreError } from "../store/index.mjs";
@@ -165,6 +166,14 @@ const errorStatus = {
   agent_object_not_found: 404,
   agent_handoff_target_invalid: 409,
   main_agent_session_required: 409,
+  memory_service_unavailable: 503,
+  memory_candidate_not_found: 404,
+  memory_not_found: 404,
+  memory_access_forbidden: 403,
+  memory_candidate_state_invalid: 409,
+  memory_candidate_invalid: 400,
+  memory_query_invalid: 400,
+  memory_scope_invalid: 400,
   team_library_unavailable: 503,
   release_not_available: 404,
   installation_not_found: 404,
@@ -257,6 +266,11 @@ const actionByOperation = Object.freeze({
   confirmAgentHandoff: "confirmAgentHandoff",
   listRunInvocations: "listRunInvocations",
   listRunExecutionEvents: "listRunExecutionEvents",
+  listMemoryCandidates: "listMemoryCandidates",
+  approveMemoryCandidate: "approveMemoryCandidate",
+  rejectMemoryCandidate: "rejectMemoryCandidate",
+  listMemories: "listMemories",
+  deleteMemory: "deleteMemory",
 });
 
 const activeLifecycleEndpoints = [
@@ -324,6 +338,7 @@ const routeDefinitions = [
   ...Object.values(WORKBENCH_V1_ENDPOINTS),
   ...activeLifecycleEndpoints,
   ...Object.values(WORKBENCH_V1_AGENT_ENDPOINTS),
+  ...Object.values(WORKBENCH_V1_MEMORY_ENDPOINTS),
 ].map((endpoint) => ({
   endpoint,
   pattern: new RegExp(`^${endpoint.path.replace(/\{(\w+)\}/g, "(?<$1>[^/]+)")}$`),

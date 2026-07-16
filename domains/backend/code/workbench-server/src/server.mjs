@@ -33,6 +33,7 @@ import {
 } from "./application/workbench-application.mjs";
 import { bootstrapWorkbenchCatalog } from "./application/catalog-bootstrap.mjs";
 import { createWorkbenchHttpHandler } from "./http/workbench-http-handler.mjs";
+import { MongoMemoryPersistence, ProductMemoryService } from "./memory/index.mjs";
 import {
   createDeterministicSkillBackend,
   ExecutionBroker,
@@ -64,6 +65,7 @@ const defaultDistDirectory = join(
 const defaultClock = () => new Date().toISOString();
 const defaultIdFactory = (kind) => `${kind}-${randomUUID()}`;
 const TEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const MEMORY_ROLE_RANK = Object.freeze({ viewer: 0, member: 1, maintainer: 2, owner: 3, admin: 3 });
 
 function createTestIdentityResolver(env) {
   if (String(env.WORKBENCH_TEST_MODE || "") !== "1") return null;
@@ -77,6 +79,25 @@ function createTestIdentityResolver(env) {
     }
     return { userId, workspaceId };
   };
+}
+
+async function resolveMemoryObjectPermission({ store, scope, context, action }) {
+  if (!scope || scope.kind !== "object" || !context?.workspaceId) return false;
+  if (action !== "read" && (MEMORY_ROLE_RANK[context.role] ?? -1) < MEMORY_ROLE_RANK.member) return false;
+  try {
+    if (scope.objectKind === "workflow") {
+      await store.getWorkflow(scope.objectId, { workspaceId: context.workspaceId });
+      return true;
+    }
+    if (scope.objectKind === "skill_draft") {
+      await store.connect();
+      return Boolean(await store.repositories?.skillDrafts?.get(scope.objectId, { workspaceId: context.workspaceId }));
+    }
+  } catch (error) {
+    if (["workflow_not_found", "skill_draft_not_found"].includes(error?.code)) return false;
+    throw error;
+  }
+  return false;
 }
 
 export function createDefaultAgentRuntime({
@@ -178,6 +199,7 @@ export function createWorkbenchComposition({
   executionBackends = [],
   agentTurnRunner,
   agentExecutor = null,
+  memoryService,
   runner,
   skillUploadService,
   skillValidationService,
@@ -239,11 +261,23 @@ export function createWorkbenchComposition({
       return null;
     },
   });
+  const productMemoryService = memoryService ?? new ProductMemoryService({
+    persistence: new MongoMemoryPersistence({ store }),
+    clock,
+    idFactory,
+    objectPermissionResolver: ({ scope, context, action }) => resolveMemoryObjectPermission({
+      store,
+      scope,
+      context,
+      action,
+    }),
+  });
   const application = createWorkbenchApplication({
     store,
     agentRuntime: runtimeBundle.agentRuntime,
     executionBroker: productExecutionBroker,
     agentTurnRunner: productAgentTurnRunner,
+    memoryService: productMemoryService,
     runner: productRunner,
     skillUploadService,
     skillValidationService,
@@ -257,6 +291,7 @@ export function createWorkbenchComposition({
     agentRuntime: runtimeBundle.agentRuntime,
     executionBroker: productExecutionBroker,
     agentTurnRunner: productAgentTurnRunner,
+    memoryService: productMemoryService,
     piRuntime: runtimeBundle.piRuntime,
     disposeRuntime: runtimeBundle.dispose,
     runner: productRunner,
@@ -271,6 +306,7 @@ export function createWorkbenchServer({
   executionBackends,
   agentTurnRunner,
   agentExecutor,
+  memoryService,
   runner,
   distDirectory = defaultDistDirectory,
   bootstrapCatalog = true,
@@ -323,6 +359,7 @@ export function createWorkbenchServer({
       executionBackends,
       agentTurnRunner,
       agentExecutor,
+      memoryService,
       runner,
       skillUploadService: upload.service,
       skillValidationService: validation.service,

@@ -52,6 +52,10 @@ export const PRODUCT_COLLECTIONS = Object.freeze({
   agentSessionEvents: "agent_session_events",
   agentHandoffs: "agent_handoffs",
   mergeConflicts: "merge_conflicts",
+  memoryCandidates: "memory_candidates",
+  durableMemories: "durable_memories",
+  memoryEvents: "memory_events",
+  memoryDeletionTombstones: "memory_deletion_tombstones",
   idempotencyRecords: "idempotency_records",
   auditEvents: "audit_events",
 });
@@ -432,6 +436,38 @@ export const PRODUCT_INDEX_DEFINITIONS = Object.freeze([
     indexes: [
       { key: { mergeConflictId: 1 }, options: { unique: true, name: "mergeConflictId_1" } },
       { key: { workspaceId: 1, proposalId: 1, status: 1 }, options: { name: "workspaceId_1_proposalId_1_status_1" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.memoryCandidates,
+    indexes: [
+      { key: { candidateId: 1 }, options: { unique: true, name: "candidateId_1" } },
+      { key: { workspaceId: 1, "scope.kind": 1, status: 1, createdAt: -1 }, options: { name: "workspace_scope_status_createdAt" } },
+      { key: { expiresAt: 1 }, options: { name: "expiresAt_ttl", expireAfterSeconds: 0, partialFilterExpression: { expiresAt: { $type: "date" } } } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.durableMemories,
+    indexes: [
+      { key: { memoryId: 1 }, options: { unique: true, name: "memoryId_1" } },
+      { key: { workspaceId: 1, "scope.kind": 1, "subject.kind": 1, "subject.subjectId": 1, status: 1, updatedAt: -1 }, options: { name: "workspace_scope_subject_status_updatedAt" } },
+      { key: { statement: "text", tags: "text" }, options: { name: "memory_text", weights: { statement: 10, tags: 3 } } },
+      { key: { expiresAt: 1 }, options: { name: "expiresAt_ttl", expireAfterSeconds: 0, partialFilterExpression: { expiresAt: { $type: "date" } } } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.memoryEvents,
+    indexes: [
+      { key: { memoryEventId: 1 }, options: { unique: true, name: "memoryEventId_1" } },
+      { key: { workspaceId: 1, createdAt: -1 }, options: { name: "workspaceId_1_createdAt_-1" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.memoryDeletionTombstones,
+    indexes: [
+      { key: { tombstoneId: 1 }, options: { unique: true, name: "tombstoneId_1" } },
+      { key: { memoryIdHash: 1 }, options: { unique: true, name: "memoryIdHash_1" } },
+      { key: { workspaceId: 1, deletedAt: -1 }, options: { name: "workspaceId_1_deletedAt_-1" } },
     ],
   },
   {

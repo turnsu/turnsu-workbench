@@ -5,6 +5,7 @@ import { MongoClient } from "mongodb";
 import {
   backfillDefaultWorkspaceMigration,
   agentExecutionFabricMigration,
+  productMemoryMigration,
   ProductMigrationRunner,
   runnerTerminalTransitionsMigration,
 } from "../src/store/migrations/index.mjs";
@@ -31,6 +32,7 @@ try {
       backfillDefaultWorkspaceMigration,
       runnerTerminalTransitionsMigration,
       agentExecutionFabricMigration,
+      productMemoryMigration,
     ],
   });
   const result = await runner.run({

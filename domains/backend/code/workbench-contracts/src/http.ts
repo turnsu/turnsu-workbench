@@ -316,7 +316,7 @@ export const RunEventsQuerySchema = strictObject({
 
 export interface WorkbenchEndpointMetadata {
   operationId: string;
-  method: "GET" | "POST" | "PUT" | "PATCH";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: `${typeof WORKBENCH_API_PREFIX}${string}`;
   mutation: boolean;
   successStatus: 200 | 201 | 202;

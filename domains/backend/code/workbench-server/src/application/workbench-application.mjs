@@ -319,6 +319,7 @@ export function createWorkbenchApplication({
   agentRuntime,
   executionBroker = null,
   agentTurnRunner = null,
+  memoryService = null,
   runner,
   skillUploadService = null,
   skillValidationService = null,
@@ -343,13 +344,15 @@ export function createWorkbenchApplication({
     const context = {
       userId: auth?.userId ?? userId,
       workspaceId: auth?.activeWorkspaceId ?? auth?.workspaceId ?? workspaceId,
+      role: auth?.role ?? "owner",
     };
     if (auth && typeof store.authorizeWorkspace === "function") {
-      await store.authorizeWorkspace({
+      const membership = await store.authorizeWorkspace({
         userId: context.userId,
         workspaceId: context.workspaceId,
         minimumRole,
       });
+      if (membership?.role) context.role = membership.role;
     }
     return context;
   };
@@ -531,6 +534,88 @@ export function createWorkbenchApplication({
         request: clone(request),
         workspaceId: context.workspaceId,
       }, () => agentTurnRunner.confirmHandoff({ sessionId, handoffId, ...context }));
+    },
+    async listMemoryCandidates({ query = {}, auth }) {
+      const context = await resolveAuth(auth);
+      if (!memoryService) throw storeError("memory_service_unavailable", "Product Memory is unavailable.");
+      return resultPage(await memoryService.listCandidates({
+        context,
+        status: query.status,
+        scope: query.scope,
+        limit: query.limit ?? 500,
+      }));
+    },
+    async approveMemoryCandidate({ candidateId, idempotencyKey, request, auth }) {
+      const context = await resolveAuth(auth);
+      if (!memoryService) throw storeError("memory_service_unavailable", "Product Memory is unavailable.");
+      return runExternalMutation({
+        scope: `approve-memory-candidate:${context.userId}:${candidateId}`,
+        key: idempotencyKey,
+        request: clone(request),
+        workspaceId: context.workspaceId,
+        operationIdKind: "memory-decision",
+        recover: async () => {
+          let candidate;
+          try {
+            candidate = await memoryService.getCandidate({ candidateId, context });
+          } catch (error) {
+            if (error?.code === "memory_candidate_not_found") return null;
+            throw error;
+          }
+          return candidate?.status === "promoted" ? candidate : null;
+        },
+      }, () => memoryService.approveCandidate({ candidateId, reason: request.data.reason, context }));
+    },
+    async rejectMemoryCandidate({ candidateId, idempotencyKey, request, auth }) {
+      const context = await resolveAuth(auth);
+      if (!memoryService) throw storeError("memory_service_unavailable", "Product Memory is unavailable.");
+      return runExternalMutation({
+        scope: `reject-memory-candidate:${context.userId}:${candidateId}`,
+        key: idempotencyKey,
+        request: clone(request),
+        workspaceId: context.workspaceId,
+        operationIdKind: "memory-decision",
+        recover: async () => {
+          let candidate;
+          try {
+            candidate = await memoryService.getCandidate({ candidateId, context });
+          } catch (error) {
+            if (error?.code === "memory_candidate_not_found") return null;
+            throw error;
+          }
+          return candidate?.status === "rejected" ? candidate : null;
+        },
+      }, () => memoryService.rejectCandidate({ candidateId, reason: request.data.reason, context }));
+    },
+    async listMemories({ query = {}, auth }) {
+      const context = await resolveAuth(auth);
+      if (!memoryService) throw storeError("memory_service_unavailable", "Product Memory is unavailable.");
+      if (Boolean(query.subjectKind) !== Boolean(query.subjectId)) {
+        throw storeError("memory_query_invalid", "Memory subject kind and ID must be provided together.");
+      }
+      const results = await memoryService.query({
+        query: {
+          scopes: query.scope ? [query.scope] : ["personal", "object", "workspace"],
+          ...(query.subjectKind ? { subject: { kind: query.subjectKind, subjectId: query.subjectId } } : {}),
+          ...(query.text ? { text: query.text } : {}),
+          tags: query.tags ? query.tags.split(",").map((item) => item.trim()).filter(Boolean) : [],
+          limit: query.limit ?? 100,
+        },
+        context,
+      });
+      return resultPage(results.map(({ memory }) => memory));
+    },
+    async deleteMemory({ memoryId, idempotencyKey, request, auth }) {
+      const context = await resolveAuth(auth);
+      if (!memoryService) throw storeError("memory_service_unavailable", "Product Memory is unavailable.");
+      return runExternalMutation({
+        scope: `delete-memory:${context.userId}:${memoryId}`,
+        key: idempotencyKey,
+        request: clone(request),
+        workspaceId: context.workspaceId,
+        operationIdKind: "memory-deletion",
+        recover: () => memoryService.recoverDeletion({ memoryId, context }),
+      }, () => memoryService.deleteMemory({ memoryId, reason: request.data.reason, context }));
     },
     async listMemberships({ query = {}, auth } = {}) {
       const context = await resolveAuth(auth);

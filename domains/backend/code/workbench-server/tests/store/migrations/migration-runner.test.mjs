@@ -6,6 +6,7 @@ import {
   agentExecutionFabricMigration,
   defineMigration,
   MigrationError,
+  productMemoryMigration,
   ProductMigrationRunner,
   runnerTerminalTransitionsMigration,
 } from "../../../src/store/migrations/index.mjs";
@@ -271,6 +272,23 @@ test("execution fabric migration creates durable execution and personal Agent se
   ]) {
     assert.ok(db.collection(name).indexes.length >= 2, name);
   }
+});
+
+test("Product Memory migration creates governed candidate, durable, event, and tombstone indexes", async () => {
+  const db = new FakeDb();
+  const runner = new ProductMigrationRunner({
+    db,
+    migrations: [productMemoryMigration],
+    clock: () => new Date("2026-07-16T00:00:00.000Z"),
+  });
+  assert.deepEqual((await runner.plan()).pending, ["004-product-memory"]);
+  const result = await runner.run();
+  assert.equal(result.completed[0].result.createdIndexes, true);
+  for (const name of ["memory_candidates", "durable_memories", "memory_events", "memory_deletion_tombstones"]) {
+    assert.ok(db.collection(name).indexes.length >= 2, name);
+  }
+  assert.ok(db.collection("durable_memories").indexes.some((index) => index.name === "memory_text"));
+  assert.ok(db.collection("durable_memories").indexes.some((index) => index.name === "expiresAt_ttl"));
 });
 
 test("migration runner refuses checksum drift and an active foreign lock", async () => {

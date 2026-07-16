@@ -457,6 +457,22 @@ export class ProductMongoStore {
         collection(PRODUCT_COLLECTIONS.mergeConflicts),
         { idField: "mergeConflictId" },
       ),
+      memoryCandidates: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.memoryCandidates),
+        { idField: "candidateId" },
+      ),
+      durableMemories: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.durableMemories),
+        { idField: "memoryId" },
+      ),
+      memoryEvents: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.memoryEvents),
+        { idField: "memoryEventId", immutable: true },
+      ),
+      memoryDeletionTombstones: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.memoryDeletionTombstones),
+        { idField: "tombstoneId", immutable: true },
+      ),
       idempotencyRecords: new IdempotencyRepository(
         collection(PRODUCT_COLLECTIONS.idempotencyRecords),
       ),
