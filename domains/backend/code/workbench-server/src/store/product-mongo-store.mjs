@@ -453,6 +453,10 @@ export class ProductMongoStore {
         collection(PRODUCT_COLLECTIONS.agentHandoffs),
         { idField: "handoffId" },
       ),
+      agentObjectProposals: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.agentObjectProposals),
+        { idField: "proposalId" },
+      ),
       mergeConflicts: new ProductRecordRepository(
         collection(PRODUCT_COLLECTIONS.mergeConflicts),
         { idField: "mergeConflictId" },

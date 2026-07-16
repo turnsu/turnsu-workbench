@@ -37,12 +37,42 @@ export class MongoAgentPersistence {
         "scope.objectId": query.scope.objectId,
         ...(query.scope.branchId ? { "scope.branchId": query.scope.branchId } : {}),
       } : {}),
-    }));
+      status: "active",
+    }, { sort: { updatedAt: -1, createdAt: -1 } }));
   }
 
   async createBranch(branch) {
     const repositories = await this.#repos();
     return repositories.agentBranches.insert(branch);
+  }
+
+  async createModuleSession(branch, session) {
+    const repositories = await this.#repos();
+    try {
+      return await this.store.withTransaction(async (mongoSession) => {
+        await repositories.agentBranches.collection.insertOne(structuredClone(branch), { session: mongoSession });
+        const value = { ...structuredClone(session), turnSequence: 0, messageSequence: 0, eventSequence: 0 };
+        await repositories.agentSessions.collection.insertOne(value, { session: mongoSession });
+        return publicSession(value);
+      });
+    } catch (error) {
+      if (error?.code !== 11000 && error?.codeName !== "DuplicateKey") throw error;
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const existing = await this.findSession({
+          userId: session.userId,
+          workspaceId: session.workspaceId,
+          definitionId: session.definitionId,
+          scope: {
+            kind: "module",
+            objectKind: session.scope.objectKind,
+            objectId: session.scope.objectId,
+          },
+        });
+        if (existing) return existing;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      throw error;
+    }
   }
 
   async createSession(session) {

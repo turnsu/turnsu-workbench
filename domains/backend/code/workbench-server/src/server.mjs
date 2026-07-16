@@ -26,7 +26,12 @@ import {
 } from "../../../../agent/code/agent-runtime/kernels/pi/pi-kernel-adapter.mjs";
 import { resolveRuntimePaths } from "../../../../agent/code/agent-runtime/lib/runtime-paths.mjs";
 
-import { AgentTurnRunner, MongoAgentPersistence } from "./agents/index.mjs";
+import {
+  AgentTurnRunner,
+  MongoAgentPersistence,
+  ProductAgentProposalService,
+  createProductAgentExecutor,
+} from "./agents/index.mjs";
 import {
   createExecutionResolver,
   createWorkbenchApplication,
@@ -208,6 +213,7 @@ export function createWorkbenchComposition({
   remoteTransport = null,
   agentTurnRunner,
   agentExecutor = null,
+  agentProposalService = null,
   agentSandbox = null,
   toolGateway = null,
   gatewayModelExecutor = null,
@@ -296,10 +302,12 @@ export function createWorkbenchComposition({
     clock,
     idFactory,
   });
+  const productAgentProposalService = agentProposalService ?? new ProductAgentProposalService({ store, clock, idFactory });
+  const productAgentExecutor = agentExecutor ?? createProductAgentExecutor({ proposalService: productAgentProposalService });
   const productAgentTurnRunner = agentTurnRunner ?? new AgentTurnRunner({
     persistence: new MongoAgentPersistence({ store }),
     executionBroker: productExecutionBroker,
-    executor: agentExecutor,
+    executor: productAgentExecutor,
     clock,
     idFactory,
     resolveBaseVersion: async ({ objectKind, objectId, workspaceId }) => {
@@ -347,6 +355,8 @@ export function createWorkbenchComposition({
     agentSandbox: productAgentSandbox,
     remoteTransport,
     agentTurnRunner: productAgentTurnRunner,
+    agentExecutor: productAgentExecutor,
+    agentProposalService: productAgentProposalService,
     memoryService: productMemoryService,
     piRuntime: runtimeBundle.piRuntime,
     disposeRuntime: runtimeBundle.dispose,
@@ -363,6 +373,7 @@ export function createWorkbenchServer({
   remoteTransport,
   agentTurnRunner,
   agentExecutor,
+  agentProposalService,
   agentSandbox,
   toolGateway,
   gatewayModelExecutor,
@@ -421,6 +432,7 @@ export function createWorkbenchServer({
       remoteTransport,
       agentTurnRunner,
       agentExecutor,
+      agentProposalService,
       agentSandbox,
       toolGateway,
       gatewayModelExecutor,

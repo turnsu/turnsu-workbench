@@ -55,6 +55,53 @@ test("module sessions, branches, transcripts, and permissions are isolated per c
   assert.equal(await runner.listMessages(alice.sessionId, { userId: "bob", workspaceId: "workspace-alpha" }), null);
 });
 
+test("module session creation can resume only the current user's explicit active branch", async () => {
+  const { runner } = fixture();
+  const created = await runner.createSession({
+    definitionId: "loop_creator",
+    objectKind: "workflow",
+    objectId: "workflow-shared",
+    userId: "alice",
+    workspaceId: "workspace-alpha",
+  });
+  const resumed = await runner.createSession({
+    definitionId: "loop_creator",
+    objectKind: "workflow",
+    objectId: "workflow-shared",
+    branchId: created.scope.branchId,
+    userId: "alice",
+    workspaceId: "workspace-alpha",
+  });
+  assert.equal(resumed.sessionId, created.sessionId);
+
+  await assert.rejects(runner.createSession({
+    definitionId: "loop_creator",
+    objectKind: "workflow",
+    objectId: "workflow-shared",
+    branchId: created.scope.branchId,
+    userId: "bob",
+    workspaceId: "workspace-alpha",
+  }), { code: "agent_branch_not_found" });
+});
+
+test("concurrent Module Session creation converges on one active personal branch", async () => {
+  const { runner, persistence } = fixture();
+  const request = {
+    definitionId: "loop_creator",
+    objectKind: "workflow",
+    objectId: "workflow-shared",
+    userId: "alice",
+    workspaceId: "workspace-alpha",
+  };
+  const [left, right] = await Promise.all([
+    runner.createSession(request),
+    runner.createSession(request),
+  ]);
+  assert.equal(left.sessionId, right.sessionId);
+  assert.equal(left.scope.branchId, right.scope.branchId);
+  assert.equal([...persistence.branches.values()].filter((branch) => branch.status === "active").length, 1);
+});
+
 test("turns in one session execute FIFO while different sessions can run concurrently", async () => {
   const order = [];
   const blockers = new Map();

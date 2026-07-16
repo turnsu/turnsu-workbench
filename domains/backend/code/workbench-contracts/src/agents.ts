@@ -9,6 +9,7 @@ import {
   InvocationIdSchema,
   MergeConflictIdSchema,
   ProposalIdSchema,
+  JsonValueSchema,
   UtcTimestampSchema,
   UserIdSchema,
   WorkspaceIdSchema,
@@ -146,9 +147,43 @@ export const MergeConflictSchema = strictObject({
   resolvedAt: Type.Union([UtcTimestampSchema, Type.Null()]),
 });
 
+export const AgentProposalOperationSchema = strictObject({
+  op: stringEnum(["add", "replace", "remove"]),
+  path: Type.String({ minLength: 1, maxLength: 1000, pattern: "^/" }),
+  value: Type.Optional(JsonValueSchema),
+});
+
+export const AgentProposalValidationResultSchema = strictObject({
+  status: stringEnum(["passed", "failed", "not_run"]),
+  diagnostics: Type.Array(Type.Record(Type.String(), JsonValueSchema), { maxItems: 128 }),
+});
+
+export const AgentObjectProposalSchema = strictObject({
+  schemaVersion: WorkbenchSchemaVersionSchema,
+  proposalId: ProposalIdSchema,
+  workspaceId: WorkspaceIdSchema,
+  userId: UserIdSchema,
+  sessionId: AgentSessionIdSchema,
+  turnId: AgentTurnIdSchema,
+  definitionId: AgentDefinitionIdSchema,
+  objectKind: AgentObjectKindSchema,
+  objectId: Type.String({ minLength: 1, maxLength: 128 }),
+  branchId: AgentBranchIdSchema,
+  baseVersionId: Type.String({ minLength: 1, maxLength: 128 }),
+  summary: Type.String({ minLength: 1, maxLength: 4000 }),
+  operations: Type.Array(AgentProposalOperationSchema, { minItems: 1, maxItems: 256 }),
+  evidenceRefs: Type.Array(Type.String({ minLength: 1, maxLength: 256 }), { uniqueItems: true, maxItems: 256 }),
+  validationResult: AgentProposalValidationResultSchema,
+  status: stringEnum(["proposed", "conflicting", "accepted", "rejected", "superseded"]),
+  createdBy: UserIdSchema,
+  createdAt: UtcTimestampSchema,
+  decidedAt: Type.Union([UtcTimestampSchema, Type.Null()]),
+});
+
 export type AgentDefinition = Static<typeof AgentDefinitionSchema>;
 export type AgentSession = Static<typeof AgentSessionSchema>;
 export type AgentTurn = Static<typeof AgentTurnSchema>;
 export type AgentSessionEvent = Static<typeof AgentSessionEventSchema>;
 export type AgentHandoff = Static<typeof AgentHandoffSchema>;
 export type MergeConflict = Static<typeof MergeConflictSchema>;
+export type AgentObjectProposal = Static<typeof AgentObjectProposalSchema>;

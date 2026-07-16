@@ -51,7 +51,7 @@ export class AgentTurnRunner {
     return sessionIds;
   }
 
-  async createSession({ definitionId, objectKind, objectId, userId, workspaceId }) {
+  async createSession({ definitionId, objectKind, objectId, branchId = null, userId, workspaceId }) {
     const definition = getBuiltinAgentDefinition(definitionId);
     if (!definition) throw new AgentTurnRunnerError("agent_definition_not_found", "Agent definition not found.");
     if (!userId || !workspaceId) throw new AgentTurnRunnerError("agent_session_scope_invalid");
@@ -80,6 +80,37 @@ export class AgentTurnRunner {
     if (!definition.objectKinds.includes(objectKind) || !objectId) {
       throw new AgentTurnRunnerError("module_agent_object_invalid", "This module Agent cannot operate on that object.");
     }
+    if (branchId) {
+      const branch = await this.#persistence.getBranch(branchId);
+      if (!branch
+        || branch.userId !== userId
+        || branch.workspaceId !== workspaceId
+        || branch.objectKind !== objectKind
+        || branch.objectId !== objectId
+        || branch.status !== "active") {
+        throw new AgentTurnRunnerError("agent_branch_not_found", "Agent branch not found.");
+      }
+      const resumed = await this.#persistence.findSession({
+        userId,
+        workspaceId,
+        definitionId,
+        scope: { kind: "module", objectKind, objectId, branchId },
+      });
+      if (resumed?.status === "active") return resumed;
+      const now = this.#clock();
+      return this.#persistence.createSession({
+        schemaVersion: SCHEMA_VERSION,
+        sessionId: this.#idFactory("agent-session"),
+        definitionId,
+        userId,
+        workspaceId,
+        scope: { kind: "module", objectKind, objectId, branchId, baseVersionId: branch.baseVersionId },
+        status: "active",
+        activeTurnId: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
     const existing = await this.#persistence.findSession({
       userId,
       workspaceId,
@@ -91,10 +122,10 @@ export class AgentTurnRunner {
     const baseVersionId = await this.#resolveBaseVersion({ objectKind, objectId, userId, workspaceId });
     if (!baseVersionId) throw new AgentTurnRunnerError("agent_object_not_found", "Agent object not found.");
     const now = this.#clock();
-    const branchId = this.#idFactory("agent-branch");
-    await this.#persistence.createBranch({
+    const newBranchId = this.#idFactory("agent-branch");
+    const newBranch = {
       schemaVersion: SCHEMA_VERSION,
-      branchId,
+      branchId: newBranchId,
       userId,
       workspaceId,
       objectKind,
@@ -103,19 +134,24 @@ export class AgentTurnRunner {
       status: "active",
       createdAt: now,
       updatedAt: now,
-    });
-    return this.#persistence.createSession({
+    };
+    const newSession = {
       schemaVersion: SCHEMA_VERSION,
       sessionId: this.#idFactory("agent-session"),
       definitionId,
       userId,
       workspaceId,
-      scope: { kind: "module", objectKind, objectId, branchId, baseVersionId },
+      scope: { kind: "module", objectKind, objectId, branchId: newBranchId, baseVersionId },
       status: "active",
       activeTurnId: null,
       createdAt: now,
       updatedAt: now,
-    });
+    };
+    if (typeof this.#persistence.createModuleSession === "function") {
+      return this.#persistence.createModuleSession(newBranch, newSession);
+    }
+    await this.#persistence.createBranch(newBranch);
+    return this.#persistence.createSession(newSession);
   }
 
   getSession(sessionId, access) {

@@ -51,6 +51,7 @@ export const PRODUCT_COLLECTIONS = Object.freeze({
   agentBranches: "agent_branches",
   agentSessionEvents: "agent_session_events",
   agentHandoffs: "agent_handoffs",
+  agentObjectProposals: "agent_object_proposals",
   mergeConflicts: "merge_conflicts",
   memoryCandidates: "memory_candidates",
   durableMemories: "durable_memories",
@@ -415,6 +416,7 @@ export const PRODUCT_INDEX_DEFINITIONS = Object.freeze([
     indexes: [
       { key: { branchId: 1 }, options: { unique: true, name: "branchId_1" } },
       { key: { userId: 1, workspaceId: 1, objectKind: 1, objectId: 1, createdAt: -1 }, options: { name: "user_workspace_object_createdAt" } },
+      { key: { userId: 1, workspaceId: 1, objectKind: 1, objectId: 1, status: 1 }, options: { unique: true, name: "one_active_branch_per_user_object", partialFilterExpression: { status: "active" } } },
     ],
   },
   {
@@ -429,6 +431,14 @@ export const PRODUCT_INDEX_DEFINITIONS = Object.freeze([
     indexes: [
       { key: { handoffId: 1 }, options: { unique: true, name: "handoffId_1" } },
       { key: { targetSessionId: 1, status: 1, createdAt: -1 }, options: { name: "targetSessionId_1_status_1_createdAt_-1" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.agentObjectProposals,
+    indexes: [
+      { key: { proposalId: 1 }, options: { unique: true, name: "proposalId_1" } },
+      { key: { workspaceId: 1, userId: 1, objectKind: 1, objectId: 1, branchId: 1, createdAt: -1 }, options: { name: "workspace_user_object_branch_createdAt" } },
+      { key: { sessionId: 1, turnId: 1 }, options: { unique: true, name: "sessionId_1_turnId_1" } },
     ],
   },
   {

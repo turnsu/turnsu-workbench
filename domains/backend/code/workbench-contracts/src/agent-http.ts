@@ -1,6 +1,7 @@
 import { Type } from "typebox";
 
 import {
+  AgentBranchIdSchema,
   AgentSessionIdSchema,
   AgentTurnIdSchema,
   RunIdSchema,
@@ -57,6 +58,7 @@ export const CreateAgentSessionRequestSchema = MutationRequestEnvelopeSchema(str
   definitionId: Type.String({ minLength: 1, maxLength: 128 }),
   objectKind: Type.Optional(AgentObjectKindSchema),
   objectId: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+  branchId: Type.Optional(AgentBranchIdSchema),
 }), "CreateAgentSessionRequest");
 
 export const CreateAgentTurnRequestSchema = MutationRequestEnvelopeSchema(strictObject({

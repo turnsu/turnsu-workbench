@@ -87,6 +87,7 @@ test("composition injects one execution resolver into a real Runner", () => {
   assert.equal(composed.agentRuntime, agentRuntime);
   assert.equal(typeof composed.runner.startRun, "function");
   assert.equal(typeof composed.application.compileWorkflow, "function");
+  assert.equal(typeof composed.agentExecutor.execute, "function");
 });
 
 test("composition allows a Mongo-style store to bind Runner repositories during server readiness", () => {

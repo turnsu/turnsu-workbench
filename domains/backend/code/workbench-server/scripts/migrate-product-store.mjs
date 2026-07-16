@@ -6,6 +6,7 @@ import {
   backfillDefaultWorkspaceMigration,
   agentExecutionFabricMigration,
   productMemoryMigration,
+  agentProposalsAndActiveBranchesMigration,
   ProductMigrationRunner,
   runnerTerminalTransitionsMigration,
 } from "../src/store/migrations/index.mjs";
@@ -33,6 +34,7 @@ try {
       runnerTerminalTransitionsMigration,
       agentExecutionFabricMigration,
       productMemoryMigration,
+      agentProposalsAndActiveBranchesMigration,
     ],
   });
   const result = await runner.run({

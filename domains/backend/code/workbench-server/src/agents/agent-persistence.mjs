@@ -20,6 +20,22 @@ export class InMemoryAgentPersistence {
     return clone(branch);
   }
 
+  async createModuleSession(branch, session) {
+    const existing = [...this.sessions.values()].find((candidate) => (
+      candidate.status === "active"
+      && candidate.userId === session.userId
+      && candidate.workspaceId === session.workspaceId
+      && candidate.definitionId === session.definitionId
+      && candidate.scope.kind === "module"
+      && candidate.scope.objectKind === session.scope.objectKind
+      && candidate.scope.objectId === session.scope.objectId
+    ));
+    if (existing) return publicSession(existing);
+    this.branches.set(branch.branchId, clone(branch));
+    this.sessions.set(session.sessionId, { ...clone(session), turnSequence: 0, messageSequence: 0, eventSequence: 0 });
+    return publicSession(this.sessions.get(session.sessionId));
+  }
+
   async createSession(session) {
     this.sessions.set(session.sessionId, { ...clone(session), turnSequence: 0, messageSequence: 0, eventSequence: 0 });
     return publicSession(this.sessions.get(session.sessionId));
