@@ -4,21 +4,26 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+export XDG_CACHE_HOME="$ROOT_DIR/.build/xdg-cache"
+export CLANG_MODULE_CACHE_PATH="$ROOT_DIR/.build/clang-module-cache"
+export SWIFTPM_MODULECACHE_OVERRIDE="$ROOT_DIR/.build/swiftpm-module-cache"
+mkdir -p "$XDG_CACHE_HOME" "$CLANG_MODULE_CACHE_PATH" "$SWIFTPM_MODULECACHE_OVERRIDE"
+
 rm -rf \
   "$ROOT_DIR/.build/debug/WeChatIntelligenceRadar.app" \
   "$ROOT_DIR/.build/arm64-apple-macosx/debug/WeChatIntelligenceRadar.app"
 
 # Use the default .build dir (incremental — fast when nothing changed).
-swift build
+swift build --disable-sandbox
 
-BUILD_DIR="$(swift build --show-bin-path)"
+BUILD_DIR="$(swift build --disable-sandbox --show-bin-path)"
 APP_DIR="$ROOT_DIR/.build/debug-app/WeChatIntelligenceRadar.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 EXECUTABLE="$BUILD_DIR/WeChatIntelligenceRadar"
 RESOURCE_BUNDLE="$BUILD_DIR/WeChatIntelligenceRadarMVP_WeChatIntelligenceRadarApp.bundle"
-ICON_FILE="$ROOT_DIR/Sources/WeChatIntelligenceRadarApp/Resources/AppIcon.icns"
+ICON_FILE="$ROOT_DIR/domains/frontend/app/code/WeChatIntelligenceRadarApp/Resources/AppIcon.icns"
 
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
@@ -70,7 +75,11 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
 PLIST
 
 if [[ -x /usr/libexec/PlistBuddy ]]; then
-  /usr/libexec/PlistBuddy -c "Add :LooloomiProjectRoot string $ROOT_DIR" "$CONTENTS_DIR/Info.plist" >/dev/null 2>&1 || true
+  /usr/libexec/PlistBuddy -c "Add :LooloomiUseAppSupportRuntime bool true" "$CONTENTS_DIR/Info.plist" >/dev/null 2>&1 || true
+  if [[ "${LOOLOOMI_EMBED_PROJECT_ROOT:-0}" == "1" ]]; then
+    /usr/libexec/PlistBuddy -c "Set :LooloomiUseAppSupportRuntime false" "$CONTENTS_DIR/Info.plist" >/dev/null 2>&1 || true
+    /usr/libexec/PlistBuddy -c "Add :LooloomiProjectRoot string $ROOT_DIR" "$CONTENTS_DIR/Info.plist" >/dev/null 2>&1 || true
+  fi
 fi
 
 if command -v codesign >/dev/null 2>&1; then

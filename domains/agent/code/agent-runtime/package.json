@@ -1,0 +1,41 @@
+{
+  "name": "wechat-onchain-agent-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local Agent Runtime Host for the WeChat x on-chain agent console.",
+  "type": "module",
+  "scripts": {
+    "test": "npm run test:unit && npm run test:runtime-integrity",
+    "test:unit": "node lib/runtime-paths.test.mjs && node kernels/pi/pi-kernel-adapter.test.mjs && node test/business-skill-smoke.mjs && node core/proposals/pi-builder-proposal-generator.test.mjs && node core/run-loop/agent-runtime-core.test.mjs && node core/gates/gate-engine.test.mjs && node core/final-output/deterministic-final-copy.test.mjs && node core/capability/capability-loop-read-model.test.mjs && node core/providers/runtime-tool-executor.test.mjs && node control-plane/model-route.test.mjs && node control-plane/smoke-test.mjs",
+    "test:business-skill": "node test/business-skill-smoke.mjs",
+    "test:runtime-integrity": "node test/runtime-integrity-smoke.mjs",
+    "control-plane:smoke": "node control-plane/smoke-test.mjs",
+    "cloud-asr:oss-check": "node bin/check-cloud-asr-oss-config.mjs",
+    "smoke": "RUNTIME_ROOT=$(mktemp -d \"${TMPDIR:-/tmp}/looloomi-agent-smoke.XXXXXX\"); trap 'rm -rf \"$RUNTIME_ROOT\"' EXIT; export WECHAT_AGENT_TEST_MODE=1 WECHAT_AGENT_RUNTIME_ROOT=\"$RUNTIME_ROOT\" MONGODB_DB=looloomi_agent_smoke_test; node bin/wechat-agent-daemon.mjs --smoke-check",
+    "async-smoke": "RUNTIME_ROOT=$(mktemp -d \"${TMPDIR:-/tmp}/looloomi-agent-async-smoke.XXXXXX\"); trap 'rm -rf \"$RUNTIME_ROOT\"' EXIT; export WECHAT_AGENT_TEST_MODE=1 WECHAT_AGENT_RUNTIME_ROOT=\"$RUNTIME_ROOT\" MONGODB_DB=looloomi_agent_async_smoke_test; node bin/wechat-agent-daemon.mjs --async-smoke-check",
+    "smoke:security": "RUNTIME_ROOT=$(mktemp -d \"${TMPDIR:-/tmp}/looloomi-agent-security-smoke.XXXXXX\"); trap 'rm -rf \"$RUNTIME_ROOT\"' EXIT; export WECHAT_AGENT_TEST_MODE=1 WECHAT_AGENT_RUNTIME_ROOT=\"$RUNTIME_ROOT\" MONGODB_DB=looloomi_agent_security_smoke_test; node bin/wechat-agent-daemon.mjs --security-smoke-check",
+    "smoke:business": "RUNTIME_ROOT=$(mktemp -d \"${TMPDIR:-/tmp}/looloomi-agent-business-smoke.XXXXXX\"); trap 'rm -rf \"$RUNTIME_ROOT\"' EXIT; export WECHAT_AGENT_TEST_MODE=1 WECHAT_AGENT_RUNTIME_ROOT=\"$RUNTIME_ROOT\" MONGODB_DB=looloomi_agent_business_smoke_test; node bin/wechat-agent-daemon.mjs --business-qa-check",
+    "smoke:mongo": "RUNTIME_ROOT=$(mktemp -d \"${TMPDIR:-/tmp}/looloomi-agent-mongo-smoke.XXXXXX\"); trap 'rm -rf \"$RUNTIME_ROOT\"' EXIT; export WECHAT_AGENT_TEST_MODE=1 WECHAT_AGENT_RUNTIME_ROOT=\"$RUNTIME_ROOT\" MONGODB_DB=looloomi_agent_mongo_smoke_test; node bin/wechat-agent-daemon.mjs --mongo-smoke-check && node bin/wechat-agent-daemon.mjs --mongo-test-cleanup",
+    "start": "node bin/wechat-agent-daemon.mjs"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ],
+    "skills": [
+      "./skills"
+    ],
+    "prompts": [
+      "./prompts"
+    ]
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.75.5",
+    "mongodb": "6.16.0",
+    "typebox": "1.1.38",
+    "undici": "^6.21.3"
+  }
+}

@@ -1,0 +1,85 @@
+[
+  {
+    "controlCount" : 24,
+    "focusFailures" : [
+
+    ],
+    "h1" : "Loop lifecycle",
+    "testids" : [
+      "loopops.nav.skills",
+      "loopops.nav.loops",
+      "loopops.nav.library",
+      "loopops.theme.light",
+      "loopops.theme.dark",
+      "loopops.locale.en",
+      "loopops.locale.zh",
+      "loopops.global-create",
+      "loopops.inbox",
+      "loopops.account-menu",
+      "loopops.loops.view.list",
+      "loopops.loops.view.board",
+      "loopops.loops.ai-command",
+      "loopops.topbar.primary.create-loop",
+      "loopops.loops.upload",
+      "loopops.loops.action.workflow-bf520887-0bb2-4def-882e-23321f4d6c95"
+    ],
+    "unlabeled" : [
+
+    ]
+  },
+  {
+    "controlCount" : 22,
+    "focusFailures" : [
+
+    ],
+    "h1" : "Skills",
+    "testids" : [
+      "loopops.nav.skills",
+      "loopops.nav.loops",
+      "loopops.nav.library",
+      "loopops.theme.light",
+      "loopops.theme.dark",
+      "loopops.locale.en",
+      "loopops.locale.zh",
+      "loopops.global-create",
+      "loopops.inbox",
+      "loopops.account-menu",
+      "loopops.skills.search",
+      "loopops.skills.upload",
+      "loopops.skills.create",
+      "loopops.skills.add.meeting-action-extractor",
+      "loopops.skills.view"
+    ],
+    "unlabeled" : [
+
+    ]
+  },
+  {
+    "controlCount" : 19,
+    "focusFailures" : [
+
+    ],
+    "h1" : "Team library",
+    "testids" : [
+      "loopops.nav.skills",
+      "loopops.nav.loops",
+      "loopops.nav.library",
+      "loopops.theme.light",
+      "loopops.theme.dark",
+      "loopops.locale.en",
+      "loopops.locale.zh",
+      "loopops.global-create",
+      "loopops.inbox",
+      "loopops.account-menu",
+      "loopops.library.filter.all",
+      "loopops.library.filter.skill",
+      "loopops.library.filter.loop",
+      "loopops.library.filter.starting",
+      "loopops.library.filter.installed",
+      "loopops.library.filter.updates"
+    ],
+    "unlabeled" : [
+
+    ]
+  }
+]

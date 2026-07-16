@@ -1,0 +1,41 @@
+{
+  "name": "web-prototype",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "review": "vite --host 127.0.0.1 --port 5184",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "review:offline": "LOOP_WORKBENCH_OFFLINE_BUILD=1 vite build && node scripts/export-offline-review.mjs",
+    "review:no-permission": "node scripts/no-permission-review.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "action:smoke": "node scripts/action-smoke.mjs",
+    "api:smoke": "node scripts/api-client-smoke.mjs",
+    "editor:smoke": "node scripts/editor-state-smoke.mjs && node scripts/workflow-draft-smoke.mjs",
+    "run-stream:smoke": "node scripts/run-stream-smoke.mjs",
+    "server-model:smoke": "node scripts/server-model-smoke.mjs",
+    "routing:smoke": "node scripts/routing-smoke.mjs",
+    "state:smoke": "npm run api:smoke && npm run editor:smoke && npm run run-stream:smoke && npm run server-model:smoke && npm run routing:smoke",
+    "dom:smoke": "CLANG_MODULE_CACHE_PATH=/private/tmp/loopops-web-audit-clang swift scripts/dom-smoke.swift",
+    "focus:smoke": "CLANG_MODULE_CACHE_PATH=/private/tmp/loopops-web-audit-clang swift scripts/focus-smoke.swift",
+    "accessibility:smoke": "CLANG_MODULE_CACHE_PATH=/private/tmp/loopops-web-audit-clang swift scripts/accessibility-smoke.swift",
+    "permission:smoke": "npm run build && node scripts/permission-state-smoke.mjs",
+    "owner:audit": "node scripts/production-owner-audit.mjs",
+    "audit:evidence": "node scripts/visual-evidence-audit.mjs",
+    "audit:capture": "CLANG_MODULE_CACHE_PATH=/private/tmp/loopops-web-audit-clang swift scripts/capture-audit.swift"
+  },
+  "dependencies": {
+    "@astryxdesign/core": "^0.1.3",
+    "@astryxdesign/theme-neutral": "^0.1.3",
+    "@flowgram.ai/editor": "^1.0.12",
+    "@stylexjs/stylex": "^0.18.3",
+    "@tanstack/react-query": "^5.101.2",
+    "@vitejs/plugin-react": "5.0.4",
+    "lucide-react": "^1.18.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "vite": "6.4.2"
+  }
+}

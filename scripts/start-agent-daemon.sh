@@ -1,142 +1,173 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RUNTIME_DIR="$ROOT_DIR/runtime/agent"
-LOG_DIR="$RUNTIME_DIR/logs"
-PID_FILE="$RUNTIME_DIR/daemon.pid"
-AUTH_FILE="$RUNTIME_DIR/auth-token.json"
-APP_SUPPORT_AUTH_FILE="$HOME/Library/Application Support/WeChatIntelligenceRadarMVP/runtime/agent/auth-token.json"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_HINT="$(cd "$SCRIPT_DIR/.." && pwd)"
+LOCAL_NODE="$REPO_HINT/.tooling/node/bin/node"
+NODE_BIN="$LOCAL_NODE"
+[[ -x "$NODE_BIN" ]] || NODE_BIN="$(command -v node || true)"
+if [[ -z "$NODE_BIN" ]]; then
+  echo "Node.js not found; Node >= 22.19.0 is required." >&2
+  exit 1
+fi
+if ! "$NODE_BIN" -e 'const [a,b]=process.versions.node.split(".").map(Number); process.exit(a>22 || (a===22 && b>=19) ? 0 : 1)'; then
+  echo "Node $("$NODE_BIN" -v) is too old; Node >= 22.19.0 is required." >&2
+  exit 1
+fi
+
+RUNTIME_PATHS_MODULE="$REPO_HINT/domains/agent/code/agent-runtime/lib/runtime-paths.mjs"
+ROOT_DIR="$("$NODE_BIN" "$RUNTIME_PATHS_MODULE" --print repoRoot)"
+RUNTIME_BASE="$("$NODE_BIN" "$RUNTIME_PATHS_MODULE" --print runtimeRoot)"
+RUNTIME_DIR="$("$NODE_BIN" "$RUNTIME_PATHS_MODULE" --print agentDataRoot)"
+LOG_FILE="$("$NODE_BIN" "$RUNTIME_PATHS_MODULE" --print daemonLogPath)"
+PID_FILE="$("$NODE_BIN" "$RUNTIME_PATHS_MODULE" --print daemonPidPath)"
+AUTH_FILE="$("$NODE_BIN" "$RUNTIME_PATHS_MODULE" --print authTokenPath)"
+DAEMON_ENTRY="$ROOT_DIR/domains/agent/code/agent-runtime/bin/wechat-agent-daemon.mjs"
 DAEMON_PORT="${WECHAT_AGENT_DAEMON_PORT:-8797}"
-LAUNCH_LABEL="local.looloomi.agent-daemon"
-LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
-LAUNCH_PLIST="$LAUNCH_AGENT_DIR/$LAUNCH_LABEL.plist"
 
-# Prefer the project-local Node runtime (installed under .tooling/node) if present.
-LOCAL_NODE_BIN="$ROOT_DIR/.tooling/node/bin"
-[[ -d "$LOCAL_NODE_BIN" ]] && export PATH="$LOCAL_NODE_BIN:$PATH"
-
-mkdir -p "$LOG_DIR"
-
-# --- Preflight: Node, dependencies, secrets -------------------------------
-if ! command -v node >/dev/null 2>&1; then
-  echo "✗ Node.js not found. Install Node >= 22.19.0 first:" >&2
-  echo "    nvm install 22   # or download from https://nodejs.org" >&2
-  exit 1
-fi
-NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
-if [[ "$NODE_MAJOR" -lt 22 ]]; then
-  echo "✗ Node $(node -v) is too old; the runtime needs >= 22.19.0." >&2
-  exit 1
-fi
-if [[ ! -f "$AUTH_FILE" ]]; then
-  node -e 'const fs=require("fs"); const crypto=require("crypto"); const path=process.argv[1]; const payload={schemaVersion:"agent-daemon-auth-token-v1",token:crypto.randomBytes(32).toString("base64url"),audience:"local-swift-client",createdAt:new Date().toISOString()}; fs.mkdirSync(require("path").dirname(path),{recursive:true}); fs.writeFileSync(path, JSON.stringify(payload,null,2)+"\n", {mode:0o600});' "$AUTH_FILE"
-  chmod 600 "$AUTH_FILE" 2>/dev/null || true
-fi
-mkdir -p "$(dirname "$APP_SUPPORT_AUTH_FILE")"
-cp "$AUTH_FILE" "$APP_SUPPORT_AUTH_FILE"
-chmod 600 "$APP_SUPPORT_AUTH_FILE" 2>/dev/null || true
-if [[ ! -d "$ROOT_DIR/agent-runtime/node_modules" || ! -d "$ROOT_DIR/agent-runtime/node_modules/mongodb" ]]; then
-  echo "• Installing agent-runtime dependencies (npm install)…"
-  (cd "$ROOT_DIR/agent-runtime" && npm install)
-fi
-if ! command -v docker >/dev/null 2>&1; then
-  echo "✗ Docker not found. Local MongoDB is required for Agent sessions/tasks/runs." >&2
-  exit 1
-fi
-echo "• Ensuring local MongoDB is running…"
-(cd "$ROOT_DIR" && docker compose up -d mongodb)
-
-ENV_ARGS=()
-if [[ -f "$ROOT_DIR/.env" ]]; then
-  ENV_ARGS=(--env-file "$ROOT_DIR/.env")
-  echo "• Loading secrets from .env"
-else
-  echo "• No .env found — model providers will report 'not ready'. Copy .env.example to .env and add keys."
-fi
-
-# --- Already running? -----------------------------------------------------
-health_ok() {
-  node -e 'const port=process.argv[1]; fetch(`http://127.0.0.1:${port}/health`).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1));' "$DAEMON_PORT" >/dev/null 2>&1
-}
-
-wait_for_health() {
-  for _ in {1..120}; do
-    if health_ok; then
-      return 0
-    fi
-    sleep 0.25
-  done
-  return 1
-}
-
-launch_in_terminal() {
-  local cmd="cd \"$ROOT_DIR\"; \"$NODE_BIN\""
-  if [[ -f "$ROOT_DIR/.env" ]]; then
-    cmd="$cmd --env-file \"$ROOT_DIR/.env\""
+if [[ "${WECHAT_AGENT_TEST_MODE:-}" == "1" ]]; then
+  AUTH_MIRROR_FILE="${WECHAT_AGENT_AUTH_MIRROR_PATH:-$RUNTIME_DIR/auth-token.mirror.json}"
+  if ! "$NODE_BIN" -e 'const p=require("node:path"); const [root,target]=process.argv.slice(1).map(value => p.resolve(value)); const rel=p.relative(root,target); process.exit(rel && !rel.startsWith("..") && !p.isAbsolute(rel) ? 0 : 1)' "$RUNTIME_BASE" "$AUTH_MIRROR_FILE"; then
+    echo "test auth mirror must be inside the isolated runtime root" >&2
+    exit 1
   fi
-  cmd="$cmd agent-runtime/bin/wechat-agent-daemon.mjs"
-  local escaped="${cmd//\\/\\\\}"
-  escaped="${escaped//\"/\\\"}"
-  osascript -e "tell application \"Terminal\" to do script \"$escaped\"" >/dev/null
+else
+  if [[ -n "${WECHAT_AGENT_AUTH_MIRROR_PATH:-}" ]]; then
+    echo "WECHAT_AGENT_AUTH_MIRROR_PATH is allowed only in test mode" >&2
+    exit 1
+  fi
+  AUTH_MIRROR_FILE="$HOME/Library/Application Support/WeChatIntelligenceRadarMVP/runtime/agent/auth-token.json"
+fi
+
+mkdir -p "$(dirname "$LOG_FILE")"
+
+pid_record_valid() {
+  "$NODE_BIN" -e '
+    const fs=require("node:fs");
+    try {
+      const value=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+      const valid=value.schemaVersion==="agent-daemon-pid-v1"
+        && value.owner==="looloomi-agent-runtime"
+        && value.runtimeOwner==="repository-runtime-agent-v1"
+        && Number.isInteger(value.pid) && value.pid>0
+        && typeof value.instanceID==="string" && value.instanceID.length>0
+        && value.host==="127.0.0.1"
+        && Number.isInteger(value.port)
+        && typeof value.startedAt==="string" && value.startedAt.length>0;
+      process.exit(valid?0:1);
+    } catch { process.exit(1); }
+  ' "$PID_FILE"
+}
+
+pid_from_file() {
+  "$NODE_BIN" -e 'const fs=require("node:fs"); console.log(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).pid)' "$PID_FILE"
+}
+
+process_matches_daemon() {
+  local pid="$1" command
+  command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  [[ -n "$command" ]] && [[ "$command" == *"$DAEMON_ENTRY"* ]]
+}
+
+health_matches_pid_file() {
+  "$NODE_BIN" -e '
+    const fs=require("node:fs");
+    const pid=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+    const port=process.argv[2];
+    fetch(`http://127.0.0.1:${port}/health`).then(async response => {
+      if (!response.ok) process.exit(1);
+      const health=await response.json();
+      const daemon=health.daemon || {};
+      const keys=["owner","runtimeOwner","instanceID","pid","host","port","startedAt"];
+      process.exit(keys.every(key => daemon[key]===pid[key]) ? 0 : 1);
+    }).catch(() => process.exit(1));
+  ' "$PID_FILE" "$DAEMON_PORT" >/dev/null 2>&1
+}
+
+port_responds() {
+  "$NODE_BIN" -e 'fetch(`http://127.0.0.1:${process.argv[1]}/health`).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))' "$DAEMON_PORT" >/dev/null 2>&1
+}
+
+mirror_canonical_token() {
+  "$NODE_BIN" -e '
+    const fs=require("node:fs");
+    try {
+      const token=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+      const pid=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));
+      const keys=["owner","runtimeOwner","instanceID","pid","host","port","startedAt"];
+      const valid=token.schemaVersion==="agent-daemon-auth-token-v1"
+        && typeof token.token==="string" && token.token.length>=32
+        && keys.every(key => token[key]===pid[key]);
+      process.exit(valid?0:1);
+    } catch { process.exit(1); }
+  ' "$AUTH_FILE" "$PID_FILE"
+  mkdir -p "$(dirname "$AUTH_MIRROR_FILE")"
+  cp "$AUTH_FILE" "$AUTH_MIRROR_FILE"
+  chmod 600 "$AUTH_MIRROR_FILE" 2>/dev/null || true
 }
 
 if [[ -f "$PID_FILE" ]]; then
-  EXISTING_PID="$(node -e 'try{console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).pid||"")}catch{console.log("")}' "$PID_FILE")"
-  if [[ -n "$EXISTING_PID" ]] && kill -0 "$EXISTING_PID" 2>/dev/null && health_ok; then
+  if ! pid_record_valid; then
+    echo "refusing_start_invalid_pid_owner" >&2
+    exit 1
+  fi
+  EXISTING_PID="$(pid_from_file)"
+  if kill -0 "$EXISTING_PID" 2>/dev/null; then
+    if ! process_matches_daemon "$EXISTING_PID"; then
+      echo "refusing_start_process_command_mismatch pid=$EXISTING_PID" >&2
+      exit 1
+    fi
+    if ! health_matches_pid_file; then
+      echo "refusing_start_health_owner_mismatch pid=$EXISTING_PID" >&2
+      exit 1
+    fi
+    mirror_canonical_token
     echo "wechat-agent-daemon already running pid=$EXISTING_PID"
     exit 0
   fi
 fi
 
-# --- Launch ---------------------------------------------------------------
-cd "$ROOT_DIR"
-NODE_BIN="$(command -v node)"
-mkdir -p "$LAUNCH_AGENT_DIR"
-ENV_PLIST_ARGS=""
-if [[ -f "$ROOT_DIR/.env" ]]; then
-  ENV_PLIST_ARGS="    <string>--env-file</string>
-    <string>$ROOT_DIR/.env</string>"
-fi
-cat > "$LAUNCH_PLIST" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>$LAUNCH_LABEL</string>
-  <key>WorkingDirectory</key>
-  <string>$ROOT_DIR</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>$NODE_BIN</string>
-$ENV_PLIST_ARGS
-    <string>agent-runtime/bin/wechat-agent-daemon.mjs</string>
-  </array>
-  <key>KeepAlive</key>
-  <true/>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>StandardOutPath</key>
-  <string>$LOG_DIR/daemon.log</string>
-  <key>StandardErrorPath</key>
-  <string>$LOG_DIR/daemon.log</string>
-</dict>
-</plist>
-PLIST
-launchctl bootout "gui/$(id -u)/$LAUNCH_LABEL" >/dev/null 2>&1 || true
-launchctl bootstrap "gui/$(id -u)" "$LAUNCH_PLIST"
-launchctl kickstart -k "gui/$(id -u)/$LAUNCH_LABEL" >/dev/null 2>&1 || true
-if ! wait_for_health; then
-  launchctl bootout "gui/$(id -u)/$LAUNCH_LABEL" >/dev/null 2>&1 || true
-  echo "• LaunchAgent did not stay healthy; starting daemon in Terminal…"
-  launch_in_terminal
-fi
-if ! wait_for_health; then
-  echo "✗ wechat-agent-daemon did not become healthy on 127.0.0.1:$DAEMON_PORT" >&2
-  tail -40 "$LOG_DIR/daemon.log" >&2 || true
+if port_responds; then
+  echo "refusing_start_unowned_health_on_port port=$DAEMON_PORT" >&2
   exit 1
 fi
-PID="$(node -e 'try{console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).pid||"")}catch{console.log("")}' "$PID_FILE")"
-echo "wechat-agent-daemon started pid=$PID"
-echo "log=$LOG_DIR/daemon.log"
+
+if [[ ! -d "$ROOT_DIR/domains/agent/code/agent-runtime/node_modules/mongodb" ]]; then
+  echo "agent-runtime dependencies are missing; install them explicitly before starting" >&2
+  exit 1
+fi
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Docker not found. Local MongoDB is required for Agent sessions/tasks/runs." >&2
+  exit 1
+fi
+
+(cd "$ROOT_DIR" && docker compose up -d mongodb)
+
+ENV_ARGS=()
+if [[ -f "$ROOT_DIR/.env" ]]; then
+  ENV_ARGS=(--env-file "$ROOT_DIR/.env")
+fi
+
+cd "$ROOT_DIR"
+nohup "$NODE_BIN" "${ENV_ARGS[@]}" "$DAEMON_ENTRY" >>"$LOG_FILE" 2>&1 &
+LAUNCHED_PID=$!
+
+for _ in {1..120}; do
+  if [[ -f "$PID_FILE" ]] && pid_record_valid && health_matches_pid_file; then
+    PID="$(pid_from_file)"
+    if process_matches_daemon "$PID"; then
+      mirror_canonical_token
+      echo "wechat-agent-daemon started pid=$PID"
+      echo "log=$LOG_FILE"
+      exit 0
+    fi
+  fi
+  sleep 0.25
+done
+
+if kill -0 "$LAUNCHED_PID" 2>/dev/null && process_matches_daemon "$LAUNCHED_PID"; then
+  kill "$LAUNCHED_PID" 2>/dev/null || true
+fi
+echo "wechat-agent-daemon did not become owned and healthy on 127.0.0.1:$DAEMON_PORT" >&2
+tail -40 "$LOG_FILE" >&2 || true
+exit 1

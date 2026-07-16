@@ -9,6 +9,9 @@ DerivedData/
 node_modules/
 agent-runtime/node_modules/
 agent-runtime/.pi-agent/
+.npm-cache/
+dist/
+domains/frontend/web/code/web-prototype/product-design-audit-web-mobile/
 
 # Local runtime artifacts, logs, generated sessions, and auth state
 /runtime/
@@ -26,3 +29,4 @@ agent-runtime/.pi-agent/
 .vscode/
 .idea/
 .tooling/
+.superpowers/

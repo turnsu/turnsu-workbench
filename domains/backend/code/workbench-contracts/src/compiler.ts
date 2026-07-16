@@ -1,0 +1,144 @@
+import { Type, type Static } from "typebox";
+
+import {
+  ContentHashSchema,
+  DataSchemaSchema,
+  DiagnosticSchema,
+  ExecutionPlanV1SchemaVersionSchema,
+  NodeIdSchema,
+  ResourceIdSchema,
+  UtcTimestampSchema,
+  WorkflowIdSchema,
+  WorkflowRevisionIdSchema,
+  WorkbenchSchemaVersionSchema,
+} from "./common.js";
+import { strictObject } from "./schema.js";
+import { PinnedSkillRefSchema } from "./skills.js";
+import {
+  InputBindingSchema,
+  PrimaryOutputSchema,
+  WorkflowNodeKindSchema,
+} from "./workflows.js";
+
+export const ExecutionPlanStepSchema = strictObject({
+  nodeId: NodeIdSchema,
+  kind: WorkflowNodeKindSchema,
+  skillRef: Type.Optional(PinnedSkillRefSchema),
+  dependsOn: Type.Array(NodeIdSchema, { uniqueItems: true }),
+  inputBindings: Type.Array(InputBindingSchema),
+});
+
+export const ExecutionReviewGateSchema = strictObject({
+  nodeId: NodeIdSchema,
+  dependsOn: Type.Array(NodeIdSchema, { uniqueItems: true }),
+  instructions: Type.String({ minLength: 1, maxLength: 2000 }),
+});
+
+export const ExecutionPlanV1Schema = strictObject(
+  {
+    schemaVersion: ExecutionPlanV1SchemaVersionSchema,
+    planVersion: Type.Literal("1"),
+    workflowId: WorkflowIdSchema,
+    workflowRevisionId: WorkflowRevisionIdSchema,
+    generatedAt: UtcTimestampSchema,
+    contentHash: ContentHashSchema,
+    maxParallelism: Type.Literal(1),
+    pinnedSkills: Type.Array(PinnedSkillRefSchema),
+    steps: Type.Array(ExecutionPlanStepSchema, { minItems: 1 }),
+    reviewGates: Type.Array(ExecutionReviewGateSchema),
+    primaryOutput: PrimaryOutputSchema,
+  },
+  { $id: "ExecutionPlanV1" },
+);
+
+export const RequiredRunInputSchema = strictObject({
+  inputKey: Type.String({ minLength: 1, maxLength: 128 }),
+  label: Type.String({ minLength: 1, maxLength: 200 }),
+  schema: DataSchemaSchema,
+  required: Type.Boolean(),
+});
+
+export const MissingBindingSchema = strictObject({
+  nodeId: NodeIdSchema,
+  targetPort: Type.String({ minLength: 1, maxLength: 128 }),
+  message: Type.String({ minLength: 1, maxLength: 1000 }),
+});
+
+export const MissingResourceSchema = strictObject({
+  resourceId: ResourceIdSchema,
+  label: Type.String({ minLength: 1, maxLength: 200 }),
+  nodeId: Type.Optional(NodeIdSchema),
+});
+
+export const UnavailableSkillSchema = strictObject({
+  skillRef: PinnedSkillRefSchema,
+  reason: Type.String({ minLength: 1, maxLength: 1000 }),
+  nodeId: Type.Optional(NodeIdSchema),
+});
+
+export const InvalidCycleSchema = strictObject({
+  nodeIds: Type.Array(NodeIdSchema, { minItems: 2 }),
+});
+
+export const PortSchemaMismatchSchema = strictObject({
+  sourceNodeId: NodeIdSchema,
+  sourcePort: Type.String({ minLength: 1, maxLength: 128 }),
+  targetNodeId: NodeIdSchema,
+  targetPort: Type.String({ minLength: 1, maxLength: 128 }),
+  message: Type.String({ minLength: 1, maxLength: 1000 }),
+});
+
+export const RecoveryActionSchema = strictObject({
+  code: Type.String({ minLength: 1, maxLength: 128 }),
+  label: Type.String({ minLength: 1, maxLength: 500 }),
+  nodeId: Type.Optional(NodeIdSchema),
+});
+
+const CompileResultProperties = {
+  schemaVersion: WorkbenchSchemaVersionSchema,
+  workflowId: WorkflowIdSchema,
+  workflowRevisionId: WorkflowRevisionIdSchema,
+  orderedSteps: Type.Array(NodeIdSchema, { uniqueItems: true }),
+  requiredRunInputs: Type.Array(RequiredRunInputSchema),
+  missingBindings: Type.Array(MissingBindingSchema),
+  missingResources: Type.Array(MissingResourceSchema),
+  unavailableSkills: Type.Array(UnavailableSkillSchema),
+  orphanNodeIds: Type.Array(NodeIdSchema, { uniqueItems: true }),
+  unreachableNodeIds: Type.Array(NodeIdSchema, { uniqueItems: true }),
+  invalidCycles: Type.Array(InvalidCycleSchema),
+  portSchemaMismatches: Type.Array(PortSchemaMismatchSchema),
+  reviewGates: Type.Array(NodeIdSchema, { uniqueItems: true }),
+  outputNodes: Type.Array(NodeIdSchema, { uniqueItems: true }),
+  warnings: Type.Array(DiagnosticSchema),
+  recoveryActions: Type.Array(RecoveryActionSchema),
+  compiledAt: UtcTimestampSchema,
+};
+
+export const ReadyCompileResultSchema = strictObject({
+  ...CompileResultProperties,
+  status: Type.Literal("ready"),
+  executionPlan: ExecutionPlanV1Schema,
+});
+
+export const BlockedCompileResultSchema = strictObject({
+  ...CompileResultProperties,
+  status: Type.Literal("blocked"),
+});
+
+export const InvalidCompileResultSchema = strictObject({
+  ...CompileResultProperties,
+  status: Type.Literal("invalid"),
+});
+
+export const CompileResultSchema = Type.Union(
+  [
+    ReadyCompileResultSchema,
+    BlockedCompileResultSchema,
+    InvalidCompileResultSchema,
+  ],
+  { $id: "CompileResult" },
+);
+
+export type ExecutionPlanStep = Static<typeof ExecutionPlanStepSchema>;
+export type ExecutionPlanV1 = Static<typeof ExecutionPlanV1Schema>;
+export type CompileResult = Static<typeof CompileResultSchema>;

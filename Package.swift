@@ -16,7 +16,7 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "WeChatIntelligenceRadarApp",
-            path: "Sources/WeChatIntelligenceRadarApp",
+            path: "domains/frontend/app/code/WeChatIntelligenceRadarApp",
             resources: [
                 .process("Fixtures"),
                 .process("Resources")
@@ -24,7 +24,8 @@ let package = Package(
         ),
         .testTarget(
             name: "WeChatIntelligenceRadarAppTests",
-            dependencies: ["WeChatIntelligenceRadarApp"]
+            dependencies: ["WeChatIntelligenceRadarApp"],
+            path: "domains/frontend/app/code/Tests/WeChatIntelligenceRadarAppTests"
         )
     ]
 )

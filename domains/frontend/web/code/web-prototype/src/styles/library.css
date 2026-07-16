@@ -1,0 +1,88 @@
+.libraryKindFilter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.libraryKindFilter button {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.libraryKindFilter button:hover,
+.libraryKindFilter button:focus-visible,
+.libraryKindFilter button.active {
+  background: var(--surface-subtle);
+  color: var(--text);
+}
+
+.librarySkillPage {
+  display: grid;
+  align-content: start;
+}
+
+.librarySkillHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px 32px 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.librarySkillHeader > div:first-child {
+  display: grid;
+  gap: 8px;
+  max-width: 760px;
+}
+
+.librarySkillLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 0;
+}
+
+.librarySkillMain {
+  display: grid;
+  align-content: start;
+  gap: 24px;
+  padding: 28px 32px;
+}
+
+.librarySkillFacts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+}
+
+.librarySkillFacts section {
+  min-width: 0;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.librarySkillFacts section:nth-child(odd) { padding-right: 24px; }
+.librarySkillFacts section:nth-child(even) { padding-left: 24px; border-left: 1px solid var(--line); }
+.librarySkillFacts h3, .libraryReleaseNotes h3 { margin: 0 0 7px; font-size: 12px; color: var(--muted); }
+.librarySkillFacts p, .libraryReleaseNotes p { margin: 0; overflow-wrap: anywhere; line-height: 1.55; }
+
+.libraryReleaseNotes {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+@media (max-width: 820px) {
+  .librarySkillHeader { display: grid; padding: 20px 18px; }
+  .librarySkillLayout { grid-template-columns: minmax(0, 1fr); }
+  .librarySkillMain { padding: 20px 18px; }
+  .librarySkillFacts { grid-template-columns: minmax(0, 1fr); }
+  .librarySkillFacts section:nth-child(n) { padding: 16px 0; border-left: 0; }
+  .libraryKindFilter button { min-height: 44px; }
+}

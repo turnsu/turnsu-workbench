@@ -3,15 +3,34 @@ services:
     image: mongo:7
     container_name: looloomi-mongodb
     restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     ports:
       - "127.0.0.1:27017:27017"
     volumes:
       - looloomi-mongodb-data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet --host 127.0.0.1:27017 --eval '
+          try {
+            const status = rs.status();
+            if (status.set !== "rs0") quit(2);
+            quit(status.myState === 1 ? 0 : 1);
+          } catch (error) {
+            if (error.code === 94 || error.codeName === "NotYetInitialized") {
+              const result = rs.initiate({
+                _id: "rs0",
+                members: [{ _id: 0, host: "127.0.0.1:27017" }]
+              });
+              quit(result.ok === 1 ? 1 : 2);
+            }
+            quit(2);
+          }'
       interval: 5s
       timeout: 3s
-      retries: 20
+      retries: 30
+      start_period: 5s
 
 volumes:
   looloomi-mongodb-data:

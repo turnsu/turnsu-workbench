@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "agent-extension-package-v1",
+  "id": "workflow-conformance",
+  "title": "Workflow Conformance",
+  "description": "Test-only deterministic Workflow bridge conformance extension.",
+  "visibility": "internal",
+  "publicExtension": null,
+  "publicSkills": [],
+  "internalOnly": true,
+  "testOnly": true,
+  "internalTools": [
+    "workflow.conformance.echo"
+  ]
+}

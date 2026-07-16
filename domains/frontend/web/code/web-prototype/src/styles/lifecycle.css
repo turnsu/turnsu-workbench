@@ -1,0 +1,140 @@
+.createLoopProposalReview,
+.createLoopProposalError {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.createLoopProposalReview h3,
+.createLoopProposalReview p,
+.createLoopProposalError p {
+  margin: 0;
+}
+
+.createLoopProposalReview ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.createLoopProposalReview li {
+  position: relative;
+  min-width: 0;
+  padding-left: 15px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.createLoopProposalReview li::before {
+  position: absolute;
+  left: 0;
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.createLoopSubmit {
+  flex-wrap: wrap;
+}
+
+.skillCreateBlankNote {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+}
+
+.skillCreateBlankNote small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.lifecycleViewToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+}
+
+.lifecycleViewToggle button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.lifecycleViewToggle button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 8%);
+}
+
+.loopCommand label {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.loopCommand input {
+  width: 100%;
+  min-height: 38px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  outline: 0;
+}
+
+.loopCommand input::placeholder { color: var(--muted); }
+
+.lifecycleTransitionMessage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.lifecycleItem[draggable="true"] { cursor: grab; }
+.lifecycleItem[draggable="true"]:active { cursor: grabbing; }
+
+.lifecycleBoardLanes.listView {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.lifecycleBoardLanes.listView .lifecycleLaneList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 640px) {
+  .createLoopProposalReview ul { grid-template-columns: minmax(0, 1fr); }
+  .createLoopProposalReview .buttonRow,
+  .createLoopProposalError .buttonRow { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .lifecycleViewToggle button { min-height: 44px; }
+  .loopCommand { align-items: stretch; }
+  .loopCommand label { width: 100%; }
+  .loopCommand input { min-height: 44px; }
+  .lifecycleBoardLanes.listView .lifecycleLaneList { grid-template-columns: minmax(0, 1fr); }
+}

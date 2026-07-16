@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "agent-extension-package-v1",
+  "id": "meeting-action-extractor",
+  "title": "Meeting Action Extractor",
+  "description": "Extracts explicit action items from a supplied meeting transcript.",
+  "visibility": "workspace",
+  "publicExtension": null,
+  "publicSkills": [
+    "meeting-action-extractor"
+  ],
+  "internalOnly": false,
+  "testOnly": false,
+  "internalTools": [
+    "workflow.meeting.extract_actions"
+  ]
+}
