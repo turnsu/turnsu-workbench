@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@looloomi/workbench-contracts": "file:../workbench-contracts",
-    "mongodb": "6.16.0"
+    "mongodb": "6.16.0",
+    "yaml": "2.8.1"
   }
 }

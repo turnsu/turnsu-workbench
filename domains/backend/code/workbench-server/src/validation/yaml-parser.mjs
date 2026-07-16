@@ -1,4 +1,4 @@
-import YAML from "../../../../../agent/code/agent-runtime/node_modules/@earendil-works/pi-coding-agent/node_modules/yaml/dist/index.js";
+import YAML from "yaml";
 
 export function parseYamlDocument(source) {
   if (typeof source !== "string") throw new TypeError("yaml_source_required");

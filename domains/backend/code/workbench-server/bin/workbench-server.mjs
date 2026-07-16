@@ -1,5 +1,8 @@
 #!/usr/bin/env node
+import { assertSupportedNodeVersion } from "../src/runtime/node-version-gate.mjs";
 import { startWorkbenchServer } from "../src/server.mjs";
+
+assertSupportedNodeVersion();
 
 let runner;
 try {

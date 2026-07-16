@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { loadSkillsFromDir } from "../../../../../agent/code/agent-runtime/node_modules/@earendil-works/pi-coding-agent/dist/core/skills.js";
+import { loadPiSkillsFromDir } from "../../../../../agent/code/agent-runtime/lib/pi-skill-loader.mjs";
 import { inspectSkillPackage } from "../../src/validation/skill-package-inspector.mjs";
 
 const skill = (description = "Extract explicit actions from supplied meeting notes.") => `---
@@ -81,7 +81,7 @@ test("Skill package inspection blocks credentials and dangerous scripts while pr
   assert.ok(result.diagnostics.some((entry) => entry.code === "secret_detected"));
 });
 
-test("Skill frontmatter validation follows PI 0.75.5 limits and boolean semantics", async (t) => {
+test("Skill frontmatter validation follows PI 0.80.7 limits and boolean semantics", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "looloomi-pi-skill-parity-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const cases = [
@@ -100,7 +100,7 @@ test("Skill frontmatter validation follows PI 0.75.5 limits and boolean semantic
     await writeFile(join(directory, "SKILL.md"), source);
 
     const product = inspectSkillPackage({ files: [{ path: "SKILL.md", content: source }] });
-    const pi = loadSkillsFromDir({ dir: directory, source: "path" });
+    const pi = loadPiSkillsFromDir({ dir: directory, source: "path" });
     assert.equal(product.status, item.product, item.name);
     assert.equal(pi.skills[0]?.disableModelInvocation, item.disabled, item.name);
     if (item.piWarning) {

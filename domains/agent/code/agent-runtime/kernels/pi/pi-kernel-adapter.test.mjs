@@ -17,6 +17,8 @@ const tempRoot = mkdtempSync(join(tmpdir(), "looloomi-pi-adapter-"));
 const prompts = [];
 const messages = [];
 const toolSignals = [];
+const lifecycle = [];
+let eventListener;
 const diagnostic = {
   type: "warning",
   message: "test diagnostic",
@@ -44,6 +46,21 @@ const fakeSession = {
   },
   getAllTools: () => [],
   getActiveToolNames: () => [],
+  subscribe(listener) {
+    eventListener = listener;
+    lifecycle.push("subscribed");
+    return () => lifecycle.push("unsubscribed");
+  },
+  async compact(instructions) {
+    lifecycle.push(`compact:${instructions}`);
+    return { summary: "compacted" };
+  },
+  async abort() {
+    lifecycle.push("aborted");
+  },
+  dispose() {
+    lifecycle.push("disposed");
+  },
   getToolDefinition(name) {
     if (name !== "test.signal") return null;
     return {
@@ -152,6 +169,21 @@ try {
   );
   assert.equal(toolSignals[0], controller.signal);
   assert.deepEqual(toolResult.details.workflowOutput, { value: "signal proof" });
+
+  const unsubscribe = kernel.subscribe((event) => lifecycle.push(`event:${event.type}`));
+  eventListener({ type: "agent_start" });
+  unsubscribe();
+  assert.deepEqual(await kernel.compact("retain decisions"), { summary: "compacted" });
+  await kernel.abort();
+  await kernel.dispose();
+  assert.deepEqual(lifecycle, [
+    "subscribed",
+    "event:agent_start",
+    "unsubscribed",
+    "compact:retain decisions",
+    "aborted",
+    "disposed",
+  ]);
 
   console.log("pi_kernel_skill_invocation=pass");
 } finally {

@@ -34,6 +34,9 @@ export class PiBackedAgentRuntime {
     createResourceLoader = (options) => new DefaultResourceLoader(options),
     createSession = createAgentSession,
     createSessionManager = (root) => SessionManager.inMemory(root),
+    model,
+    thinkingLevel,
+    sessionOptions = {},
   } = {}) {
     this.projectRoot = projectRoot;
     this.agentRuntimeRoot = agentRuntimeRoot;
@@ -50,6 +53,9 @@ export class PiBackedAgentRuntime {
     this.createResourceLoader = createResourceLoader;
     this.createSession = createSession;
     this.createSessionManager = createSessionManager;
+    this.model = model;
+    this.thinkingLevel = thinkingLevel;
+    this.sessionOptions = { ...sessionOptions };
     this.resourceLoader = null;
     this.session = null;
     this.extensionsResult = null;
@@ -78,12 +84,15 @@ export class PiBackedAgentRuntime {
       this.skillsResult = loader.getSkills?.() || { skills: [], diagnostics: [] };
       this.skillDiagnostics = this.skillsResult.diagnostics || [];
       const result = await this.createSession({
+        ...this.sessionOptions,
         cwd: this.projectRoot,
         agentDir: this.piAgentDir,
         resourceLoader: loader,
         sessionManager: this.createSessionManager(this.projectRoot),
         tools: this.projectToolNames,
         noTools: "builtin",
+        ...(this.model ? { model: this.model } : {}),
+        ...(this.thinkingLevel ? { thinkingLevel: this.thinkingLevel } : {}),
         sessionStartEvent: {
           type: "session_start",
           cwd: this.projectRoot,
@@ -235,6 +244,34 @@ export class PiBackedAgentRuntime {
       details: result?.details || {},
     };
   }
+
+  subscribe(listener) {
+    if (typeof listener !== "function") throw new TypeError("pi_event_listener_required");
+    if (!this.session || typeof this.session.subscribe !== "function") {
+      throw new Error("pi_session_not_initialized");
+    }
+    return this.session.subscribe(listener);
+  }
+
+  async compact(instructions) {
+    await this.ensure();
+    if (typeof this.session.compact !== "function") throw new Error("pi_compaction_unavailable");
+    return this.session.compact(instructions);
+  }
+
+  async abort() {
+    if (!this.session || typeof this.session.abort !== "function") return;
+    await this.session.abort();
+  }
+
+  async dispose() {
+    const session = this.session;
+    this.session = null;
+    this.extensionsResult = null;
+    if (!session) return;
+    if (session.isStreaming && typeof session.abort === "function") await session.abort();
+    await Promise.resolve(session.dispose?.());
+  }
 }
 
 export class PiKernelAdapter {
@@ -265,6 +302,22 @@ export class PiKernelAdapter {
 
   async executeTool(toolName, params, options = {}) {
     return this.piRuntime.executeTool(toolName, params, options);
+  }
+
+  subscribe(listener) {
+    return this.piRuntime.subscribe(listener);
+  }
+
+  async compact(instructions) {
+    return this.piRuntime.compact(instructions);
+  }
+
+  async abort() {
+    return this.piRuntime.abort();
+  }
+
+  async dispose() {
+    return this.piRuntime.dispose();
   }
 }
 
