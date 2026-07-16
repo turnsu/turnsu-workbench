@@ -7,11 +7,18 @@ const COLLECTIONS = Object.freeze([
   PRODUCT_COLLECTIONS.executionEvents,
   PRODUCT_COLLECTIONS.executionCheckpoints,
   PRODUCT_COLLECTIONS.capabilityLeases,
+  PRODUCT_COLLECTIONS.agentSessions,
+  PRODUCT_COLLECTIONS.agentTurns,
+  PRODUCT_COLLECTIONS.agentMessages,
+  PRODUCT_COLLECTIONS.agentBranches,
+  PRODUCT_COLLECTIONS.agentSessionEvents,
+  PRODUCT_COLLECTIONS.agentHandoffs,
+  PRODUCT_COLLECTIONS.mergeConflicts,
 ]);
 
 export const agentExecutionFabricMigration = defineMigration({
   version: "003-agent-execution-fabric",
-  description: "Create durable Agent execution invocation, attempt, event, checkpoint, and capability lease storage.",
+  description: "Create durable execution fabric, personal Agent session, branch, handoff, and merge-conflict storage.",
   async inspect({ db }) {
     const collections = {};
     for (const name of COLLECTIONS) collections[name] = await collectionDigest(db.collection(name));

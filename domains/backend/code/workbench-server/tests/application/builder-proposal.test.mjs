@@ -14,6 +14,8 @@ function proposalStore(baseRevision, { beforeMutation = null } = {}) {
   const idempotency = new Map();
   const audits = [];
   const saved = [];
+  const conflicts = [];
+  const revisions = new Map([[baseRevision.revisionId, structuredClone(baseRevision)]]);
   const workflow = {
     schemaVersion: "workbench-v1",
     workflowId: baseRevision.workflowId,
@@ -33,7 +35,12 @@ function proposalStore(baseRevision, { beforeMutation = null } = {}) {
     proposals,
     audits,
     saved,
+    conflicts,
     advanceWorkflowRevision(revisionId) { workflow.currentRevisionId = revisionId; },
+    setCurrentRevision(revision) {
+      revisions.set(revision.revisionId, structuredClone(revision));
+      workflow.currentRevisionId = revision.revisionId;
+    },
     async connect() {},
     async getWorkflow() { return { workflow: structuredClone(workflow), etag: `"${workflow.currentRevisionId}"` }; },
     async runIdempotentMutation({ scope, key, request }, mutation) {
@@ -69,15 +76,19 @@ function proposalStore(baseRevision, { beforeMutation = null } = {}) {
         createdAt: NOW,
         updatedAt: NOW,
       };
+      revisions.set(revision.revisionId, structuredClone(revision));
       return { workflow: structuredClone(workflow), revision, etag: `"${workflow.currentRevisionId}"` };
     },
     repositories: {
       workflowRevisions: {
         async get(workflowId, revisionId) {
-          return workflowId === baseRevision.workflowId && revisionId === baseRevision.revisionId
-            ? structuredClone(baseRevision)
+          return workflowId === baseRevision.workflowId
+            ? structuredClone(revisions.get(revisionId) ?? null)
             : null;
         },
+      },
+      mergeConflicts: {
+        async insert(conflict) { conflicts.push(structuredClone(conflict)); return structuredClone(conflict); },
       },
       builderProposals: {
         async insert(proposal) { proposals.set(proposal.proposalId, structuredClone(proposal)); return structuredClone(proposal); },
@@ -260,6 +271,104 @@ test("proposal generation rechecks the current revision inside its mutation boun
     (error) => error?.code === "workflow_revision_conflict",
   );
   assert.equal(store.proposals.size, 0);
+});
+
+test("proposal apply automatically rebases non-overlapping changes onto the current revision", async () => {
+  const base = makeRevision();
+  const store = proposalStore(base);
+  const application = createWorkbenchApplication({
+    store,
+    agentRuntime: {
+      async generateBuilderProposal() {
+        return {
+          summary: "Update the goal.",
+          operations: [{
+            op: "updateDefinition",
+            definition: {
+              goal: "Agent goal", context: "", constraints: [], doneWhen: ["Done"],
+              verify: [], expectedResult: "Result", stopRules: [],
+            },
+          }],
+          diagnostics: [], permissionImpact: [],
+        };
+      },
+    },
+    clock: () => NOW,
+    idFactory: (kind) => `${kind}-rebase`,
+  });
+  const proposal = await application.generateLoopProposal({
+    workflowId: base.workflowId,
+    idempotencyKey: "generate-rebase",
+    ifMatch: `"${base.revisionId}"`,
+    request: { data: { instruction: "Update the goal." } },
+  });
+  const current = structuredClone(base);
+  current.revisionId = "revision-concurrent";
+  current.revisionNumber = 2;
+  current.baseRevisionId = base.revisionId;
+  current.graph.nodes[0].title = "Collaborator title";
+  store.setCurrentRevision(current);
+
+  const applied = await application.applyLoopProposal({
+    workflowId: base.workflowId,
+    proposalId: proposal.proposalId,
+    idempotencyKey: "apply-rebase",
+    ifMatch: `"${current.revisionId}"`,
+    request: { data: { baseRevisionId: base.revisionId } },
+  });
+
+  assert.equal(applied.status, "applied");
+  assert.equal(store.saved[0].request.data.baseRevisionId, current.revisionId);
+  assert.equal(store.saved[0].request.data.graph.nodes[0].title, "Collaborator title");
+  assert.equal(store.saved[0].request.data.definition.goal, "Agent goal");
+});
+
+test("same-path proposal conflict is persisted and never modifies the canonical Draft", async () => {
+  const base = makeRevision();
+  base.definition = {
+    goal: "Base", context: "", constraints: [], doneWhen: ["Done"], verify: [], expectedResult: "Result", stopRules: [],
+  };
+  const store = proposalStore(base);
+  const application = createWorkbenchApplication({
+    store,
+    agentRuntime: {
+      async generateBuilderProposal() {
+        return {
+          summary: "Update the goal.",
+          operations: [{ op: "updateDefinition", definition: { ...base.definition, goal: "Agent goal" } }],
+          diagnostics: [], permissionImpact: [],
+        };
+      },
+    },
+    clock: () => NOW,
+    idFactory: (kind) => `${kind}-conflict`,
+  });
+  const proposal = await application.generateLoopProposal({
+    workflowId: base.workflowId,
+    idempotencyKey: "generate-conflict",
+    ifMatch: `"${base.revisionId}"`,
+    request: { data: { instruction: "Update the goal." } },
+  });
+  const current = structuredClone(base);
+  current.revisionId = "revision-concurrent-conflict";
+  current.revisionNumber = 2;
+  current.baseRevisionId = base.revisionId;
+  current.definition.goal = "Collaborator goal";
+  store.setCurrentRevision(current);
+
+  const conflicted = await application.applyLoopProposal({
+    workflowId: base.workflowId,
+    proposalId: proposal.proposalId,
+    idempotencyKey: "apply-conflict",
+    ifMatch: `"${current.revisionId}"`,
+    request: { data: { baseRevisionId: base.revisionId } },
+  });
+
+  assert.equal(conflicted.status, "conflicted");
+  assert.equal(store.saved.length, 0);
+  assert.equal(store.conflicts.length, 1);
+  assert.equal(store.conflicts[0].path, "/definition/goal");
+  assert.equal((await store.getWorkflow()).workflow.currentRevisionId, current.revisionId);
 });
 
 test("invalid model operations are rejected without persisting proposal data", async () => {

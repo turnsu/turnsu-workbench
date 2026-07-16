@@ -1,6 +1,8 @@
 export { Check, Errors } from "typebox/value";
 
 export * from "./common.js";
+export * from "./agents.js";
+export * from "./agent-http.js";
 export * from "./compiler.js";
 export * from "./execution.js";
 export * from "./http.js";

@@ -244,7 +244,7 @@ test("terminal transition migration plans, backfills one marker per terminal Run
   }]);
 });
 
-test("execution fabric migration creates all five durable collection indexes", async () => {
+test("execution fabric migration creates durable execution and personal Agent session indexes", async () => {
   const db = new FakeDb();
   const runner = new ProductMigrationRunner({
     db,
@@ -261,6 +261,13 @@ test("execution fabric migration creates all five durable collection indexes", a
     "execution_events",
     "execution_checkpoints",
     "capability_leases",
+    "agent_sessions",
+    "agent_turns",
+    "agent_messages",
+    "agent_branches",
+    "agent_session_events",
+    "agent_handoffs",
+    "merge_conflicts",
   ]) {
     assert.ok(db.collection(name).indexes.length >= 2, name);
   }

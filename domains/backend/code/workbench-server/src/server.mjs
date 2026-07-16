@@ -26,6 +26,7 @@ import {
 } from "../../../../agent/code/agent-runtime/kernels/pi/pi-kernel-adapter.mjs";
 import { resolveRuntimePaths } from "../../../../agent/code/agent-runtime/lib/runtime-paths.mjs";
 
+import { AgentTurnRunner, MongoAgentPersistence } from "./agents/index.mjs";
 import {
   createExecutionResolver,
   createWorkbenchApplication,
@@ -174,6 +175,8 @@ export function createWorkbenchComposition({
   store = new ProductMongoStore(),
   agentRuntime,
   executionBroker,
+  agentTurnRunner,
+  agentExecutor = null,
   runner,
   skillUploadService,
   skillValidationService,
@@ -214,10 +217,29 @@ export function createWorkbenchComposition({
     clock,
     idFactory,
   });
+  const productAgentTurnRunner = agentTurnRunner ?? new AgentTurnRunner({
+    persistence: new MongoAgentPersistence({ store }),
+    executionBroker: productExecutionBroker,
+    executor: agentExecutor,
+    clock,
+    idFactory,
+    resolveBaseVersion: async ({ objectKind, objectId, workspaceId }) => {
+      if (objectKind === "workflow") {
+        return (await store.getWorkflow(objectId, { workspaceId })).workflow.currentRevisionId;
+      }
+      if (objectKind === "skill_draft") {
+        await store.connect();
+        const draft = await store.repositories?.skillDrafts?.get(objectId, { workspaceId });
+        return draft ? `${draft.skillDraftId}:${draft.revision}` : null;
+      }
+      return null;
+    },
+  });
   const application = createWorkbenchApplication({
     store,
     agentRuntime: runtimeBundle.agentRuntime,
     executionBroker: productExecutionBroker,
+    agentTurnRunner: productAgentTurnRunner,
     runner: productRunner,
     skillUploadService,
     skillValidationService,
@@ -230,6 +252,7 @@ export function createWorkbenchComposition({
     store,
     agentRuntime: runtimeBundle.agentRuntime,
     executionBroker: productExecutionBroker,
+    agentTurnRunner: productAgentTurnRunner,
     piRuntime: runtimeBundle.piRuntime,
     disposeRuntime: runtimeBundle.dispose,
     runner: productRunner,
@@ -240,6 +263,9 @@ export function createWorkbenchComposition({
 export function createWorkbenchServer({
   store,
   agentRuntime,
+  executionBroker,
+  agentTurnRunner,
+  agentExecutor,
   runner,
   distDirectory = defaultDistDirectory,
   bootstrapCatalog = true,
@@ -288,6 +314,9 @@ export function createWorkbenchServer({
     : createWorkbenchComposition({
       store: productStore,
       agentRuntime,
+      executionBroker,
+      agentTurnRunner,
+      agentExecutor,
       runner,
       skillUploadService: upload.service,
       skillValidationService: validation.service,
@@ -322,6 +351,9 @@ export function createWorkbenchServer({
     .then(async () => {
       if (typeof composition.runner?.recover === "function") {
         await composition.runner.recover();
+      }
+      if (typeof composition.agentTurnRunner?.recover === "function") {
+        await composition.agentTurnRunner.recover();
       }
     });
   const api = httpHandler ?? createWorkbenchHttpHandler({

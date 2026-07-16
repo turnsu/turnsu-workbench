@@ -3,6 +3,7 @@ import {
   Errors,
   ErrorEnvelopeSchema,
   RunEventSchema,
+  WORKBENCH_V1_AGENT_ENDPOINTS,
   WORKBENCH_V1_ENDPOINTS,
   WORKBENCH_V1_LIFECYCLE_ENDPOINTS,
 } from "@looloomi/workbench-contracts";
@@ -152,6 +153,18 @@ const errorStatus = {
   builder_proposal_invalid: 422,
   builder_proposal_not_found: 404,
   builder_proposal_state_invalid: 409,
+  agent_definition_not_found: 404,
+  agent_session_not_found: 404,
+  agent_turn_not_found: 404,
+  agent_handoff_not_found: 404,
+  agent_turn_runner_unavailable: 503,
+  agent_session_closed: 409,
+  agent_turn_not_running: 409,
+  main_agent_object_forbidden: 400,
+  module_agent_object_invalid: 400,
+  agent_object_not_found: 404,
+  agent_handoff_target_invalid: 409,
+  main_agent_session_required: 409,
   team_library_unavailable: 503,
   release_not_available: 404,
   installation_not_found: 404,
@@ -233,6 +246,17 @@ const actionByOperation = Object.freeze({
   submitReviewDecision: "submitReviewDecision",
   cancelRun: "cancelRun",
   retryRun: "retryRun",
+  listAgentDefinitions: "listAgentDefinitions",
+  createAgentSession: "createAgentSession",
+  getAgentSession: "getAgentSession",
+  createAgentTurn: "createAgentTurn",
+  getAgentTurn: "getAgentTurn",
+  cancelAgentTurn: "cancelAgentTurn",
+  listAgentSessionEvents: "listAgentSessionEvents",
+  listAgentHandoffs: "listAgentHandoffs",
+  confirmAgentHandoff: "confirmAgentHandoff",
+  listRunInvocations: "listRunInvocations",
+  listRunExecutionEvents: "listRunExecutionEvents",
 });
 
 const activeLifecycleEndpoints = [
@@ -296,7 +320,11 @@ const activeLifecycleEndpoints = [
   WORKBENCH_V1_LIFECYCLE_ENDPOINTS.retryRun,
 ];
 
-const routeDefinitions = [...Object.values(WORKBENCH_V1_ENDPOINTS), ...activeLifecycleEndpoints].map((endpoint) => ({
+const routeDefinitions = [
+  ...Object.values(WORKBENCH_V1_ENDPOINTS),
+  ...activeLifecycleEndpoints,
+  ...Object.values(WORKBENCH_V1_AGENT_ENDPOINTS),
+].map((endpoint) => ({
   endpoint,
   pattern: new RegExp(`^${endpoint.path.replace(/\{(\w+)\}/g, "(?<$1>[^/]+)")}$`),
 }));

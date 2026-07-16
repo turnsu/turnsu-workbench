@@ -429,6 +429,34 @@ export class ProductMongoStore {
         collection(PRODUCT_COLLECTIONS.capabilityLeases),
         { idField: "capabilityLeaseId" },
       ),
+      agentSessions: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.agentSessions),
+        { idField: "sessionId" },
+      ),
+      agentTurns: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.agentTurns),
+        { idField: "turnId" },
+      ),
+      agentMessages: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.agentMessages),
+        { idField: "messageId", immutable: true },
+      ),
+      agentBranches: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.agentBranches),
+        { idField: "branchId", immutable: true },
+      ),
+      agentSessionEvents: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.agentSessionEvents),
+        { idField: "eventId", immutable: true },
+      ),
+      agentHandoffs: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.agentHandoffs),
+        { idField: "handoffId" },
+      ),
+      mergeConflicts: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.mergeConflicts),
+        { idField: "mergeConflictId" },
+      ),
       idempotencyRecords: new IdempotencyRepository(
         collection(PRODUCT_COLLECTIONS.idempotencyRecords),
       ),

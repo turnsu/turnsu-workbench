@@ -3,6 +3,7 @@ import {
   LifecycleBuilderProposalSchema,
 } from "@looloomi/workbench-contracts";
 
+import { listBuiltinAgentDefinitions } from "../agents/index.mjs";
 import {
   compileWorkflowV1,
 } from "../compiler/index.mjs";
@@ -14,6 +15,7 @@ import {
   projectPortableLoopPackage,
 } from "../loops/portable-loop-package.mjs";
 import { applyBuilderOperations } from "../proposals/index.mjs";
+import { mergeWorkflowProposal } from "../proposals/three-way-proposal-merge.mjs";
 import { ProductStoreError, canonicalRequestHash, formatSkillDraftEtag } from "../store/index.mjs";
 import {
   resolvePinnedSkill,
@@ -28,6 +30,19 @@ const storeError = (code, message, details = {}) => new ProductStoreError(code, 
 function resultPage(value) {
   if (Array.isArray(value)) return { data: value, page: PAGE };
   return { data: value.data ?? value.items ?? [], page: value.page ?? PAGE };
+}
+
+function productSafeInvocation(invocation) {
+  return {
+    invocationId: invocation.invocationId,
+    attemptId: invocation.attemptId,
+    mode: invocation.mode,
+    isolation: invocation.isolation,
+    status: invocation.status,
+    createdAt: invocation.createdAt,
+    startedAt: invocation.startedAt ?? null,
+    finishedAt: invocation.finishedAt ?? null,
+  };
 }
 
 function requireRepository(store, name) {
@@ -302,6 +317,8 @@ export function createExecutionResolver({ store } = {}) {
 export function createWorkbenchApplication({
   store,
   agentRuntime,
+  executionBroker = null,
+  agentTurnRunner = null,
   runner,
   skillUploadService = null,
   skillValidationService = null,
@@ -341,6 +358,57 @@ export function createWorkbenchApplication({
     const revision = await requireRepository(store, "workflowRevisions").get(workflowId, revisionId, options);
     if (!revision) throw storeError("workflow_revision_not_found", "Workflow revision not found.", { workflowId, revisionId });
     return revision;
+  };
+  const compileRevision = async ({ workflowId, revision, context, options = {} }) => {
+    if (!agentRuntime || typeof agentRuntime.probeSkill !== "function") {
+      throw storeError("agent_runtime_unavailable", "Skill readiness service is unavailable.");
+    }
+    const refs = [...new Map(
+      revision.graph.nodes.filter((node) => node.kind === "Skill")
+        .map((node) => [`${node.skillRef.skillId}:${node.skillRef.version}`, node.skillRef]),
+    ).values()];
+    const resolved = await Promise.all(refs.map(async (ref) => {
+      const definition = await resolvePinnedSkillDefinition({
+        repositories: store.repositories,
+        skillRef: ref,
+        workspaceId: context.workspaceId,
+        options,
+      });
+      const probe = definition
+        ? await agentRuntime.probeSkill(definition.executionRef, { workspaceId: context.workspaceId })
+        : { status: "blocked", ready: false, code: "skill_definition_not_found" };
+      const readiness = readinessFromProbe(probe);
+      return [`${ref.skillId}:${ref.version}`, { definition, adapterReadiness: readiness, piReadiness: readiness }];
+    }));
+    const byRef = new Map(resolved);
+    const resourceEntries = await Promise.all((revision.resourceRefs ?? []).map(async (ref) => [
+      `${ref.resourceId}:${ref.version}`,
+      await requireRepository(store, "resources").get(ref.resourceId, { workspaceId: context.workspaceId, ...options }),
+    ]));
+    const resources = new Map(resourceEntries);
+    const compileResult = compileWorkflowV1(clone(revision), {
+      compiledAt: clock(),
+      resolver: {
+        resolveSkill(ref) { return byRef.get(`${ref.skillId}:${ref.version}`) ?? null; },
+        resolveResource(ref) {
+          const resource = resources.get(`${ref.resourceId}:${ref.version}`);
+          if (!resource || resource.version !== ref.version || resource.readiness?.status !== "ready") {
+            return { readiness: { status: "blocked", reason: "Attached material is not ready to use." } };
+          }
+          return { readiness: { status: "ready" } };
+        },
+      },
+    });
+    await requireRepository(store, "compileResults").insert(clone(compileResult), options);
+    if (compileResult.status === "ready") {
+      await requireRepository(store, "executionPlans").insert(idFactory("plan"), clone(compileResult.executionPlan), options);
+    }
+    await requireRepository(store, "workflows").updateCompileSummary(workflowId, {
+      revisionId: revision.revisionId,
+      status: compileResult.status,
+      compiledAt: compileResult.compiledAt,
+    }, options);
+    return compileResult;
   };
 
   return Object.freeze({
@@ -388,6 +456,81 @@ export function createWorkbenchApplication({
         workspace,
         membership,
       };
+    },
+    async listAgentDefinitions({ auth } = {}) {
+      await resolveAuth(auth);
+      return resultPage(listBuiltinAgentDefinitions());
+    },
+    async createAgentSession({ idempotencyKey, request, auth }) {
+      const context = await resolveAuth(auth, "member");
+      if (!agentTurnRunner) throw storeError("agent_turn_runner_unavailable", "Agent session service is unavailable.");
+      return store.runIdempotentMutation({
+        scope: `create-agent-session:${context.userId}`,
+        key: idempotencyKey,
+        request: clone(request),
+        workspaceId: context.workspaceId,
+      }, () => agentTurnRunner.createSession({
+        ...request.data,
+        userId: context.userId,
+        workspaceId: context.workspaceId,
+      }));
+    },
+    async getAgentSession({ sessionId, auth }) {
+      const context = await resolveAuth(auth);
+      const session = await agentTurnRunner?.getSession(sessionId, context);
+      if (!session) throw storeError("agent_session_not_found", "Agent session not found.");
+      return session;
+    },
+    async createAgentTurn({ sessionId, idempotencyKey, request, auth }) {
+      const context = await resolveAuth(auth, "member");
+      if (!agentTurnRunner) throw storeError("agent_turn_runner_unavailable", "Agent turn service is unavailable.");
+      return store.runIdempotentMutation({
+        scope: `create-agent-turn:${sessionId}`,
+        key: idempotencyKey,
+        request: clone(request),
+        workspaceId: context.workspaceId,
+      }, () => agentTurnRunner.enqueueTurn({
+        sessionId,
+        message: request.data.message,
+        ...context,
+      }));
+    },
+    async getAgentTurn({ sessionId, turnId, auth }) {
+      const context = await resolveAuth(auth);
+      const turn = await agentTurnRunner?.getTurn(sessionId, turnId, context);
+      if (!turn) throw storeError("agent_turn_not_found", "Agent turn not found.");
+      return turn;
+    },
+    async cancelAgentTurn({ sessionId, turnId, idempotencyKey, request, auth }) {
+      const context = await resolveAuth(auth, "member");
+      if (!agentTurnRunner) throw storeError("agent_turn_runner_unavailable", "Agent turn service is unavailable.");
+      return store.runIdempotentMutation({
+        scope: `cancel-agent-turn:${turnId}`,
+        key: idempotencyKey,
+        request: clone(request),
+        workspaceId: context.workspaceId,
+      }, () => agentTurnRunner.cancelTurn({ sessionId, turnId, reason: request.data.reason, ...context }));
+    },
+    async listAgentSessionEvents({ sessionId, query = {}, auth }) {
+      const context = await resolveAuth(auth);
+      const events = await agentTurnRunner?.listEvents(sessionId, query.after ?? 0, query.limit ?? 500, context);
+      if (!events) throw storeError("agent_session_not_found", "Agent session not found.");
+      return resultPage(events);
+    },
+    async listAgentHandoffs({ sessionId, auth }) {
+      const context = await resolveAuth(auth);
+      if (!agentTurnRunner) throw storeError("agent_turn_runner_unavailable", "Agent handoff service is unavailable.");
+      return resultPage(await agentTurnRunner.listHandoffs({ sessionId, ...context }));
+    },
+    async confirmAgentHandoff({ sessionId, handoffId, idempotencyKey, request, auth }) {
+      const context = await resolveAuth(auth, "member");
+      if (!agentTurnRunner) throw storeError("agent_turn_runner_unavailable", "Agent handoff service is unavailable.");
+      return store.runIdempotentMutation({
+        scope: `confirm-agent-handoff:${handoffId}`,
+        key: idempotencyKey,
+        request: clone(request),
+        workspaceId: context.workspaceId,
+      }, () => agentTurnRunner.confirmHandoff({ sessionId, handoffId, ...context }));
     },
     async listMemberships({ query = {}, auth } = {}) {
       const context = await resolveAuth(auth);
@@ -1154,11 +1297,7 @@ export function createWorkbenchApplication({
         }
         const current = await store.getWorkflow(workflowId, { workspaceId: context.workspaceId, session });
         const expectedBase = request.data.baseRevisionId;
-        if (
-          current.etag !== ifMatch
-          || current.workflow.currentRevisionId !== expectedBase
-          || proposal.baseRevisionId !== expectedBase
-        ) {
+        if (current.etag !== ifMatch || proposal.baseRevisionId !== expectedBase) {
           throw storeError("workflow_revision_conflict", "The workflow changed after these changes were suggested.", {
             workflowId,
             proposalId,
@@ -1176,21 +1315,63 @@ export function createWorkbenchApplication({
         );
         if (!revision) throw storeError("workflow_revision_not_found", "Workflow revision not found.");
         const proposed = applyBuilderOperations(revision, proposal.operations);
+        const currentRevision = current.workflow.currentRevisionId === revision.revisionId
+          ? revision
+          : await requireRepository(store, "workflowRevisions").get(
+            workflowId,
+            current.workflow.currentRevisionId,
+            { workspaceId: context.workspaceId, ...options },
+          );
+        if (!currentRevision) throw storeError("workflow_revision_not_found", "Workflow revision not found.");
+        const merge = mergeWorkflowProposal({ base: revision, current: currentRevision, proposed });
+        if (merge.status === "conflicted") {
+          const createdAt = clock();
+          for (const conflict of merge.conflicts) {
+            await requireRepository(store, "mergeConflicts").insert({
+              schemaVersion: "workbench-v1",
+              mergeConflictId: idFactory("merge-conflict"),
+              workspaceId: context.workspaceId,
+              proposalId,
+              objectKind: "workflow",
+              objectId: workflowId,
+              ...conflict,
+              status: "open",
+              createdAt,
+              resolvedAt: null,
+            }, options);
+          }
+          const conflicted = await requireRepository(store, "builderProposals").patch(
+            proposalId,
+            { status: "conflicted", decidedAt: createdAt },
+            { workspaceId: context.workspaceId, ...options },
+          );
+          await requireRepository(store, "auditEvents").append({
+            schemaVersion: "workbench-v1",
+            auditEventId: idFactory("audit"),
+            workspaceId: context.workspaceId,
+            actorId: context.userId,
+            action: "builder_proposal.conflicted",
+            entityKind: "builder_proposal",
+            entityId: proposalId,
+            createdAt,
+          }, options);
+          return conflicted;
+        }
         const revisionIdempotencyKey = canonicalRequestHash({ proposalId, idempotencyKey }).slice(0, 64);
-        await store.saveWorkflowRevision({
+        const savedRevision = await store.saveWorkflowRevision({
           workflowId,
           idempotencyKey: revisionIdempotencyKey,
           ifMatch,
           request: {
             schemaVersion: "workbench-api-v1",
             data: {
-              baseRevisionId: revision.revisionId,
-              graph: proposed.graph,
-              inputForm: proposed.inputForm,
-              outputDefinition: proposed.outputDefinition,
-              resourceRefs: proposed.resourceRefs,
-              runSettings: proposed.runSettings,
-              ...(proposed.definition ? { definition: proposed.definition } : {}),
+              baseRevisionId: currentRevision.revisionId,
+              graph: merge.merged.graph,
+              inputForm: merge.merged.inputForm,
+              outputDefinition: merge.merged.outputDefinition,
+              resourceRefs: merge.merged.resourceRefs,
+              runSettings: merge.merged.runSettings,
+              ...(merge.merged.definition ? { definition: merge.merged.definition } : {}),
               saveReason: `Applied confirmed workflow changes ${proposalId}.`,
             },
           },
@@ -1198,6 +1379,14 @@ export function createWorkbenchApplication({
           authoredBy: context.userId,
           session,
         });
+        if (store.repositories?.compileResults && store.repositories?.executionPlans && store.repositories?.workflows) {
+          await compileRevision({
+            workflowId,
+            revision: savedRevision.revision,
+            context,
+            options,
+          });
+        }
         const decidedAt = clock();
         const applied = await requireRepository(store, "builderProposals").patch(
           proposalId,
@@ -1415,65 +1604,8 @@ export function createWorkbenchApplication({
       if (revision.workflowId !== workflowId) {
         throw storeError("workflow_revision_not_found", "Workflow revision not found.", { workflowId, revisionId });
       }
-      if (!agentRuntime || typeof agentRuntime.probeSkill !== "function") {
-        throw storeError("agent_runtime_unavailable", "Skill readiness service is unavailable.");
-      }
       await ready();
-      const refs = [...new Map(
-        revision.graph.nodes.filter((node) => node.kind === "Skill")
-          .map((node) => [`${node.skillRef.skillId}:${node.skillRef.version}`, node.skillRef]),
-      ).values()];
-      const resolved = await Promise.all(refs.map(async (ref) => {
-        const definition = await resolvePinnedSkillDefinition({
-          repositories: store.repositories,
-          skillRef: ref,
-          workspaceId: context.workspaceId,
-          options,
-        });
-        const probe = definition
-          ? await agentRuntime.probeSkill(definition.executionRef, {
-            workspaceId: context.workspaceId,
-          })
-          : { status: "blocked", ready: false, code: "skill_definition_not_found" };
-        const readiness = readinessFromProbe(probe);
-        return [
-          `${ref.skillId}:${ref.version}`,
-          {
-            definition,
-            adapterReadiness: readiness,
-            piReadiness: readiness,
-          },
-        ];
-      }));
-      const byRef = new Map(resolved);
-      const resourceEntries = await Promise.all((revision.resourceRefs ?? []).map(async (ref) => [
-        `${ref.resourceId}:${ref.version}`,
-        await requireRepository(store, "resources").get(ref.resourceId, { workspaceId: context.workspaceId }),
-      ]));
-      const resources = new Map(resourceEntries);
-      const compileResult = compileWorkflowV1(clone(revision), {
-        compiledAt: clock(),
-        resolver: {
-          resolveSkill(ref) { return byRef.get(`${ref.skillId}:${ref.version}`) ?? null; },
-          resolveResource(ref) {
-            const resource = resources.get(`${ref.resourceId}:${ref.version}`);
-            if (!resource || resource.version !== ref.version || resource.readiness?.status !== "ready") {
-              return { readiness: { status: "blocked", reason: "Attached material is not ready to use." } };
-            }
-            return { readiness: { status: "ready" } };
-          },
-        },
-      });
-      await requireRepository(store, "compileResults").insert(clone(compileResult), options);
-      if (compileResult.status === "ready") {
-        await requireRepository(store, "executionPlans").insert(idFactory("plan"), clone(compileResult.executionPlan), options);
-      }
-      await requireRepository(store, "workflows").updateCompileSummary(workflowId, {
-        revisionId,
-        status: compileResult.status,
-        compiledAt: compileResult.compiledAt,
-      }, options);
-      return compileResult;
+      return compileRevision({ workflowId, revision, context, options });
       });
     },
     async startRun({ workflowId, idempotencyKey, request, requestId, auth }) {
@@ -1494,6 +1626,26 @@ export function createWorkbenchApplication({
       const value = await runner.getRun(runId);
       if (auth) await store.getWorkflow(value.run.workflowId, { workspaceId: context.workspaceId });
       return value;
+    },
+    async listRunInvocations({ runId, auth }) {
+      const context = await resolveAuth(auth);
+      if (!runner?.getRun || !executionBroker?.listInvocations) throw storeError("runner_unavailable", "Run execution details are unavailable.");
+      const run = await runner.getRun(runId);
+      await store.getWorkflow(run.run.workflowId, { workspaceId: context.workspaceId });
+      const invocations = await executionBroker.listInvocations({ workspaceId: context.workspaceId, controllerId: runId, limit: 500 });
+      return resultPage(invocations.map(productSafeInvocation));
+    },
+    async listRunExecutionEvents({ runId, query = {}, auth }) {
+      const context = await resolveAuth(auth);
+      if (!runner?.getRun || !executionBroker?.listEvents) throw storeError("runner_unavailable", "Run execution events are unavailable.");
+      const run = await runner.getRun(runId);
+      await store.getWorkflow(run.run.workflowId, { workspaceId: context.workspaceId });
+      const invocations = await executionBroker.listInvocations({ workspaceId: context.workspaceId, controllerId: runId, limit: 500 });
+      return resultPage(await executionBroker.listEvents(
+        invocations.map((invocation) => invocation.invocationId),
+        query.after ?? 0,
+        query.limit ?? 500,
+      ));
     },
     async getRunComparison({ runId, otherRunId, auth }) {
       const context = await resolveAuth(auth);

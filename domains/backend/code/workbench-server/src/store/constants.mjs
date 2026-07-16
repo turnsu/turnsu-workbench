@@ -45,6 +45,13 @@ export const PRODUCT_COLLECTIONS = Object.freeze({
   executionEvents: "execution_events",
   executionCheckpoints: "execution_checkpoints",
   capabilityLeases: "capability_leases",
+  agentSessions: "agent_sessions",
+  agentTurns: "agent_turns",
+  agentMessages: "agent_messages",
+  agentBranches: "agent_branches",
+  agentSessionEvents: "agent_session_events",
+  agentHandoffs: "agent_handoffs",
+  mergeConflicts: "merge_conflicts",
   idempotencyRecords: "idempotency_records",
   auditEvents: "audit_events",
 });
@@ -375,6 +382,56 @@ export const PRODUCT_INDEX_DEFINITIONS = Object.freeze([
       { key: { capabilityLeaseId: 1 }, options: { unique: true, name: "capabilityLeaseId_1" } },
       { key: { invocationId: 1, attemptId: 1 }, options: { unique: true, name: "invocationId_1_attemptId_1" } },
       { key: { expiresAt: 1 }, options: { name: "expiresAt_1" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.agentSessions,
+    indexes: [
+      { key: { sessionId: 1 }, options: { unique: true, name: "sessionId_1" } },
+      { key: { userId: 1, workspaceId: 1, definitionId: 1, "scope.kind": 1, "scope.objectId": 1, "scope.branchId": 1 }, options: { unique: true, name: "user_workspace_definition_scope" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.agentTurns,
+    indexes: [
+      { key: { turnId: 1 }, options: { unique: true, name: "turnId_1" } },
+      { key: { sessionId: 1, sequence: 1 }, options: { unique: true, name: "sessionId_1_sequence_1" } },
+      { key: { sessionId: 1, status: 1, sequence: 1 }, options: { name: "sessionId_1_status_1_sequence_1" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.agentMessages,
+    indexes: [
+      { key: { messageId: 1 }, options: { unique: true, name: "messageId_1" } },
+      { key: { sessionId: 1, sequence: 1 }, options: { unique: true, name: "sessionId_1_sequence_1" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.agentBranches,
+    indexes: [
+      { key: { branchId: 1 }, options: { unique: true, name: "branchId_1" } },
+      { key: { userId: 1, workspaceId: 1, objectKind: 1, objectId: 1, createdAt: -1 }, options: { name: "user_workspace_object_createdAt" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.agentSessionEvents,
+    indexes: [
+      { key: { eventId: 1 }, options: { unique: true, name: "eventId_1" } },
+      { key: { sessionId: 1, sequence: 1 }, options: { unique: true, name: "sessionId_1_sequence_1" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.agentHandoffs,
+    indexes: [
+      { key: { handoffId: 1 }, options: { unique: true, name: "handoffId_1" } },
+      { key: { targetSessionId: 1, status: 1, createdAt: -1 }, options: { name: "targetSessionId_1_status_1_createdAt_-1" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.mergeConflicts,
+    indexes: [
+      { key: { mergeConflictId: 1 }, options: { unique: true, name: "mergeConflictId_1" } },
+      { key: { workspaceId: 1, proposalId: 1, status: 1 }, options: { name: "workspaceId_1_proposalId_1_status_1" } },
     ],
   },
   {
