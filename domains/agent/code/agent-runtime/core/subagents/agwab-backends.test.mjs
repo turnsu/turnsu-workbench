@@ -115,6 +115,46 @@ test("pi-workflow adapter resumes an existing valid run instead of relaunching c
   assert.equal(resumes, 0);
 });
 
+test("pi-workflow adapter streams task diffs before the parent run completes", async () => {
+  const updates = [];
+  let resolveWait;
+  const waiting = new Promise((resolve) => { resolveWait = resolve; });
+  const running = {
+    runId: "workflow-run-live", status: "running",
+    taskSummary: { pending: 0, running: 1, blocked: 0, completed: 0, failed: 0, skipped: 0, interrupted: 0, total: 1 },
+    tasks: [{ taskId: "task-live", specId: "live", displayName: "Live", status: "running", lastMessage: "working" }],
+  };
+  const completed = {
+    ...running,
+    status: "completed",
+    taskSummary: { pending: 0, running: 0, blocked: 0, completed: 1, failed: 0, skipped: 0, interrupted: 0, total: 1 },
+    tasks: [{ ...running.tasks[0], status: "completed", lastMessage: '{"answer":"done"}' }],
+  };
+  const backend = createAgwaWorkflowBackend({
+    cwd: "/sandbox",
+    pollIntervalMs: 10,
+    providerProbe: async () => ({ ready: true }),
+    api: {
+      async runDynamicTask() { return running; },
+      async waitForRun() { return waiting; },
+      async refreshRun() { resolveWait(completed); return completed; },
+      async stopRun() {},
+      async resumeRun() { return { run: running }; },
+    },
+  });
+  const result = await backend.execute({
+    request: request({
+      limits: { timeoutMs: 5000, maxSteps: 4, maxModelRequests: 2, maxChildren: 1 },
+      resultSchema: { type: "object", properties: { answer: { type: "string" } }, required: ["answer"], additionalProperties: false },
+    }),
+    reportChild(update) { updates.push(update); },
+  });
+
+  assert.equal(result.status, "completed");
+  assert.deepEqual(updates.map((update) => update.status), ["running", "completed"]);
+  assert(updates.every((update) => update.checkpoint.agwaRunId === "workflow-run-live"));
+});
+
 test("pi-workflow parent cancellation cascades to the active AgwaB run", async () => {
   let resolveWait;
   let stopped = 0;

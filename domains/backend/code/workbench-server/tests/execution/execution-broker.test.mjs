@@ -328,3 +328,120 @@ test("orchestrator children become independent product invocations without chang
   assert(children.every((invocation) => invocation.controller.controllerId === "run-alpha"));
   assert.equal((persistence.events.get(input.invocationId) ?? []).filter((event) => event.type === "execution.child_recorded").length, 2);
 });
+
+test("orchestrator children are durable while the parent is still running", async () => {
+  const { value, persistence } = broker();
+  let continueParent;
+  const gate = new Promise((resolve) => { continueParent = resolve; });
+  let childStarted;
+  const started = new Promise((resolve) => { childStarted = resolve; });
+  value.registerBackend({
+    mode: "agent_orchestrator",
+    isolation: "process",
+    backend: {
+      async execute({ reportChild }) {
+        await reportChild({
+          childRef: "live-research",
+          goal: "Research while the parent remains active.",
+          status: "running",
+          checkpoint: { cursor: 1 },
+          capabilities: {
+            toolAllowlist: ["read"], connectionIds: [], network: false,
+            filesystem: "none", externalActions: false,
+          },
+        });
+        childStarted();
+        await gate;
+        await reportChild({
+          childRef: "live-research",
+          status: "completed",
+          output: { answer: "ready" },
+          summary: "Research completed.",
+          usage: { steps: 1, modelRequests: 1, inputBytes: 1, outputBytes: 1 },
+        });
+        return {
+          output: { workflowStatus: "completed" },
+          usage: { steps: 1, modelRequests: 1, inputBytes: 1, outputBytes: 1 },
+        };
+      },
+    },
+  });
+  const input = request({
+    mode: "agent_orchestrator",
+    limits: { ...request().limits, maxSteps: 2, maxModelRequests: 2, maxChildren: 1 },
+    capabilities: {
+      toolAllowlist: ["read"], connectionIds: [], network: false,
+      filesystem: "scratch_readonly", externalActions: false,
+    },
+    resultSchema: {
+      type: "object",
+      properties: { workflowStatus: { type: "string" } },
+      required: ["workflowStatus"],
+      additionalProperties: false,
+    },
+  });
+
+  const running = value.execute(input);
+  await started;
+  const liveChildren = (await persistence.listInvocations({ controllerId: "run-alpha" }))
+    .filter((invocation) => invocation.parentInvocationId === input.invocationId);
+  assert.equal(liveChildren.length, 1);
+  assert.equal(liveChildren[0].status, "running");
+  assert.equal((persistence.checkpoints.get(liveChildren[0].invocationId) ?? []).length, 1);
+  continueParent();
+  assert.equal((await running).status, "completed");
+  assert.equal((await persistence.getInvocation(liveChildren[0].invocationId)).status, "completed");
+});
+
+test("parent cancellation revokes and terminally cancels live orchestrator children", async () => {
+  const { value, persistence } = broker();
+  let childStarted;
+  const started = new Promise((resolve) => { childStarted = resolve; });
+  value.registerBackend({
+    mode: "agent_orchestrator",
+    isolation: "process",
+    backend: {
+      async execute({ reportChild, signal }) {
+        await reportChild({ childRef: "cancel-me", status: "running" });
+        childStarted();
+        await new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+      },
+    },
+  });
+  const input = request({
+    mode: "agent_orchestrator",
+    limits: { ...request().limits, maxSteps: 2, maxModelRequests: 2, maxChildren: 1 },
+  });
+  const running = value.execute(input);
+  await started;
+  const child = (await persistence.listInvocations({ controllerId: "run-alpha" }))
+    .find((invocation) => invocation.parentInvocationId === input.invocationId);
+  await value.cancel(input.invocationId, { reason: "user_cancelled" });
+  assert.equal((await running).status, "cancelled");
+  assert.equal((await persistence.getInvocation(child.invocationId)).status, "cancelled");
+  assert.equal(await persistence.getActiveLease(child.invocationId, child.attemptId, "2026-07-16T10:00:00.000Z"), null);
+});
+
+test("orchestrator failure terminally cancels live children and revokes their leases", async () => {
+  const { value, persistence } = broker();
+  value.registerBackend({
+    mode: "agent_orchestrator",
+    isolation: "process",
+    backend: {
+      async execute({ reportChild }) {
+        await reportChild({ childRef: "fail-with-parent", status: "running" });
+        throw new Error("orchestrator crashed");
+      },
+    },
+  });
+  const input = request({
+    mode: "agent_orchestrator",
+    limits: { ...request().limits, maxSteps: 2, maxModelRequests: 2, maxChildren: 1 },
+  });
+
+  assert.equal((await value.execute(input)).status, "failed");
+  const child = (await persistence.listInvocations({ controllerId: "run-alpha" }))
+    .find((invocation) => invocation.parentInvocationId === input.invocationId);
+  assert.equal(child.status, "cancelled");
+  assert.equal(await persistence.getActiveLease(child.invocationId, child.attemptId, NOW), null);
+});

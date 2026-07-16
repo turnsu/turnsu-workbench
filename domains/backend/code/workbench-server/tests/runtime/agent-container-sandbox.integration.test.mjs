@@ -77,3 +77,75 @@ test("real Agent image runs Pi through the product stdio Gateway with no contain
   assert.equal(JSON.stringify(modelCalls).includes("apiKey"), false);
   assert.equal((await sandbox.scavenge()).containersRemoved, 0);
 });
+
+test("real pi-workflow streams dynamic children into the product timeline before parent settlement", { skip: !enabled }, async (t) => {
+  assert.match(image ?? "", /^(?:[^@]+@)?sha256:[a-f0-9]{64}$/);
+  const root = await mkdtemp(join(tmpdir(), "looloomi-agwab-image-integration-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const persistence = new InMemoryExecutionPersistence();
+  const modelCalls = [];
+  const gateway = new ProductToolGateway({
+    persistence,
+    modelExecutor: async (call) => {
+      modelCalls.push(call);
+      const context = JSON.stringify(call.input?.context ?? {});
+      if (context.includes("dynamic-decision-v1") && !context.includes("Dynamic Synthesis Handoff")) {
+        return {
+          text: '<control>{"schema":"dynamic-decision-v1","digest":"Synthesize the bounded result without external sources.","decisionId":"decision-0","round":0,"phase":"orientation","status":"synthesize","nextActions":[{"type":"synthesize","actionId":"synthesize-0","prompt":"Return a concise final answer with no source-backed claims.","outputProfile":"synthesis_v1","inputRefs":[]}]}</control><analysis>Direct synthesis is sufficient.</analysis><refs>[]</refs>',
+        };
+      }
+      return {
+        text: '<control>{"schema":"dynamic-task-result-v1","digest":"Completed isolated synthesis.","summary":"Completed isolated synthesis.","claims":[],"caveats":[],"blockers":[],"omissions":[]}</control><analysis>Completed inside the pinned outer node.</analysis><refs>["workflow_artifact:dynamic.decide-r0"]</refs>',
+      };
+    },
+  });
+  const sandbox = new AgentContainerSandbox({
+    image,
+    gatewayServer: new StdioToolGatewayServer({ gateway }),
+    tempRoot: root,
+  });
+  const broker = new ExecutionBroker({
+    persistence,
+    clock: () => new Date().toISOString(),
+    idFactory: (() => { let sequence = 1000; return (kind) => `${kind}-${++sequence}`; })(),
+  });
+  broker.registerBackend({
+    mode: "agent_orchestrator",
+    isolation: "container",
+    backend: createAgentContainerBackend({ sandbox }),
+  });
+  const request = {
+    schemaVersion: "workbench-execution-fabric-v1",
+    invocationId: "invocation-real-agwab-image",
+    attemptId: "attempt-real-agwab-image",
+    workspaceId: "workspace-agent-image",
+    controller: { kind: "workflow_run", controllerId: "run-real-agwab", fence: 1 },
+    mode: "agent_orchestrator",
+    isolation: "container",
+    goal: "Create one concise response inside this pinned outer node.",
+    input: { value: 1 },
+    limits: { timeoutMs: 60_000, maxSteps: 8, maxModelRequests: 8, maxChildren: 4, maxInputBytes: 100_000, maxOutputBytes: 500_000 },
+    capabilities: { toolAllowlist: [], connectionIds: [], network: false, filesystem: "none", externalActions: false },
+    resultSchema: { type: "object", additionalProperties: true },
+    evidenceRequirements: [],
+    metadata: { outerNodeId: "pinned-node-agwab" },
+  };
+
+  const result = await broker.execute(request);
+  const invocations = await persistence.listInvocations({ controllerId: "run-real-agwab" });
+  const children = invocations.filter((item) => item.parentInvocationId === request.invocationId);
+  const parentEvents = persistence.events.get(request.invocationId) ?? [];
+
+  assert.equal(result.status, "completed");
+  assert.ok(modelCalls.length >= 2);
+  assert.ok(children.length >= 1);
+  assert(children.every((child) => child.status === "completed"));
+  const childInvocationIds = new Set(children.map((child) => child.invocationId));
+  assert(modelCalls.every((call) => childInvocationIds.has(call.invocationId)));
+  assert(modelCalls.every((call) => call.invocationId !== request.invocationId));
+  assert(parentEvents.some((event) => event.type === "execution.child_started"));
+  assert(parentEvents.findIndex((event) => event.type === "execution.child_started")
+    < parentEvents.findIndex((event) => event.type === "execution.completed"));
+  assert(children.every((child) => child.request.metadata.parentInvocationId === request.invocationId));
+  assert.equal((await sandbox.scavenge()).containersRemoved, 0);
+});

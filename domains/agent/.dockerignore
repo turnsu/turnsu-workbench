@@ -4,8 +4,10 @@
 !code/agent-runtime/package.json
 !code/agent-runtime/package-lock.json
 !code/agent-runtime/worker/
-!code/agent-runtime/worker/container-worker-protocol.mjs
-!code/agent-runtime/worker/container-pi-worker.mjs
-!code/agent-runtime/worker/worker.mjs
+!code/agent-runtime/worker/*.mjs
+!code/agent-runtime/core/
+!code/agent-runtime/core/subagents/
+!code/agent-runtime/core/subagents/agwab-subagent-backend.mjs
+!code/agent-runtime/core/subagents/agwab-workflow-backend.mjs
 !image/
 !image/Dockerfile

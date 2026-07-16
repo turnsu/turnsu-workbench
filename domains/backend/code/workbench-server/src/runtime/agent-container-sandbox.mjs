@@ -94,11 +94,12 @@ export class AgentContainerSandbox {
     }
   }
 
-  async run({ request, lease, signal, emit, checkpoint }) {
+  async run({ request, lease, signal, emit, checkpoint, reportChild }) {
     validateRequest(request, lease);
     await this.probe();
     let root = null;
     let endpoint = null;
+    const gatewaySessions = new Map();
     let containerName = null;
     try {
       await mkdir(this.#tempRoot, { recursive: true, mode: 0o700 });
@@ -113,6 +114,7 @@ export class AgentContainerSandbox {
       if (!endpoint || typeof endpoint.handle !== "function" || typeof endpoint.close !== "function") {
         throw new AgentContainerSandboxError("agent_gateway_session_invalid", "Agent gateway session is invalid.", { status: "blocked" });
       }
+      gatewaySessions.set(lease.capabilityLeaseId, endpoint);
       const payload = containerPayload(request, lease);
       containerName = containerNameFor(request.invocationId, request.attemptId);
       const args = buildAgentContainerArguments({
@@ -131,9 +133,21 @@ export class AgentContainerSandbox {
         containerName,
         invocationId: request.invocationId,
         payload,
-        gatewaySession: endpoint,
+        gatewaySessions,
+        openChildGateway: async (binding) => {
+          validateGatewayBinding(binding);
+          const existing = gatewaySessions.get(binding.capabilityLeaseId);
+          if (existing) return existing;
+          const childEndpoint = await this.#gatewayServer.open(binding);
+          if (!childEndpoint || typeof childEndpoint.handle !== "function" || typeof childEndpoint.close !== "function") {
+            throw new AgentContainerSandboxError("agent_gateway_session_invalid", "Agent gateway session is invalid.", { status: "blocked" });
+          }
+          gatewaySessions.set(binding.capabilityLeaseId, childEndpoint);
+          return childEndpoint;
+        },
         emit,
         checkpoint,
+        reportChild,
         signal,
         timeoutMs: request.limits.timeoutMs,
         maxStdoutBytes: this.#limits.maxStdoutBytes,
@@ -146,7 +160,7 @@ export class AgentContainerSandbox {
       return sanitizeBackendResult(result);
     } finally {
       if (containerName) await cleanupContainer(this.#dockerControl, containerName, request.invocationId).catch(() => {});
-      if (endpoint) await endpoint.close().catch(() => {});
+      await Promise.allSettled([...gatewaySessions.values()].map((session) => session.close()));
       if (root) {
         await chmod(join(root, "output"), 0o700).catch(() => {});
         await rm(root, { recursive: true, force: true }).catch(() => {});
@@ -187,8 +201,8 @@ export class AgentContainerSandbox {
 export function createAgentContainerBackend({ sandbox } = {}) {
   if (!sandbox?.run) throw new TypeError("agent_container_sandbox_required");
   return Object.freeze({
-    execute({ request, lease, signal, emit, checkpoint }) {
-      return sandbox.run({ request, lease, signal, emit, checkpoint });
+    execute({ request, lease, signal, emit, checkpoint, reportChild }) {
+      return sandbox.run({ request, lease, signal, emit, checkpoint, reportChild });
     },
   });
 }
@@ -227,7 +241,7 @@ export function buildAgentContainerArguments({
     "--mount", `type=bind,src=${outputRoot},dst=/work/output`,
     "--workdir", "/work/output",
     image,
-    "node", "/opt/looloomi-agent/worker.mjs",
+    "node", "/opt/looloomi-agent/worker/worker.mjs",
   ];
 }
 
@@ -260,7 +274,7 @@ const MAX_PROTOCOL_FRAME_BYTES = 4 * 1024 * 1024;
 
 async function executeAgentContainer({
   dockerBinary, dockerEnvironment, spawnProcess, dockerControl, args, containerName, invocationId,
-  payload, gatewaySession, emit, checkpoint, signal, timeoutMs, maxStdoutBytes, maxStderrBytes,
+  payload, gatewaySessions, openChildGateway, emit, checkpoint, reportChild, signal, timeoutMs, maxStdoutBytes, maxStderrBytes,
 }) {
   let child;
   try {
@@ -301,7 +315,10 @@ async function executeAgentContainer({
         || !frame.message || typeof frame.message !== "object" || Array.isArray(frame.message)) {
         throw protocolError();
       }
-      const operation = Promise.resolve(gatewaySession.handle(frame.message))
+      const gatewaySession = gatewaySessions.get(frame.message.capabilityLeaseId);
+      const operation = Promise.resolve(gatewaySession
+        ? gatewaySession.handle(frame.message)
+        : Promise.reject(gatewaySessionMissing()))
         .then(
           (result) => send({ kind: "rpc_response", id: frame.id, ok: true, result }),
           (error) => send({
@@ -329,6 +346,36 @@ async function executeAgentContainer({
     if (frame.kind === "checkpoint") {
       if (!isPlainObject(frame.state) || typeof checkpoint !== "function") throw protocolError();
       track(Promise.resolve(checkpoint(structuredClone(frame.state))).catch(terminate));
+      return;
+    }
+    if (frame.kind === "child_request") {
+      if (terminalResult || typeof frame.id !== "string" || frame.id.length < 1 || frame.id.length > 128
+        || !isPlainObject(frame.update) || typeof reportChild !== "function" || typeof openChildGateway !== "function") {
+        throw protocolError();
+      }
+      const update = structuredClone(frame.update);
+      const operation = Promise.resolve(reportChild(update))
+        .then(async (binding) => {
+          validateGatewayBinding(binding);
+          if (!isTerminalChildStatus(update.status)) await openChildGateway(binding);
+          await send({ kind: "child_response", id: frame.id, ok: true, result: binding });
+          if (isTerminalChildStatus(update.status)) {
+            const session = gatewaySessions.get(binding.capabilityLeaseId);
+            gatewaySessions.delete(binding.capabilityLeaseId);
+            await session?.close();
+          }
+        }, (error) => send({
+          kind: "child_response",
+          id: frame.id,
+          ok: false,
+          error: {
+            code: typeof error?.code === "string" ? error.code : "orchestrator_child_update_invalid",
+            status: typeof error?.status === "string" ? error.status : "failed",
+            message: error?.productSafe === true ? error.message : "Child update is invalid.",
+          },
+        }))
+        .catch(terminate);
+      track(operation);
       return;
     }
     if (frame.kind === "result") {
@@ -445,6 +492,22 @@ function validateRequest(request, lease) {
   }
 }
 
+function validateGatewayBinding(binding) {
+  if (!isPlainObject(binding)
+    || ![binding.invocationId, binding.attemptId, binding.capabilityLeaseId]
+      .every((value) => typeof value === "string" && value.length > 0)) {
+    throw protocolError();
+  }
+}
+
+function isTerminalChildStatus(status) {
+  return [
+    "completed", "failed", "cancelled", "blocked", "partial", "timeout",
+    "permission_denied", "sandbox_unavailable", "remote_backend_unavailable",
+    "interrupted", "skipped",
+  ].includes(status);
+}
+
 function validateLimits(limits) {
   for (const key of ["pids", "memoryBytes", "tmpfsBytes", "maxStdoutBytes", "maxStderrBytes", "maxArtifactFiles"]) {
     if (!Number.isSafeInteger(limits[key]) || limits[key] < 1) throw new TypeError("agent_sandbox_limits_invalid");
@@ -489,6 +552,10 @@ function unavailable() {
 
 function protocolError() {
   return new AgentContainerSandboxError("agent_sandbox_protocol_invalid", "Agent sandbox protocol is invalid.", { status: "failed" });
+}
+
+function gatewaySessionMissing() {
+  return new AgentContainerSandboxError("gateway_capability_lease_invalid", "Gateway request is not permitted.", { status: "permission_denied" });
 }
 
 function limitError() {

@@ -29,7 +29,7 @@ export class ContainerWorkerProtocol {
       return Promise.reject(protocolError("container_worker_rpc_invalid"));
     }
     const id = `rpc-${++this.sequence}`;
-    const result = new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
+    const result = new Promise((resolve, reject) => this.pending.set(id, { kind: "rpc_response", resolve, reject }));
     this.#send({ kind: "rpc_request", id, message }).catch((error) => {
       const operation = this.pending.get(id);
       this.pending.delete(id);
@@ -44,6 +44,20 @@ export class ContainerWorkerProtocol {
 
   sendCheckpoint(state) {
     return this.#send({ kind: "checkpoint", state });
+  }
+
+  sendChild(update) {
+    if (this.closed || !this.started || !isPlainObject(update)) {
+      return Promise.reject(protocolError("container_worker_child_invalid"));
+    }
+    const id = `child-${++this.sequence}`;
+    const result = new Promise((resolve, reject) => this.pending.set(id, { kind: "child_response", resolve, reject }));
+    this.#send({ kind: "child_request", id, update }).catch((error) => {
+      const operation = this.pending.get(id);
+      this.pending.delete(id);
+      operation?.reject(error);
+    });
+    return result;
   }
 
   sendResult(result) {
@@ -87,11 +101,14 @@ export class ContainerWorkerProtocol {
       this.resolveStart(structuredClone(frame.payload));
       return;
     }
-    if (frame.kind !== "rpc_response" || typeof frame.id !== "string" || typeof frame.ok !== "boolean") {
+    if (!["rpc_response", "child_response"].includes(frame.kind)
+      || typeof frame.id !== "string" || typeof frame.ok !== "boolean") {
       throw protocolError("container_worker_response_invalid");
     }
     const operation = this.pending.get(frame.id);
-    if (!operation) throw protocolError("container_worker_response_unknown");
+    if (!operation || (operation.kind && operation.kind !== frame.kind)) {
+      throw protocolError("container_worker_response_unknown");
+    }
     this.pending.delete(frame.id);
     if (frame.ok) operation.resolve(structuredClone(frame.result));
     else {

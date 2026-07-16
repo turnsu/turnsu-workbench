@@ -50,7 +50,12 @@ test("container Pi Worker uses the Gateway model and returns schema-checked JSON
   assert.equal(result.usage.modelRequests, 1);
   assert.equal(calls[0].operation, "model");
   assert.equal(JSON.stringify(calls).includes("apiKey"), false);
-  assert.deepEqual(events.map((event) => event.type), ["session.started", "session.completed"]);
+  assert.deepEqual(events.map((event) => event.type), [
+    "session.started",
+    "agwab.subagent.launching",
+    "agwab.subagent.completed",
+    "session.completed",
+  ]);
 });
 
 test("container Pi Worker exposes only allowlisted tools and routes execution through the Gateway", async (t) => {
@@ -90,4 +95,57 @@ test("container Pi Worker rejects a model result that does not match the product
     runContainerPiWorker(payload(), rpc, await tempRuntime(t)),
     { code: "agent_output_schema_mismatch", status: "failed" },
   );
+});
+
+test("container orchestrator streams AgwaB child lifecycle through the product protocol", async (t) => {
+  const children = [];
+  let resolveWait;
+  const waiting = new Promise((resolve) => { resolveWait = resolve; });
+  const running = {
+    runId: "workflow-container-live",
+    status: "running",
+    taskSummary: { pending: 0, running: 1, blocked: 0, completed: 0, failed: 0, skipped: 0, interrupted: 0, total: 1 },
+    tasks: [{ taskId: "task-live", specId: "live", displayName: "Live", status: "running", lastMessage: "working" }],
+  };
+  const completed = {
+    ...running,
+    status: "completed",
+    taskSummary: { pending: 0, running: 0, blocked: 0, completed: 1, failed: 0, skipped: 0, interrupted: 0, total: 1 },
+    tasks: [{ ...running.tasks[0], status: "completed", lastMessage: '{"answer":"done"}' }],
+  };
+  const rpc = {
+    async call() { throw new Error("fake workflow should not call the model Gateway"); },
+    async sendEvent() {},
+    async sendChild(update) {
+      children.push(update);
+      return {
+        childRef: update.childRef,
+        invocationId: "invocation-child-live",
+        attemptId: "attempt-child-live",
+        capabilityLeaseId: "lease-child-live",
+        capabilities: structuredClone(update.capabilities),
+        status: update.status,
+      };
+    },
+  };
+  const result = await runContainerPiWorker(payload({
+    mode: "agent_orchestrator",
+    limits: { ...payload().limits, maxChildren: 1 },
+    metadata: { outerNodeId: "node-orchestrator" },
+    resultSchema: { type: "object", properties: { answer: { type: "string" } }, required: ["answer"], additionalProperties: false },
+  }), rpc, {
+    ...await tempRuntime(t),
+    workflowApi: {
+      async runDynamicTask() { return running; },
+      async waitForRun() { return waiting; },
+      async refreshRun() { resolveWait(completed); return completed; },
+      async stopRun() {},
+      async resumeRun() { return { run: running }; },
+    },
+  });
+
+  assert.equal(result.status, "completed");
+  assert.equal(result.outerGraphChanged, false);
+  assert.deepEqual(children.map((child) => child.status), ["running", "completed"]);
+  assert(children.every((child) => child.capabilities.toolAllowlist.length === 0));
 });

@@ -23,7 +23,6 @@ export function buildContainerIsolationArguments({
     || !/^\d+:\d+$/.test(user)) {
     throw new TypeError("container_sandbox_policy_invalid");
   }
-  const fileBlocks = Math.max(1, Math.ceil(fileSizeBytes / 1024));
   return [
     "run",
     "--pull", "never",
@@ -40,7 +39,7 @@ export function buildContainerIsolationArguments({
     "--cpus", String(limits.cpus),
     "--ulimit", "nofile=64:64",
     "--ulimit", "core=0:0",
-    "--ulimit", `fsize=${fileBlocks}:${fileBlocks}`,
+    "--ulimit", `fsize=${fileSizeBytes}:${fileSizeBytes}`,
     "--tmpfs", `/tmp:rw,noexec,nosuid,nodev,size=${tmpfsBytes},mode=1777`,
   ];
 }

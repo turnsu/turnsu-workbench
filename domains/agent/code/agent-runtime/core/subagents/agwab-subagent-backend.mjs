@@ -4,9 +4,15 @@ export function createAgwaSubagentBackend({
   api = null,
   cwd,
   runsDir = ".pi/product-agent-runs",
+  backend = "headless",
+  extensions = [],
   providerProbe = async () => ({ ready: false, reason: "provider_unavailable" }),
 } = {}) {
   if (typeof cwd !== "string" || cwd.length === 0) throw new TypeError("agwab_subagent_cwd_required");
+  if (!["inline", "headless"].includes(backend) || !Array.isArray(extensions)
+    || extensions.some((item) => typeof item !== "string" || item.length === 0)) {
+    throw new TypeError("agwab_subagent_runtime_options_invalid");
+  }
   const active = new Map();
   let loadedApi = api;
   const getApi = async () => {
@@ -24,8 +30,9 @@ export function createAgwaSubagentBackend({
         throw backendError("model_configuration_missing", "Agent model configuration is missing.", "blocked");
       }
       await emit?.("agwab.subagent.launching", { backend: "pi-subagent" });
+      const detached = backend === "headless";
       const launch = await runtime.runSubagent({
-        backend: "headless",
+        backend,
         cwd,
         runsDir,
         task: request.goal,
@@ -36,11 +43,11 @@ export function createAgwaSubagentBackend({
         thinking: normalizeThinking(request.metadata?.thinking),
         tools: [...request.capabilities.toolAllowlist],
         skills: safeStringArray(request.metadata?.skillPaths),
-        extensions: [],
+        extensions: [...extensions],
         timeoutMs: request.limits.timeoutMs,
         correlationId: request.invocationId,
-        async: true,
-        onComplete: "detach",
+        async: detached,
+        onComplete: detached ? "detach" : "return",
         signal,
       });
       if (!launch?.runId) throw backendError("agwab_launch_invalid", "Subagent launch did not return a run reference.");

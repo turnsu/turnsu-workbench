@@ -72,6 +72,7 @@ test("Agent container arguments share the strict isolation policy and mount no s
   assert.deepEqual(option(args, "--pids-limit"), "64");
   assert.deepEqual(option(args, "--memory"), String(256 * 1024 * 1024));
   assert.deepEqual(option(args, "--cpus"), "0.5");
+  assert.equal(options(args, "--ulimit").includes("fsize=4096:4096"), true);
   assert.equal(args.includes("--interactive"), true);
   assert.deepEqual(options(args, "--env"), [
     "HOME=/tmp",
@@ -86,7 +87,7 @@ test("Agent container arguments share the strict isolation policy and mount no s
   assert.equal(mounts.length, 1);
   assert.match(mounts[0], /dst=\/work\/output$/);
   assert.equal(args.some((item) => item.includes("domains/") || item.includes("providerSecret")), false);
-  assert.deepEqual(args.slice(-3), [IMAGE, "node", "/opt/looloomi-agent/worker.mjs"]);
+  assert.deepEqual(args.slice(-3), [IMAGE, "node", "/opt/looloomi-agent/worker/worker.mjs"]);
 });
 
 test("Agent sandbox passes only governed input and strips image, host, and socket details", async (t) => {
@@ -94,11 +95,15 @@ test("Agent sandbox passes only governed input and strips image, host, and socke
   t.after(() => rm(root, { recursive: true, force: true }));
   let payload;
   let environment;
-  let gatewayRequest;
+  const gatewayRequests = [];
+  let childUpdate;
   const gatewayServer = {
-    async open() {
+    async open(binding) {
       return {
-        async handle(message) { gatewayRequest = message; return { text: "model result" }; },
+        async handle(message) {
+          gatewayRequests.push({ binding, message });
+          return { text: "model result" };
+        },
         async close() {},
       };
     },
@@ -130,7 +135,23 @@ test("Agent sandbox passes only governed input and strips image, host, and socke
               input: { context: "safe" },
             },
           })}\n`);
-        } else if (frame.kind === "rpc_response") {
+        } else if (frame.kind === "rpc_response" && frame.id === "rpc-1") {
+          assert.equal(frame.ok, true);
+          child.stdout.write(`${JSON.stringify({ kind: "child_request", id: "child-1", update: { childRef: "child-a", status: "running" } })}\n`);
+        } else if (frame.kind === "child_response") {
+          assert.equal(frame.ok, true);
+          child.stdout.write(`${JSON.stringify({
+            kind: "rpc_request",
+            id: "rpc-child",
+            message: {
+              operation: "model",
+              invocationId: frame.result.invocationId,
+              attemptId: frame.result.attemptId,
+              capabilityLeaseId: frame.result.capabilityLeaseId,
+              input: { context: "child-safe" },
+            },
+          })}\n`);
+        } else if (frame.kind === "rpc_response" && frame.id === "rpc-child") {
           assert.equal(frame.ok, true);
           child.stdout.end(`${JSON.stringify({
             kind: "result",
@@ -151,7 +172,21 @@ test("Agent sandbox passes only governed input and strips image, host, and socke
     return child;
   };
   const sandbox = new AgentContainerSandbox({ image: IMAGE, gatewayServer, dockerControl, spawnProcess, tempRoot: root, dockerEnvironment: { PATH: "/safe/bin" } });
-  const result = await sandbox.run({ request: request(), lease });
+  const result = await sandbox.run({
+    request: request({
+      mode: "agent_orchestrator",
+      limits: { ...request().limits, maxModelRequests: 2, maxChildren: 1 },
+    }),
+    lease,
+    reportChild(update) {
+      childUpdate = update;
+      return {
+        invocationId: "invocation-child-a",
+        attemptId: "attempt-child-a",
+        capabilityLeaseId: "lease-child-a",
+      };
+    },
+  });
   assert.deepEqual(result.output, { ok: true });
   assert.equal(Object.hasOwn(result, "imageDigest"), false);
   assert.equal(Object.hasOwn(result, "hostPath"), false);
@@ -161,7 +196,12 @@ test("Agent sandbox passes only governed input and strips image, host, and socke
   assert.equal(JSON.stringify(payload).includes("must-not-cross"), false);
   assert.deepEqual(payload.runtimeVersions, { pi: "0.80.7", subagent: "0.4.8", workflow: "0.8.1" });
   assert.deepEqual(payload.gateway, { transport: "stdio-jsonl-v1", capabilityLeaseId: "lease-agent-a" });
-  assert.equal(JSON.stringify(gatewayRequest).includes("must-not-cross"), false);
+  assert.equal(JSON.stringify(gatewayRequests).includes("must-not-cross"), false);
+  assert.equal(gatewayRequests.length, 2);
+  assert.equal(gatewayRequests[0].binding.capabilityLeaseId, "lease-agent-a");
+  assert.equal(gatewayRequests[1].binding.capabilityLeaseId, "lease-child-a");
+  assert.equal(gatewayRequests[1].message.invocationId, "invocation-child-a");
+  assert.deepEqual(childUpdate, { childRef: "child-a", status: "running" });
 });
 
 test("Agent artifact output is bounded and Docker unavailability never falls back to process", async (t) => {

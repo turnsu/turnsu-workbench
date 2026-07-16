@@ -13,9 +13,17 @@ import {
 } from "@earendil-works/pi-ai/providers/faux";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
+import { fileURLToPath } from "node:url";
+
+import { createAgwaSubagentBackend } from "../core/subagents/agwab-subagent-backend.mjs";
+import { createAgwaWorkflowBackend } from "../core/subagents/agwab-workflow-backend.mjs";
+import { startContainerGatewaySupervisor } from "./container-gateway-supervisor.mjs";
 
 const PROVIDER = "looloomi-gateway";
 const MODEL_ID = "product-controlled-model";
+const PRODUCT_MODEL = `${PROVIDER}/${MODEL_ID}`;
+const PRODUCT_GATEWAY_EXTENSION = fileURLToPath(new URL("./product-gateway-extension.mjs", import.meta.url));
+const LOCAL_NODE_BIN = fileURLToPath(new URL("../node_modules/.bin/", import.meta.url));
 const EMPTY_USAGE = Object.freeze({
   input: 0,
   output: 0,
@@ -25,7 +33,89 @@ const EMPTY_USAGE = Object.freeze({
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 });
 
-export async function runContainerPiWorker(payload, rpc, {
+export async function runContainerPiWorker(payload, rpc, options = {}) {
+  validatePayload(payload, rpc);
+  if (options.directPi === true) return runDirectContainerPiWorker(payload, rpc, options);
+  const cwd = options.cwd ?? "/work/output";
+  const supervisor = await startContainerGatewaySupervisor({
+    payload,
+    rpc,
+    socketRoot: options.agentDir ?? "/tmp",
+  });
+  const previousWorkflowExtension = process.env.PI_WORKFLOW_SUBAGENT_EXTRA_EXTENSIONS;
+  const previousPath = process.env.PATH;
+  process.env.PI_WORKFLOW_SUBAGENT_EXTRA_EXTENSIONS = PRODUCT_GATEWAY_EXTENSION;
+  process.env.PATH = `${LOCAL_NODE_BIN}:${previousPath ?? ""}`;
+  const request = {
+    ...structuredClone(payload),
+    capabilities: {
+      ...structuredClone(payload.capabilities),
+      toolAllowlist: [...supervisor.toolAliases],
+    },
+    metadata: {
+      ...structuredClone(payload.metadata),
+      model: PRODUCT_MODEL,
+    },
+  };
+  const emit = (type, value) => rpc.sendEvent?.(type, value);
+  const reportChild = async (update) => {
+    const governedUsage = supervisor.usageForChild(update.childRef);
+    const binding = await rpc.sendChild?.({
+      ...structuredClone(update),
+      usage: {
+        ...structuredClone(update.usage ?? {}),
+        steps: governedUsage.steps,
+        modelRequests: governedUsage.modelRequests,
+      },
+      capabilities: structuredClone(payload.capabilities),
+    });
+    supervisor.registerChild(update.childRef, binding);
+    return binding;
+  };
+  try {
+    await emit("session.started", { mode: payload.mode, backend: payload.mode === "bounded_agent" ? "pi-subagent" : "pi-workflow" });
+    const backend = payload.mode === "bounded_agent"
+      ? createAgwaSubagentBackend({
+        api: options.subagentApi ?? null,
+        cwd,
+        backend: "headless",
+        extensions: [PRODUCT_GATEWAY_EXTENSION],
+        providerProbe: async () => ({ ready: true, model: PRODUCT_MODEL }),
+      })
+      : createAgwaWorkflowBackend({
+        api: options.workflowApi ?? null,
+        cwd,
+        ...(options.workflowApi ? { pollIntervalMs: 10 } : {}),
+        providerProbe: async () => ({ ready: true, model: PRODUCT_MODEL }),
+      });
+    const result = await backend.execute({ request, emit, reportChild });
+    if (Object.hasOwn(result, "output") && !Check(payload.resultSchema, result.output)) {
+      throw workerError("agent_output_schema_mismatch", "failed");
+    }
+    const normalized = {
+      ...result,
+      usage: {
+        steps: supervisor.usage.steps,
+        modelRequests: supervisor.usage.modelRequests,
+        inputBytes: byteLength(payload.input),
+        outputBytes: byteLength(result.output),
+      },
+      ...(Array.isArray(result.children)
+        ? { children: result.children.map((child) => ({ ...child, capabilities: structuredClone(payload.capabilities) })) }
+        : {}),
+    };
+    await emit("session.completed", { steps: normalized.usage.steps, modelRequests: normalized.usage.modelRequests });
+    return normalized;
+  } finally {
+    if (previousWorkflowExtension === undefined) delete process.env.PI_WORKFLOW_SUBAGENT_EXTRA_EXTENSIONS;
+    else process.env.PI_WORKFLOW_SUBAGENT_EXTRA_EXTENSIONS = previousWorkflowExtension;
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
+    await supervisor.close();
+  }
+}
+
+async function runDirectContainerPiWorker(payload, rpc, {
   cwd = "/work/output",
   agentDir = "/tmp/looloomi-pi-agent",
 } = {}) {
