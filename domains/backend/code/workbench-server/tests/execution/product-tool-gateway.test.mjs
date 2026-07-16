@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   InMemoryExecutionPersistence,
   ProductToolGateway,
+  StdioToolGatewayServer,
   UnixToolGatewayServer,
 } from "../../src/execution/index.mjs";
 
@@ -95,6 +96,19 @@ test("Gateway rejects expired/revoked leases, model over-budget, and child escal
     }), budget.binding),
     { code: "gateway_child_capability_escalation" },
   );
+});
+
+test("stdio Gateway session is process-bound and releases invocation usage on close", async () => {
+  const { gateway, binding, message } = await fixture({ maxModelRequests: 1, maxSteps: 2 });
+  const server = new StdioToolGatewayServer({ gateway });
+  const session = await server.open(binding);
+  assert.deepEqual(await session.handle(message({ operation: "model", toolId: undefined })), { text: "model result" });
+  await session.close();
+  await assert.rejects(async () => session.handle(message()), { code: "gateway_session_closed" });
+
+  const next = await server.open(binding);
+  assert.deepEqual(await next.handle(message({ operation: "model", toolId: undefined })), { text: "model result" });
+  await next.close();
 });
 
 test("Unix socket endpoint binds one invocation and rejects the wrong nonce", {

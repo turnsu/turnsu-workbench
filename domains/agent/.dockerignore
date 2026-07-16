@@ -1,0 +1,11 @@
+**
+!code/
+!code/agent-runtime/
+!code/agent-runtime/package.json
+!code/agent-runtime/package-lock.json
+!code/agent-runtime/worker/
+!code/agent-runtime/worker/container-worker-protocol.mjs
+!code/agent-runtime/worker/container-pi-worker.mjs
+!code/agent-runtime/worker/worker.mjs
+!image/
+!image/Dockerfile

@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "npm run test:unit && npm run test:runtime-integrity",
-    "test:unit": "node --test lib/node-version-gate.test.mjs test/pi-compatibility-gate.test.mjs core/subagents/agwab-backends.test.mjs && node lib/runtime-paths.test.mjs && node kernels/pi/pi-kernel-adapter.test.mjs && node test/business-skill-smoke.mjs && node core/proposals/pi-builder-proposal-generator.test.mjs && node core/run-loop/agent-runtime-core.test.mjs && node core/gates/gate-engine.test.mjs && node core/final-output/deterministic-final-copy.test.mjs && node core/capability/capability-loop-read-model.test.mjs && node core/providers/runtime-tool-executor.test.mjs && node control-plane/model-route.test.mjs && node control-plane/smoke-test.mjs",
+    "test:unit": "node --test lib/node-version-gate.test.mjs test/pi-compatibility-gate.test.mjs core/subagents/agwab-backends.test.mjs worker/container-pi-worker.test.mjs && node lib/runtime-paths.test.mjs && node kernels/pi/pi-kernel-adapter.test.mjs && node test/business-skill-smoke.mjs && node core/proposals/pi-builder-proposal-generator.test.mjs && node core/run-loop/agent-runtime-core.test.mjs && node core/gates/gate-engine.test.mjs && node core/final-output/deterministic-final-copy.test.mjs && node core/capability/capability-loop-read-model.test.mjs && node core/providers/runtime-tool-executor.test.mjs && node control-plane/model-route.test.mjs && node control-plane/smoke-test.mjs",
     "test:business-skill": "node test/business-skill-smoke.mjs",
     "test:runtime-integrity": "node test/runtime-integrity-smoke.mjs",
     "control-plane:smoke": "node control-plane/smoke-test.mjs",
@@ -38,6 +38,6 @@
     "@earendil-works/pi-coding-agent": "0.80.7",
     "mongodb": "6.16.0",
     "typebox": "1.1.38",
-    "undici": "^6.21.3"
+    "undici": "6.27.0"
   }
 }

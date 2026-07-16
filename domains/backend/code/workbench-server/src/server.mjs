@@ -49,7 +49,7 @@ import {
   ExecutionBroker,
   MongoExecutionPersistence,
   ProductToolGateway,
-  UnixToolGatewayServer,
+  StdioToolGatewayServer,
 } from "./execution/index.mjs";
 import { createWorkflowRunner } from "./runner/index.mjs";
 import {
@@ -265,9 +265,8 @@ export function createWorkbenchComposition({
     env.WORKBENCH_AGENT_IMAGE && productToolGateway
       ? new AgentContainerSandbox({
         image: env.WORKBENCH_AGENT_IMAGE,
-        gatewayServer: new UnixToolGatewayServer({
+        gatewayServer: new StdioToolGatewayServer({
           gateway: productToolGateway,
-          ...(env.WORKBENCH_AGENT_GATEWAY_ROOT ? { tempRoot: env.WORKBENCH_AGENT_GATEWAY_ROOT } : {}),
         }),
         ...(env.WORKBENCH_AGENT_SANDBOX_ROOT ? { tempRoot: env.WORKBENCH_AGENT_SANDBOX_ROOT } : {}),
       })

@@ -1,4 +1,4 @@
-export const DIGEST_PINNED_CONTAINER_IMAGE = /^[A-Za-z0-9][A-Za-z0-9._/+:~-]*@sha256:[a-f0-9]{64}$/;
+export const DIGEST_PINNED_CONTAINER_IMAGE = /^(?:[A-Za-z0-9][A-Za-z0-9._/+:~-]*@)?sha256:[a-f0-9]{64}$/;
 const SAFE_CONTAINER_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,191}$/;
 
 export function buildContainerIsolationArguments({

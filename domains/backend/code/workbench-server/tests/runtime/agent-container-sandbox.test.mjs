@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -23,6 +23,7 @@ const VERSIONS = {
 class FakeChild extends EventEmitter {
   constructor() {
     super();
+    this.stdin = new PassThrough();
     this.stdout = new PassThrough();
     this.stderr = new PassThrough();
     this.killed = false;
@@ -60,10 +61,7 @@ test("Agent container arguments share the strict isolation policy and mount no s
     image: IMAGE,
     containerName: "looloomi-agent-proof",
     invocationId: "invocation-agent-a",
-    inputRoot: "/tmp/input",
     outputRoot: "/tmp/output",
-    gatewaySocketPath: "/tmp/gateway.sock",
-    gatewayNonce: "nonce-a",
     limits: { pids: 64, memoryBytes: 256 * 1024 * 1024, cpus: 0.5, tmpfsBytes: 1024, maxStdoutBytes: 1024, maxStderrBytes: 1024, maxArtifactFiles: 4, maxOutputBytes: 4096 },
   });
   assert.deepEqual(option(args, "--network"), "none");
@@ -74,13 +72,21 @@ test("Agent container arguments share the strict isolation policy and mount no s
   assert.deepEqual(option(args, "--pids-limit"), "64");
   assert.deepEqual(option(args, "--memory"), String(256 * 1024 * 1024));
   assert.deepEqual(option(args, "--cpus"), "0.5");
+  assert.equal(args.includes("--interactive"), true);
+  assert.deepEqual(options(args, "--env"), [
+    "HOME=/tmp",
+    "HTTP_PROXY=",
+    "HTTPS_PROXY=",
+    "NO_PROXY=",
+    "http_proxy=",
+    "https_proxy=",
+    "no_proxy=",
+  ]);
   const mounts = options(args, "--mount");
-  assert.equal(mounts.length, 3);
-  assert.match(mounts[0], /dst=\/work\/input,readonly$/);
-  assert.match(mounts[1], /dst=\/work\/output$/);
-  assert.match(mounts[2], /dst=\/run\/looloomi\/gateway.sock$/);
+  assert.equal(mounts.length, 1);
+  assert.match(mounts[0], /dst=\/work\/output$/);
   assert.equal(args.some((item) => item.includes("domains/") || item.includes("providerSecret")), false);
-  assert.deepEqual(args.slice(-4), [IMAGE, "node", "/opt/looloomi-agent/worker.mjs", "/work/input/request.json"]);
+  assert.deepEqual(args.slice(-3), [IMAGE, "node", "/opt/looloomi-agent/worker.mjs"]);
 });
 
 test("Agent sandbox passes only governed input and strips image, host, and socket details", async (t) => {
@@ -88,8 +94,14 @@ test("Agent sandbox passes only governed input and strips image, host, and socke
   t.after(() => rm(root, { recursive: true, force: true }));
   let payload;
   let environment;
+  let gatewayRequest;
   const gatewayServer = {
-    async open() { return { socketPath: "/tmp/gateway.sock", containerSocketPath: "/run/looloomi/gateway.sock", nonce: "nonce-a", async close() {} }; },
+    async open() {
+      return {
+        async handle(message) { gatewayRequest = message; return { text: "model result" }; },
+        async close() {},
+      };
+    },
   };
   const dockerControl = async (args) => {
     if (args[0] === "image") return { code: 0, stdout: `${JSON.stringify(VERSIONS)}\n`, stderr: "" };
@@ -98,20 +110,43 @@ test("Agent sandbox passes only governed input and strips image, host, and socke
   const spawnProcess = (_command, args, optionsValue) => {
     environment = optionsValue.env;
     const child = new FakeChild();
-    queueMicrotask(async () => {
-      const inputMount = options(args, "--mount").find((item) => item.includes("dst=/work/input"));
-      const inputRoot = inputMount.match(/src=(.*),dst=\/work\/input,readonly$/)[1];
-      payload = JSON.parse(await readFile(join(inputRoot, "request.json"), "utf8"));
-      child.stdout.end(JSON.stringify({
-        output: { ok: true },
-        summary: "done",
-        evidence: [],
-        usage: { steps: 1, modelRequests: 1, inputBytes: 1, outputBytes: 1 },
-        imageDigest: IMAGE,
-        hostPath: root,
-        socketPath: "/tmp/gateway.sock",
-      }));
-      child.close(0);
+    let source = "";
+    child.stdin.on("data", (chunk) => {
+      source += chunk.toString("utf8");
+      while (source.includes("\n")) {
+        const newline = source.indexOf("\n");
+        const frame = JSON.parse(source.slice(0, newline));
+        source = source.slice(newline + 1);
+        if (frame.kind === "start") {
+          payload = frame.payload;
+          child.stdout.write(`${JSON.stringify({
+            kind: "rpc_request",
+            id: "rpc-1",
+            message: {
+              operation: "model",
+              invocationId: payload.invocationId,
+              attemptId: payload.attemptId,
+              capabilityLeaseId: payload.gateway.capabilityLeaseId,
+              input: { context: "safe" },
+            },
+          })}\n`);
+        } else if (frame.kind === "rpc_response") {
+          assert.equal(frame.ok, true);
+          child.stdout.end(`${JSON.stringify({
+            kind: "result",
+            result: {
+              output: { ok: true },
+              summary: "done",
+              evidence: [],
+              usage: { steps: 1, modelRequests: 1, inputBytes: 1, outputBytes: 1 },
+              imageDigest: IMAGE,
+              hostPath: root,
+              socketPath: "/tmp/gateway.sock",
+            },
+          })}\n`);
+          child.close(0);
+        }
+      }
     });
     return child;
   };
@@ -125,13 +160,15 @@ test("Agent sandbox passes only governed input and strips image, host, and socke
   assert.deepEqual(payload.metadata, { outerNodeId: "node-agent" });
   assert.equal(JSON.stringify(payload).includes("must-not-cross"), false);
   assert.deepEqual(payload.runtimeVersions, { pi: "0.80.7", subagent: "0.4.8", workflow: "0.8.1" });
+  assert.deepEqual(payload.gateway, { transport: "stdio-jsonl-v1", capabilityLeaseId: "lease-agent-a" });
+  assert.equal(JSON.stringify(gatewayRequest).includes("must-not-cross"), false);
 });
 
 test("Agent artifact output is bounded and Docker unavailability never falls back to process", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "looloomi-agent-output-test-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const gatewayServer = {
-    async open() { return { socketPath: "/tmp/gateway.sock", containerSocketPath: "/run/looloomi/gateway.sock", nonce: "nonce-a", async close() {} }; },
+    async open() { return { async handle() { return {}; }, async close() {} }; },
   };
   const dockerControl = async (args) => {
     if (args[0] === "image") return { code: 0, stdout: `${JSON.stringify(VERSIONS)}\n`, stderr: "" };
@@ -144,11 +181,11 @@ test("Agent artifact output is bounded and Docker unavailability never falls bac
     tempRoot: root,
     spawnProcess: (_command, args) => {
       const child = new FakeChild();
-      queueMicrotask(async () => {
+      child.stdin.once("data", async () => {
         const outputMount = options(args, "--mount").find((item) => item.includes("dst=/work/output"));
         const outputRoot = outputMount.match(/src=(.*),dst=\/work\/output$/)[1];
         await writeFile(join(outputRoot, "oversized.txt"), "x".repeat(33));
-        child.stdout.end(JSON.stringify({ output: {}, summary: "done", evidence: [], usage: { steps: 1, modelRequests: 0, inputBytes: 1, outputBytes: 1 } }));
+        child.stdout.end(`${JSON.stringify({ kind: "result", result: { output: {}, summary: "done", evidence: [], usage: { steps: 1, modelRequests: 0, inputBytes: 1, outputBytes: 1 } } })}\n`);
         child.close(0);
       });
       return child;
