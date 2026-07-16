@@ -13,15 +13,30 @@ export const REMOTE_EXECUTION_MODES = Object.freeze([
 const MAX_REORDER_WINDOW = 256;
 const MAX_REMOTE_EVENTS = 10_000;
 const MAX_REMOTE_EVENT_BYTES = 1_000_000;
-const INTERNAL_RESULT_KEYS = new Set([
-  "deviceId",
-  "deviceName",
-  "remoteExecutionId",
-  "transportId",
-  "hostPath",
-  "socketPath",
-  "imageDigest",
+const REMOTE_EVENT_TYPES = new Set([
+  "worker.started",
+  "worker.progress",
+  "worker.checkpoint",
+  "worker.artifact",
+  "worker.blocked",
+  "worker.completed",
+  "worker.failed",
+  "worker.cancelled",
+  "execution.result",
 ]);
+const REMOTE_EVENT_STATUSES = new Set([
+  "running", "completed", "failed", "cancelled", "blocked", "partial", "timeout",
+  "permission_denied", "sandbox_unavailable", "remote_backend_unavailable",
+]);
+const REMOTE_RESULT_STATUSES = new Set([
+  "completed", "failed", "cancelled", "blocked", "partial", "timeout",
+  "permission_denied", "sandbox_unavailable", "remote_backend_unavailable",
+]);
+const CHECKPOINT_PHASES = new Set([
+  "started", "running", "checkpointing", "recovering", "completed", "failed", "cancelled", "blocked",
+]);
+const ARTIFACT_REFERENCE_PATTERN = /^artifact:sha256:[a-f0-9]{16,64}$/;
+const STABLE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 export function createRemoteExecutionBackend({ transport, maxResumeAttempts = 2 } = {}) {
   assertRemoteWorkerTransport(transport);
@@ -90,18 +105,18 @@ export function createRemoteExecutionBackend({ transport, maxResumeAttempts = 2 
                     remoteSequence: ordered.sequence,
                     type: ordered.type,
                     ...(ordered.status ? { status: ordered.status } : {}),
-                    payload: stripInternalDetails(ordered.payload ?? {}),
+                    payload: ordered.payload,
                   });
                   if (ordered.checkpoint !== undefined) {
                     await checkpoint({
                       phase: "remote_running",
                       remoteSequence: ordered.sequence,
-                      transportState: stripInternalDetails(ordered.checkpoint),
+                      transportState: ordered.checkpoint,
                     });
                   }
                   nextSequence += 1;
                   if (ordered.type === "execution.result") {
-                    return validateRemoteResult(ordered.result);
+                    return validateRemoteResult(ordered.result, request);
                   }
                 }
               }
@@ -124,7 +139,7 @@ export function createRemoteExecutionBackend({ transport, maxResumeAttempts = 2 
               phase: "remote_recovering",
               remoteSequence: nextSequence - 1,
               resumeAttempt: resumeAttempts,
-              transportState: stripInternalDetails(transportCheckpoint ?? {}),
+              transportState: sanitizeRemoteCheckpoint(transportCheckpoint ?? {}),
             });
             const resumed = await translateUnavailable(() => transport.resume({
               remoteExecutionId,
@@ -241,48 +256,161 @@ function validateRemoteEvent(event) {
   if (!isPlainObject(event)
     || typeof event.eventId !== "string" || event.eventId.length < 1 || event.eventId.length > 256
     || !Number.isInteger(event.sequence) || event.sequence < 1
-    || typeof event.type !== "string" || event.type.length < 1 || event.type.length > 256
-    || (event.status !== undefined && (typeof event.status !== "string" || event.status.length > 64))
+    || !REMOTE_EVENT_TYPES.has(event.type)
+    || (event.status !== undefined && !REMOTE_EVENT_STATUSES.has(event.status))
     || !isJsonValue(event.payload ?? {})
     || (event.checkpoint !== undefined && !isJsonValue(event.checkpoint))
     || (event.type === "execution.result" && !isPlainObject(event.result))
+    || (event.type !== "execution.result" && event.result !== undefined)
     || byteLength(event) > MAX_REMOTE_EVENT_BYTES) {
     throw invalidRemoteEvent("remote_event_invalid");
   }
-  return structuredClone(event);
-}
-
-function validateRemoteResult(result) {
-  if (!isPlainObject(result)
-    || (result.status !== undefined && typeof result.status !== "string")
-    || (result.output !== undefined && !isJsonValue(result.output))
-    || (result.summary !== undefined && typeof result.summary !== "string")
-    || (result.evidence !== undefined && (!Array.isArray(result.evidence) || !result.evidence.every(isPlainObject)))
-    || (result.children !== undefined && (!Array.isArray(result.children) || !result.children.every(isPlainObject)))
-    || (result.usage !== undefined && !isPlainObject(result.usage))) {
-    throw invalidRemoteEvent("remote_result_invalid");
-  }
-  const sanitized = stripInternalDetails(result);
   return {
-    ...(sanitized.status !== undefined ? { status: sanitized.status } : {}),
-    ...(Object.hasOwn(sanitized, "output") ? { output: sanitized.output } : {}),
-    ...(sanitized.summary !== undefined ? { summary: sanitized.summary } : {}),
-    evidence: sanitized.evidence ?? [],
-    usage: sanitized.usage ?? {},
-    ...(sanitized.children !== undefined ? { children: sanitized.children } : {}),
+    eventId: event.eventId,
+    sequence: event.sequence,
+    type: event.type,
+    ...(event.status !== undefined ? { status: event.status } : {}),
+    payload: sanitizeRemoteEventPayload(event.type, event.payload ?? {}),
+    ...(event.checkpoint !== undefined
+      ? { checkpoint: sanitizeRemoteCheckpoint(event.checkpoint) }
+      : {}),
+    ...(event.type === "execution.result" ? { result: structuredClone(event.result) } : {}),
   };
 }
 
-function stripInternalDetails(value) {
-  if (Array.isArray(value)) return value.map(stripInternalDetails);
-  if (!isPlainObject(value)) return value;
-  return Object.fromEntries(Object.entries(value)
-    .filter(([key]) => !INTERNAL_RESULT_KEYS.has(key))
-    .map(([key, item]) => [key, stripInternalDetails(item)]));
+function validateRemoteResult(result, request) {
+  if (!isPlainObject(result)
+    || (result.status !== undefined && !REMOTE_RESULT_STATUSES.has(result.status))
+    || (result.output !== undefined && !isJsonValue(result.output))
+    || (result.evidence !== undefined && (!Array.isArray(result.evidence) || !result.evidence.every(isPlainObject)))
+    || (result.usage !== undefined && !isPlainObject(result.usage))) {
+    throw invalidRemoteEvent("remote_result_invalid");
+  }
+  const status = result.status ?? "completed";
+  return {
+    ...(result.status !== undefined ? { status } : {}),
+    ...(Object.hasOwn(result, "output")
+      ? { output: projectResultBySchema(result.output, request.resultSchema) }
+      : {}),
+    summary: resultSummary(status),
+    evidence: sanitizeRemoteEvidence(result.evidence ?? [], request.evidenceRequirements ?? []),
+    usage: sanitizeRemoteUsage(result.usage ?? {}),
+  };
+}
+
+function sanitizeRemoteEventPayload(type, payload) {
+  if (!isPlainObject(payload)) throw invalidRemoteEvent("remote_event_payload_invalid");
+  switch (type) {
+    case "worker.progress":
+      return compactObject({
+        percent: boundedInteger(payload.percent, 0, 100),
+        currentStep: boundedInteger(payload.currentStep, 0, 10_000),
+        totalSteps: boundedInteger(payload.totalSteps, 0, 10_000),
+      });
+    case "worker.checkpoint":
+      return sanitizeRemoteCheckpoint(payload);
+    case "worker.artifact":
+      return isProductArtifactReference(payload.ref) ? { ref: payload.ref } : {};
+    default:
+      return {};
+  }
+}
+
+function sanitizeRemoteCheckpoint(value) {
+  if (!isPlainObject(value)) throw invalidRemoteEvent("remote_checkpoint_invalid");
+  return compactObject({
+    phase: CHECKPOINT_PHASES.has(value.phase) ? value.phase : undefined,
+    cursor: boundedInteger(value.cursor, 0, Number.MAX_SAFE_INTEGER),
+    percent: boundedInteger(value.percent, 0, 100),
+    currentStep: boundedInteger(value.currentStep, 0, 10_000),
+    totalSteps: boundedInteger(value.totalSteps, 0, 10_000),
+  });
+}
+
+function sanitizeRemoteEvidence(evidence, requirements) {
+  const byId = new Map(requirements.map((item) => [item.requirementId, item]));
+  const sanitized = [];
+  for (const item of evidence.slice(0, 256)) {
+    const requirement = typeof item.requirementId === "string" ? byId.get(item.requirementId) : undefined;
+    if (!requirement || item.kind !== requirement.kind) continue;
+    const entry = { requirementId: requirement.requirementId, kind: requirement.kind };
+    if (requirement.kind === "artifact") {
+      if (!isProductArtifactReference(item.ref)) continue;
+      entry.ref = item.ref;
+    }
+    sanitized.push(entry);
+  }
+  return sanitized;
+}
+
+function sanitizeRemoteUsage(usage) {
+  return compactObject({
+    steps: boundedInteger(usage.steps, 0, Number.MAX_SAFE_INTEGER),
+    modelRequests: boundedInteger(usage.modelRequests, 0, Number.MAX_SAFE_INTEGER),
+    inputBytes: boundedInteger(usage.inputBytes, 0, Number.MAX_SAFE_INTEGER),
+    outputBytes: boundedInteger(usage.outputBytes, 0, Number.MAX_SAFE_INTEGER),
+  });
+}
+
+function projectResultBySchema(value, schema) {
+  if (!isPlainObject(schema)) throw invalidRemoteEvent("remote_result_schema_invalid");
+  if (Array.isArray(schema.enum)) {
+    const match = schema.enum.find((item) => JSON.stringify(item) === JSON.stringify(value));
+    return match === undefined ? null : structuredClone(match);
+  }
+  switch (schema.type) {
+    case "object": {
+      if (!isPlainObject(value)) return {};
+      const properties = isPlainObject(schema.properties) ? schema.properties : {};
+      return Object.fromEntries(Object.entries(properties)
+        .filter(([key]) => Object.hasOwn(value, key))
+        .map(([key, childSchema]) => [key, projectResultBySchema(value[key], childSchema)]));
+    }
+    case "array":
+      if (!Array.isArray(value) || !isPlainObject(schema.items)) return [];
+      return value.slice(0, 10_000).map((item) => projectResultBySchema(item, schema.items));
+    case "string":
+      return typeof value === "string" ? value : "";
+    case "integer":
+      return Number.isSafeInteger(value) ? value : 0;
+    case "number":
+      return typeof value === "number" && Number.isFinite(value) ? value : 0;
+    case "boolean":
+      return typeof value === "boolean" ? value : false;
+    case "null":
+      return null;
+    default:
+      throw invalidRemoteEvent("remote_result_schema_unsupported");
+  }
+}
+
+function boundedInteger(value, minimum, maximum) {
+  return Number.isSafeInteger(value) && value >= minimum && value <= maximum ? value : undefined;
+}
+
+function compactObject(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
+}
+
+function isProductArtifactReference(value) {
+  return typeof value === "string" && ARTIFACT_REFERENCE_PATTERN.test(value);
+}
+
+function resultSummary(status) {
+  return {
+    completed: "Remote execution completed.",
+    partial: "Remote execution completed with a partial result.",
+    cancelled: "Remote execution was cancelled.",
+    blocked: "Remote execution was blocked.",
+    timeout: "Remote execution timed out.",
+    permission_denied: "Remote execution was denied.",
+    sandbox_unavailable: "Remote execution sandbox was unavailable.",
+    remote_backend_unavailable: "Remote execution backend was unavailable.",
+  }[status] ?? "Remote execution failed.";
 }
 
 function validateRemoteExecutionId(value) {
-  if (typeof value !== "string" || value.length < 1 || value.length > 256) {
+  if (typeof value !== "string" || !STABLE_ID_PATTERN.test(value)) {
     throw invalidRemoteEvent("remote_execution_id_invalid");
   }
   return value;

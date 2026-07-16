@@ -129,6 +129,157 @@ test("remote events are reordered and deduplicated before entering the product t
   assert.equal(transport.calls.dispose.length, 1);
 });
 
+test("remote product boundary projects only type-specific fields and schema-declared output", async () => {
+  const secrets = [
+    "Bearer remote-secret",
+    "provider-response-secret",
+    "/Users/remote/private.txt",
+    "/var/run/remote-secret.sock",
+    "tool-args-secret",
+    "image-secret",
+    "ENV_SECRET",
+    "stack-secret",
+  ];
+  const transport = new LoopbackRemoteWorkerTransport({
+    scenarioFactory: (input) => ({
+      streams: [[
+        {
+          eventId: "attack-1",
+          sequence: 1,
+          type: "worker.started",
+          payload: {
+            authorization: secrets[0],
+            providerPayload: { content: secrets[1] },
+            host_path: secrets[2],
+          },
+          checkpoint: {
+            phase: "started",
+            socket: secrets[3],
+            environment: { TOKEN: secrets[6] },
+          },
+          internalStack: secrets[7],
+        },
+        {
+          eventId: "attack-2",
+          sequence: 2,
+          type: "worker.progress",
+          status: "running",
+          payload: {
+            percent: 40,
+            currentStep: 2,
+            totalSteps: 5,
+            bearer: secrets[0],
+            response: secrets[1],
+            cwd: secrets[2],
+            unixSocket: secrets[3],
+            toolInput: { arguments: secrets[4] },
+            containerImage: secrets[5],
+          },
+        },
+        {
+          eventId: "attack-3",
+          sequence: 3,
+          type: "worker.artifact",
+          payload: {
+            ref: `artifact:${secrets[0]}`,
+            image: secrets[5],
+          },
+        },
+        {
+          eventId: "attack-4",
+          sequence: 4,
+          type: "execution.result",
+          payload: { rawProviderEvent: secrets[1] },
+          result: {
+            output: {
+              echo: input.input.text,
+              authorizationHeader: secrets[0],
+              provider_reply: { raw: secrets[1] },
+              filesystemLocation: secrets[2],
+              rpcEndpoint: secrets[3],
+              toolInvocation: secrets[4],
+              runtimeImage: secrets[5],
+              environmentDump: secrets[6],
+              errorStack: secrets[7],
+            },
+            summary: secrets[0],
+            evidence: [{
+              requirementId: "artifact-proof",
+              kind: "artifact",
+              ref: `artifact:${secrets[4]}`,
+              providerPayload: secrets[1],
+            }],
+            usage: {
+              steps: 1,
+              modelRequests: 0,
+              inputBytes: 10,
+              outputBytes: 10,
+              providerTokens: secrets[1],
+            },
+            children: [{ output: secrets[1] }],
+            diagnostics: { stack: secrets[7] },
+          },
+        },
+      ]],
+    }),
+  });
+  const { broker, persistence } = createBroker(transport);
+  const input = request({
+    evidenceRequirements: [{
+      requirementId: "artifact-proof",
+      kind: "artifact",
+      required: false,
+      description: "Optional content-addressed artifact.",
+    }],
+  });
+  const result = await broker.execute(input);
+  const invocation = await persistence.getInvocation(input.invocationId);
+  const stored = JSON.stringify({
+    result,
+    invocation,
+    events: persistence.events.get(input.invocationId),
+    checkpoints: persistence.checkpoints.get(input.invocationId),
+  });
+
+  assert.equal(result.status, "completed");
+  assert.deepEqual(result.output, { echo: input.input.text });
+  assert.equal(result.summary, "Remote execution completed.");
+  assert.deepEqual(result.evidence, []);
+  const remoteEvents = persistence.events.get(input.invocationId)
+    .filter((event) => event.type === "execution.remote_event");
+  assert.deepEqual(remoteEvents.map((event) => event.payload.payload), [
+    {},
+    { percent: 40, currentStep: 2, totalSteps: 5 },
+    {},
+    {},
+  ]);
+  assert.ok(persistence.checkpoints.get(input.invocationId).some((checkpoint) => (
+    checkpoint.state.transportState?.phase === "started"
+      && Object.keys(checkpoint.state.transportState).length === 1
+  )));
+  for (const secret of secrets) assert.equal(stored.includes(secret), false, secret);
+});
+
+test("unknown remote event types fail closed before product persistence", async () => {
+  const transport = new LoopbackRemoteWorkerTransport({
+    scenarioFactory: () => ({ streams: [[{
+      eventId: "unknown-1",
+      sequence: 1,
+      type: "provider.raw_response",
+      payload: { content: "must-not-enter-product-state" },
+    }]] }),
+  });
+  const { broker, persistence } = createBroker(transport);
+  const input = request();
+  const result = await broker.execute(input);
+
+  assert.equal(result.status, "failed");
+  assert.equal(JSON.stringify(await persistence.getInvocation(input.invocationId))
+    .includes("must-not-enter-product-state"), false);
+  assert.equal(JSON.stringify(persistence.events.get(input.invocationId))
+    .includes("must-not-enter-product-state"), false);
+});
+
 test("a disconnected stream checkpoints and resumes after the last committed sequence", async () => {
   const transport = new LoopbackRemoteWorkerTransport({
     scenarioFactory: (input) => ({
