@@ -8,7 +8,7 @@ import {
 
 const BASE_TIME = "2026-07-16T10:00:00.000Z";
 
-function fixture({ objectPermissionResolver, initialTime = BASE_TIME } = {}) {
+function fixture({ objectPermissionResolver, canonicalResolver, initialTime = BASE_TIME } = {}) {
   let time = initialTime;
   let sequence = 0;
   const persistence = new InMemoryMemoryPersistence();
@@ -17,6 +17,7 @@ function fixture({ objectPermissionResolver, initialTime = BASE_TIME } = {}) {
     clock: () => time,
     idFactory: (kind) => `${kind}-${++sequence}`,
     objectPermissionResolver,
+    canonicalResolver,
   });
   return {
     persistence,
@@ -83,23 +84,72 @@ test("first-version retrieval never invokes the reserved embedding adapter", asy
   assert.equal(calls, 0);
 });
 
-test("only verified low-sensitivity Canonical Object facts auto-promote", async () => {
+test("Agent and Worker cannot forge canonical verification to auto-promote", async () => {
   const { service, persistence } = fixture();
-  const promoted = await service.submitCandidate({
+  for (const actorKind of ["agent", "worker"]) {
+    const candidate = await service.submitCandidate({
+      input: candidateInput({
+        scope: { kind: "workspace" },
+        source: { kind: "canonical_object", sourceId: "workflow-a", versionId: "revision-7", verified: true },
+        evidence: evidence("canonical_object"),
+        confidence: 0.98,
+      }),
+      actor: { kind: actorKind, id: `${actorKind}-main` },
+      context: context("user-a", "member"),
+    });
+
+    assert.equal(candidate.status, "pending");
+    assert.equal(candidate.source.verified, false);
+  }
+  assert.equal(persistence.memories.size, 0);
+});
+
+test("only server-resolved low-sensitivity Canonical Object facts auto-promote", async () => {
+  const calls = [];
+  const { service, persistence } = fixture({
+    canonicalResolver: {
+      async resolve(reference) {
+        calls.push(reference);
+        return {
+          source: { kind: "canonical_object", sourceId: "workflow-a", versionId: "revision-7", verified: true },
+          evidence: [
+            { kind: "canonical_object", ref: "product:workflow/workflow-a/revisions/revision-7", hash: "sha256:aaaaaaaaaaaaaaaa" },
+            { kind: "validation", ref: "product:workflow/workflow-a/revisions/revision-7/compile", hash: "sha256:bbbbbbbbbbbbbbbb" },
+          ],
+          statement: "Ship a verified workflow.",
+          subject: { kind: "workflow", subjectId: "workflow-a" },
+          verification: { objectKind: "workflow", objectId: "workflow-a", versionId: "revision-7", factPath: "/definition/goal" },
+        };
+      },
+    },
+  });
+  const promoted = await service.ingestCanonicalFact({
     input: candidateInput({
       scope: { kind: "workspace" },
-      source: { kind: "canonical_object", sourceId: "workflow-a", versionId: "revision-7", verified: true },
-      evidence: evidence("canonical_object"),
       confidence: 0.98,
     }),
-    actor: { kind: "agent", id: "agent-main" },
-    context: context("user-a", "member"),
+    canonicalRef: {
+      objectKind: "workflow",
+      objectId: "workflow-a",
+      versionId: "revision-7",
+      factPath: "/definition/goal",
+      expectedEvidenceHash: "sha256:aaaaaaaaaaaaaaaa",
+    },
+    context: context("user-a", "owner"),
   });
 
+  assert.deepEqual(calls, [{
+    workspaceId: "workspace-a",
+    objectKind: "workflow",
+    objectId: "workflow-a",
+    versionId: "revision-7",
+    factPath: "/definition/goal",
+    expectedEvidenceHash: "sha256:aaaaaaaaaaaaaaaa",
+  }]);
   assert.equal(promoted.status, "promoted");
   assert.equal(persistence.memories.size, 1);
   const [result] = await service.query({
-    query: { scopes: ["workspace"], text: "concise", tags: [], limit: 10 },
+    query: { scopes: ["workspace"], text: "verified", tags: [], limit: 10 },
     context: context("user-b", "viewer"),
   });
   assert.equal(result.memory.candidateId, promoted.candidateId);

@@ -22,6 +22,7 @@ export class ProductMemoryService {
     clock = () => new Date().toISOString(),
     idFactory,
     objectPermissionResolver = async () => false,
+    canonicalResolver = null,
     embeddingAdapter = null,
     policyVersion = DEFAULT_POLICY_VERSION,
   } = {}) {
@@ -30,6 +31,7 @@ export class ProductMemoryService {
     this.clock = clock;
     this.idFactory = idFactory;
     this.objectPermissionResolver = objectPermissionResolver;
+    this.canonicalResolver = canonicalResolver;
     this.embeddingAdapter = embeddingAdapter;
     this.policyVersion = policyVersion;
   }
@@ -39,6 +41,56 @@ export class ProductMemoryService {
     if (!actor || !["agent", "worker", "user", "system"].includes(actor.kind)) throw new ProductMemoryError("memory_actor_invalid");
     validateScopeOwnership(input.scope, context, actor);
     if (!await this.#canAccess(input.scope, context, "submit")) throw new ProductMemoryError("memory_access_forbidden");
+    return this.#submitCandidateValue({
+      input,
+      actor,
+      context,
+      source: { ...structuredClone(input.source), verified: false },
+      evidence: structuredClone(input.evidence ?? []),
+      metadata: { verification: "caller_untrusted" },
+    });
+  }
+
+  async ingestCanonicalFact({ input, canonicalRef, context }) {
+    requireContext(context);
+    if (!this.canonicalResolver || typeof this.canonicalResolver.resolve !== "function") {
+      throw new ProductMemoryError("canonical_memory_resolver_unavailable");
+    }
+    const actor = { kind: "system", id: "product-canonical-memory" };
+    validateScopeOwnership(input.scope, context, actor);
+    if (!await this.#canAccess(input.scope, context, "submit")) throw new ProductMemoryError("memory_access_forbidden");
+    const verified = await this.canonicalResolver.resolve({
+      workspaceId: context.workspaceId,
+      objectKind: canonicalRef?.objectKind,
+      objectId: canonicalRef?.objectId,
+      versionId: canonicalRef?.versionId,
+      factPath: canonicalRef?.factPath,
+      ...(canonicalRef?.expectedEvidenceHash ? { expectedEvidenceHash: canonicalRef.expectedEvidenceHash } : {}),
+    });
+    const candidate = await this.#submitCandidateValue({
+      input: {
+        ...input,
+        subject: verified.subject,
+        statement: verified.statement,
+      },
+      actor,
+      context,
+      source: verified.source,
+      evidence: verified.evidence,
+      metadata: { verification: "server_resolved", ...verified.verification },
+    });
+    if (candidate.sensitivity !== "low") return candidate;
+    return (await this.#promote(candidate, {
+      userId: "product-memory-policy",
+      workspaceId: context.workspaceId,
+      role: "owner",
+    }, {
+      automatic: true,
+      reason: "Server-resolved low-sensitivity Canonical Object fact with verified evidence.",
+    })).candidate;
+  }
+
+  async #submitCandidateValue({ input, actor, context, source, evidence, metadata }) {
     const now = this.clock();
     const candidate = {
       schemaVersion: SCHEMA_VERSION,
@@ -48,8 +100,8 @@ export class ProductMemoryService {
       subject: structuredClone(input.subject),
       statement: String(input.statement || "").trim(),
       tags: uniqueStrings(input.tags),
-      source: structuredClone(input.source),
-      evidence: structuredClone(input.evidence ?? []),
+      source: structuredClone(source),
+      evidence: structuredClone(evidence),
       confidence: Number(input.confidence),
       sensitivity: input.sensitivity,
       expiresAt: input.expiresAt ?? null,
@@ -61,14 +113,8 @@ export class ProductMemoryService {
       decidedAt: null,
     };
     if (!Check(MemoryCandidateSchema, candidate)) throw new ProductMemoryError("memory_candidate_invalid", "Memory candidate is invalid.");
-    const submittedEvent = this.#eventValue("candidate.submitted", candidate, null, actor.id, {}, now);
+    const submittedEvent = this.#eventValue("candidate.submitted", candidate, null, actor.id, metadata, now);
     await this.persistence.submitCandidate(candidate, submittedEvent);
-    if (qualifiesForAutomaticPromotion(candidate)) {
-      return (await this.#promote(candidate, { userId: "product-memory-policy", workspaceId: context.workspaceId, role: "owner" }, {
-        automatic: true,
-        reason: "Verified low-sensitivity Canonical Object fact with complete evidence.",
-      })).candidate;
-    }
     return candidate;
   }
 
@@ -259,15 +305,9 @@ export class ProductMemoryService {
   }
 }
 
-function qualifiesForAutomaticPromotion(candidate) {
-  return candidate.source.kind === "canonical_object" && candidate.source.verified === true
-    && candidate.source.versionId !== null && candidate.sensitivity === "low"
-    && candidate.evidence.length > 0 && candidate.evidence.every((item) => item.kind === "canonical_object" || item.kind === "validation");
-}
-
 function validateScopeOwnership(scope, context, actor) {
   if (!scope || typeof scope !== "object") throw new ProductMemoryError("memory_scope_invalid");
-  if (scope.kind === "personal" && scope.ownerUserId !== context.userId && actor.kind !== "system") {
+  if (scope.kind === "personal" && scope.ownerUserId !== context.userId) {
     throw new ProductMemoryError("memory_access_forbidden");
   }
 }

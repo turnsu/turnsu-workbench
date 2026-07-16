@@ -43,6 +43,22 @@ export const canonicalJson = (value) => canonicalize(value, new WeakSet());
 export const canonicalRequestHash = (value) =>
   `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
 
+export const canonicalSkillDraftContentHash = (draft) => canonicalRequestHash({
+  skillDraftId: draft.skillDraftId,
+  skillId: draft.skillId,
+  baseVersionId: draft.baseVersionId,
+  revision: draft.revision,
+  name: draft.name,
+  description: draft.description,
+  category: draft.category,
+  inputSchema: draft.inputSchema,
+  outputSchema: draft.outputSchema,
+  risk: draft.risk,
+  dependencies: draft.dependencies,
+  connectionRequirements: draft.connectionRequirements,
+  files: draft.files,
+});
+
 export const cloneValue = (value) =>
   value === undefined ? undefined : structuredClone(value);
 

@@ -38,7 +38,11 @@ import {
 } from "./application/workbench-application.mjs";
 import { bootstrapWorkbenchCatalog } from "./application/catalog-bootstrap.mjs";
 import { createWorkbenchHttpHandler } from "./http/workbench-http-handler.mjs";
-import { MongoMemoryPersistence, ProductMemoryService } from "./memory/index.mjs";
+import {
+  CanonicalMemoryResolver,
+  MongoMemoryPersistence,
+  ProductMemoryService,
+} from "./memory/index.mjs";
 import {
   createDeterministicSkillBackend,
   createRemoteExecutionBackend,
@@ -332,6 +336,7 @@ export function createWorkbenchComposition({
       context,
       action,
     }),
+    canonicalResolver: new CanonicalMemoryResolver({ store }),
   });
   const application = createWorkbenchApplication({
     store,

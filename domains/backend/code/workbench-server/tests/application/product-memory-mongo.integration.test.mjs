@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 
-import { MongoMemoryPersistence, ProductMemoryService } from "../../src/memory/index.mjs";
+import {
+  CanonicalMemoryResolver,
+  MongoMemoryPersistence,
+  ProductMemoryService,
+} from "../../src/memory/index.mjs";
 import { ProductMongoStore } from "../../src/store/index.mjs";
 
 const enabled = process.env.WORKBENCH_MONGO_INTEGRATION === "1";
@@ -23,24 +27,60 @@ test("Mongo Product Memory survives restart and physically deletes content", { s
   const makeService = (store) => new ProductMemoryService({
     persistence: new MongoMemoryPersistence({ store }),
     idFactory: (kind) => `${kind}-${randomUUID()}`,
+    canonicalResolver: new CanonicalMemoryResolver({ store }),
   });
   const context = { userId: "user-owner", workspaceId: "workspace-memory", role: "owner" };
 
   let store = makeStore();
   await store.dropTestDatabase();
-  const submitted = await makeService(store).submitCandidate({
+  await store.connect();
+  await store.repositories.workflows.collection.insertOne({
+    schemaVersion: "workbench-v1",
+    workflowId: "workflow-memory",
+    workspaceId: context.workspaceId,
+    ownerId: context.userId,
+    currentRevisionId: "revision-1",
+    revisionNumber: 1,
+    writeVersion: 1,
+    status: "ready",
+    createdAt: "2026-07-16T10:00:00.000Z",
+    updatedAt: "2026-07-16T10:00:00.000Z",
+  });
+  await store.repositories.workflowRevisions.insert({
+    schemaVersion: "workbench-v1",
+    workflowId: "workflow-memory",
+    revisionId: "revision-1",
+    revisionNumber: 1,
+    definition: { goal: "Canonical memory persists across service restart." },
+    graph: { nodes: [], edges: [] },
+  });
+  await store.repositories.compileResults.insert({
+    compileResultId: "compile-memory",
+    workflowRevisionId: "revision-1",
+    status: "ready",
+    diagnostics: [],
+    executionPlan: {
+      workflowId: "workflow-memory",
+      workflowRevisionId: "revision-1",
+    },
+    compiledAt: "2026-07-16T10:00:00.000Z",
+  });
+  const submitted = await makeService(store).ingestCanonicalFact({
     input: {
       scope: { kind: "workspace" },
       subject: { kind: "workflow", subjectId: "workflow-memory" },
-      statement: "Canonical memory persists across service restart.",
+      statement: "Caller text is ignored for automatic promotion.",
       tags: ["restart"],
-      source: { kind: "canonical_object", sourceId: "workflow-memory", versionId: "revision-1", verified: true },
-      evidence: [{ kind: "validation", ref: "validation:memory", hash: "sha256:0123456789abcdef" }],
       confidence: 0.95,
       sensitivity: "low",
       expiresAt: null,
     },
-    actor: { kind: "agent", id: "agent-main" },
+    canonicalRef: {
+      objectKind: "workflow",
+      objectId: "workflow-memory",
+      versionId: "revision-1",
+      factPath: "/definition/goal",
+    },
     context,
   });
   assert.equal(submitted.status, "promoted");

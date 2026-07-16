@@ -52,6 +52,7 @@ import {
 } from "./repositories.mjs";
 import {
   canonicalRequestHash,
+  canonicalSkillDraftContentHash,
   cloneValue,
   formatSkillDraftEtag,
   formatWorkflowEtag,
@@ -172,22 +173,6 @@ const loopSkillUpdateVersion = (version) => ({
   description: version.description,
   risk: cloneValue(version.risk),
   connectionRequirements: cloneValue(version.connectionRequirements ?? []),
-});
-
-const skillDraftContentHash = (draft) => canonicalRequestHash({
-  skillDraftId: draft.skillDraftId,
-  skillId: draft.skillId,
-  baseVersionId: draft.baseVersionId,
-  revision: draft.revision,
-  name: draft.name,
-  description: draft.description,
-  category: draft.category,
-  inputSchema: draft.inputSchema,
-  outputSchema: draft.outputSchema,
-  risk: draft.risk,
-  dependencies: draft.dependencies,
-  connectionRequirements: draft.connectionRequirements,
-  files: draft.files,
 });
 
 const skillReferenceKey = (reference) => `${reference.skillId}\u0000${reference.version}`;
@@ -1023,7 +1008,7 @@ export class ProductMongoStore {
       objectId: packageObject.objectId,
       objectHash: packageObject.contentHash,
       packageHash: upload.inspection.contentHash,
-      contentHash: skillDraftContentHash(draft),
+      contentHash: canonicalSkillDraftContentHash(draft),
       inspection: cloneValue(upload.inspection),
     };
   }
@@ -1497,7 +1482,7 @@ export class ProductMongoStore {
         if (!packageObject || packageObject.contentHash !== packageFile.contentHash) {
           throw new ProductStoreError("skill_package_object_missing", "The promoted Skill package is unavailable.", { skillId });
         }
-        const contentHash = skillDraftContentHash(draft);
+        const contentHash = canonicalSkillDraftContentHash(draft);
         const validation = await this.repositories.skillValidations.getExactPassed({
           workspaceId,
           skillId,
