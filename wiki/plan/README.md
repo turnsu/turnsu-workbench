@@ -1,5 +1,8 @@
 # Plan Index
 
+- [2026-07-17-backend-agent-local-production-hardening-implementation-plan.md](2026-07-17-backend-agent-local-production-hardening-implementation-plan.md)
+  — approved single-machine Backend / Agent Slice 0–4 production hardening execution plan
+
 Current implementation planning should start from:
 
 - [../../PRODUCT.md](../../PRODUCT.md)
