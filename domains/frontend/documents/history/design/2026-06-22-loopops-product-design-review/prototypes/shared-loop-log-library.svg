@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1024" viewBox="0 0 1440 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Shared Loop Log Library prototype</title>
+  <desc id="desc">A library-focused prototype for saved loops, run logs, shared loop pages, clone and replay actions.</desc>
+  <defs>
+    <style>
+      .bg{fill:#f6f6f8}.surface{fill:#fff}.soft{fill:#f1f3f6}.line{stroke:#d7dce4;stroke-width:1}.text{fill:#1d1d1f;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif}.muted{fill:#6e7480}.tiny{font-size:12px}.body{font-size:14px}.h1{font-size:28px;font-weight:700}.h2{font-size:18px;font-weight:700}.h3{font-size:14px;font-weight:700}.blue{fill:#0a84ff}.green{fill:#34c759}.amber{fill:#b7791f}.purple{fill:#6e5de7}.shadow{filter:drop-shadow(0 12px 24px rgba(20,28,44,.08))}
+    </style>
+  </defs>
+  <rect class="bg" width="1440" height="1024"/>
+  <rect x="32" y="30" width="256" height="964" rx="24" class="surface shadow"/>
+  <text x="62" y="78" class="text h2">Library</text>
+  <text x="62" y="102" class="text tiny muted">Saved loops and shared logs</text>
+  <rect x="62" y="142" width="196" height="44" rx="14" fill="#e8f1ff" stroke="#8ab8ff"/><text x="88" y="170" class="text h3">My Loops</text>
+  <rect x="62" y="198" width="196" height="44" rx="14" class="soft"/><text x="88" y="226" class="text h3">Run Logs</text>
+  <rect x="62" y="254" width="196" height="44" rx="14" class="soft"/><text x="88" y="282" class="text h3">Shared</text>
+  <rect x="62" y="310" width="196" height="44" rx="14" class="soft"/><text x="88" y="338" class="text h3">Prompts</text>
+  <line x1="62" y1="396" x2="258" y2="396" class="line"/>
+  <text x="62" y="436" class="text h3">Filters</text>
+  <rect x="62" y="462" width="82" height="32" rx="16" class="blue"/><text x="87" y="483" class="text tiny" fill="#fff">Crypto</text>
+  <rect x="154" y="462" width="86" height="32" rx="16" class="soft"/><text x="178" y="483" class="text tiny muted">Office</text>
+  <rect x="62" y="506" width="96" height="32" rx="16" class="soft"/><text x="84" y="527" class="text tiny muted">Markets</text>
+  <rect x="62" y="568" width="196" height="56" rx="14" fill="#eef8f0" stroke="#b9dfc1"/>
+  <text x="82" y="594" class="text h3">Runner healthy</text>
+  <text x="82" y="612" class="text tiny muted">3 scheduled loops</text>
+
+  <rect x="316" y="30" width="664" height="964" rx="24" class="surface shadow"/>
+  <text x="350" y="78" class="text h1">My Loops</text>
+  <text x="350" y="106" class="text body muted">Reusable workflows built from logs, skills and review gates.</text>
+  <rect x="350" y="144" width="596" height="92" rx="18" fill="#e8f1ff" stroke="#8ab8ff"/>
+  <text x="378" y="176" class="text h2">BTC Alpha Monitor</text>
+  <text x="378" y="202" class="text body muted">CMC returned result + WeChat context + evidence gate</text>
+  <text x="792" y="176" class="text tiny blue">scheduled</text>
+  <text x="792" y="202" class="text tiny muted">last run 12m ago</text>
+  <rect x="350" y="254" width="596" height="92" rx="18" class="soft"/>
+  <text x="378" y="286" class="text h2">Meeting Recap Writer</text>
+  <text x="378" y="312" class="text body muted">Cloud ASR + minutes + Feishu preview</text>
+  <text x="792" y="286" class="text tiny green">ready</text>
+  <text x="792" y="312" class="text tiny muted">manual run</text>
+  <rect x="350" y="364" width="596" height="92" rx="18" class="soft"/>
+  <text x="378" y="396" class="text h2">Earnings Quality Review</text>
+  <text x="378" y="422" class="text body muted">Markets Research + counter evidence + draft</text>
+  <text x="792" y="396" class="text tiny muted">draft</text>
+  <text x="792" y="422" class="text tiny muted">needs source</text>
+
+  <text x="350" y="528" class="text h2">Recent Run Logs</text>
+  <rect x="350" y="558" width="596" height="76" rx="16" class="soft"/>
+  <circle cx="382" cy="596" r="9" class="amber"/><text x="408" y="590" class="text h3">ETH regime loop</text><text x="408" y="612" class="text tiny muted">Review needed · prices blocked · shareable summary ready</text>
+  <rect x="350" y="646" width="596" height="76" rx="16" class="soft"/>
+  <circle cx="382" cy="684" r="9" class="green"/><text x="408" y="678" class="text h3">Office document draft</text><text x="408" y="700" class="text tiny muted">Completed · Feishu preview waiting confirmation</text>
+  <rect x="350" y="734" width="596" height="76" rx="16" class="soft"/>
+  <circle cx="382" cy="772" r="9" class="blue"/><text x="408" y="766" class="text h3">BTC thesis review</text><text x="408" y="788" class="text tiny muted">Cloned from shared loop · output accepted</text>
+
+  <rect x="1008" y="30" width="400" height="964" rx="24" class="surface shadow"/>
+  <text x="1040" y="78" class="text h2">Shared Loop Page</text>
+  <text x="1040" y="102" class="text tiny muted">Public-safe run log format</text>
+  <rect x="1040" y="138" width="336" height="172" rx="20" class="soft"/>
+  <text x="1068" y="172" class="text h2">Crypto Market Report Loop</text>
+  <text x="1068" y="202" class="text body muted">A reusable loop for regime scanning, candidate funnel and review-only trade planning.</text>
+  <rect x="1068" y="250" width="84" height="30" rx="15" class="blue"/><text x="1091" y="270" class="text tiny" fill="#fff">Clone</text>
+  <rect x="1164" y="250" width="86" height="30" rx="15" fill="#fff"/><text x="1188" y="270" class="text tiny muted">Replay</text>
+  <rect x="1262" y="250" width="86" height="30" rx="15" fill="#fff"/><text x="1284" y="270" class="text tiny muted">Share</text>
+
+  <text x="1040" y="366" class="text h3">What the log shows</text>
+  <rect x="1040" y="390" width="336" height="54" rx="14" class="soft"/><text x="1062" y="423" class="text body muted">Inputs used, redacted and bounded</text>
+  <rect x="1040" y="456" width="336" height="54" rx="14" class="soft"/><text x="1062" y="489" class="text body muted">Step timeline, not raw runtime logs</text>
+  <rect x="1040" y="522" width="336" height="54" rx="14" class="soft"/><text x="1062" y="555" class="text body muted">Final answer and evidence gaps</text>
+  <rect x="1040" y="588" width="336" height="54" rx="14" class="soft"/><text x="1062" y="621" class="text body muted">Review decision and follow-up</text>
+
+  <text x="1040" y="708" class="text h3">Safety</text>
+  <rect x="1040" y="732" width="336" height="78" rx="16" fill="#fff8e8" stroke="#ead49a"/>
+  <text x="1064" y="762" class="text h3">Public-safe by default</text>
+  <text x="1064" y="786" class="text body muted">No secrets, provider IDs, raw payloads or artifact paths.</text>
+  <rect x="1040" y="846" width="158" height="44" rx="14" class="blue"/><text x="1083" y="874" class="text h3" fill="#fff">Import</text>
+  <rect x="1218" y="846" width="158" height="44" rx="14" class="soft"/><text x="1260" y="874" class="text h3">Preview</text>
+</svg>

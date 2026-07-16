@@ -1,0 +1,151 @@
+[
+  {
+    "blockedActions" : [
+
+    ],
+    "cloneReplayMetadata" : {
+      "canClone" : true,
+      "canReplay" : true,
+      "sourceRunID" : "visual-run-result-state"
+    },
+    "completedAt" : "2026-06-27T07:42:00.000Z",
+    "evidenceGaps" : [
+      {
+        "detail" : "Confirm source timestamp",
+        "id" : "evidence-gap-326BED0F-BF42-4824-81EE-69A98DC7F138",
+        "severity" : "warning",
+        "title" : "Evidence gap"
+      }
+    ],
+    "finalAnswerPointer" : {
+      "excerpt" : "Review packet final answer is ready for manual review.",
+      "id" : "final-answer-visual-run-result-state",
+      "title" : "Final answer"
+    },
+    "followUpPrompts" : [
+      "Attach latest market note"
+    ],
+    "id" : "run-ledger-visual-run-result-state",
+    "inputsUsed" : [
+      {
+        "id" : "crypto-market-report-loop-prompt",
+        "kind" : "prompt",
+        "label" : "Prompt",
+        "required" : true,
+        "valueHint" : "运行一轮 Crypto Market Report Loop：用 CMC Skill Hub 做大盘 regime、perp scanner、on-chain scanner 的并行只读扫描，逐项检查 status、confidence、missing_or_stale_inputs、error 和数据时间。输出中文候选漏斗、市场 stance、缺失输入、下一轮复核条件和人工 review 清单；不调用 Trading Zac，不触发 dry-run 或 live 交易，不生成下单指令。"
+      },
+      {
+        "id" : "crypto-market-report-loop-input-1",
+        "kind" : "loopContext",
+        "label" : "Current workspace context",
+        "required" : false
+      },
+      {
+        "id" : "crypto-market-report-loop-input-2",
+        "kind" : "file",
+        "label" : "User attachments when provided",
+        "required" : false
+      }
+    ],
+    "loopContractSnapshot" : {
+      "createdAt" : "2026-06-27T07:51:47.441Z",
+      "domain" : "crypto",
+      "exitCondition" : "形成候选漏斗、市场 stance、缺失输入和下一轮检查条件。",
+      "feedbackGate" : "如果大盘防御、数据 partial 或 scanner 结果拥挤，只输出研究候选和等待条件。",
+      "goal" : "大盘、perp、链上广度扫描",
+      "id" : "crypto-market-report-loop",
+      "inputBindings" : [
+        {
+          "id" : "crypto-market-report-loop-prompt",
+          "kind" : "prompt",
+          "label" : "Prompt",
+          "required" : true,
+          "valueHint" : "运行一轮 Crypto Market Report Loop：用 CMC Skill Hub 做大盘 regime、perp scanner、on-chain scanner 的并行只读扫描，逐项检查 status、confidence、missing_or_stale_inputs、error 和数据时间。输出中文候选漏斗、市场 stance、缺失输入、下一轮复核条件和人工 review 清单；不调用 Trading Zac，不触发 dry-run 或 live 交易，不生成下单指令。"
+        },
+        {
+          "id" : "crypto-market-report-loop-input-1",
+          "kind" : "loopContext",
+          "label" : "Current workspace context",
+          "required" : false
+        },
+        {
+          "id" : "crypto-market-report-loop-input-2",
+          "kind" : "file",
+          "label" : "User attachments when provided",
+          "required" : false
+        }
+      ],
+      "knowledgeSourceIDs" : [
+
+      ],
+      "name" : "Market Report Loop",
+      "outputShape" : "中文本轮报告摘要、候选状态变化、NO_TRADE/等待触发说明。",
+      "owner" : "local-user",
+      "reviewBoundary" : "review-only：不调用 Trading Zac，不触发 dry-run，不生成下单动作。",
+      "scheduleMode" : "manual",
+      "schemaVersion" : "loopops-loop-contract-v1",
+      "status" : "saved",
+      "stepSummary" : [
+        "并行读取大盘 regime、perp scanner、on-chain scanner。",
+        "逐项检查 status、confidence、missing/stale inputs 和错误。",
+        "只把高质量候选放入后续深挖或复核队列。"
+      ],
+      "templateMigration" : {
+        "launchPrompt" : "运行一轮 Crypto Market Report Loop：用 CMC Skill Hub 做大盘 regime、perp scanner、on-chain scanner 的并行只读扫描，逐项检查 status、confidence、missing_or_stale_inputs、error 和数据时间。输出中文候选漏斗、市场 stance、缺失输入、下一轮复核条件和人工 review 清单；不调用 Trading Zac，不触发 dry-run 或 live 交易，不生成下单指令。",
+        "legacyExtensionIDs" : [
+          "cmc-skill-hub"
+        ],
+        "legacySkillIDs" : [
+          "cmc-market-radar",
+          "market-regime-review"
+        ],
+        "sourceTemplateID" : "crypto-market-report-loop",
+        "sourceTemplateTitle" : "Market Report Loop"
+      },
+      "trigger" : "需要一轮周期市场扫描或小时级 crypto monitor。",
+      "updatedAt" : "2026-06-27T07:51:47.441Z",
+      "userFacingCapabilityChain" : [
+        {
+          "category" : "marketData",
+          "id" : "capability-1",
+          "summary" : "Read-only crypto market evidence capability.",
+          "title" : "CMC Skill Hub capability"
+        },
+        {
+          "category" : "marketData",
+          "id" : "capability-2",
+          "summary" : "Market evidence and candidate scanning.",
+          "title" : "CoinMarketCap market radar"
+        },
+        {
+          "category" : "review",
+          "id" : "capability-3",
+          "summary" : "Risk stance, missing inputs, and review conditions.",
+          "title" : "Market regime review"
+        }
+      ],
+      "version" : 1,
+      "visibility" : "private"
+    },
+    "reviewDecision" : {
+      "decidedAt" : "2026-06-27T07:51:47.991Z",
+      "decision" : "needsFollowUp",
+      "id" : "review-decision-BDAABA40-F939-426E-93D8-602107774F95",
+      "nextAction" : "Ask a run-scoped follow-up.",
+      "notes" : "Visual seed for Run Result state review.",
+      "reviewer" : "local-user"
+    },
+    "runID" : "visual-run-result-state",
+    "schemaVersion" : "loopops-run-ledger-v1",
+    "startedAt" : "2026-06-27T07:40:00.000Z",
+    "statusTimeline" : [
+      {
+        "detail" : "Market Report Loop",
+        "id" : "timeline-visual-run-result-state-status",
+        "occurredAt" : "2026-06-27T07:42:00.000Z",
+        "status" : "reviewNeeded",
+        "title" : "review_ready"
+      }
+    ]
+  }
+]

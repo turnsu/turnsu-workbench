@@ -1,0 +1,22 @@
+flowchart TD
+    Draft["One Loop draft"]
+    Definition["Definition\nGoal, constraints, done, verify"]
+    Outline["Outline\nReadable ordered steps"]
+    Canvas["Canvas\nDependencies and mappings"]
+    StepEditor["Step editor"]
+    SkillPanel["Skill panel"]
+    Assistant["Assistant proposal"]
+    Validate["Server validation"]
+    Test["Test Run"]
+
+    Draft <--> Definition
+    Draft <--> Outline
+    Draft <--> Canvas
+    SkillPanel -->|Add or drag| Draft
+    StepEditor <--> Draft
+    Assistant -->|Review and apply| Draft
+    Draft --> Validate
+    Validate -->|Issues focus field or step| Definition
+    Validate -->|Issues focus field or step| Outline
+    Validate -->|Issues focus field or step| Canvas
+    Validate -->|Ready| Test

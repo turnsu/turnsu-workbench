@@ -1,138 +1,105 @@
-# WeChat Intelligence Radar MVP
+# looloomi Skill & Loop Cloud Workbench
 
-Swift / SwiftUI macOS MVP for a local-first "WeChat x On-chain Intelligence Terminal" aimed at personal or 5-8 person team usage.
+Current implementation: a local same-origin Web workbench for backend-backed Skill,
+Workflow/Loop, compile, Run, review, and rerun behavior. Target product: a cloud workspace
+for creating, uploading, versioning, composing, publishing, and sharing Skills and Loops.
 
-## Scope
+## Active Truth
 
-- Builds only inside this new project directory.
-- Uses mock fixture data for MVP development.
-- Keeps `assignment-agent-raw` and `wechat-cli_raw` as read-only references.
-- Does not connect to the current computer's WeChat client.
-- Does not call `wechat-cli init/history/search` or any live local WeChat read command without explicit authorization.
-- Treats CoinMarketCap MCP / Crypto Skill Hub as a permissioned/live capability. If no callable CMC tool, network permission, or API key is available, the app must show `blocked` or `degraded` and may only use clearly labeled mock market fixtures.
+- [PRODUCT.md](PRODUCT.md)
+- [DESIGN.md](DESIGN.md)
+- [wiki/PROJECT_WIKI.md](wiki/PROJECT_WIKI.md)
+- [wiki/architecture/CURRENT_SYSTEM_ARCHITECTURE.md](wiki/architecture/CURRENT_SYSTEM_ARCHITECTURE.md)
+- [wiki/prd/README.md](wiki/prd/README.md)
+- [domains/frontend/documents/current-skill-workflow-loop-workbench.md](domains/frontend/documents/current-skill-workflow-loop-workbench.md)
+- [domains/frontend/web/code/web-prototype/INTERACTION_QA.md](domains/frontend/web/code/web-prototype/INTERACTION_QA.md)
 
-## Architecture
+## Architecture Status
 
-```text
-SwiftUI Views
-  -> DashboardViewModel
-  -> RuntimeBackend
-  -> RuntimeRepository
-  -> RuntimeCommand / RuntimeQuery / RuntimeMutation
-  -> AgentOrchestrator module pipeline
-  -> AgentRunStore / AgentSyncState
-  -> PolicyGate / CapabilityRegistry / AgentRunLog
-  -> WeChatDataAdapter
-  -> WeChatFixtureFileAdapter / MockWeChatDataAdapter
-  -> MarketSnapshotStore / CMCRefreshBridge
-  -> CMCMarketDataProvider
-  -> CMCSkillHubCapability
-  -> TokenResolutionService
-  -> NormalizedWeChatStore / TokenEntityStore
-  -> OnchainSnapshotStore / AlertStore
-  -> EvidenceStore / TaskStore / WatchlistStore / AlertRuleStore
-  -> ArtifactManifestStore / RuntimeHealthStore
-  -> SubagentManager agent module timeline
-  -> MockWeb3MarketDataAdapter
-  -> Web3SignalService
-  -> BriefingAgent
-  -> IntelligenceSnapshot
-```
+The P0 Web surface is connected to a same-origin Product API. Skills, immutable
+Templates, Workflow revisions, server compilation, persisted Runs, SSE, Review Gates,
+authoritative final results, and history/rerun are implemented. `localStorage` is limited
+to UI preferences and the current unsaved Workflow draft.
 
-Future live integration should implement `WeChatDataAdapter` using `wechat-cli` JSON outputs, after explicit user authorization.
-
-## Current Data Chain
-
-- WeChat intelligence: `WeChatFixtureFileAdapter` loads `Fixtures/wechat/messages.sample.json`; if the file cannot be loaded it degrades to `MockWeChatDataAdapter`.
-- Desktop shell: the app now has Home/Daily Brief, WeChat Intelligence Inbox, Token Terminal, Watchlist/Alerts, Agent Console, and Data/Ops workspaces.
-- Agent run: `AgentOrchestrator` builds a planner envelope, evaluates policy, loads the fixture batch, applies the selected `TimeWindow`, detects Web3 entities, loads the freshest market snapshot, resolves token entities, generates on-chain fixture snapshots and alerts, writes run artifacts, synthesizes briefing/actions/sources, and returns `IntelligenceSnapshot`.
-- Token loop: `TokenResolutionService` normalizes messages, extracts BTC/ETH/SOL symbols and CA-like strings, resolves `TokenEntity` records, and links related WeChat messages to Token Terminal.
-- Web3 enrichment: `Web3SignalService` detects BTC/ETH/SOL/Web3 mentions in group intelligence and attaches normalized market context.
-- Runtime storage: local-first JSON stores are written under `runtime/wechat`, `runtime/entities`, `runtime/market`, `runtime/onchain`, `runtime/alerts`, and `runtime/runs/{runID}/`.
-- Ops surface: `AgentSyncState`, source health, policy decisions, artifact paths, freshness, and degraded reasons are visible in Agent Console / Data-Ops.
-- UI controls: group selection, time window changes, rescan, and copy summary all call ViewModel methods and append run logs/sync status.
-
-## Runtime Overhaul Status
-
-`wiki/plan/2026-05-24-runtime-data-agent-ops-overhaul.md` is now implemented at MVP runtime depth:
-
-- local `RuntimeBackend` / `RuntimeRepository` / command-query-mutation boundary;
-- evidence, task, watchlist, alert-rule, artifact-manifest, and runtime-health JSON stores;
-- explicit agent module pipeline: Ingestion, Entity Resolver, Market Data, On-chain, Evidence, Alert, Task, Briefing, QA/Policy;
-- Top Command Bar, Left Nav, Main Workspace, Right Inspector, and Bottom Operations Deck;
-- Ops health, artifact completeness, policy state, import/export boundary, secrets boundary, and degraded reasons as runtime data.
-
-## CMC MCP Boundary
-
-The intended live provider is CoinMarketCap MCP / Skills Marketplace:
-
-https://coinmarketcap.com/api/skills-marketplace/
-
-In the current Codex session `mcp__crypto_skill_hub__` is active. The loaded skill is:
+The target full-stack path is:
 
 ```text
-unique_name: altcoin_token_profile
-parameters: {"symbol":"BTC|ETH|SOL","convert":"USD"}
+Web -> Product API/BFF -> Workflow Compiler/Runner
+    -> Agent Runtime Core -> PI Kernel -> Skill adapters
 ```
 
-The app therefore reports:
+See [Current System Architecture](wiki/architecture/CURRENT_SYSTEM_ARCHITECTURE.md)
+for the implemented capability matrix, remaining P1/P2 gaps, canonical contracts,
+Product API, event model, and migration plan.
 
-- `CoinMarketCap MCP`: `enabled`
-- `Web3 Enrichment`: `enabled`
-- `Mock Market Fixture`: `standby`
+## Current P0 Scope
 
-The current normalized snapshot was loaded from CMC Skill Hub executions for BTC, ETH, and SOL. The Swift app does not call the network directly; live refresh belongs to the external agent/MCP execution boundary. Mock market values remain fallback only and must not be described as live CoinMarketCap data.
+The active web prototype only serves:
 
-## Runtime Artifacts
+- `Skills`: callable capability units with inputs, outputs, risk, dependencies, and usage.
+- `Workflows`: owned workflow / loop objects that can be edited, saved as revisions, run, reviewed, and rerun.
+- `Templates`: immutable preset workflows that create an owned workflow for editing.
 
-Manual app-free smoke check:
+Builder includes Skill Library, Workflow Canvas, Step Editor, and Run / Debug Panel.
+Natural-language Builder proposals and Resources remain visibly blocked until P1.
+
+## Target Product Scope
+
+The target product uses three primary surfaces: `Skills`, `Loops`, and `Team library`.
+It adds cloud Skill/Loop creation and upload, immutable publication, team install/fork/update,
+minimal workspace roles, secret-safe connection binding, and a Loop contract that complements
+the execution graph. Templates become published Loop starting points rather than a separate
+top-level object.
+
+See the [target PRD set](wiki/prd/README.md). Those requirements are a delivery target, not a
+claim about the currently running P0 catalog.
+
+## Not Current Scope
+
+The following are historical examples or implementation background only:
+
+- standalone crypto, market, stock, meeting, office, or research products;
+- old monitoring dashboards, provider panels, ops consoles, and independent Knowledge / Runs products;
+- old SwiftUI-first workbench directions;
+- old LoopOps v2, Blocks Workbench, Command Desk, and RelevanceAI/Triple research packets.
+
+Those documents are archived under [wiki/history/](wiki/history/) and [domains/frontend/documents/history/](domains/frontend/documents/history/).
+
+## Web Prototype
+
+Start the same-origin Product server (Mongo replica set and Web build are prepared by the
+script), then open `http://127.0.0.1:8798/`:
 
 ```bash
-swift run WeChatIntelligenceRadar --smoke-check
+./scripts/start-workbench-server.sh
 ```
 
-This runs one agent refresh without launching the desktop window and writes:
-
-```text
-runtime/market/latest-market-snapshot.json
-runtime/wechat/messages.normalized.json
-runtime/entities/token-entities.json
-runtime/onchain/{chain}/{ca-or-tokenID}.json
-runtime/alerts/alerts.json
-runtime/alerts/alert-rules.json
-runtime/evidence/evidence.json
-runtime/tasks/tasks.json
-runtime/watchlist/watchlist.json
-runtime/artifacts/manifest.json
-runtime/health/latest-health.json
-runtime/runs/{runID}/run.json
-runtime/runs/{runID}/planner-envelope.json
-runtime/runs/{runID}/policy-decisions.json
-runtime/runs/{runID}/market-snapshot.json
-runtime/runs/{runID}/intelligence-snapshot.json
-runtime/runs/{runID}/terminal-data.json
-runtime/runs/{runID}/module-runs.json
-runtime/runs/{runID}/subagent-runs.json
-runtime/runs/{runID}/artifact-manifest.json
-runtime/runs/{runID}/logs.json
-```
-
-## Build
+Run Web-only static and state gates with:
 
 ```bash
-swift build
+cd domains/frontend/web/code/web-prototype
+npm run build
+npm run smoke
+npm run action:smoke
 ```
 
-## Test
+Browser-side checks:
 
 ```bash
-swift test
+npm run review
+npm run dom:smoke
+npm run focus:smoke
+npm run audit:capture
 ```
 
-The current CommandLineTools install does not expose `XCTest` as an importable module, so the test target uses framework-free precondition checks for Web3 detection, policy blocking, CMC freshness, fixture JSON loading, CA extraction, time-window filtering, and artifact writing. `swift test` validates the target build; `--smoke-check` is the runtime verification path.
-
-## Run
+No-permission review:
 
 ```bash
-swift run WeChatIntelligenceRadar
+npm run review:no-permission
 ```
+
+## Cleanup Rule
+
+If a document or implementation path no longer serves Skill creation/management, Loop
+authoring/execution, or workspace-scoped sharing and reuse, it should be archived or downgraded
+to example-only context instead of kept as an active requirement.

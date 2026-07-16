@@ -1,0 +1,235 @@
+{
+  "capturedAt" : "2026-07-13T16:36:07Z",
+  "shots" : [
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/package-lifecycle-390\/01-loops-lifecycle-board.png",
+      "h1" : "Loops",
+      "h2s" : [
+        "Move each Loop to its next useful state",
+        "Drafts",
+        "Ready",
+        "Shared"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Loops lifecycle board",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "01",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/loops"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/package-lifecycle-390\/02-skills-registry.png",
+      "h1" : "Skills",
+      "h2s" : [
+        "Executable review smoke",
+        "How this skill works",
+        "Add to a workflow",
+        "Used in"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Skills registry",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "02",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/skills"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/package-lifecycle-390\/02a-skill-overview.png",
+      "h1" : "Skill overview",
+      "h2s" : [
+        "Executable review smoke",
+        "Needs",
+        "Creates",
+        "Permissions and setup",
+        "Package files",
+        "Used in"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Skill overview",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "02a",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/skills\/skill-2aabc721-a183-42ce-b0f3-043669097498"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/package-lifecycle-390\/02b-skill-instructions.png",
+      "h1" : "Skill instructions",
+      "h2s" : [
+        "Executable review smoke",
+        "Instructions",
+        "Review before saving"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Skill instructions",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "02b",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/skills\/skill-2aabc721-a183-42ce-b0f3-043669097498\/instructions"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/package-lifecycle-390\/02c-skill-files.png",
+      "h1" : "Skill files",
+      "h2s" : [
+        "Executable review smoke",
+        "Files",
+        "Review before saving"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Skill files",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "02c",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/skills\/skill-2aabc721-a183-42ce-b0f3-043669097498\/files"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/package-lifecycle-390\/02d-skill-versions.png",
+      "h1" : "Skill versions",
+      "h2s" : [
+        "Executable review smoke",
+        "Version history",
+        "Compare versions",
+        "Workflows using this Skill"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Skill versions",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "02d",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/skills\/skill-2aabc721-a183-42ce-b0f3-043669097498\/versions"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/package-lifecycle-390\/03-loop-builder-canvas-light.png",
+      "h1" : "Loop builder",
+      "h2s" : [
+        "Templates",
+        "Meeting action Loop"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Loop builder canvas light",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "03",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/builder"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/package-lifecycle-390\/04-loop-builder-canvas-dark.png",
+      "h1" : "Loop builder",
+      "h2s" : [
+        "Templates",
+        "Meeting action Loop"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Loop builder canvas dark",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "04",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/builder"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/package-lifecycle-390\/05-loop-builder-canvas-chinese.png",
+      "h1" : "工作流编排",
+      "h2s" : [
+        "模板",
+        "Meeting action Loop"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Loop builder canvas Chinese",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "05",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/builder"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/package-lifecycle-390\/06-team-library.png",
+      "h1" : "Team library",
+      "h2s" : [
+        "Find a reusable starting point"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Team library",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "06",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/library"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/package-lifecycle-390\/07-team-loop-detail.png",
+      "h1" : "Team Loop",
+      "h2s" : [
+        "Meeting action Loop copy copy"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Team Loop detail",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "07",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/library\/loops\/workflow-25a7c534-ebf3-470f-ac2c-654a0b9fa0e2"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/package-lifecycle-390\/08-publish-loop-review.png",
+      "h1" : "Publish Loop",
+      "h2s" : [
+        "Publish Meeting action Loop copy copy"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Publish Loop review",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "08",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/loops\/workflow-25a7c534-ebf3-470f-ac2c-654a0b9fa0e2\/publish"
+    }
+  ],
+  "targetUrl" : "http:\/\/127.0.0.1:5184\/",
+  "viewport" : {
+    "height" : 844,
+    "width" : 390
+  }
+}

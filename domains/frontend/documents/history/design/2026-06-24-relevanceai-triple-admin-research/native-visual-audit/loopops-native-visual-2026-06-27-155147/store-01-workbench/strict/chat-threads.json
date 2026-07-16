@@ -1,0 +1,32 @@
+[
+  {
+    "attachments" : [
+
+    ],
+    "createdAt" : "2026-06-27T07:51:47.510Z",
+    "followUpRunReferences" : [
+
+    ],
+    "id" : "run-visual-run-result-state",
+    "memoryCandidates" : [
+
+    ],
+    "messages" : [
+      {
+        "attachments" : [
+
+        ],
+        "createdAt" : "2026-06-27T07:51:47.510Z",
+        "id" : "3E1DFD05-B7B3-4E91-B3BB-1FD144BE7012",
+        "referencedRunID" : "visual-run-result-state",
+        "role" : "user",
+        "text" : "Summarize only this run's evidence gaps."
+      }
+    ],
+    "runID" : "visual-run-result-state",
+    "schemaVersion" : "loopops-chat-thread-v1",
+    "scope" : "run",
+    "title" : "Market Report Loop",
+    "updatedAt" : "2026-06-27T07:51:47.510Z"
+  }
+]

@@ -1,0 +1,2012 @@
+{
+  "capturedAt" : "2026-06-25T19:35:50Z",
+  "surfaces" : [
+    {
+      "focusableCount" : 42,
+      "focusOrder" : [
+        {
+          "active" : true,
+          "index" : 0,
+          "tag" : "button",
+          "testid" : "loopops.nav.workbench",
+          "text" : "Workbench"
+        },
+        {
+          "active" : true,
+          "index" : 1,
+          "tag" : "button",
+          "testid" : "loopops.nav.library",
+          "text" : "Loop Library"
+        },
+        {
+          "active" : true,
+          "index" : 2,
+          "tag" : "button",
+          "testid" : "loopops.nav.skillos",
+          "text" : "Skill OS"
+        },
+        {
+          "active" : true,
+          "index" : 3,
+          "tag" : "button",
+          "testid" : "loopops.nav.chat",
+          "text" : "Chat"
+        },
+        {
+          "active" : true,
+          "index" : 4,
+          "tag" : "button",
+          "testid" : "loopops.nav.studio",
+          "text" : "Studio"
+        },
+        {
+          "active" : true,
+          "index" : 5,
+          "tag" : "button",
+          "testid" : "loopops.nav.knowledge",
+          "text" : "Knowledge"
+        },
+        {
+          "active" : true,
+          "index" : 6,
+          "tag" : "button",
+          "testid" : "loopops.language.zh",
+          "text" : "中文"
+        },
+        {
+          "active" : true,
+          "index" : 7,
+          "tag" : "button",
+          "testid" : "loopops.language.en",
+          "text" : "EN"
+        },
+        {
+          "active" : true,
+          "index" : 8,
+          "tag" : "button",
+          "testid" : "loopops.workspace.save",
+          "text" : "Save workspace"
+        },
+        {
+          "active" : true,
+          "index" : 9,
+          "tag" : "button",
+          "testid" : "loopops.topbar.primary.run-selected",
+          "text" : "Run selected"
+        },
+        {
+          "active" : true,
+          "index" : 10,
+          "tag" : "button",
+          "testid" : "loopops.workbench.review-mode.toggle",
+          "text" : "Review tools"
+        },
+        {
+          "active" : true,
+          "index" : 11,
+          "tag" : "button",
+          "testid" : "loopops.workbench.mode.empty",
+          "text" : "Empty queue"
+        },
+        {
+          "active" : true,
+          "index" : 12,
+          "tag" : "button",
+          "testid" : "loopops.workbench.mode.seeded",
+          "text" : "Seeded review"
+        },
+        {
+          "active" : true,
+          "index" : 13,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Select Crypto Market Report Loop run"
+        },
+        {
+          "active" : true,
+          "index" : 14,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Move Crypto Market Report Loop run up"
+        },
+        {
+          "active" : true,
+          "index" : 15,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Move Crypto Market Report Loop run down"
+        },
+        {
+          "active" : true,
+          "index" : 16,
+          "tag" : "button",
+          "testid" : "loopops.workbench.queue-action.pause.run-crypto-market-report-loop-mqtwjy4e-loakru-0",
+          "text" : "Pause Crypto Market Report Loop run"
+        },
+        {
+          "active" : true,
+          "index" : 17,
+          "tag" : "button",
+          "testid" : "loopops.workbench.queue-action.complete.run-crypto-market-report-loop-mqtwjy4e-loakru-0",
+          "text" : "Complete Crypto Market Report Loop run"
+        },
+        {
+          "active" : true,
+          "index" : 18,
+          "tag" : "button",
+          "testid" : "loopops.workbench.queue-action.fail.run-crypto-market-report-loop-mqtwjy4e-loakru-0",
+          "text" : "Fail Crypto Market Report Loop run"
+        },
+        {
+          "active" : true,
+          "index" : 19,
+          "tag" : "button",
+          "testid" : "loopops.workbench.queue-action.cancel.run-crypto-market-report-loop-mqtwjy4e-loakru-0",
+          "text" : "Cancel Crypto Market Report Loop run"
+        },
+        {
+          "active" : true,
+          "index" : 20,
+          "tag" : "button",
+          "testid" : "loopops.library.review-decision.reviewed",
+          "text" : "Mark review packet as Reviewed"
+        },
+        {
+          "active" : true,
+          "index" : 21,
+          "tag" : "button",
+          "testid" : "loopops.library.review-decision.needs-follow-up",
+          "text" : "Mark review packet as Needs follow-up"
+        },
+        {
+          "active" : true,
+          "index" : 22,
+          "tag" : "button",
+          "testid" : "loopops.library.review-decision.blocked",
+          "text" : "Mark review packet as Blocked"
+        },
+        {
+          "active" : true,
+          "index" : 23,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch model from Kimi K2"
+        },
+        {
+          "active" : true,
+          "index" : 24,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch to Deep mode"
+        },
+        {
+          "active" : true,
+          "index" : 25,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Enable search"
+        },
+        {
+          "active" : true,
+          "index" : 26,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Attach context"
+        },
+        {
+          "active" : true,
+          "index" : 27,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Enable temporary chat"
+        },
+        {
+          "active" : true,
+          "index" : 28,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Create prompt"
+        },
+        {
+          "active" : true,
+          "index" : 29,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Explore prompt"
+        },
+        {
+          "active" : true,
+          "index" : 30,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Code prompt"
+        },
+        {
+          "active" : true,
+          "index" : 31,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Learn prompt"
+        },
+        {
+          "active" : true,
+          "index" : 32,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send quick action: 补证据缺口"
+        },
+        {
+          "active" : true,
+          "index" : 33,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send quick action: 生成审阅包"
+        },
+        {
+          "active" : true,
+          "index" : 34,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send quick action: 交给 builder"
+        },
+        {
+          "active" : true,
+          "index" : 35,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Remove attachment research-notes.md"
+        },
+        {
+          "active" : true,
+          "index" : 36,
+          "tag" : "textarea",
+          "testid" : "",
+          "text" : "Run chat message"
+        },
+        {
+          "active" : true,
+          "index" : 37,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Run chat message"
+        },
+        {
+          "active" : true,
+          "index" : 38,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Run chat"
+        },
+        {
+          "active" : true,
+          "index" : 39,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Review chat"
+        },
+        {
+          "active" : true,
+          "index" : 40,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Open review tools"
+        },
+        {
+          "active" : true,
+          "index" : 41,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Loop Library synced 4 templates"
+        }
+      ],
+      "h1" : "Workbench",
+      "primary" : "Run selected",
+      "primaryIndex" : 9,
+      "primaryTestID" : "loopops.topbar.primary.run-selected",
+      "surface" : "Workbench"
+    },
+    {
+      "focusableCount" : 76,
+      "focusOrder" : [
+        {
+          "active" : true,
+          "index" : 0,
+          "tag" : "button",
+          "testid" : "loopops.nav.workbench",
+          "text" : "Workbench"
+        },
+        {
+          "active" : true,
+          "index" : 1,
+          "tag" : "button",
+          "testid" : "loopops.nav.library",
+          "text" : "Loop Library"
+        },
+        {
+          "active" : true,
+          "index" : 2,
+          "tag" : "button",
+          "testid" : "loopops.nav.skillos",
+          "text" : "Skill OS"
+        },
+        {
+          "active" : true,
+          "index" : 3,
+          "tag" : "button",
+          "testid" : "loopops.nav.chat",
+          "text" : "Chat"
+        },
+        {
+          "active" : true,
+          "index" : 4,
+          "tag" : "button",
+          "testid" : "loopops.nav.studio",
+          "text" : "Studio"
+        },
+        {
+          "active" : true,
+          "index" : 5,
+          "tag" : "button",
+          "testid" : "loopops.nav.knowledge",
+          "text" : "Knowledge"
+        },
+        {
+          "active" : true,
+          "index" : 6,
+          "tag" : "button",
+          "testid" : "loopops.language.zh",
+          "text" : "中文"
+        },
+        {
+          "active" : true,
+          "index" : 7,
+          "tag" : "button",
+          "testid" : "loopops.language.en",
+          "text" : "EN"
+        },
+        {
+          "active" : true,
+          "index" : 8,
+          "tag" : "button",
+          "testid" : "loopops.workspace.save",
+          "text" : "Save workspace"
+        },
+        {
+          "active" : true,
+          "index" : 9,
+          "tag" : "button",
+          "testid" : "loopops.library.batch-run",
+          "text" : "Run selected"
+        },
+        {
+          "active" : true,
+          "index" : 10,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "Filter loops"
+        },
+        {
+          "active" : true,
+          "index" : 11,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "All"
+        },
+        {
+          "active" : true,
+          "index" : 12,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Template"
+        },
+        {
+          "active" : true,
+          "index" : 13,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Database"
+        },
+        {
+          "active" : true,
+          "index" : 14,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Review"
+        },
+        {
+          "active" : true,
+          "index" : 15,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Builder"
+        },
+        {
+          "active" : true,
+          "index" : 16,
+          "tag" : "select",
+          "testid" : "",
+          "text" : "Sort templates"
+        },
+        {
+          "active" : true,
+          "index" : 17,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Expand Loop Library to 8 columns"
+        },
+        {
+          "active" : true,
+          "index" : 18,
+          "tag" : "div",
+          "testid" : "loopops.library.contract.crypto-trade-plan-review",
+          "text" : "Open Trade Plan Review detail"
+        },
+        {
+          "active" : true,
+          "index" : 19,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "Select Trade Plan Review"
+        },
+        {
+          "active" : true,
+          "index" : 20,
+          "tag" : "button",
+          "testid" : "loopops.library.run.crypto-trade-plan-review",
+          "text" : "Open Trade Plan Review detail"
+        },
+        {
+          "active" : true,
+          "index" : 21,
+          "tag" : "button",
+          "testid" : "loopops.workbench.contract.crypto-trade-plan-review.run",
+          "text" : "Run Trade Plan Review"
+        },
+        {
+          "active" : true,
+          "index" : 22,
+          "tag" : "button",
+          "testid" : "loopops.library.open.crypto-trade-plan-review",
+          "text" : "Open Trade Plan Review detail"
+        },
+        {
+          "active" : true,
+          "index" : 23,
+          "tag" : "div",
+          "testid" : "loopops.library.contract.crypto-market-report-loop",
+          "text" : "Open Crypto Market Report Loop detail"
+        },
+        {
+          "active" : true,
+          "index" : 24,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "Select Crypto Market Report Loop"
+        },
+        {
+          "active" : true,
+          "index" : 25,
+          "tag" : "button",
+          "testid" : "loopops.library.run.crypto-market-report-loop",
+          "text" : "Open Crypto Market Report Loop detail"
+        },
+        {
+          "active" : true,
+          "index" : 26,
+          "tag" : "button",
+          "testid" : "loopops.workbench.contract.crypto-market-report-loop.run",
+          "text" : "Run Crypto Market Report Loop"
+        },
+        {
+          "active" : true,
+          "index" : 27,
+          "tag" : "button",
+          "testid" : "loopops.library.open.crypto-market-report-loop",
+          "text" : "Open Crypto Market Report Loop detail"
+        },
+        {
+          "active" : true,
+          "index" : 28,
+          "tag" : "div",
+          "testid" : "loopops.library.contract.crypto-thesis-review",
+          "text" : "Open Thesis Review detail"
+        },
+        {
+          "active" : true,
+          "index" : 29,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "Select Thesis Review"
+        },
+        {
+          "active" : true,
+          "index" : 30,
+          "tag" : "button",
+          "testid" : "loopops.library.run.crypto-thesis-review",
+          "text" : "Open Thesis Review detail"
+        },
+        {
+          "active" : true,
+          "index" : 31,
+          "tag" : "button",
+          "testid" : "loopops.library.install.crypto-thesis-review",
+          "text" : "Install Thesis Review"
+        },
+        {
+          "active" : true,
+          "index" : 32,
+          "tag" : "button",
+          "testid" : "loopops.library.open.crypto-thesis-review",
+          "text" : "Open Thesis Review detail"
+        },
+        {
+          "active" : true,
+          "index" : 33,
+          "tag" : "div",
+          "testid" : "loopops.library.contract.crypto-defi-opportunity-scan",
+          "text" : "Open DeFi Opportunity Scan detail"
+        },
+        {
+          "active" : true,
+          "index" : 34,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "Select DeFi Opportunity Scan"
+        },
+        {
+          "active" : true,
+          "index" : 35,
+          "tag" : "button",
+          "testid" : "loopops.library.run.crypto-defi-opportunity-scan",
+          "text" : "Open DeFi Opportunity Scan detail"
+        },
+        {
+          "active" : true,
+          "index" : 36,
+          "tag" : "button",
+          "testid" : "loopops.library.setup.crypto-defi-opportunity-scan",
+          "text" : "Finish setup for DeFi Opportunity Scan"
+        },
+        {
+          "active" : true,
+          "index" : 37,
+          "tag" : "button",
+          "testid" : "loopops.library.open.crypto-defi-opportunity-scan",
+          "text" : "Open DeFi Opportunity Scan detail"
+        },
+        {
+          "active" : true,
+          "index" : 38,
+          "tag" : "button",
+          "testid" : "loopops.library.contract-preview.crypto-trade-plan-review",
+          "text" : "Trade Plan ReviewReady to run"
+        },
+        {
+          "active" : true,
+          "index" : 39,
+          "tag" : "button",
+          "testid" : "loopops.library.contract-preview.crypto-market-report-loop",
+          "text" : "Crypto Market Report LoopReady to run"
+        },
+        {
+          "active" : true,
+          "index" : 40,
+          "tag" : "button",
+          "testid" : "loopops.library.contract-preview.crypto-thesis-review",
+          "text" : "Thesis ReviewNeeds setup"
+        },
+        {
+          "active" : true,
+          "index" : 41,
+          "tag" : "button",
+          "testid" : "loopops.library.run-ledger.run-crypto-market-report-loop-mqtwjy4e-loakru-0",
+          "text" : "Crypto Market Report LoopRunning, 刚刚"
+        },
+        {
+          "active" : true,
+          "index" : 42,
+          "tag" : "button",
+          "testid" : "loopops.library.packet-row.run-crypto-market-report-loop-mqtwjy4e-loakru-0",
+          "text" : "Crypto Market Report LoopNeeds follow-up, 2 gap(s)"
+        },
+        {
+          "active" : true,
+          "index" : 43,
+          "tag" : "button",
+          "testid" : "loopops.library.share-log.run-crypto-market-report-loop-mqtwjy4e-loakru-0",
+          "text" : "Crypto Market Report LoopCrypto Market Report Loop 已进入队列。当前带入 2 个知识源和 0 个工具，只生成研"
+        },
+        {
+          "active" : true,
+          "index" : 44,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "on"
+        },
+        {
+          "active" : true,
+          "index" : 45,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "on"
+        },
+        {
+          "active" : true,
+          "index" : 46,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "on"
+        },
+        {
+          "active" : true,
+          "index" : 47,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "on"
+        },
+        {
+          "active" : true,
+          "index" : 48,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "on"
+        },
+        {
+          "active" : true,
+          "index" : 49,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "on"
+        },
+        {
+          "active" : true,
+          "index" : 50,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "on"
+        },
+        {
+          "active" : true,
+          "index" : 51,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "on"
+        },
+        {
+          "active" : true,
+          "index" : 52,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "on"
+        },
+        {
+          "active" : true,
+          "index" : 53,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Use Crypto Market Report Loop example in chat"
+        },
+        {
+          "active" : true,
+          "index" : 54,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Run Crypto Market Report Loop"
+        },
+        {
+          "active" : true,
+          "index" : 55,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Clone Crypto Market Report Loop"
+        },
+        {
+          "active" : true,
+          "index" : 56,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Run 1 selected Loops"
+        },
+        {
+          "active" : true,
+          "index" : 57,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch to Run chat"
+        },
+        {
+          "active" : true,
+          "index" : 58,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch to Builder chat"
+        },
+        {
+          "active" : true,
+          "index" : 59,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch to Review chat"
+        },
+        {
+          "active" : true,
+          "index" : 60,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch model from Kimi K2"
+        },
+        {
+          "active" : true,
+          "index" : 61,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch to Deep mode"
+        },
+        {
+          "active" : true,
+          "index" : 62,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Enable search"
+        },
+        {
+          "active" : true,
+          "index" : 63,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Attach context"
+        },
+        {
+          "active" : true,
+          "index" : 64,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Enable temporary chat"
+        },
+        {
+          "active" : true,
+          "index" : 65,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Create prompt"
+        },
+        {
+          "active" : true,
+          "index" : 66,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Explore prompt"
+        },
+        {
+          "active" : true,
+          "index" : 67,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Code prompt"
+        },
+        {
+          "active" : true,
+          "index" : 68,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Learn prompt"
+        },
+        {
+          "active" : true,
+          "index" : 69,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send quick action: 补证据缺口"
+        },
+        {
+          "active" : true,
+          "index" : 70,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send quick action: 生成审阅包"
+        },
+        {
+          "active" : true,
+          "index" : 71,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send quick action: 交给 builder"
+        },
+        {
+          "active" : true,
+          "index" : 72,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Remove attachment research-notes.md"
+        },
+        {
+          "active" : true,
+          "index" : 73,
+          "tag" : "textarea",
+          "testid" : "",
+          "text" : "Run chat message"
+        },
+        {
+          "active" : true,
+          "index" : 74,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Run chat message"
+        },
+        {
+          "active" : true,
+          "index" : 75,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Loop Library synced 4 templates"
+        }
+      ],
+      "h1" : "Loop Library",
+      "primary" : "Run selected",
+      "primaryIndex" : 9,
+      "primaryTestID" : "loopops.library.batch-run",
+      "surface" : "Loop Library"
+    },
+    {
+      "focusableCount" : 37,
+      "focusOrder" : [
+        {
+          "active" : true,
+          "index" : 0,
+          "tag" : "button",
+          "testid" : "loopops.nav.workbench",
+          "text" : "Workbench"
+        },
+        {
+          "active" : true,
+          "index" : 1,
+          "tag" : "button",
+          "testid" : "loopops.nav.library",
+          "text" : "Loop Library"
+        },
+        {
+          "active" : true,
+          "index" : 2,
+          "tag" : "button",
+          "testid" : "loopops.nav.skillos",
+          "text" : "Skill OS"
+        },
+        {
+          "active" : true,
+          "index" : 3,
+          "tag" : "button",
+          "testid" : "loopops.nav.chat",
+          "text" : "Chat"
+        },
+        {
+          "active" : true,
+          "index" : 4,
+          "tag" : "button",
+          "testid" : "loopops.nav.studio",
+          "text" : "Studio"
+        },
+        {
+          "active" : true,
+          "index" : 5,
+          "tag" : "button",
+          "testid" : "loopops.nav.knowledge",
+          "text" : "Knowledge"
+        },
+        {
+          "active" : true,
+          "index" : 6,
+          "tag" : "button",
+          "testid" : "loopops.language.zh",
+          "text" : "中文"
+        },
+        {
+          "active" : true,
+          "index" : 7,
+          "tag" : "button",
+          "testid" : "loopops.language.en",
+          "text" : "EN"
+        },
+        {
+          "active" : true,
+          "index" : 8,
+          "tag" : "button",
+          "testid" : "loopops.workspace.save",
+          "text" : "Save workspace"
+        },
+        {
+          "active" : true,
+          "index" : 9,
+          "tag" : "button",
+          "testid" : "loopops.topbar.primary.create-tool",
+          "text" : "Create tool"
+        },
+        {
+          "active" : true,
+          "index" : 10,
+          "tag" : "button",
+          "testid" : "loopops.skill-os.create-tool",
+          "text" : "Create tool"
+        },
+        {
+          "active" : true,
+          "index" : 11,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Build"
+        },
+        {
+          "active" : true,
+          "index" : 12,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Use"
+        },
+        {
+          "active" : true,
+          "index" : 13,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Logs"
+        },
+        {
+          "active" : true,
+          "index" : 14,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Add CMC market radar to active stack"
+        },
+        {
+          "active" : true,
+          "index" : 15,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Add 分诊技能 to active stack"
+        },
+        {
+          "active" : true,
+          "index" : 16,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Add 构建技能 to active stack"
+        },
+        {
+          "active" : true,
+          "index" : 17,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Add 证据复核技能 to active stack"
+        },
+        {
+          "active" : true,
+          "index" : 18,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Add 最终答案技能 to active stack"
+        },
+        {
+          "active" : true,
+          "index" : 19,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "Enter 标的"
+        },
+        {
+          "active" : true,
+          "index" : 20,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "Enter 时间窗口"
+        },
+        {
+          "active" : true,
+          "index" : 21,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Validate run"
+        },
+        {
+          "active" : true,
+          "index" : 22,
+          "tag" : "select",
+          "testid" : "",
+          "text" : "Choose active Skill Stack"
+        },
+        {
+          "active" : true,
+          "index" : 23,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Move CMC market radar up"
+        },
+        {
+          "active" : true,
+          "index" : 24,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Move CMC market radar down"
+        },
+        {
+          "active" : true,
+          "index" : 25,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Remove CMC market radar from execution path"
+        },
+        {
+          "active" : true,
+          "index" : 26,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Move 证据复核技能 up"
+        },
+        {
+          "active" : true,
+          "index" : 27,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Move 证据复核技能 down"
+        },
+        {
+          "active" : true,
+          "index" : 28,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Remove 证据复核技能 from execution path"
+        },
+        {
+          "active" : true,
+          "index" : 29,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Move 最终答案技能 up"
+        },
+        {
+          "active" : true,
+          "index" : 30,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Move 最终答案技能 down"
+        },
+        {
+          "active" : true,
+          "index" : 31,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Remove 最终答案技能 from execution path"
+        },
+        {
+          "active" : true,
+          "index" : 32,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Edit inputs"
+        },
+        {
+          "active" : true,
+          "index" : 33,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Validate with run"
+        },
+        {
+          "active" : true,
+          "index" : 34,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Open history"
+        },
+        {
+          "active" : true,
+          "index" : 35,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Review chat"
+        },
+        {
+          "active" : true,
+          "index" : 36,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Loop Library synced 4 templates"
+        }
+      ],
+      "h1" : "Skill OS",
+      "primary" : "Create tool",
+      "primaryIndex" : 9,
+      "primaryTestID" : "loopops.topbar.primary.create-tool",
+      "surface" : "Skill OS"
+    },
+    {
+      "focusableCount" : 54,
+      "focusOrder" : [
+        {
+          "active" : true,
+          "index" : 0,
+          "tag" : "button",
+          "testid" : "loopops.nav.workbench",
+          "text" : "Workbench"
+        },
+        {
+          "active" : true,
+          "index" : 1,
+          "tag" : "button",
+          "testid" : "loopops.nav.library",
+          "text" : "Loop Library"
+        },
+        {
+          "active" : true,
+          "index" : 2,
+          "tag" : "button",
+          "testid" : "loopops.nav.skillos",
+          "text" : "Skill OS"
+        },
+        {
+          "active" : true,
+          "index" : 3,
+          "tag" : "button",
+          "testid" : "loopops.nav.chat",
+          "text" : "Chat"
+        },
+        {
+          "active" : true,
+          "index" : 4,
+          "tag" : "button",
+          "testid" : "loopops.nav.studio",
+          "text" : "Studio"
+        },
+        {
+          "active" : true,
+          "index" : 5,
+          "tag" : "button",
+          "testid" : "loopops.nav.knowledge",
+          "text" : "Knowledge"
+        },
+        {
+          "active" : true,
+          "index" : 6,
+          "tag" : "button",
+          "testid" : "loopops.language.zh",
+          "text" : "中文"
+        },
+        {
+          "active" : true,
+          "index" : 7,
+          "tag" : "button",
+          "testid" : "loopops.language.en",
+          "text" : "EN"
+        },
+        {
+          "active" : true,
+          "index" : 8,
+          "tag" : "button",
+          "testid" : "loopops.workspace.save",
+          "text" : "Save workspace"
+        },
+        {
+          "active" : true,
+          "index" : 9,
+          "tag" : "button",
+          "testid" : "loopops.topbar.primary.save-loop",
+          "text" : "Save Loop"
+        },
+        {
+          "active" : true,
+          "index" : 10,
+          "tag" : "button",
+          "testid" : "loopops.studio.open-builder-packet",
+          "text" : "Open packet"
+        },
+        {
+          "active" : true,
+          "index" : 11,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Save Loop"
+        },
+        {
+          "active" : true,
+          "index" : 12,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "Crypto Market Report Loop"
+        },
+        {
+          "active" : true,
+          "index" : 13,
+          "tag" : "input",
+          "testid" : "",
+          "text" : "Crypto"
+        },
+        {
+          "active" : true,
+          "index" : 14,
+          "tag" : "textarea",
+          "testid" : "",
+          "text" : "读取市场结构、perp、链上信号，输出中文候选漏斗、市场判断和复核包。"
+        },
+        {
+          "active" : true,
+          "index" : 15,
+          "tag" : "textarea",
+          "testid" : "",
+          "text" : "运行一轮 Crypto Market Report Loop，只输出研究结论、缺口和下一轮复核条件。"
+        },
+        {
+          "active" : true,
+          "index" : 16,
+          "tag" : "textarea",
+          "testid" : "",
+          "text" : "最终答案 + 复核包 + 可分享摘要"
+        },
+        {
+          "active" : true,
+          "index" : 17,
+          "tag" : "select",
+          "testid" : "",
+          "text" : "Choose Studio Skill Stack"
+        },
+        {
+          "active" : true,
+          "index" : 18,
+          "tag" : "button",
+          "testid" : "loopops.studio.review-diff",
+          "text" : "Review changes"
+        },
+        {
+          "active" : true,
+          "index" : 19,
+          "tag" : "textarea",
+          "testid" : "loopops.studio.contract-block.name",
+          "text" : "Crypto Market Report Loop"
+        },
+        {
+          "active" : true,
+          "index" : 20,
+          "tag" : "textarea",
+          "testid" : "loopops.studio.contract-block.domain",
+          "text" : "Crypto"
+        },
+        {
+          "active" : true,
+          "index" : 21,
+          "tag" : "textarea",
+          "testid" : "loopops.studio.contract-block.goal",
+          "text" : "读取市场结构、perp、链上信号，输出中文候选漏斗、市场判断和复核包。"
+        },
+        {
+          "active" : true,
+          "index" : 22,
+          "tag" : "textarea",
+          "testid" : "loopops.studio.contract-block.trigger",
+          "text" : "运行一轮 Crypto Market Report Loop，只输出研究结论、缺口和下一轮复核条件。"
+        },
+        {
+          "active" : true,
+          "index" : 23,
+          "tag" : "textarea",
+          "testid" : "",
+          "text" : "Step 1"
+        },
+        {
+          "active" : true,
+          "index" : 24,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Remove step 1"
+        },
+        {
+          "active" : true,
+          "index" : 25,
+          "tag" : "textarea",
+          "testid" : "",
+          "text" : "Step 2"
+        },
+        {
+          "active" : true,
+          "index" : 26,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Remove step 2"
+        },
+        {
+          "active" : true,
+          "index" : 27,
+          "tag" : "textarea",
+          "testid" : "",
+          "text" : "Step 3"
+        },
+        {
+          "active" : true,
+          "index" : 28,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Remove step 3"
+        },
+        {
+          "active" : true,
+          "index" : 29,
+          "tag" : "button",
+          "testid" : "loopops.studio.step.add",
+          "text" : "Add step"
+        },
+        {
+          "active" : true,
+          "index" : 30,
+          "tag" : "textarea",
+          "testid" : "loopops.studio.contract-block.review-rule",
+          "text" : "数据不完整时标记证据缺口，不虚构置信度。"
+        },
+        {
+          "active" : true,
+          "index" : 31,
+          "tag" : "textarea",
+          "testid" : "loopops.studio.contract-block.exit",
+          "text" : "最终答案、复核包、下一步问题。"
+        },
+        {
+          "active" : true,
+          "index" : 32,
+          "tag" : "textarea",
+          "testid" : "loopops.studio.contract-block.output-shape",
+          "text" : "最终答案 + 复核包 + 可分享摘要"
+        },
+        {
+          "active" : true,
+          "index" : 33,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Builder chat"
+        },
+        {
+          "active" : true,
+          "index" : 34,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Review packet"
+        },
+        {
+          "active" : true,
+          "index" : 35,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch to Run chat"
+        },
+        {
+          "active" : true,
+          "index" : 36,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch to Builder chat"
+        },
+        {
+          "active" : true,
+          "index" : 37,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch to Review chat"
+        },
+        {
+          "active" : true,
+          "index" : 38,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch model from Kimi K2"
+        },
+        {
+          "active" : true,
+          "index" : 39,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch to Deep mode"
+        },
+        {
+          "active" : true,
+          "index" : 40,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Enable search"
+        },
+        {
+          "active" : true,
+          "index" : 41,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Attach context"
+        },
+        {
+          "active" : true,
+          "index" : 42,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Enable temporary chat"
+        },
+        {
+          "active" : true,
+          "index" : 43,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Create prompt"
+        },
+        {
+          "active" : true,
+          "index" : 44,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Explore prompt"
+        },
+        {
+          "active" : true,
+          "index" : 45,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Code prompt"
+        },
+        {
+          "active" : true,
+          "index" : 46,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Learn prompt"
+        },
+        {
+          "active" : true,
+          "index" : 47,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send quick action: 补证据缺口"
+        },
+        {
+          "active" : true,
+          "index" : 48,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send quick action: 生成审阅包"
+        },
+        {
+          "active" : true,
+          "index" : 49,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send quick action: 交给 builder"
+        },
+        {
+          "active" : true,
+          "index" : 50,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Remove attachment research-notes.md"
+        },
+        {
+          "active" : true,
+          "index" : 51,
+          "tag" : "textarea",
+          "testid" : "",
+          "text" : "Run chat message"
+        },
+        {
+          "active" : true,
+          "index" : 52,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Run chat message"
+        },
+        {
+          "active" : true,
+          "index" : 53,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Loop Library synced 4 templates"
+        }
+      ],
+      "h1" : "Studio",
+      "primary" : "Save Loop",
+      "primaryIndex" : 9,
+      "primaryTestID" : "loopops.topbar.primary.save-loop",
+      "surface" : "Studio"
+    },
+    {
+      "focusableCount" : 26,
+      "focusOrder" : [
+        {
+          "active" : true,
+          "index" : 0,
+          "tag" : "button",
+          "testid" : "loopops.nav.workbench",
+          "text" : "Workbench"
+        },
+        {
+          "active" : true,
+          "index" : 1,
+          "tag" : "button",
+          "testid" : "loopops.nav.library",
+          "text" : "Loop Library"
+        },
+        {
+          "active" : true,
+          "index" : 2,
+          "tag" : "button",
+          "testid" : "loopops.nav.skillos",
+          "text" : "Skill OS"
+        },
+        {
+          "active" : true,
+          "index" : 3,
+          "tag" : "button",
+          "testid" : "loopops.nav.chat",
+          "text" : "Chat"
+        },
+        {
+          "active" : true,
+          "index" : 4,
+          "tag" : "button",
+          "testid" : "loopops.nav.studio",
+          "text" : "Studio"
+        },
+        {
+          "active" : true,
+          "index" : 5,
+          "tag" : "button",
+          "testid" : "loopops.nav.knowledge",
+          "text" : "Knowledge"
+        },
+        {
+          "active" : true,
+          "index" : 6,
+          "tag" : "button",
+          "testid" : "loopops.language.zh",
+          "text" : "中文"
+        },
+        {
+          "active" : true,
+          "index" : 7,
+          "tag" : "button",
+          "testid" : "loopops.language.en",
+          "text" : "EN"
+        },
+        {
+          "active" : true,
+          "index" : 8,
+          "tag" : "button",
+          "testid" : "loopops.workspace.save",
+          "text" : "Save workspace"
+        },
+        {
+          "active" : true,
+          "index" : 9,
+          "tag" : "button",
+          "testid" : "loopops.topbar.primary.new-knowledge",
+          "text" : "New Knowledge"
+        },
+        {
+          "active" : true,
+          "index" : 10,
+          "tag" : "button",
+          "testid" : "loopops.knowledge.new-menu",
+          "text" : "Open New Knowledge menu"
+        },
+        {
+          "active" : true,
+          "index" : 11,
+          "tag" : "button",
+          "testid" : "loopops.knowledge.starter.blank",
+          "text" : "BlankStart a reusable note from scratch."
+        },
+        {
+          "active" : true,
+          "index" : 12,
+          "tag" : "button",
+          "testid" : "loopops.knowledge.starter.upload-file",
+          "text" : "UploadAdd a local source packet to this workspace."
+        },
+        {
+          "active" : true,
+          "index" : 13,
+          "tag" : "button",
+          "testid" : "loopops.knowledge.starter.website",
+          "text" : "WebsiteCapture a URL as a reusable context source."
+        },
+        {
+          "active" : true,
+          "index" : 14,
+          "tag" : "button",
+          "testid" : "loopops.knowledge.starter.integrations",
+          "text" : "IntegrationConnect an existing workspace source."
+        },
+        {
+          "active" : true,
+          "index" : 15,
+          "tag" : "input",
+          "testid" : "loopops.knowledge.search",
+          "text" : "Search Knowledge"
+        },
+        {
+          "active" : true,
+          "index" : 16,
+          "tag" : "select",
+          "testid" : "loopops.knowledge.status-filter",
+          "text" : "Filter Knowledge by status"
+        },
+        {
+          "active" : true,
+          "index" : 17,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Open RelevanceAI admin notes source detail"
+        },
+        {
+          "active" : true,
+          "index" : 18,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Attach RelevanceAI admin notes to Crypto Market Report Loop"
+        },
+        {
+          "active" : true,
+          "index" : 19,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Open Triple chatbot quick GUI findings source detail"
+        },
+        {
+          "active" : true,
+          "index" : 20,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Attach Triple chatbot quick GUI findings to Crypto Market Report Loop"
+        },
+        {
+          "active" : true,
+          "index" : 21,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Open Notion database behavior source detail"
+        },
+        {
+          "active" : true,
+          "index" : 22,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Open LoopOps copy decisions source detail"
+        },
+        {
+          "active" : true,
+          "index" : 23,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "New source"
+        },
+        {
+          "active" : true,
+          "index" : 24,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Use in run chat"
+        },
+        {
+          "active" : true,
+          "index" : 25,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Loop Library synced 4 templates"
+        }
+      ],
+      "h1" : "Knowledge",
+      "primary" : "New Knowledge",
+      "primaryIndex" : 9,
+      "primaryTestID" : "loopops.topbar.primary.new-knowledge",
+      "surface" : "Knowledge"
+    },
+    {
+      "focusableCount" : 43,
+      "focusOrder" : [
+        {
+          "active" : true,
+          "index" : 0,
+          "tag" : "button",
+          "testid" : "loopops.nav.workbench",
+          "text" : "Workbench"
+        },
+        {
+          "active" : true,
+          "index" : 1,
+          "tag" : "button",
+          "testid" : "loopops.nav.library",
+          "text" : "Loop Library"
+        },
+        {
+          "active" : true,
+          "index" : 2,
+          "tag" : "button",
+          "testid" : "loopops.nav.skillos",
+          "text" : "Skill OS"
+        },
+        {
+          "active" : true,
+          "index" : 3,
+          "tag" : "button",
+          "testid" : "loopops.nav.chat",
+          "text" : "Chat"
+        },
+        {
+          "active" : true,
+          "index" : 4,
+          "tag" : "button",
+          "testid" : "loopops.nav.studio",
+          "text" : "Studio"
+        },
+        {
+          "active" : true,
+          "index" : 5,
+          "tag" : "button",
+          "testid" : "loopops.nav.knowledge",
+          "text" : "Knowledge"
+        },
+        {
+          "active" : true,
+          "index" : 6,
+          "tag" : "button",
+          "testid" : "loopops.language.zh",
+          "text" : "中文"
+        },
+        {
+          "active" : true,
+          "index" : 7,
+          "tag" : "button",
+          "testid" : "loopops.language.en",
+          "text" : "EN"
+        },
+        {
+          "active" : true,
+          "index" : 8,
+          "tag" : "button",
+          "testid" : "loopops.workspace.save",
+          "text" : "Save workspace"
+        },
+        {
+          "active" : true,
+          "index" : 9,
+          "tag" : "button",
+          "testid" : "loopops.topbar.primary.send-message",
+          "text" : "Send message"
+        },
+        {
+          "active" : true,
+          "index" : 10,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch to Run chat"
+        },
+        {
+          "active" : true,
+          "index" : 11,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch to Builder chat"
+        },
+        {
+          "active" : true,
+          "index" : 12,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch to Review chat"
+        },
+        {
+          "active" : true,
+          "index" : 13,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch model from Kimi K2"
+        },
+        {
+          "active" : true,
+          "index" : 14,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Switch to Deep mode"
+        },
+        {
+          "active" : true,
+          "index" : 15,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Enable search"
+        },
+        {
+          "active" : true,
+          "index" : 16,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Attach context"
+        },
+        {
+          "active" : true,
+          "index" : 17,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Enable temporary chat"
+        },
+        {
+          "active" : true,
+          "index" : 18,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Create prompt"
+        },
+        {
+          "active" : true,
+          "index" : 19,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Explore prompt"
+        },
+        {
+          "active" : true,
+          "index" : 20,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Code prompt"
+        },
+        {
+          "active" : true,
+          "index" : 21,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Learn prompt"
+        },
+        {
+          "active" : true,
+          "index" : 22,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send quick action: 补证据缺口"
+        },
+        {
+          "active" : true,
+          "index" : 23,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send quick action: 生成审阅包"
+        },
+        {
+          "active" : true,
+          "index" : 24,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send quick action: 交给 builder"
+        },
+        {
+          "active" : true,
+          "index" : 25,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Remove attachment research-notes.md"
+        },
+        {
+          "active" : true,
+          "index" : 26,
+          "tag" : "textarea",
+          "testid" : "",
+          "text" : "Run chat message"
+        },
+        {
+          "active" : true,
+          "index" : 27,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Send Run chat message"
+        },
+        {
+          "active" : true,
+          "index" : 28,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Run: Run selected loop"
+        },
+        {
+          "active" : true,
+          "index" : 29,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Run: Explain active queue"
+        },
+        {
+          "active" : true,
+          "index" : 30,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Run: Fork this result"
+        },
+        {
+          "active" : true,
+          "index" : 31,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Builder: Draft steps"
+        },
+        {
+          "active" : true,
+          "index" : 32,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Builder: Rewrite review rule"
+        },
+        {
+          "active" : true,
+          "index" : 33,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Builder: Create tool from step"
+        },
+        {
+          "active" : true,
+          "index" : 34,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Review: Find evidence gaps"
+        },
+        {
+          "active" : true,
+          "index" : 35,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Review: Prepare review packet"
+        },
+        {
+          "active" : true,
+          "index" : 36,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Review: Mark reviewed"
+        },
+        {
+          "active" : true,
+          "index" : 37,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Run"
+        },
+        {
+          "active" : true,
+          "index" : 38,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Builder"
+        },
+        {
+          "active" : true,
+          "index" : 39,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Review"
+        },
+        {
+          "active" : true,
+          "index" : 40,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Open result"
+        },
+        {
+          "active" : true,
+          "index" : 41,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Open Studio"
+        },
+        {
+          "active" : true,
+          "index" : 42,
+          "tag" : "button",
+          "testid" : "",
+          "text" : "Loop Library synced 4 templates"
+        }
+      ],
+      "h1" : "Chat",
+      "primary" : "Send message",
+      "primaryIndex" : 9,
+      "primaryTestID" : "loopops.topbar.primary.send-message",
+      "surface" : "Chat"
+    }
+  ],
+  "targetUrl" : "http:\/\/127.0.0.1:5184\/"
+}

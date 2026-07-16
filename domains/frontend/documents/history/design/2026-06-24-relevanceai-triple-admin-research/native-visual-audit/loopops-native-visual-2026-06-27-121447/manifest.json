@@ -1,0 +1,70 @@
+{
+  "captureCount" : 5,
+  "captureID" : "loopops-native-visual-2026-06-27-121447",
+  "captures" : [
+    {
+      "bytes" : 307407,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/native-visual-audit\/loopops-native-visual-2026-06-27-121447\/01-workbench.png",
+      "height" : 820,
+      "id" : "01-workbench",
+      "nonBlank" : true,
+      "sampledColorCount" : 83,
+      "title" : "Workbench default",
+      "width" : 1280,
+      "workspace" : "工作台"
+    },
+    {
+      "bytes" : 490262,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/native-visual-audit\/loopops-native-visual-2026-06-27-121447\/02-loop-library.png",
+      "height" : 820,
+      "id" : "02-loop-library",
+      "nonBlank" : true,
+      "sampledColorCount" : 120,
+      "title" : "Loop Library database",
+      "width" : 1280,
+      "workspace" : "Loop Library"
+    },
+    {
+      "bytes" : 527116,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/native-visual-audit\/loopops-native-visual-2026-06-27-121447\/03-skill-os.png",
+      "height" : 820,
+      "id" : "03-skill-os",
+      "nonBlank" : true,
+      "sampledColorCount" : 118,
+      "title" : "Skill OS and Tool Logs",
+      "width" : 1280,
+      "workspace" : "Skill OS"
+    },
+    {
+      "bytes" : 390229,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/native-visual-audit\/loopops-native-visual-2026-06-27-121447\/04-knowledge.png",
+      "height" : 820,
+      "id" : "04-knowledge",
+      "nonBlank" : true,
+      "sampledColorCount" : 94,
+      "title" : "Knowledge library",
+      "width" : 1280,
+      "workspace" : "Knowledge"
+    },
+    {
+      "bytes" : 456647,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/native-visual-audit\/loopops-native-visual-2026-06-27-121447\/05-studio.png",
+      "height" : 820,
+      "id" : "05-studio",
+      "nonBlank" : true,
+      "sampledColorCount" : 113,
+      "title" : "Studio builder",
+      "width" : 1280,
+      "workspace" : "Studio"
+    }
+  ],
+  "created" : "2026-06-27-121447",
+  "externalUIAutomation" : false,
+  "manifestPath" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/native-visual-audit\/loopops-native-visual-2026-06-27-121447\/manifest.json",
+  "markdownPath" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/native-visual-audit\/loopops-native-visual-2026-06-27-121447\/README.md",
+  "nativeAppKitClicksVerified" : false,
+  "noSystemPermissions" : true,
+  "nonBlankCount" : 5,
+  "outputDirectory" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/native-visual-audit\/loopops-native-visual-2026-06-27-121447",
+  "permissionModel" : "offscreen NSHostingView render; no open, AppleScript, Accessibility, screen recording, Chrome\/Safari, browser automation, or external AppKit click automation"
+}

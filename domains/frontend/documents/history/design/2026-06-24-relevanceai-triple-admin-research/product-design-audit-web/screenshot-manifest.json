@@ -1,0 +1,297 @@
+{
+  "capturedAt" : "2026-06-26T16:03:52Z",
+  "shots" : [
+    {
+      "clientWidth" : 1263,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/product-design-audit-web\/01-workbench-initial.png",
+      "h1" : "工作台",
+      "h2s" : [
+        "Crypto Market Report Loop",
+        "当前队列",
+        "Crypto Market Report Loop",
+        "运行中"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Workbench initial",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 1263,
+      "step" : "01",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/"
+    },
+    {
+      "clientWidth" : 1263,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/product-design-audit-web\/02-loop-library-database.png",
+      "h1" : "Loop 库",
+      "h2s" : [
+        "Crypto Market Report Loop"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Loop Library database",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 1263,
+      "step" : "02",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/"
+    },
+    {
+      "clientWidth" : 1263,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/product-design-audit-web\/03-workbench-run-result.png",
+      "h1" : "工作台",
+      "h2s" : [
+        "Crypto Market Report Loop",
+        "当前队列",
+        "Crypto Market Report Loop",
+        "运行中"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Workbench run result",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 1263,
+      "step" : "03",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/"
+    },
+    {
+      "clientWidth" : 1263,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/product-design-audit-web\/04-skill-os-stack.png",
+      "h1" : "技能 OS",
+      "h2s" : [
+        "可复用动作与编排流程",
+        "CMC market radar",
+        "执行路径",
+        "CMC market radar"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Skill OS stack",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 1263,
+      "step" : "04",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/"
+    },
+    {
+      "clientWidth" : 1263,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/product-design-audit-web\/05-skill-os-stack-after-add.png",
+      "h1" : "技能 OS",
+      "h2s" : [
+        "可复用动作与编排流程",
+        "CMC market radar",
+        "执行路径",
+        "CMC market radar"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Skill OS stack after add",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 1263,
+      "step" : "05",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/"
+    },
+    {
+      "clientWidth" : 1263,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/product-design-audit-web\/05a-skill-os-create-tool-import.png",
+      "h1" : "技能 OS",
+      "h2s" : [
+        "可复用动作与编排流程",
+        "CMC market radar",
+        "执行路径",
+        "CMC market radar",
+        "选择起点"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Skill OS Create Tool import modal",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 1263,
+      "step" : "05a",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/"
+    },
+    {
+      "clientWidth" : 1263,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/product-design-audit-web\/05b-skill-os-tool-logs-validation.png",
+      "h1" : "技能 OS",
+      "h2s" : [
+        "可复用动作与编排流程",
+        "截图 导入 复核 Tool",
+        "执行路径",
+        "截图 导入 复核 Tool"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Skill OS Tool logs validation",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 1263,
+      "step" : "05b",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/"
+    },
+    {
+      "clientWidth" : 1263,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/product-design-audit-web\/06-studio-contract-page.png",
+      "h1" : "工作室",
+      "h2s" : [
+        "Loop 蓝图页",
+        "结构化蓝图",
+        "草稿有修改"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Studio contract page",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 1263,
+      "step" : "06",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/"
+    },
+    {
+      "clientWidth" : 1263,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/product-design-audit-web\/06a-studio-builder-patch-receipt.png",
+      "h1" : "工作室",
+      "h2s" : [
+        "Loop 蓝图页",
+        "结构化蓝图",
+        "草稿有修改"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Studio Builder patch receipt",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 1263,
+      "step" : "06a",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/"
+    },
+    {
+      "clientWidth" : 1263,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/product-design-audit-web\/06b-studio-review-changes.png",
+      "h1" : "工作室",
+      "h2s" : [
+        "Loop 蓝图页",
+        "结构化蓝图",
+        "草稿有修改"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Studio review changes",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 1263,
+      "step" : "06b",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/"
+    },
+    {
+      "clientWidth" : 1263,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/product-design-audit-web\/07-knowledge-new-menu.png",
+      "h1" : "知识库",
+      "h2s" : [
+        "来源与可复用上下文",
+        "RelevanceAI admin notes"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Knowledge new menu",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 1263,
+      "step" : "07",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/"
+    },
+    {
+      "clientWidth" : 1263,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/product-design-audit-web\/08-knowledge-setup-panel.png",
+      "h1" : "知识库",
+      "h2s" : [
+        "来源与可复用上下文",
+        "RelevanceAI admin notes"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Knowledge setup panel",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 1263,
+      "step" : "08",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/"
+    },
+    {
+      "clientWidth" : 1263,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/product-design-audit-web\/08b-knowledge-source-detail.png",
+      "h1" : "知识库",
+      "h2s" : [
+        "来源与可复用上下文",
+        "Untitled 条知识 note"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Knowledge source detail",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 1263,
+      "step" : "08b",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/"
+    },
+    {
+      "clientWidth" : 1263,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/product-design-audit-web\/09-chat-quick-gui.png",
+      "h1" : "聊天",
+      "h2s" : [
+        "上下文聊天台",
+        "运行上下文"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Chat quick GUI",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 1263,
+      "step" : "09",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/"
+    },
+    {
+      "clientWidth" : 1263,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/design\/2026-06-24-relevanceai-triple-admin-research\/product-design-audit-web\/10-workbench-empty-state.png",
+      "h1" : "工作台",
+      "h2s" : [
+        "运行队列与最终答案",
+        "当前队列",
+        "暂无运行",
+        "未选择运行 selected"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Workbench empty state",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 1263,
+      "step" : "10",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:5184\/"
+    }
+  ],
+  "targetUrl" : "http:\/\/127.0.0.1:5184\/",
+  "viewport" : {
+    "height" : 820,
+    "width" : 1280
+  }
+}

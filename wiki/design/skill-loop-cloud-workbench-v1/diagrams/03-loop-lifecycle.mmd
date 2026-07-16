@@ -1,0 +1,19 @@
+flowchart LR
+    Entry["Describe goal / Blank / Starting point / Upload / Duplicate"]
+    Contract["Draft Loop definition"]
+    Compose["Add and arrange Skills"]
+    Validate["Validate Loop"]
+    Setup{"Ready?"}
+    Fix["Fix definition or setup"]
+    Test["Test Loop"]
+    Review["Review result and checks"]
+    Publish["Publish immutable version"]
+    Run["Run Loop"]
+    Evidence["Result, evidence, review, timeline"]
+    Improve["Create next draft"]
+
+    Entry --> Contract --> Compose --> Validate --> Setup
+    Setup -->|No| Fix --> Validate
+    Setup -->|Yes| Test --> Review
+    Review -->|Needs changes| Contract
+    Review -->|Pass| Publish --> Run --> Evidence --> Improve --> Contract

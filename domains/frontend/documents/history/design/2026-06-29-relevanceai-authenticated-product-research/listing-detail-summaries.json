@@ -1,0 +1,3538 @@
+[
+  {
+    "slug": "02-listing-outbound-composer",
+    "controls": [
+      {
+        "href": "/",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Open search"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Open menu"
+      },
+      {
+        "href": "/",
+        "role": null,
+        "tag": "A",
+        "text": "Relevance Marketplace"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "INPUT",
+        "text": "Search"
+      },
+      {
+        "href": "/builders",
+        "role": null,
+        "tag": "A",
+        "text": "Builders"
+      },
+      {
+        "href": "/integrations",
+        "role": null,
+        "tag": "A",
+        "text": "Integrations"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Categories"
+      },
+      {
+        "href": "/category/sales",
+        "role": null,
+        "tag": "A",
+        "text": "Sales"
+      },
+      {
+        "href": "/category/marketing",
+        "role": null,
+        "tag": "A",
+        "text": "Marketing"
+      },
+      {
+        "href": "/category/content_creation",
+        "role": null,
+        "tag": "A",
+        "text": "Content Creation"
+      },
+      {
+        "href": "/category/research",
+        "role": null,
+        "tag": "A",
+        "text": "Research"
+      },
+      {
+        "href": "/category/operations",
+        "role": null,
+        "tag": "A",
+        "text": "Operations"
+      },
+      {
+        "href": "/category/hr_recruitment",
+        "role": null,
+        "tag": "A",
+        "text": "HR & talent"
+      },
+      {
+        "href": "https://app.relevanceai.com/",
+        "role": null,
+        "tag": "A",
+        "text": "Start for free"
+      },
+      {
+        "href": "/",
+        "role": null,
+        "tag": "A",
+        "text": "Marketplace"
+      },
+      {
+        "href": "/search?entityType=agent",
+        "role": null,
+        "tag": "A",
+        "text": "Agents"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Copy link"
+      },
+      {
+        "href": "https://app.relevanceai.com/marketplace-clone?cloneMarketplaceListingId=42f2cab0-71d6-41ca-b71e-fbaa55dfc53a",
+        "role": null,
+        "tag": "A",
+        "text": "Clone Agent"
+      },
+      {
+        "href": "/category/marketing",
+        "role": null,
+        "tag": "A",
+        "text": "Marketing"
+      },
+      {
+        "href": "/category/research",
+        "role": null,
+        "tag": "A",
+        "text": "Research"
+      },
+      {
+        "href": "/category/sales",
+        "role": null,
+        "tag": "A",
+        "text": "Sales"
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": "✉️"
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": "📩"
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": "✍️"
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": "🌐"
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": "🔀"
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "/integrations/gmail",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "/integrations/linkedin",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "#ratings-and-reviews",
+        "role": null,
+        "tag": "A",
+        "text": "★ 5.0 (1)"
+      },
+      {
+        "href": "https://community.relevanceai.com",
+        "role": null,
+        "tag": "A",
+        "text": "https://community.relevanceai.com"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "📩 ✍️ … Expand to see thinking"
+      },
+      {
+        "href": "mailto:user@example.com",
+        "role": null,
+        "tag": "A",
+        "text": "user@example.com"
+      },
+      {
+        "href": "mailto:user@example.com",
+        "role": null,
+        "tag": "A",
+        "text": "user@example.com"
+      },
+      {
+        "href": "https://www.smartcompany.com.au/startupsmart/relevance-ai-raises-15-million-low-code-workplace-platform/",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://www.forbes.com.au/news/entrepreneurs/six-australian-companies-make-forbes-asias-100-to-watch-list/",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://techcrunch.com/2023/12/11/relevance-ais-low-code-platform-enables-businesses-to-build-ai-teams/",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://www.theinformation.com/newsletters/ai-agenda/what-separates-the-ai-winners-and-losers-the-general-catalyst-backed-startup-taking-on-databricks",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://relevanceai.com/book-a-demo",
+        "role": null,
+        "tag": "A",
+        "text": "Talk to sales"
+      },
+      {
+        "href": "https://app.relevanceai.com",
+        "role": null,
+        "tag": "A",
+        "text": "Try for free"
+      },
+      {
+        "href": "https://app.relevanceai.com/marketplace-clone?cloneMarketplaceListingId=42f2cab0-71d6-41ca-b71e-fbaa55dfc53a",
+        "role": null,
+        "tag": "A",
+        "text": "Clone this agent"
+      },
+      {
+        "href": "/listing/17e5f250-1f45-4d65-8840-f224c38e60d1",
+        "role": null,
+        "tag": "A",
+        "text": "Build Competitor Profile Build Company Profile Competitive Analyst Agent • 10 Competitive Analyst is an AI agent for GTM teams that need clear, evidence-backed competitor intelligence for sales, marketing, support, pricing, QBR prep, and battlecards. The agent sets up your home-company context once, stores confirmed durable facts in long-term memory, then uses that context to compare competitors against your actual positioning. It can handle quick scans for live conversations or deeper research for strategic work. Competitive Analyst researches competitor websites, pricing pages, comparison pages, search results, LinkedIn, and third-party evidence. It separates competitor-owned claims, independent evidence, and grounded inference so teams can see what is directly sourced, what is externally supported, and what still needs verification. Outputs focus on practical GTM decisions: positioning, key messaging, pricing signals, competitor strengths, your-company strengths, objections, risks, sales traps, positioning implications, and battlecard notes. Every important claim is labelled as Fact, Inference, or Unverified. Use it when you need competitor analysis that is specific, cited, and useful for real customer conversations, not generic market summaries. Alex Waite Free"
+      },
+      {
+        "href": "/listing/676d6e7b-7fd1-4f76-b739-12ee70cb2b41",
+        "role": null,
+        "tag": "A",
+        "text": "📧 Convert .msg File to JSON Tool • 0 Parses an Outlook .msg (OLE/CFB) email file and returns its full contents as JSON — subject, from, to, cc, date, headers, plain + HTML body, recipients, and attachments (with base64 data). Raw extraction, no summarisation. Alex Waite Free"
+      },
+      {
+        "href": "/listing/0e36dbfe-70ad-4208-a274-373b31e0a3c2",
+        "role": null,
+        "tag": "A",
+        "text": ".msg File Reader Agent • 2 Reads Outlook .msg (binary OLE) email files that other tools can't parse. Extracts subject, sender, recipients, date, body, HTML, headers, and attachments, then answers questions about the email. Alex Waite Free"
+      },
+      {
+        "href": "/listing/cca97b25-77ea-47e5-9766-ae6549c28a72",
+        "role": null,
+        "tag": "A",
+        "text": "Google BigQuery: Run Query to be checked BigQuery SQL Performance Reviewer Agent • 3 BigQuery SQL Performance Reviewer An SQL analyst agent that runs your queries, retrieves job performance metadata, and provides optimization recommendations tailored for fraud detection workloads. Features Runs BigQuery SQL queries against your GCP project Automatically appends LIMIT 10 if no LIMIT is present in your query Retrieves job performance metadata via INFORMATION_SCHEMA.JOBS using the job_id Flags cache hits and explains their impact on performance metrics Provides query optimization recommendations specific to fraud detection workloads Requirements Google account authenticated via OAuth A valid GCP Project ID with BigQuery access How It Works Submit your SQL query and GCP Project ID The agent checks for a LIMIT clause and appends LIMIT 10 if missing The query is executed and results are returned Job performance metadata is retrieved using the returned job_id A performance summary and optimization recommendations are provided Performance Summary Includes Job ID Cache hit status Bytes processed and billed Slot milliseconds Query duration Optimization warnings and recommendations Notes Cache hit results show 0 bytes processed and do not reflect true scan cost Always include a date filter on transaction_timestamp for better performance SQL is never modified beyond adding LIMIT 10 ebixg Free"
+      },
+      {
+        "href": "/listing/4a693269-7c61-4e9a-a6a9-147cc274bbe2",
+        "role": null,
+        "tag": "A",
+        "text": "QR Code Wizard (Image) Agent • 4 Overview QR Code Wizard turns a quick chat into a polished, branded QR code. Tell it what you want in your own words and it returns a real downloadable image you can drop into slides, social posts, business cards, event signage, posters, and printed material. No design tools, no fiddling with templates, no broken codes. Built-in contrast checking means every QR you generate actually scans reliably, even with custom colours and centre logos. Key Features Nine QR types:* website, vCard contact card, wifi network, email, SMS, phone, plain text, location, and crypto wallet Custom branding:* pick any colour, embed your logo in the centre, add a frame label like SCAN ME Real downloadable images:* returns a hosted PNG (for screen) and SVG (for print) on stable URLs Conversational interface:* answer in plain English, no forms, no jargon Built-in contrast checking:* warns you if your colours might fail to scan Auto error correction:* when you add a logo, error correction bumps to maximum so the code still scans reliably Workflow-ready:* the underlying tool can be called from other agents, slide builders, or document pipelines How It Works Tell the agent what you want. Plain English works: \"QR code for my booking link in purple with SCAN ME label\" or \"wifi QR for my home network\". Answer any clarifying questions. The agent only asks for what's missing. Get your QR. The agent posts an inline preview plus PNG and SVG download links. Use it anywhere. Drop the PNG into slides, posters, social, email signatures. Use the SVG for crisp print at any size. Use Cases Perfect for: Coaches, consultants, and creators wanting branded QR codes for booking pages, lead magnets, and offers Small business owners adding QR codes to business cards, menus, signage, and packaging Event planners generating QR codes for tickets, wifi access, schedules, and venue maps Marketing teams creating campaign-specific QR codes with brand colours and CTAs Anyone who needs a QR code that looks professional and scans reliably, without learning design software Example Output An 800x800px PNG QR code in your brand colour, optionally with your logo in the centre and a SCAN ME frame label, plus a vector SVG version for print. Both files are returned as direct download links. The chat preview shows the QR inline so you can scan it with your phone before downloading. Disclaimer. Provided as-is by the publisher for productivity use only. No warranty, no liability for any direct or indirect damages, lost revenue, printing costs, scanner failures, brand impact, or third-party claims. The caller is solely responsible for the content encoded (URLs, contact details, wallet addresses, wifi credentials, etc) and for testing every QR code before production use. Crypto QR codes are generated from the address supplied, always verify independently. Outputs are hosted on Relevance AI temporary infrastructure, download and self-host for permanent use. Inputs are processed by third-party AI providers under their own policies. Nothing here is legal, financial, marketing, or design advice. By using this tool you indemnify the publisher against any claim arising from its use. Governed by the laws of the user's country of residence to the extent permitted, otherwise by the laws of the publisher's country of registration. Yasmin Cronin Free"
+      },
+      {
+        "href": "/listing/d1092947-1746-4df1-9596-255d13796a2c",
+        "role": null,
+        "tag": "A",
+        "text": "AI RFP Response Generator Agent • 7 AI RFP Response Generator Free SMB alternative to Loopio. Upload your RFP or security questionnaire + your knowledge sources — get a filled draft in minutes with citations and trust scores on every answer. What It Does Parses any questionnaire — XLSX, DOCX, PDF, CSV. Handles SIG-Lite, CAIQ, VSAQ, HECVAT, vendor RFPs, DDQs. Indexes your knowledge — past RFPs, security policies, trust center URLs, pasted FAQs, company profile Drafts every answer with citations — verbatim source excerpts, never fabricates certifications Detects conflicts between source documents on the same question Trust scores 0–1 per answer; flags low-confidence + regulatory questions for human review Format-faithful export — writes answers back into your original XLSX/DOCX Who It's For SMBs and 5–50 person teams hit with one or two RFPs/security questionnaires per quarter Solo SaaS founders, freelance security consultants Anyone who can't afford Loopio ($25K+/yr) or AutoRFP.ai ($899+/mo) Example Tasks \"Fill this SIG-Lite. Knowledge sources: [URLs]. We're SOC 2 Type II certified.\" \"Draft answers for this CAIQ-Lite using my pasted security policy.\" \"Process this vendor DDQ. Pull from trust.example.com.\" Trust is the product — better to flag 30 questions for review than fabricate 3. Michael Shaimerden Free"
+      },
+      {
+        "href": "https://linkedin.com/company/relevanceai",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://github.com/relevanceai",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://www.youtube.com/@relevanceai",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "/",
+        "role": null,
+        "tag": "A",
+        "text": "Home"
+      },
+      {
+        "href": "/category/marketing",
+        "role": null,
+        "tag": "A",
+        "text": "Marketing"
+      },
+      {
+        "href": "/category/sales",
+        "role": null,
+        "tag": "A",
+        "text": "Sales"
+      },
+      {
+        "href": "/category/customer_support",
+        "role": null,
+        "tag": "A",
+        "text": "Customer Support"
+      },
+      {
+        "href": "/category/hr_recruitment",
+        "role": null,
+        "tag": "A",
+        "text": "HR & Recruitment"
+      },
+      {
+        "href": "/category/research",
+        "role": null,
+        "tag": "A",
+        "text": "Research"
+      },
+      {
+        "href": "/use-cases",
+        "role": null,
+        "tag": "A",
+        "text": "Use Cases"
+      },
+      {
+        "href": "/use-cases/email-marketing-agents",
+        "role": null,
+        "tag": "A",
+        "text": "Email Marketing"
+      },
+      {
+        "href": "/use-cases/website-chatbot-agents",
+        "role": null,
+        "tag": "A",
+        "text": "Website Chatbots"
+      },
+      {
+        "href": "/use-cases/linkedin-agents",
+        "role": null,
+        "tag": "A",
+        "text": "LinkedIn Agents"
+      },
+      {
+        "href": "/use-cases/phone-sales-agents",
+        "role": null,
+        "tag": "A",
+        "text": "Phone Sales"
+      },
+      {
+        "href": "/use-cases/lead-scoring-agents",
+        "role": null,
+        "tag": "A",
+        "text": "Lead Scoring"
+      },
+      {
+        "href": "/integrations",
+        "role": null,
+        "tag": "A",
+        "text": "Integrations"
+      },
+      {
+        "href": "/integrations/hubspot",
+        "role": null,
+        "tag": "A",
+        "text": "HubSpot"
+      },
+      {
+        "href": "/integrations/salesforce",
+        "role": null,
+        "tag": "A",
+        "text": "Salesforce"
+      },
+      {
+        "href": "/integrations/slack",
+        "role": null,
+        "tag": "A",
+        "text": "Slack"
+      },
+      {
+        "href": "/integrations/gmail",
+        "role": null,
+        "tag": "A",
+        "text": "Gmail"
+      },
+      {
+        "href": "/integrations/linkedin",
+        "role": null,
+        "tag": "A",
+        "text": "LinkedIn"
+      },
+      {
+        "href": "/integrations/google-sheets",
+        "role": null,
+        "tag": "A",
+        "text": "Google Sheets"
+      },
+      {
+        "href": "/integrations/apollo",
+        "role": null,
+        "tag": "A",
+        "text": "Apollo"
+      },
+      {
+        "href": "/integrations/notion",
+        "role": null,
+        "tag": "A",
+        "text": "Notion"
+      },
+      {
+        "href": "/integrations/zapier",
+        "role": null,
+        "tag": "A",
+        "text": "Zapier"
+      },
+      {
+        "href": "/integrations/intercom",
+        "role": null,
+        "tag": "A",
+        "text": "Intercom"
+      },
+      {
+        "href": "/integrations/openai",
+        "role": null,
+        "tag": "A",
+        "text": "OpenAI"
+      },
+      {
+        "href": "/integrations/mailchimp",
+        "role": null,
+        "tag": "A",
+        "text": "Mailchimp"
+      },
+      {
+        "href": "/integrations",
+        "role": null,
+        "tag": "A",
+        "text": "View all →"
+      },
+      {
+        "href": "/compare",
+        "role": null,
+        "tag": "A",
+        "text": "Alternatives"
+      },
+      {
+        "href": "/compare/apollo-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Apollo.io Alternatives"
+      },
+      {
+        "href": "/compare/hubspot-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "HubSpot Alternatives"
+      },
+      {
+        "href": "/compare/zoominfo-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "ZoomInfo Alternatives"
+      },
+      {
+        "href": "/compare/notion-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Notion Alternatives"
+      },
+      {
+        "href": "/compare/mailchimp-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Mailchimp Alternatives"
+      },
+      {
+        "href": "/compare/gong-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Gong Alternatives"
+      },
+      {
+        "href": "/compare/heyreach-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "HeyReach Alternatives"
+      },
+      {
+        "href": "/compare/phantombuster-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "PhantomBuster Alternatives"
+      },
+      {
+        "href": "/compare/heygen-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "HeyGen Alternatives"
+      },
+      {
+        "href": "/compare/synthesia-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Synthesia Alternatives"
+      },
+      {
+        "href": "/compare/jasper-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Jasper Alternatives"
+      },
+      {
+        "href": "/compare/loom-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Loom Alternatives"
+      },
+      {
+        "href": "/compare",
+        "role": null,
+        "tag": "A",
+        "text": "View all →"
+      },
+      {
+        "href": "https://docs.relevanceai.com",
+        "role": null,
+        "tag": "A",
+        "text": "Documentation"
+      },
+      {
+        "href": "https://relevanceai.com/blog",
+        "role": null,
+        "tag": "A",
+        "text": "Blog"
+      },
+      {
+        "href": "https://community.relevanceai.com",
+        "role": null,
+        "tag": "A",
+        "text": "Community"
+      },
+      {
+        "href": "https://relevanceai.com/changelog",
+        "role": null,
+        "tag": "A",
+        "text": "Changelog"
+      }
+    ],
+    "h1": "Outbound Composer",
+    "headings": [
+      {
+        "level": "H1",
+        "text": "Outbound Composer"
+      },
+      {
+        "level": "H2",
+        "text": "Example Conversation"
+      },
+      {
+        "level": "H2",
+        "text": "Personalization Brief"
+      },
+      {
+        "level": "H2",
+        "text": "LinkedIn Variants"
+      },
+      {
+        "level": "H3",
+        "text": "Variant A — Content Reaction"
+      },
+      {
+        "level": "H3",
+        "text": "Variant B — Mutual Interest"
+      },
+      {
+        "level": "H2",
+        "text": "Email"
+      },
+      {
+        "level": "H3",
+        "text": "Email Variant A — Content Reaction"
+      },
+      {
+        "level": "H3",
+        "text": "Email Variant B — Mutual Interest"
+      },
+      {
+        "level": "H2",
+        "text": "Ready to send?"
+      },
+      {
+        "level": "H3",
+        "text": "Variant A — Content Reaction"
+      },
+      {
+        "level": "H3",
+        "text": "Variant B — Mutual Interest"
+      },
+      {
+        "level": "H3",
+        "text": "Variant A"
+      },
+      {
+        "level": "H3",
+        "text": "Variant B"
+      },
+      {
+        "level": "H2",
+        "text": "Featured in..."
+      },
+      {
+        "level": "H2",
+        "text": "Getting Started"
+      },
+      {
+        "level": "H2",
+        "text": "How it works"
+      },
+      {
+        "level": "H2",
+        "text": "More by Alex Waite"
+      },
+      {
+        "level": "H3",
+        "text": "Competitive Analyst"
+      },
+      {
+        "level": "H3",
+        "text": "Convert .msg File to JSON"
+      },
+      {
+        "level": "H3",
+        "text": ".msg File Reader"
+      },
+      {
+        "level": "H2",
+        "text": "Similar Agents"
+      },
+      {
+        "level": "H3",
+        "text": "BigQuery SQL Performance Reviewer"
+      },
+      {
+        "level": "H3",
+        "text": "QR Code Wizard (Image)"
+      },
+      {
+        "level": "H3",
+        "text": "AI RFP Response Generator"
+      },
+      {
+        "level": "H2",
+        "text": "Ratings and reviews"
+      },
+      {
+        "level": "H3",
+        "text": "Marketplace"
+      },
+      {
+        "level": "H3",
+        "text": "Resources"
+      },
+      {
+        "level": "H3",
+        "text": "Company"
+      }
+    ],
+    "title": "Outbound Composer - Relevance Marketplace",
+    "url": "https://marketplace.relevanceai.com/listing/42f2cab0-71d6-41ca-b71e-fbaa55dfc53a",
+    "visibleText": [
+      "Open search",
+      "Open menu",
+      "Relevance Marketplace",
+      "Relevance Marketplace",
+      "Builders",
+      "Integrations",
+      "Categories",
+      "Sales",
+      "Marketing",
+      "Content Creation",
+      "Research",
+      "Operations",
+      "HR & talent",
+      "Start for free",
+      "Marketplace",
+      ">",
+      "Agents",
+      ">",
+      "Outbound Composer",
+      "Outbound Composer",
+      "Copy link",
+      "Clone Agent",
+      "AI Agent created by Alex Waite",
+      "AI Agent",
+      "Turns prospect intel into ready-to-send outbound. Researches a contact + their company, detects connection state, drafts 2-3 LinkedIn message variants with tone tuned to whether you're already connected, and finds the prospect's email when possible (with email variants to match). Built on the same two-brain architecture as Sales Researcher.",
+      "CATEGORY",
+      "Marketing, Research, Sales",
+      "Marketing",
+      "Research",
+      "Sales",
+      "TOOLS",
+      "11 tools",
+      "✉️",
+      "✉️",
+      "📩",
+      "📩",
+      "✍️",
+      "✍️",
+      "🌐",
+      "🌐",
+      "🔀",
+      "🔀",
+      "INTEGRATIONS",
+      "4 integrations",
+      "CLONES",
+      "73",
+      "★ 5.0 (1)",
+      "Turns prospect intel into ready-to-send outbound. Researches a contact + their company, detects connection state, drafts 2-3 LinkedIn message variants with tone tuned to whether you're already connected, and finds the prospect's email when possible (with email variants to match). Built on the same two-brain architecture as Sales Researcher.",
+      "Created live in the Relevance Community in our live agent building series! Join the Relevance Community to learn more about agent building and get your agent use cases built by expert agent builders at https://community.relevanceai.com",
+      "https://community.relevanceai.com",
+      "Example Conversation",
+      "User",
+      "Let's go!",
+      "Outbound Composer",
+      "Perfect. Here's the play:",
+      "Lane: Post-connect followup (you're already connected, so this is warm) Approach: React to his recent work on Acme Corporation + explore mutual interest in AI-powered support Angles I'll try: Content reaction (his Acme Corporation post), Mutual interest (both in AI support automation) Char limit: 1900 (plenty of room) Variants: 2 Email: Yes — I'll try to find his work email too",
+      "Sound good, or want me to adjust?",
+      "📩 ✍️ … Expand to see thinking",
+      "📩 ✍️ …",
+      "📩",
+      "✍️",
+      "Outbound Composer",
+      "Used Get information from LinkedIn",
+      "Get information from LinkedIn",
+      "Used Get information from LinkedIn",
+      "Get information from LinkedIn",
+      "📩",
+      "Used Find Prospect Email",
+      "Find Prospect Email",
+      "✍️",
+      "Used Message Drafter",
+      "Message Drafter",
+      "✍️",
+      "Used Message Drafter",
+      "Message Drafter",
+      "Perfect. Here's your personalization brief and drafts:",
+      "Personalization Brief",
+      "Hook 1: SupportOS build (Nov 2025) — AI layer on Pylon ticketing, multi-ticket automation, emphasis on non-engineer accessibility (Conf 5/5)",
+      "Hook 2: Mutual interest — both solving AI-powered support automation; John Doe building internal tools, Tech Solutions Inc. providing end-to-end resolution (Conf 4/5)",
+      "Their context: Technical Support Specialist at Acme Corporation; hands-on builder and evangelist; joined Sept 2025",
+      "Connection state: Already connected on LinkedIn",
+      "LinkedIn Variants",
+      "Variant A — Content Reaction",
+      "Your SupportOS build is really cool — especially the multi-ticket batch runs on top of Pylon. Not something you see many support folks actually shipping themselves.",
+      "One thing I've been thinking about since reading your post: how are you approaching the jump from drafting responses to full resolution? Like actually closing the loop. Processing a refund, updating an account, filing the bug report AND linking it back to the ticket automatically.",
+      "That's where we've been spending most of our energy at Tech Solutions Inc.. Getting AI to take real action across systems (not just suggest it) while keeping accuracy tight enough that you're not creating a new review queue for humans.",
+      "No pitch here. Genuinely curious since you're building from the inside at Acme Corporation and we're attacking it from the product side. Feels like there's a good conversation in comparing notes.",
+      "Up for a quick chat sometime? Happy to share what's been working (and what hasn't) on our end too.",
+      "Char count: 963 / 1900 | Why: Reacts to his concrete shipped work, asks a specific technical question that shows you understand the challenge, positions Tech Solutions Inc. as a peer builder.",
+      "Variant B — Mutual Interest",
+      "Hey John Doe,",
+      "Your SupportOS build is sharp — layering AI on Pylon with Acme Corporation's MCP/SDK to handle drafting, doc search, and multi-ticket batch runs. The part about making it accessible to non-engineers is what got me. That's the actual hard part most people skip over.",
+      "How's it performing in the wild? I'm curious whether the drafted responses are going out mostly untouched or if there's still a decent amount of agent editing before send.",
+      "We're deep in similar territory at Tech Solutions Inc. — building AI that resolves customer support issues end-to-end across chat, email, voice, SMS. Different product, but the core challenge is the same: getting AI accurate enough that humans actually trust it without second-guessing every response.",
+      "Would genuinely enjoy comparing notes. No pitch, no agenda — just seems like a waste to be building in the same corner of AI support in Sydney and not talk.",
+      "Char count: 894 / 1900 | Why: Acknowledges the hard part (adoption), asks about real-world performance, positions as peer problem-solver in the same city.",
+      "Email",
+      "Found: user@example.com (Conf 4/5, source: pattern + Google verification)",
+      "user@example.com",
+      "Email Variant A — Content Reaction",
+      "Subject: SupportOS is a smart build",
+      "Hey John Doe,",
+      "Saw your SupportOS walkthrough — layering AI on Pylon with the Acme Corporation SDK to handle draft responses, doc search, ticket refinement, multi-ticket runs. Really clean solve for a problem most teams just throw headcount at.",
+      "I run Tech Solutions Inc. — we're in a similar orbit. AI that resolves customer support issues end-to-end across chat, email, voice, SMS. Different entry point but a lot of the same headaches around accuracy, keeping humans in the loop, and making it actually usable for non-engineers.",
+      "Curious how the multi-ticket automation is holding up in practice. Happy to share what's been working (and not working) on our end too.",
+      "No agenda, just seems like a good conversation.",
+      "Cheers",
+      "Char count: 733 / 8000 | Why: Short, specific, peer-to-peer. Reacts to his work, mentions Tech Solutions Inc. naturally, asks a real question.",
+      "Email Variant B — Mutual Interest",
+      "Subject: SupportOS is sharp",
+      "Hey John Doe,",
+      "Your SupportOS walkthrough stopped my scroll. The bit about making it work for non-engineers — that's where most internal AI tools die quietly. People build something powerful then wonder why nobody on the team actually uses it.",
+      "I'm working on a related problem at Tech Solutions Inc. (AI support resolution across chat, email, voice, SMS). Different angle but the same core challenge: getting humans to trust the AI enough to let it do its thing without rewriting everything.",
+      "Biggest unlock we stumbled into was radical transparency — showing exactly why the AI took each step, not just the output. Sounds obvious in hindsight but it changed adoption completely.",
+      "Would be fun to compare notes sometime. No agenda, just genuinely curious how SupportOS is landing with agents day to day.",
+      "Cheers",
+      "Char count: 819 / 8000 | Why: Leads with empathy on the adoption challenge, shares a concrete insight (transparency), invites collaboration without pitch.",
+      "Ready to send?",
+      "Which variant feels right to you? Want to:",
+      "Send Variant A or B via LinkedIn direct message",
+      "Send an email variant to user@example.com",
+      "user@example.com",
+      "Edit one first, then send",
+      "Try a different angle",
+      "✍️",
+      "Used Message Drafter",
+      "Message Drafter",
+      "Much better. Here are your two tight variants:",
+      "Variant A — Content Reaction",
+      "AcmeCorpX on TechX is a sharp build. Multi-ticket automation is exactly the space we're neck-deep in at AcmeLab1. Would love to swap notes on how you're handling resolution accuracy across those flows.",
+      "Char count: 201 / 300 | Why: Compliments the work, shows you get it, asks a real question.",
+      "Variant B — Mutual Interest",
+      "AcmeCorpX caught my eye — building an AI layer on top of TechX is no joke. We're solving similar problems at AcmeLab1, just from the platform side. Curious how you're handling multi-ticket resolution accuracy at scale?",
+      "Char count: 218 / 300 | Why: Peer-to-peer, no pitch, invites a conversation.",
+      "Which one feels more like you? Want me to send it, or tweak first?",
+      "✍️",
+      "Used Message Drafter",
+      "Message Drafter",
+      "Better. Here's the vibe:",
+      "Variant A",
+      "Yo John Doe — your Acme Platform build is wild. Multi-ticket automation on Tech Solutions Inc. is exactly the kind of thing I nerd out about. How's it performing on the messy edge cases? Been building similar stuff at Acme Corporation, down to swap notes if you're keen.",
+      "Char count: 242 / 300",
+      "Variant B",
+      "Saw your Acme Platform post — building an AI layer on Tech Solutions Inc. is legit. How's it holding up with real ticket volume? Been in the weeds on similar stuff with Acme Corporation. Would love to trade notes if you're keen.",
+      "Char count: 202 / 300",
+      "These feel more like you're just chatting with someone you know. Which one lands better?",
+      "Used Send LinkedIn Message",
+      "Send LinkedIn Message",
+      "Used Save to Memory",
+      "Save to Memory",
+      "Outbound Composer",
+      "Outbound Composer",
+      "Saved that preference — next time you reach out to someone you already know, I'll keep it even more casual and friend-like.",
+      "Want to draft another prospect, or all set?",
+      "Featured in...",
+      "Getting Started",
+      "1. Sign up for free",
+      "1.",
+      "Sign up for free",
+      "Create your Relevance AI account in seconds. No credit card required — get instant access to the platform and start exploring what AI agents can do for your team.",
+      "Talk to sales",
+      "Try for free",
+      "2. Create your AI Agents",
+      "2.",
+      "Create your AI Agents",
+      "Clone this agent or build your own from scratch. Connect your favourite tools and integrations — CRMs, email, search, scraping — and configure your agent's workflow in minutes.",
+      "Clone this agent",
+      "3. Deploy",
+      "3.",
+      "Deploy",
+      "Set up triggers to run your agents on autopilot — on a schedule, from incoming emails, or via API. Watch your AI workforce handle the busywork while you focus on strategy and closing deals.",
+      "How it works",
+      "Outbound Composer",
+      "✉️",
+      "Send Gmail Email",
+      "Send LinkedIn Message",
+      "📩",
+      "Find Prospect Email",
+      "✍️",
+      "Message Drafter",
+      "Get Company Open Roles from LinkedIn",
+      "OpenAI Deep Researcher",
+      "Get information from LinkedIn",
+      "🌐",
+      "Search the web",
+      "Extract and Summarize Website Content",
+      "🔀",
+      "Outreach Router",
+      "Google Search",
+      "More by Alex Waite",
+      "Build Competitor Profile Build Company Profile Competitive Analyst Agent • 10 Competitive Analyst is an AI agent for GTM teams that need clear, evidence-backed competitor intelligence for sales, marketing, support, pricing, QBR prep, and battlecards. The agent sets up your home-company context once, stores confirmed durable facts in long-term memory, then uses that context to compare competitors against your actual positioning. It can handle quick scans for live conversations or deeper research for strategic work. Competitive Analyst researches competitor websites, pricing pages, comparison pages, search results, LinkedIn, and third-party evidence. It separates competitor-owned claims, independent evidence, and grounded inference so teams can see what is directly sourced, what is externally supported, and what still needs verification. Outputs focus on practical GTM decisions: positioning, key messaging, pricing signals, competitor strengths, your-company strengths, objections, risks, sales traps, positioning implications, and battlecard notes. Every important claim is labelled as Fact, Inference, or Unverified. Use it when you need competitor analysis that is specific, cited, and useful for real customer conversations, not generic market summaries. Alex Waite Free",
+      "Competitive Analyst",
+      "Agent",
+      "•",
+      "10",
+      "Competitive Analyst is an AI agent for GTM teams that need clear, evidence-backed competitor intelligence for sales, marketing, support, pricing, QBR prep, and battlecards. The agent sets up your home-company context once, stores confirmed durable facts in long-term memory, then uses that context to compare competitors against your actual positioning. It can handle quick scans for live conversations or deeper research for strategic work. Competitive Analyst researches competitor websites, pricing pages, comparison pages, search results, LinkedIn, and third-party evidence. It separates competitor-owned claims, independent evidence, and grounded inference so teams can see what is directly sourced, what is externally supported, and what still needs verification. Outputs focus on practical GTM decisions: positioning, key messaging, pricing signals, competitor strengths, your-company strengths, objections, risks, sales traps, positioning implications, and battlecard notes. Every important claim is labelled as Fact, Inference, or Unverified. Use it when you need competitor analysis that is specific, cited, and useful for real customer conversations, not generic market summaries.",
+      "Alex Waite",
+      "Free",
+      "📧 Convert .msg File to JSON Tool • 0 Parses an Outlook .msg (OLE/CFB) email file and returns its full contents as JSON — subject, from, to, cc, date, headers, plain + HTML body, recipients, and attachments (with base64 data). Raw extraction, no summarisation. Alex Waite Free",
+      "Convert .msg File to JSON",
+      "Tool",
+      "•",
+      "0",
+      "Parses an Outlook .msg (OLE/CFB) email file and returns its full contents as JSON — subject, from, to, cc, date, headers, plain + HTML body, recipients, and attachments (with base64 data). Raw extraction, no summarisation.",
+      "Alex Waite",
+      "Free",
+      ".msg File Reader Agent • 2 Reads Outlook .msg (binary OLE) email files that other tools can't parse. Extracts subject, sender, recipients, date, body, HTML, headers, and attachments, then answers questions about the email. Alex Waite Free",
+      ".msg File Reader",
+      "Agent",
+      "•",
+      "2",
+      "Reads Outlook .msg (binary OLE) email files that other tools can't parse. Extracts subject, sender, recipients, date, body, HTML, headers, and attachments, then answers questions about the email.",
+      "Alex Waite",
+      "Free",
+      "Similar Agents",
+      "Google BigQuery: Run Query to be checked BigQuery SQL Performance Reviewer Agent • 3 BigQuery SQL Performance Reviewer An SQL analyst agent that runs your queries, retrieves job performance metadata, and provides optimization recommendations tailored for fraud detection workloads. Features Runs BigQuery SQL queries against your GCP project Automatically appends LIMIT 10 if no LIMIT is present in your query Retrieves job performance metadata via INFORMATION_SCHEMA.JOBS using the job_id Flags cache hits and explains their impact on performance metrics Provides query optimization recommendations specific to fraud detection workloads Requirements Google account authenticated via OAuth A valid GCP Project ID with BigQuery access How It Works Submit your SQL query and GCP Project ID The agent checks for a LIMIT clause and appends LIMIT 10 if missing The query is executed and results are returned Job performance metadata is retrieved using the returned job_id A performance summary and optimization recommendations are provided Performance Summary Includes Job ID Cache hit status Bytes processed and billed Slot milliseconds Query duration Optimization warnings and recommendations Notes Cache hit results show 0 bytes processed and do not reflect true scan cost Always include a date filter on transaction_timestamp for better performance SQL is never modified beyond adding LIMIT 10 ebixg Free",
+      "BigQuery SQL Performance Reviewer",
+      "Agent",
+      "•",
+      "3"
+    ]
+  },
+  {
+    "slug": "03-listing-salesforce-assistant",
+    "controls": [
+      {
+        "href": "/",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Open search"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Open menu"
+      },
+      {
+        "href": "/",
+        "role": null,
+        "tag": "A",
+        "text": "Relevance Marketplace"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "INPUT",
+        "text": "Search"
+      },
+      {
+        "href": "/builders",
+        "role": null,
+        "tag": "A",
+        "text": "Builders"
+      },
+      {
+        "href": "/integrations",
+        "role": null,
+        "tag": "A",
+        "text": "Integrations"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Categories"
+      },
+      {
+        "href": "/category/sales",
+        "role": null,
+        "tag": "A",
+        "text": "Sales"
+      },
+      {
+        "href": "/category/marketing",
+        "role": null,
+        "tag": "A",
+        "text": "Marketing"
+      },
+      {
+        "href": "/category/content_creation",
+        "role": null,
+        "tag": "A",
+        "text": "Content Creation"
+      },
+      {
+        "href": "/category/research",
+        "role": null,
+        "tag": "A",
+        "text": "Research"
+      },
+      {
+        "href": "/category/operations",
+        "role": null,
+        "tag": "A",
+        "text": "Operations"
+      },
+      {
+        "href": "/category/hr_recruitment",
+        "role": null,
+        "tag": "A",
+        "text": "HR & talent"
+      },
+      {
+        "href": "https://app.relevanceai.com/",
+        "role": null,
+        "tag": "A",
+        "text": "Start for free"
+      },
+      {
+        "href": "/",
+        "role": null,
+        "tag": "A",
+        "text": "Marketplace"
+      },
+      {
+        "href": "/search?entityType=agent",
+        "role": null,
+        "tag": "A",
+        "text": "Agents"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Copy link"
+      },
+      {
+        "href": "https://app.relevanceai.com/marketplace-clone?cloneMarketplaceListingId=f8925f8e-4702-486f-94aa-5e16919cc809",
+        "role": null,
+        "tag": "A",
+        "text": "Clone Agent"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Previous media"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Next media"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "View image 1"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "View image 2"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "View image 3"
+      },
+      {
+        "href": "/category/sales",
+        "role": null,
+        "tag": "A",
+        "text": "Sales"
+      },
+      {
+        "href": "/category/operations",
+        "role": null,
+        "tag": "A",
+        "text": "Operations"
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": "🔍"
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": "☁️"
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": "🎓"
+      },
+      {
+        "href": "#ratings-and-reviews",
+        "role": null,
+        "tag": "A",
+        "text": "★ 3.0 (1)"
+      },
+      {
+        "href": "mailto:user01@acmecorp.com",
+        "role": null,
+        "tag": "A",
+        "text": "user01@acmecorp.com"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "☁️ Expand to see thinking"
+      },
+      {
+        "href": "mailto:user@example.com",
+        "role": null,
+        "tag": "A",
+        "text": "user@example.com"
+      },
+      {
+        "href": "https://www.smartcompany.com.au/startupsmart/relevance-ai-raises-15-million-low-code-workplace-platform/",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://www.forbes.com.au/news/entrepreneurs/six-australian-companies-make-forbes-asias-100-to-watch-list/",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://techcrunch.com/2023/12/11/relevance-ais-low-code-platform-enables-businesses-to-build-ai-teams/",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://www.theinformation.com/newsletters/ai-agenda/what-separates-the-ai-winners-and-losers-the-general-catalyst-backed-startup-taking-on-databricks",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://relevanceai.com/book-a-demo",
+        "role": null,
+        "tag": "A",
+        "text": "Talk to sales"
+      },
+      {
+        "href": "https://app.relevanceai.com",
+        "role": null,
+        "tag": "A",
+        "text": "Try for free"
+      },
+      {
+        "href": "https://app.relevanceai.com/marketplace-clone?cloneMarketplaceListingId=f8925f8e-4702-486f-94aa-5e16919cc809",
+        "role": null,
+        "tag": "A",
+        "text": "Clone this agent"
+      },
+      {
+        "href": "/listing/d1092947-1746-4df1-9596-255d13796a2c",
+        "role": null,
+        "tag": "A",
+        "text": "AI RFP Response Generator Agent • 7 AI RFP Response Generator Free SMB alternative to Loopio. Upload your RFP or security questionnaire + your knowledge sources — get a filled draft in minutes with citations and trust scores on every answer. What It Does Parses any questionnaire — XLSX, DOCX, PDF, CSV. Handles SIG-Lite, CAIQ, VSAQ, HECVAT, vendor RFPs, DDQs. Indexes your knowledge — past RFPs, security policies, trust center URLs, pasted FAQs, company profile Drafts every answer with citations — verbatim source excerpts, never fabricates certifications Detects conflicts between source documents on the same question Trust scores 0–1 per answer; flags low-confidence + regulatory questions for human review Format-faithful export — writes answers back into your original XLSX/DOCX Who It's For SMBs and 5–50 person teams hit with one or two RFPs/security questionnaires per quarter Solo SaaS founders, freelance security consultants Anyone who can't afford Loopio ($25K+/yr) or AutoRFP.ai ($899+/mo) Example Tasks \"Fill this SIG-Lite. Knowledge sources: [URLs]. We're SOC 2 Type II certified.\" \"Draft answers for this CAIQ-Lite using my pasted security policy.\" \"Process this vendor DDQ. Pull from trust.example.com.\" Trust is the product — better to flag 30 questions for review than fabricate 3. Michael Shaimerden Free"
+      },
+      {
+        "href": "/listing/ff7d4781-24ca-40a4-9f24-f307b19498a9",
+        "role": null,
+        "tag": "A",
+        "text": "AI Invoice Parser Agent • 15 AI Invoice Parser Free invoice-to-JSON parser. Send a PDF, image, or pasted text — get back structured data in seconds. 25+ fields per invoice including line items, currency, payment terms, and bank details. What It Does OCR + structured extraction — vendor, invoice number, dates, amounts, line items, taxes, bank details Vendor matching against your existing records (fuzzy + tax ID) Duplicate detection — fingerprint + fuzzy match against past invoices GL code suggestions per line item (standard SMB chart of accounts or your own) Confidence per field so you know which to verify CSV / JSON export for upload to QuickBooks, Xero, Google Sheets Who It's For Solo founders and freelancers parsing 20–100 invoices/mo Bookkeepers managing 5–50 SMB clients Developers needing invoice data for custom workflows Anyone currently pasting invoice PDFs into ChatGPT or paying $45/user/mo just to get started Example Tasks \"Parse this PDF invoice and export as CSV.\" \"Extract line items + suggest GL codes for this Stripe bill.\" \"Is this a duplicate? Here's my list of past 50 invoices.\" Send a public PDF/image URL or paste invoice text and get going. Michael Shaimerden Free"
+      },
+      {
+        "href": "/listing/c9e4828b-d839-42c0-90fb-dc42af5f2f40",
+        "role": null,
+        "tag": "A",
+        "text": "AI Contract Review Agent • 26 AI Contract Review Free first-pass contract review for non-lawyers. Plain English risk analysis, suggested redlines, and a draft email back to the counterparty — in under a minute. What It Does Auto-detects contract type — NDA, MSA, SOW, Vendor Agreement, Lease, Employment, DPA Plain-English risk table with high/medium/low severity, why it matters, and what to push back on Surfaces missing clauses the counterparty should have included to protect you Drafts the negotiation email — copy-paste ready, no legal jargon Optional redlined DOCX with proposed changes annotated Who It's For Founders reviewing investor or vendor agreements Sales teams responding to MSAs and SOWs Ops and procurement screening incoming contracts before legal review Anyone who currently pastes their NDA into ChatGPT Example Tasks \"Review this NDA — I'm the seller, US-based.\" \"Flag the riskiest terms in this MSA and draft the email I should send back.\" \"What would a top-tier law firm push back on in this SOW?\" ⚠️ Provides legal information, not legal advice. Have a licensed attorney review contracts with material consequences. Michael Shaimerden Free"
+      },
+      {
+        "href": "/listing/17e5f250-1f45-4d65-8840-f224c38e60d1",
+        "role": null,
+        "tag": "A",
+        "text": "Build Competitor Profile Build Company Profile Competitive Analyst Agent • 10 Competitive Analyst is an AI agent for GTM teams that need clear, evidence-backed competitor intelligence for sales, marketing, support, pricing, QBR prep, and battlecards. The agent sets up your home-company context once, stores confirmed durable facts in long-term memory, then uses that context to compare competitors against your actual positioning. It can handle quick scans for live conversations or deeper research for strategic work. Competitive Analyst researches competitor websites, pricing pages, comparison pages, search results, LinkedIn, and third-party evidence. It separates competitor-owned claims, independent evidence, and grounded inference so teams can see what is directly sourced, what is externally supported, and what still needs verification. Outputs focus on practical GTM decisions: positioning, key messaging, pricing signals, competitor strengths, your-company strengths, objections, risks, sales traps, positioning implications, and battlecard notes. Every important claim is labelled as Fact, Inference, or Unverified. Use it when you need competitor analysis that is specific, cited, and useful for real customer conversations, not generic market summaries. Alex Waite Free"
+      },
+      {
+        "href": "/listing/0e36dbfe-70ad-4208-a274-373b31e0a3c2",
+        "role": null,
+        "tag": "A",
+        "text": ".msg File Reader Agent • 2 Reads Outlook .msg (binary OLE) email files that other tools can't parse. Extracts subject, sender, recipients, date, body, HTML, headers, and attachments, then answers questions about the email. Alex Waite Free"
+      },
+      {
+        "href": "/listing/cca97b25-77ea-47e5-9766-ae6549c28a72",
+        "role": null,
+        "tag": "A",
+        "text": "Google BigQuery: Run Query to be checked BigQuery SQL Performance Reviewer Agent • 3 BigQuery SQL Performance Reviewer An SQL analyst agent that runs your queries, retrieves job performance metadata, and provides optimization recommendations tailored for fraud detection workloads. Features Runs BigQuery SQL queries against your GCP project Automatically appends LIMIT 10 if no LIMIT is present in your query Retrieves job performance metadata via INFORMATION_SCHEMA.JOBS using the job_id Flags cache hits and explains their impact on performance metrics Provides query optimization recommendations specific to fraud detection workloads Requirements Google account authenticated via OAuth A valid GCP Project ID with BigQuery access How It Works Submit your SQL query and GCP Project ID The agent checks for a LIMIT clause and appends LIMIT 10 if missing The query is executed and results are returned Job performance metadata is retrieved using the returned job_id A performance summary and optimization recommendations are provided Performance Summary Includes Job ID Cache hit status Bytes processed and billed Slot milliseconds Query duration Optimization warnings and recommendations Notes Cache hit results show 0 bytes processed and do not reflect true scan cost Always include a date filter on transaction_timestamp for better performance SQL is never modified beyond adding LIMIT 10 ebixg Free"
+      },
+      {
+        "href": "https://linkedin.com/company/relevanceai",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://github.com/relevanceai",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://www.youtube.com/@relevanceai",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "/",
+        "role": null,
+        "tag": "A",
+        "text": "Home"
+      },
+      {
+        "href": "/category/marketing",
+        "role": null,
+        "tag": "A",
+        "text": "Marketing"
+      },
+      {
+        "href": "/category/sales",
+        "role": null,
+        "tag": "A",
+        "text": "Sales"
+      },
+      {
+        "href": "/category/customer_support",
+        "role": null,
+        "tag": "A",
+        "text": "Customer Support"
+      },
+      {
+        "href": "/category/hr_recruitment",
+        "role": null,
+        "tag": "A",
+        "text": "HR & Recruitment"
+      },
+      {
+        "href": "/category/research",
+        "role": null,
+        "tag": "A",
+        "text": "Research"
+      },
+      {
+        "href": "/use-cases",
+        "role": null,
+        "tag": "A",
+        "text": "Use Cases"
+      },
+      {
+        "href": "/use-cases/email-marketing-agents",
+        "role": null,
+        "tag": "A",
+        "text": "Email Marketing"
+      },
+      {
+        "href": "/use-cases/website-chatbot-agents",
+        "role": null,
+        "tag": "A",
+        "text": "Website Chatbots"
+      },
+      {
+        "href": "/use-cases/linkedin-agents",
+        "role": null,
+        "tag": "A",
+        "text": "LinkedIn Agents"
+      },
+      {
+        "href": "/use-cases/phone-sales-agents",
+        "role": null,
+        "tag": "A",
+        "text": "Phone Sales"
+      },
+      {
+        "href": "/use-cases/lead-scoring-agents",
+        "role": null,
+        "tag": "A",
+        "text": "Lead Scoring"
+      },
+      {
+        "href": "/integrations",
+        "role": null,
+        "tag": "A",
+        "text": "Integrations"
+      },
+      {
+        "href": "/integrations/hubspot",
+        "role": null,
+        "tag": "A",
+        "text": "HubSpot"
+      },
+      {
+        "href": "/integrations/salesforce",
+        "role": null,
+        "tag": "A",
+        "text": "Salesforce"
+      },
+      {
+        "href": "/integrations/slack",
+        "role": null,
+        "tag": "A",
+        "text": "Slack"
+      },
+      {
+        "href": "/integrations/gmail",
+        "role": null,
+        "tag": "A",
+        "text": "Gmail"
+      },
+      {
+        "href": "/integrations/linkedin",
+        "role": null,
+        "tag": "A",
+        "text": "LinkedIn"
+      },
+      {
+        "href": "/integrations/google-sheets",
+        "role": null,
+        "tag": "A",
+        "text": "Google Sheets"
+      },
+      {
+        "href": "/integrations/apollo",
+        "role": null,
+        "tag": "A",
+        "text": "Apollo"
+      },
+      {
+        "href": "/integrations/notion",
+        "role": null,
+        "tag": "A",
+        "text": "Notion"
+      },
+      {
+        "href": "/integrations/zapier",
+        "role": null,
+        "tag": "A",
+        "text": "Zapier"
+      },
+      {
+        "href": "/integrations/intercom",
+        "role": null,
+        "tag": "A",
+        "text": "Intercom"
+      },
+      {
+        "href": "/integrations/openai",
+        "role": null,
+        "tag": "A",
+        "text": "OpenAI"
+      },
+      {
+        "href": "/integrations/mailchimp",
+        "role": null,
+        "tag": "A",
+        "text": "Mailchimp"
+      },
+      {
+        "href": "/integrations",
+        "role": null,
+        "tag": "A",
+        "text": "View all →"
+      },
+      {
+        "href": "/compare",
+        "role": null,
+        "tag": "A",
+        "text": "Alternatives"
+      },
+      {
+        "href": "/compare/apollo-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Apollo.io Alternatives"
+      },
+      {
+        "href": "/compare/hubspot-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "HubSpot Alternatives"
+      },
+      {
+        "href": "/compare/zoominfo-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "ZoomInfo Alternatives"
+      },
+      {
+        "href": "/compare/notion-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Notion Alternatives"
+      },
+      {
+        "href": "/compare/mailchimp-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Mailchimp Alternatives"
+      },
+      {
+        "href": "/compare/gong-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Gong Alternatives"
+      },
+      {
+        "href": "/compare/heyreach-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "HeyReach Alternatives"
+      },
+      {
+        "href": "/compare/phantombuster-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "PhantomBuster Alternatives"
+      },
+      {
+        "href": "/compare/heygen-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "HeyGen Alternatives"
+      },
+      {
+        "href": "/compare/synthesia-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Synthesia Alternatives"
+      },
+      {
+        "href": "/compare/jasper-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Jasper Alternatives"
+      },
+      {
+        "href": "/compare/loom-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Loom Alternatives"
+      },
+      {
+        "href": "/compare",
+        "role": null,
+        "tag": "A",
+        "text": "View all →"
+      },
+      {
+        "href": "https://docs.relevanceai.com",
+        "role": null,
+        "tag": "A",
+        "text": "Documentation"
+      },
+      {
+        "href": "https://relevanceai.com/blog",
+        "role": null,
+        "tag": "A",
+        "text": "Blog"
+      },
+      {
+        "href": "https://community.relevanceai.com",
+        "role": null,
+        "tag": "A",
+        "text": "Community"
+      },
+      {
+        "href": "https://relevanceai.com/changelog",
+        "role": null,
+        "tag": "A",
+        "text": "Changelog"
+      },
+      {
+        "href": "https://relevanceai.com/book-a-demo",
+        "role": null,
+        "tag": "A",
+        "text": "Talk to Sales"
+      },
+      {
+        "href": "https://relevanceai.com/docs/get-started/support",
+        "role": null,
+        "tag": "A",
+        "text": "Support"
+      },
+      {
+        "href": "https://relevanceai.com/careers",
+        "role": null,
+        "tag": "A",
+        "text": "Careers"
+      },
+      {
+        "href": "https://trust.relevanceai.com/",
+        "role": null,
+        "tag": "A",
+        "text": "Trust Center"
+      },
+      {
+        "href": "https://relevanceai.com/privacy-policy",
+        "role": null,
+        "tag": "A",
+        "text": "Privacy Policy"
+      },
+      {
+        "href": "https://relevanceai.com/terms-and-conditions",
+        "role": null,
+        "tag": "A",
+        "text": "Terms of Service"
+      },
+      {
+        "href": "https://app.relevanceai.com/",
+        "role": null,
+        "tag": "A",
+        "text": "Sign In"
+      }
+    ],
+    "h1": "Salesforce Assistant",
+    "headings": [
+      {
+        "level": "H1",
+        "text": "Salesforce Assistant"
+      },
+      {
+        "level": "H2",
+        "text": "Your Natural Language Interface to Salesforce CRM"
+      },
+      {
+        "level": "H3",
+        "text": "Key Features"
+      },
+      {
+        "level": "H3",
+        "text": "What You Can Do"
+      },
+      {
+        "level": "H3",
+        "text": "Perfect For"
+      },
+      {
+        "level": "H3",
+        "text": "Getting Started"
+      },
+      {
+        "level": "H2",
+        "text": "Example Conversation"
+      },
+      {
+        "level": "H2",
+        "text": "Featured in..."
+      },
+      {
+        "level": "H2",
+        "text": "Getting Started"
+      },
+      {
+        "level": "H2",
+        "text": "How it works"
+      },
+      {
+        "level": "H2",
+        "text": "More by Michael Shaimerden"
+      },
+      {
+        "level": "H3",
+        "text": "AI RFP Response Generator"
+      },
+      {
+        "level": "H3",
+        "text": "AI Invoice Parser"
+      },
+      {
+        "level": "H3",
+        "text": "AI Contract Review"
+      },
+      {
+        "level": "H2",
+        "text": "Similar Agents"
+      },
+      {
+        "level": "H3",
+        "text": "Competitive Analyst"
+      },
+      {
+        "level": "H3",
+        "text": ".msg File Reader"
+      },
+      {
+        "level": "H3",
+        "text": "BigQuery SQL Performance Reviewer"
+      },
+      {
+        "level": "H2",
+        "text": "Ratings and reviews"
+      },
+      {
+        "level": "H3",
+        "text": "Marketplace"
+      },
+      {
+        "level": "H3",
+        "text": "Resources"
+      },
+      {
+        "level": "H3",
+        "text": "Company"
+      }
+    ],
+    "title": "Salesforce Assistant - Relevance Marketplace",
+    "url": "https://marketplace.relevanceai.com/listing/f8925f8e-4702-486f-94aa-5e16919cc809",
+    "visibleText": [
+      "Open search",
+      "Open menu",
+      "Relevance Marketplace",
+      "Relevance Marketplace",
+      "Builders",
+      "Integrations",
+      "Categories",
+      "Sales",
+      "Marketing",
+      "Content Creation",
+      "Research",
+      "Operations",
+      "HR & talent",
+      "Start for free",
+      "Marketplace",
+      ">",
+      "Agents",
+      ">",
+      "Salesforce Assistant",
+      "Salesforce Assistant",
+      "Copy link",
+      "Clone Agent",
+      "AI Agent created by Michael Shaimerden",
+      "AI Agent",
+      "Your natural language interface to Salesforce CRM. Query data with SOQL, create and update records, and manage your CRM through simple conversation. I'll handle the API calls while you focus on what you want to accomplish.",
+      "Previous media",
+      "Next media",
+      "View image 1",
+      "View image 2",
+      "View image 3",
+      "CATEGORY",
+      "Sales, Operations",
+      "Sales",
+      "Operations",
+      "TOOLS",
+      "3 tools",
+      "🔍",
+      "🔍",
+      "☁️",
+      "☁️",
+      "🎓",
+      "🎓",
+      "INTEGRATIONS",
+      "1 integration",
+      "CLONES",
+      "80",
+      "★ 3.0 (1)",
+      "Your Natural Language Interface to Salesforce CRM",
+      "The Salesforce Wizard transforms how you interact with your CRM. Instead of navigating complex interfaces or writing SOQL queries manually, simply describe what you need in plain English.",
+      "Key Features",
+      "Natural Language Queries - Ask questions like \"Show me all opportunities closing this quarter\" and get formatted, actionable results",
+      "Smart Write Guardrails - The agent always asks for explicit confirmation before creating, updating, or deleting any CRM records",
+      "CRM Memory - Remembers your custom field mappings, naming conventions, sales stages, and preferences across conversations",
+      "Intelligent Onboarding - Learns your specific Salesforce configuration to provide accurate, context-aware responses",
+      "What You Can Do",
+      "Query accounts, contacts, leads, opportunities, and custom objects",
+      "Create new records with natural language descriptions",
+      "Update existing records with confirmation before changes",
+      "Run complex SOQL queries and get formatted results",
+      "Get insights and recommendations based on your pipeline",
+      "Perfect For",
+      "Sales Ops managers who need quick CRM insights",
+      "Sales reps who want to update records without navigating Salesforce",
+      "Revenue teams tracking pipeline health and forecasting",
+      "Anyone who wants to talk to their Salesforce like a colleague",
+      "Getting Started",
+      "Connect your Salesforce account",
+      "Tell the agent about your CRM setup (objects, custom fields, stages)",
+      "Start asking questions or making requests in plain English",
+      "The agent learns your preferences over time, making every interaction faster and more accurate.",
+      "Example Conversation",
+      "User",
+      "Create a new lead named John Doe at AcmeCorp, email user01@acmecorp.com",
+      "user01@acmecorp.com",
+      "☁️ Expand to see thinking",
+      "☁️",
+      "☁️",
+      "Salesforce Assistant",
+      "☁️",
+      "Used Use Salesforce CRM",
+      "Use Salesforce CRM",
+      "Salesforce Assistant",
+      "Salesforce Assistant",
+      "✅ Lead created successfully!",
+      "New Lead Details:",
+      "Name: John Doe",
+      "Company: Tech Solutions Inc.",
+      "Email: user@example.com",
+      "user@example.com",
+      "Lead ID: ACCOUNT123",
+      "The lead has been added to your Salesforce CRM and is ready for follow-up activities. You can now assign it to a sales rep, add tasks, or convert it to an opportunity when appropriate.",
+      "Featured in...",
+      "Getting Started",
+      "1. Sign up for free",
+      "1.",
+      "Sign up for free",
+      "Create your Relevance AI account in seconds. No credit card required — get instant access to the platform and start exploring what AI agents can do for your team.",
+      "Talk to sales",
+      "Try for free",
+      "2. Create your AI Agents",
+      "2.",
+      "Create your AI Agents",
+      "Clone this agent or build your own from scratch. Connect your favourite tools and integrations — CRMs, email, search, scraping — and configure your agent's workflow in minutes.",
+      "Clone this agent",
+      "3. Deploy",
+      "3.",
+      "Deploy",
+      "Set up triggers to run your agents on autopilot — on a schedule, from incoming emails, or via API. Watch your AI workforce handle the busywork while you focus on strategy and closing deals.",
+      "How it works",
+      "Salesforce Assistant",
+      "🔍",
+      "Execute SOQL Query",
+      "☁️",
+      "Use Salesforce CRM",
+      "🎓",
+      "My Salesforce CRM Knowledge",
+      "More by Michael Shaimerden",
+      "AI RFP Response Generator Agent • 7 AI RFP Response Generator Free SMB alternative to Loopio. Upload your RFP or security questionnaire + your knowledge sources — get a filled draft in minutes with citations and trust scores on every answer. What It Does Parses any questionnaire — XLSX, DOCX, PDF, CSV. Handles SIG-Lite, CAIQ, VSAQ, HECVAT, vendor RFPs, DDQs. Indexes your knowledge — past RFPs, security policies, trust center URLs, pasted FAQs, company profile Drafts every answer with citations — verbatim source excerpts, never fabricates certifications Detects conflicts between source documents on the same question Trust scores 0–1 per answer; flags low-confidence + regulatory questions for human review Format-faithful export — writes answers back into your original XLSX/DOCX Who It's For SMBs and 5–50 person teams hit with one or two RFPs/security questionnaires per quarter Solo SaaS founders, freelance security consultants Anyone who can't afford Loopio ($25K+/yr) or AutoRFP.ai ($899+/mo) Example Tasks \"Fill this SIG-Lite. Knowledge sources: [URLs]. We're SOC 2 Type II certified.\" \"Draft answers for this CAIQ-Lite using my pasted security policy.\" \"Process this vendor DDQ. Pull from trust.example.com.\" Trust is the product — better to flag 30 questions for review than fabricate 3. Michael Shaimerden Free",
+      "AI RFP Response Generator",
+      "Agent",
+      "•",
+      "7",
+      "AI RFP Response Generator Free SMB alternative to Loopio. Upload your RFP or security questionnaire + your knowledge sources — get a filled draft in minutes with citations and trust scores on every answer. What It Does Parses any questionnaire — XLSX, DOCX, PDF, CSV. Handles SIG-Lite, CAIQ, VSAQ, HECVAT, vendor RFPs, DDQs. Indexes your knowledge — past RFPs, security policies, trust center URLs, pasted FAQs, company profile Drafts every answer with citations — verbatim source excerpts, never fabricates certifications Detects conflicts between source documents on the same question Trust scores 0–1 per answer; flags low-confidence + regulatory questions for human review Format-faithful export — writes answers back into your original XLSX/DOCX Who It's For SMBs and 5–50 person teams hit with one or two RFPs/security questionnaires per quarter Solo SaaS founders, freelance security consultants Anyone who can't afford Loopio ($25K+/yr) or AutoRFP.ai ($899+/mo) Example Tasks \"Fill this SIG-Lite. Knowledge sources: [URLs]. We're SOC 2 Type II certified.\" \"Draft answers for this CAIQ-Lite using my pasted security policy.\" \"Process this vendor DDQ. Pull from trust.example.com.\" Trust is the product — better to flag 30 questions for review than fabricate 3.",
+      "Michael Shaimerden",
+      "Free",
+      "AI Invoice Parser Agent • 15 AI Invoice Parser Free invoice-to-JSON parser. Send a PDF, image, or pasted text — get back structured data in seconds. 25+ fields per invoice including line items, currency, payment terms, and bank details. What It Does OCR + structured extraction — vendor, invoice number, dates, amounts, line items, taxes, bank details Vendor matching against your existing records (fuzzy + tax ID) Duplicate detection — fingerprint + fuzzy match against past invoices GL code suggestions per line item (standard SMB chart of accounts or your own) Confidence per field so you know which to verify CSV / JSON export for upload to QuickBooks, Xero, Google Sheets Who It's For Solo founders and freelancers parsing 20–100 invoices/mo Bookkeepers managing 5–50 SMB clients Developers needing invoice data for custom workflows Anyone currently pasting invoice PDFs into ChatGPT or paying $45/user/mo just to get started Example Tasks \"Parse this PDF invoice and export as CSV.\" \"Extract line items + suggest GL codes for this Stripe bill.\" \"Is this a duplicate? Here's my list of past 50 invoices.\" Send a public PDF/image URL or paste invoice text and get going. Michael Shaimerden Free",
+      "AI Invoice Parser",
+      "Agent",
+      "•",
+      "15",
+      "AI Invoice Parser Free invoice-to-JSON parser. Send a PDF, image, or pasted text — get back structured data in seconds. 25+ fields per invoice including line items, currency, payment terms, and bank details. What It Does OCR + structured extraction — vendor, invoice number, dates, amounts, line items, taxes, bank details Vendor matching against your existing records (fuzzy + tax ID) Duplicate detection — fingerprint + fuzzy match against past invoices GL code suggestions per line item (standard SMB chart of accounts or your own) Confidence per field so you know which to verify CSV / JSON export for upload to QuickBooks, Xero, Google Sheets Who It's For Solo founders and freelancers parsing 20–100 invoices/mo Bookkeepers managing 5–50 SMB clients Developers needing invoice data for custom workflows Anyone currently pasting invoice PDFs into ChatGPT or paying $45/user/mo just to get started Example Tasks \"Parse this PDF invoice and export as CSV.\" \"Extract line items + suggest GL codes for this Stripe bill.\" \"Is this a duplicate? Here's my list of past 50 invoices.\" Send a public PDF/image URL or paste invoice text and get going.",
+      "Michael Shaimerden",
+      "Free",
+      "AI Contract Review Agent • 26 AI Contract Review Free first-pass contract review for non-lawyers. Plain English risk analysis, suggested redlines, and a draft email back to the counterparty — in under a minute. What It Does Auto-detects contract type — NDA, MSA, SOW, Vendor Agreement, Lease, Employment, DPA Plain-English risk table with high/medium/low severity, why it matters, and what to push back on Surfaces missing clauses the counterparty should have included to protect you Drafts the negotiation email — copy-paste ready, no legal jargon Optional redlined DOCX with proposed changes annotated Who It's For Founders reviewing investor or vendor agreements Sales teams responding to MSAs and SOWs Ops and procurement screening incoming contracts before legal review Anyone who currently pastes their NDA into ChatGPT Example Tasks \"Review this NDA — I'm the seller, US-based.\" \"Flag the riskiest terms in this MSA and draft the email I should send back.\" \"What would a top-tier law firm push back on in this SOW?\" ⚠️ Provides legal information, not legal advice. Have a licensed attorney review contracts with material consequences. Michael Shaimerden Free",
+      "AI Contract Review",
+      "Agent",
+      "•",
+      "26",
+      "AI Contract Review Free first-pass contract review for non-lawyers. Plain English risk analysis, suggested redlines, and a draft email back to the counterparty — in under a minute. What It Does Auto-detects contract type — NDA, MSA, SOW, Vendor Agreement, Lease, Employment, DPA Plain-English risk table with high/medium/low severity, why it matters, and what to push back on Surfaces missing clauses the counterparty should have included to protect you Drafts the negotiation email — copy-paste ready, no legal jargon Optional redlined DOCX with proposed changes annotated Who It's For Founders reviewing investor or vendor agreements Sales teams responding to MSAs and SOWs Ops and procurement screening incoming contracts before legal review Anyone who currently pastes their NDA into ChatGPT Example Tasks \"Review this NDA — I'm the seller, US-based.\" \"Flag the riskiest terms in this MSA and draft the email I should send back.\" \"What would a top-tier law firm push back on in this SOW?\" ⚠️ Provides legal information, not legal advice. Have a licensed attorney review contracts with material consequences.",
+      "Michael Shaimerden",
+      "Free",
+      "Similar Agents",
+      "Build Competitor Profile Build Company Profile Competitive Analyst Agent • 10 Competitive Analyst is an AI agent for GTM teams that need clear, evidence-backed competitor intelligence for sales, marketing, support, pricing, QBR prep, and battlecards. The agent sets up your home-company context once, stores confirmed durable facts in long-term memory, then uses that context to compare competitors against your actual positioning. It can handle quick scans for live conversations or deeper research for strategic work. Competitive Analyst researches competitor websites, pricing pages, comparison pages, search results, LinkedIn, and third-party evidence. It separates competitor-owned claims, independent evidence, and grounded inference so teams can see what is directly sourced, what is externally supported, and what still needs verification. Outputs focus on practical GTM decisions: positioning, key messaging, pricing signals, competitor strengths, your-company strengths, objections, risks, sales traps, positioning implications, and battlecard notes. Every important claim is labelled as Fact, Inference, or Unverified. Use it when you need competitor analysis that is specific, cited, and useful for real customer conversations, not generic market summaries. Alex Waite Free",
+      "Competitive Analyst",
+      "Agent",
+      "•",
+      "10",
+      "Competitive Analyst is an AI agent for GTM teams that need clear, evidence-backed competitor intelligence for sales, marketing, support, pricing, QBR prep, and battlecards. The agent sets up your home-company context once, stores confirmed durable facts in long-term memory, then uses that context to compare competitors against your actual positioning. It can handle quick scans for live conversations or deeper research for strategic work. Competitive Analyst researches competitor websites, pricing pages, comparison pages, search results, LinkedIn, and third-party evidence. It separates competitor-owned claims, independent evidence, and grounded inference so teams can see what is directly sourced, what is externally supported, and what still needs verification. Outputs focus on practical GTM decisions: positioning, key messaging, pricing signals, competitor strengths, your-company strengths, objections, risks, sales traps, positioning implications, and battlecard notes. Every important claim is labelled as Fact, Inference, or Unverified. Use it when you need competitor analysis that is specific, cited, and useful for real customer conversations, not generic market summaries.",
+      "Alex Waite",
+      "Free",
+      ".msg File Reader Agent • 2 Reads Outlook .msg (binary OLE) email files that other tools can't parse. Extracts subject, sender, recipients, date, body, HTML, headers, and attachments, then answers questions about the email. Alex Waite Free",
+      ".msg File Reader",
+      "Agent",
+      "•",
+      "2",
+      "Reads Outlook .msg (binary OLE) email files that other tools can't parse. Extracts subject, sender, recipients, date, body, HTML, headers, and attachments, then answers questions about the email.",
+      "Alex Waite",
+      "Free",
+      "Google BigQuery: Run Query to be checked BigQuery SQL Performance Reviewer Agent • 3 BigQuery SQL Performance Reviewer An SQL analyst agent that runs your queries, retrieves job performance metadata, and provides optimization recommendations tailored for fraud detection workloads. Features Runs BigQuery SQL queries against your GCP project Automatically appends LIMIT 10 if no LIMIT is present in your query Retrieves job performance metadata via INFORMATION_SCHEMA.JOBS using the job_id Flags cache hits and explains their impact on performance metrics Provides query optimization recommendations specific to fraud detection workloads Requirements Google account authenticated via OAuth A valid GCP Project ID with BigQuery access How It Works Submit your SQL query and GCP Project ID The agent checks for a LIMIT clause and appends LIMIT 10 if missing The query is executed and results are returned Job performance metadata is retrieved using the returned job_id A performance summary and optimization recommendations are provided Performance Summary Includes Job ID Cache hit status Bytes processed and billed Slot milliseconds Query duration Optimization warnings and recommendations Notes Cache hit results show 0 bytes processed and do not reflect true scan cost Always include a date filter on transaction_timestamp for better performance SQL is never modified beyond adding LIMIT 10 ebixg Free",
+      "BigQuery SQL Performance Reviewer",
+      "Agent",
+      "•",
+      "3",
+      "BigQuery SQL Performance Reviewer An SQL analyst agent that runs your queries, retrieves job performance metadata, and provides optimization recommendations tailored for fraud detection workloads. Features Runs BigQuery SQL queries against your GCP project Automatically appends LIMIT 10 if no LIMIT is present in your query Retrieves job performance metadata via INFORMATION_SCHEMA.JOBS using the job_id Flags cache hits and explains their impact on performance metrics Provides query optimization recommendations specific to fraud detection workloads Requirements Google account authenticated via OAuth A valid GCP Project ID with BigQuery access How It Works Submit your SQL query and GCP Project ID The agent checks for a LIMIT clause and appends LIMIT 10 if missing The query is executed and results are returned Job performance metadata is retrieved using the returned job_id A performance summary and optimization recommendations are provided Performance Summary Includes Job ID Cache hit status Bytes processed and billed Slot milliseconds Query duration Optimization warnings and recommendations Notes Cache hit results show 0 bytes processed and do not reflect true scan cost Always include a date filter on transaction_timestamp for better performance SQL is never modified beyond adding LIMIT 10",
+      "ebixg",
+      "Free",
+      "Ratings and reviews",
+      "3.0",
+      "Based on 1 ratings",
+      "5",
+      "4",
+      "3",
+      "2",
+      "1",
+      "Good",
+      "K",
+      "krigujjar568",
+      "•",
+      "Mar 10, 2026",
+      "Relevance Marketplace",
+      "Discover amazing AI agents from trusted builders. Find everything you need in our curated marketplace.",
+      "Marketplace",
+      "Home",
+      "Home",
+      "Marketing",
+      "Marketing",
+      "Sales",
+      "Sales",
+      "Customer Support",
+      "Customer Support",
+      "HR & Recruitment",
+      "HR & Recruitment",
+      "Research",
+      "Research",
+      "Use Cases",
+      "Email Marketing",
+      "Email Marketing",
+      "Website Chatbots",
+      "Website Chatbots",
+      "LinkedIn Agents",
+      "LinkedIn Agents",
+      "Phone Sales",
+      "Phone Sales",
+      "Lead Scoring",
+      "Lead Scoring",
+      "Integrations",
+      "HubSpot",
+      "HubSpot",
+      "Salesforce",
+      "Salesforce",
+      "Slack",
+      "Slack",
+      "Gmail",
+      "Gmail",
+      "LinkedIn",
+      "LinkedIn",
+      "Google Sheets",
+      "Google Sheets",
+      "Apollo",
+      "Apollo"
+    ]
+  },
+  {
+    "slug": "04-listing-perfect-5-leads",
+    "controls": [
+      {
+        "href": "/",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Open search"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Open menu"
+      },
+      {
+        "href": "/",
+        "role": null,
+        "tag": "A",
+        "text": "Relevance Marketplace"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "INPUT",
+        "text": "Search"
+      },
+      {
+        "href": "/builders",
+        "role": null,
+        "tag": "A",
+        "text": "Builders"
+      },
+      {
+        "href": "/integrations",
+        "role": null,
+        "tag": "A",
+        "text": "Integrations"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Categories"
+      },
+      {
+        "href": "/category/sales",
+        "role": null,
+        "tag": "A",
+        "text": "Sales"
+      },
+      {
+        "href": "/category/marketing",
+        "role": null,
+        "tag": "A",
+        "text": "Marketing"
+      },
+      {
+        "href": "/category/content_creation",
+        "role": null,
+        "tag": "A",
+        "text": "Content Creation"
+      },
+      {
+        "href": "/category/research",
+        "role": null,
+        "tag": "A",
+        "text": "Research"
+      },
+      {
+        "href": "/category/operations",
+        "role": null,
+        "tag": "A",
+        "text": "Operations"
+      },
+      {
+        "href": "/category/hr_recruitment",
+        "role": null,
+        "tag": "A",
+        "text": "HR & talent"
+      },
+      {
+        "href": "https://app.relevanceai.com/",
+        "role": null,
+        "tag": "A",
+        "text": "Start for free"
+      },
+      {
+        "href": "/",
+        "role": null,
+        "tag": "A",
+        "text": "Marketplace"
+      },
+      {
+        "href": "/search?entityType=agent",
+        "role": null,
+        "tag": "A",
+        "text": "Agents"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Copy link"
+      },
+      {
+        "href": "https://app.relevanceai.com/marketplace-clone?cloneMarketplaceListingId=bb721608-e194-462b-ab99-53a96e898284",
+        "role": null,
+        "tag": "A",
+        "text": "Clone Agent"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Previous media"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Next media"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "View image 1"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "View image 2"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "View image 3"
+      },
+      {
+        "href": "/category/marketing",
+        "role": null,
+        "tag": "A",
+        "text": "Marketing"
+      },
+      {
+        "href": "/category/sales",
+        "role": null,
+        "tag": "A",
+        "text": "Sales"
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": "📝"
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": "🌐"
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": "🔍"
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": "🔍"
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": "🏢"
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": "👤"
+      },
+      {
+        "href": "#how-it-works",
+        "role": null,
+        "tag": "A",
+        "text": "🔎"
+      },
+      {
+        "href": "/integrations/firecrawl",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "/integrations/linkedin",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "#ratings-and-reviews",
+        "role": null,
+        "tag": "A",
+        "text": "★ 5.0 (5)"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "🔍 🔎 📝 … Expand to see thinking"
+      },
+      {
+        "href": "https://www.linkedin.com/in/ali-ahmadzadeh-110x",
+        "role": null,
+        "tag": "A",
+        "text": "John Doe"
+      },
+      {
+        "href": "https://www.linkedin.com/in/soufiane-amar",
+        "role": null,
+        "tag": "A",
+        "text": "Jane Smith"
+      },
+      {
+        "href": "https://www.linkedin.com/in/shivkumar-k-7b0542",
+        "role": null,
+        "tag": "A",
+        "text": "John Doe"
+      },
+      {
+        "href": "https://www.linkedin.com/in/claudiastamfel",
+        "role": null,
+        "tag": "A",
+        "text": "Jane Smith"
+      },
+      {
+        "href": "https://www.linkedin.com/in/meyyappan",
+        "role": null,
+        "tag": "A",
+        "text": "John Doe"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Show more..."
+      },
+      {
+        "href": "https://www.smartcompany.com.au/startupsmart/relevance-ai-raises-15-million-low-code-workplace-platform/",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://www.forbes.com.au/news/entrepreneurs/six-australian-companies-make-forbes-asias-100-to-watch-list/",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://techcrunch.com/2023/12/11/relevance-ais-low-code-platform-enables-businesses-to-build-ai-teams/",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://www.theinformation.com/newsletters/ai-agenda/what-separates-the-ai-winners-and-losers-the-general-catalyst-backed-startup-taking-on-databricks",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://relevanceai.com/book-a-demo",
+        "role": null,
+        "tag": "A",
+        "text": "Talk to sales"
+      },
+      {
+        "href": "https://app.relevanceai.com",
+        "role": null,
+        "tag": "A",
+        "text": "Try for free"
+      },
+      {
+        "href": "https://app.relevanceai.com/marketplace-clone?cloneMarketplaceListingId=bb721608-e194-462b-ab99-53a96e898284",
+        "role": null,
+        "tag": "A",
+        "text": "Clone this agent"
+      },
+      {
+        "href": "/listing/d1092947-1746-4df1-9596-255d13796a2c",
+        "role": null,
+        "tag": "A",
+        "text": "AI RFP Response Generator Agent • 7 AI RFP Response Generator Free SMB alternative to Loopio. Upload your RFP or security questionnaire + your knowledge sources — get a filled draft in minutes with citations and trust scores on every answer. What It Does Parses any questionnaire — XLSX, DOCX, PDF, CSV. Handles SIG-Lite, CAIQ, VSAQ, HECVAT, vendor RFPs, DDQs. Indexes your knowledge — past RFPs, security policies, trust center URLs, pasted FAQs, company profile Drafts every answer with citations — verbatim source excerpts, never fabricates certifications Detects conflicts between source documents on the same question Trust scores 0–1 per answer; flags low-confidence + regulatory questions for human review Format-faithful export — writes answers back into your original XLSX/DOCX Who It's For SMBs and 5–50 person teams hit with one or two RFPs/security questionnaires per quarter Solo SaaS founders, freelance security consultants Anyone who can't afford Loopio ($25K+/yr) or AutoRFP.ai ($899+/mo) Example Tasks \"Fill this SIG-Lite. Knowledge sources: [URLs]. We're SOC 2 Type II certified.\" \"Draft answers for this CAIQ-Lite using my pasted security policy.\" \"Process this vendor DDQ. Pull from trust.example.com.\" Trust is the product — better to flag 30 questions for review than fabricate 3. Michael Shaimerden Free"
+      },
+      {
+        "href": "/listing/ff7d4781-24ca-40a4-9f24-f307b19498a9",
+        "role": null,
+        "tag": "A",
+        "text": "AI Invoice Parser Agent • 15 AI Invoice Parser Free invoice-to-JSON parser. Send a PDF, image, or pasted text — get back structured data in seconds. 25+ fields per invoice including line items, currency, payment terms, and bank details. What It Does OCR + structured extraction — vendor, invoice number, dates, amounts, line items, taxes, bank details Vendor matching against your existing records (fuzzy + tax ID) Duplicate detection — fingerprint + fuzzy match against past invoices GL code suggestions per line item (standard SMB chart of accounts or your own) Confidence per field so you know which to verify CSV / JSON export for upload to QuickBooks, Xero, Google Sheets Who It's For Solo founders and freelancers parsing 20–100 invoices/mo Bookkeepers managing 5–50 SMB clients Developers needing invoice data for custom workflows Anyone currently pasting invoice PDFs into ChatGPT or paying $45/user/mo just to get started Example Tasks \"Parse this PDF invoice and export as CSV.\" \"Extract line items + suggest GL codes for this Stripe bill.\" \"Is this a duplicate? Here's my list of past 50 invoices.\" Send a public PDF/image URL or paste invoice text and get going. Michael Shaimerden Free"
+      },
+      {
+        "href": "/listing/c9e4828b-d839-42c0-90fb-dc42af5f2f40",
+        "role": null,
+        "tag": "A",
+        "text": "AI Contract Review Agent • 26 AI Contract Review Free first-pass contract review for non-lawyers. Plain English risk analysis, suggested redlines, and a draft email back to the counterparty — in under a minute. What It Does Auto-detects contract type — NDA, MSA, SOW, Vendor Agreement, Lease, Employment, DPA Plain-English risk table with high/medium/low severity, why it matters, and what to push back on Surfaces missing clauses the counterparty should have included to protect you Drafts the negotiation email — copy-paste ready, no legal jargon Optional redlined DOCX with proposed changes annotated Who It's For Founders reviewing investor or vendor agreements Sales teams responding to MSAs and SOWs Ops and procurement screening incoming contracts before legal review Anyone who currently pastes their NDA into ChatGPT Example Tasks \"Review this NDA — I'm the seller, US-based.\" \"Flag the riskiest terms in this MSA and draft the email I should send back.\" \"What would a top-tier law firm push back on in this SOW?\" ⚠️ Provides legal information, not legal advice. Have a licensed attorney review contracts with material consequences. Michael Shaimerden Free"
+      },
+      {
+        "href": "/listing/17e5f250-1f45-4d65-8840-f224c38e60d1",
+        "role": null,
+        "tag": "A",
+        "text": "Build Competitor Profile Build Company Profile Competitive Analyst Agent • 10 Competitive Analyst is an AI agent for GTM teams that need clear, evidence-backed competitor intelligence for sales, marketing, support, pricing, QBR prep, and battlecards. The agent sets up your home-company context once, stores confirmed durable facts in long-term memory, then uses that context to compare competitors against your actual positioning. It can handle quick scans for live conversations or deeper research for strategic work. Competitive Analyst researches competitor websites, pricing pages, comparison pages, search results, LinkedIn, and third-party evidence. It separates competitor-owned claims, independent evidence, and grounded inference so teams can see what is directly sourced, what is externally supported, and what still needs verification. Outputs focus on practical GTM decisions: positioning, key messaging, pricing signals, competitor strengths, your-company strengths, objections, risks, sales traps, positioning implications, and battlecard notes. Every important claim is labelled as Fact, Inference, or Unverified. Use it when you need competitor analysis that is specific, cited, and useful for real customer conversations, not generic market summaries. Alex Waite Free"
+      },
+      {
+        "href": "/listing/0e36dbfe-70ad-4208-a274-373b31e0a3c2",
+        "role": null,
+        "tag": "A",
+        "text": ".msg File Reader Agent • 2 Reads Outlook .msg (binary OLE) email files that other tools can't parse. Extracts subject, sender, recipients, date, body, HTML, headers, and attachments, then answers questions about the email. Alex Waite Free"
+      },
+      {
+        "href": "/listing/cca97b25-77ea-47e5-9766-ae6549c28a72",
+        "role": null,
+        "tag": "A",
+        "text": "Google BigQuery: Run Query to be checked BigQuery SQL Performance Reviewer Agent • 3 BigQuery SQL Performance Reviewer An SQL analyst agent that runs your queries, retrieves job performance metadata, and provides optimization recommendations tailored for fraud detection workloads. Features Runs BigQuery SQL queries against your GCP project Automatically appends LIMIT 10 if no LIMIT is present in your query Retrieves job performance metadata via INFORMATION_SCHEMA.JOBS using the job_id Flags cache hits and explains their impact on performance metrics Provides query optimization recommendations specific to fraud detection workloads Requirements Google account authenticated via OAuth A valid GCP Project ID with BigQuery access How It Works Submit your SQL query and GCP Project ID The agent checks for a LIMIT clause and appends LIMIT 10 if missing The query is executed and results are returned Job performance metadata is retrieved using the returned job_id A performance summary and optimization recommendations are provided Performance Summary Includes Job ID Cache hit status Bytes processed and billed Slot milliseconds Query duration Optimization warnings and recommendations Notes Cache hit results show 0 bytes processed and do not reflect true scan cost Always include a date filter on transaction_timestamp for better performance SQL is never modified beyond adding LIMIT 10 ebixg Free"
+      },
+      {
+        "href": "https://linkedin.com/company/relevanceai",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://github.com/relevanceai",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://www.youtube.com/@relevanceai",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "/",
+        "role": null,
+        "tag": "A",
+        "text": "Home"
+      },
+      {
+        "href": "/category/marketing",
+        "role": null,
+        "tag": "A",
+        "text": "Marketing"
+      },
+      {
+        "href": "/category/sales",
+        "role": null,
+        "tag": "A",
+        "text": "Sales"
+      },
+      {
+        "href": "/category/customer_support",
+        "role": null,
+        "tag": "A",
+        "text": "Customer Support"
+      },
+      {
+        "href": "/category/hr_recruitment",
+        "role": null,
+        "tag": "A",
+        "text": "HR & Recruitment"
+      },
+      {
+        "href": "/category/research",
+        "role": null,
+        "tag": "A",
+        "text": "Research"
+      },
+      {
+        "href": "/use-cases",
+        "role": null,
+        "tag": "A",
+        "text": "Use Cases"
+      },
+      {
+        "href": "/use-cases/email-marketing-agents",
+        "role": null,
+        "tag": "A",
+        "text": "Email Marketing"
+      },
+      {
+        "href": "/use-cases/website-chatbot-agents",
+        "role": null,
+        "tag": "A",
+        "text": "Website Chatbots"
+      },
+      {
+        "href": "/use-cases/linkedin-agents",
+        "role": null,
+        "tag": "A",
+        "text": "LinkedIn Agents"
+      },
+      {
+        "href": "/use-cases/phone-sales-agents",
+        "role": null,
+        "tag": "A",
+        "text": "Phone Sales"
+      },
+      {
+        "href": "/use-cases/lead-scoring-agents",
+        "role": null,
+        "tag": "A",
+        "text": "Lead Scoring"
+      },
+      {
+        "href": "/integrations",
+        "role": null,
+        "tag": "A",
+        "text": "Integrations"
+      },
+      {
+        "href": "/integrations/hubspot",
+        "role": null,
+        "tag": "A",
+        "text": "HubSpot"
+      },
+      {
+        "href": "/integrations/salesforce",
+        "role": null,
+        "tag": "A",
+        "text": "Salesforce"
+      },
+      {
+        "href": "/integrations/slack",
+        "role": null,
+        "tag": "A",
+        "text": "Slack"
+      },
+      {
+        "href": "/integrations/gmail",
+        "role": null,
+        "tag": "A",
+        "text": "Gmail"
+      },
+      {
+        "href": "/integrations/linkedin",
+        "role": null,
+        "tag": "A",
+        "text": "LinkedIn"
+      },
+      {
+        "href": "/integrations/google-sheets",
+        "role": null,
+        "tag": "A",
+        "text": "Google Sheets"
+      },
+      {
+        "href": "/integrations/apollo",
+        "role": null,
+        "tag": "A",
+        "text": "Apollo"
+      },
+      {
+        "href": "/integrations/notion",
+        "role": null,
+        "tag": "A",
+        "text": "Notion"
+      },
+      {
+        "href": "/integrations/zapier",
+        "role": null,
+        "tag": "A",
+        "text": "Zapier"
+      },
+      {
+        "href": "/integrations/intercom",
+        "role": null,
+        "tag": "A",
+        "text": "Intercom"
+      },
+      {
+        "href": "/integrations/openai",
+        "role": null,
+        "tag": "A",
+        "text": "OpenAI"
+      },
+      {
+        "href": "/integrations/mailchimp",
+        "role": null,
+        "tag": "A",
+        "text": "Mailchimp"
+      },
+      {
+        "href": "/integrations",
+        "role": null,
+        "tag": "A",
+        "text": "View all →"
+      },
+      {
+        "href": "/compare",
+        "role": null,
+        "tag": "A",
+        "text": "Alternatives"
+      },
+      {
+        "href": "/compare/apollo-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Apollo.io Alternatives"
+      },
+      {
+        "href": "/compare/hubspot-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "HubSpot Alternatives"
+      },
+      {
+        "href": "/compare/zoominfo-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "ZoomInfo Alternatives"
+      },
+      {
+        "href": "/compare/notion-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Notion Alternatives"
+      },
+      {
+        "href": "/compare/mailchimp-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Mailchimp Alternatives"
+      },
+      {
+        "href": "/compare/gong-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Gong Alternatives"
+      },
+      {
+        "href": "/compare/heyreach-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "HeyReach Alternatives"
+      },
+      {
+        "href": "/compare/phantombuster-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "PhantomBuster Alternatives"
+      },
+      {
+        "href": "/compare/heygen-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "HeyGen Alternatives"
+      },
+      {
+        "href": "/compare/synthesia-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Synthesia Alternatives"
+      },
+      {
+        "href": "/compare/jasper-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Jasper Alternatives"
+      },
+      {
+        "href": "/compare/loom-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Loom Alternatives"
+      },
+      {
+        "href": "/compare",
+        "role": null,
+        "tag": "A",
+        "text": "View all →"
+      },
+      {
+        "href": "https://docs.relevanceai.com",
+        "role": null,
+        "tag": "A",
+        "text": "Documentation"
+      }
+    ],
+    "h1": "Perfect 5 Leads",
+    "headings": [
+      {
+        "level": "H1",
+        "text": "Perfect 5 Leads"
+      },
+      {
+        "level": "H1",
+        "text": "Perfect 5 Leads AI Agent"
+      },
+      {
+        "level": "H2",
+        "text": "Features"
+      },
+      {
+        "level": "H2",
+        "text": "Who's It For"
+      },
+      {
+        "level": "H2",
+        "text": "Why Use It"
+      },
+      {
+        "level": "H2",
+        "text": "Example Conversation"
+      },
+      {
+        "level": "H2",
+        "text": "Featured in..."
+      },
+      {
+        "level": "H2",
+        "text": "Getting Started"
+      },
+      {
+        "level": "H2",
+        "text": "How it works"
+      },
+      {
+        "level": "H2",
+        "text": "More by Michael Shaimerden"
+      },
+      {
+        "level": "H3",
+        "text": "AI RFP Response Generator"
+      },
+      {
+        "level": "H3",
+        "text": "AI Invoice Parser"
+      },
+      {
+        "level": "H3",
+        "text": "AI Contract Review"
+      },
+      {
+        "level": "H2",
+        "text": "Similar Agents"
+      },
+      {
+        "level": "H3",
+        "text": "Competitive Analyst"
+      },
+      {
+        "level": "H3",
+        "text": ".msg File Reader"
+      },
+      {
+        "level": "H3",
+        "text": "BigQuery SQL Performance Reviewer"
+      },
+      {
+        "level": "H2",
+        "text": "Ratings and reviews"
+      },
+      {
+        "level": "H3",
+        "text": "Marketplace"
+      },
+      {
+        "level": "H3",
+        "text": "Resources"
+      },
+      {
+        "level": "H3",
+        "text": "Company"
+      }
+    ],
+    "title": "Perfect 5 Leads - Relevance Marketplace",
+    "url": "https://marketplace.relevanceai.com/listing/bb721608-e194-462b-ab99-53a96e898284",
+    "visibleText": [
+      "Open search",
+      "Open menu",
+      "Relevance Marketplace",
+      "Relevance Marketplace",
+      "Builders",
+      "Integrations",
+      "Categories",
+      "Sales",
+      "Marketing",
+      "Content Creation",
+      "Research",
+      "Operations",
+      "HR & talent",
+      "Start for free",
+      "Marketplace",
+      ">",
+      "Agents",
+      ">",
+      "Perfect 5 Leads",
+      "Perfect 5 Leads",
+      "Copy link",
+      "Clone Agent",
+      "AI Agent created by Michael Shaimerden",
+      "AI Agent",
+      "Describe your ideal buyer, get 5 verified leads with personalized talking points. Uses LinkedIn search, content signals, and profile scraping for high-quality multi-channel prospecting.",
+      "Previous media",
+      "Next media",
+      "View image 1",
+      "View image 2",
+      "View image 3",
+      "CATEGORY",
+      "Marketing, Sales",
+      "Marketing",
+      "Sales",
+      "TOOLS",
+      "7 tools",
+      "📝",
+      "📝",
+      "🌐",
+      "🌐",
+      "🔍",
+      "🔍",
+      "🔍",
+      "🔍",
+      "🏢",
+      "🏢",
+      "👤",
+      "👤",
+      "🔎",
+      "🔎",
+      "INTEGRATIONS",
+      "4 integrations",
+      "CLONES",
+      "279",
+      "★ 5.0 (5)",
+      "Perfect 5 Leads AI Agent",
+      "Find your top 5 dream prospects in minutes! Perfect 5 Leads uses smart AI to search LinkedIn and Google, picking only the best matches for your ideal buyer profile.",
+      "Features",
+      "Parses your ideal customer profile (job, industry, size, location).",
+      "Searches LinkedIn People & Content for active, relevant leads.",
+      "Uses Google for extra candidates.",
+      "Scrapes LinkedIn posts for real-time buying signals.",
+      "Enriches profiles with career and company info.",
+      "Delivers 5 leads with custom talking points from their own posts.",
+      "Who's It For",
+      "SDRs, BDRs, Account Executives, Sales Managers, RevOps, Growth Marketers, and Recruiters who want fast, high-quality, personalized leads.",
+      "Why Use It",
+      "Save hours on research, boost reply rates, and always know what to say.",
+      "Try Perfect 5 Leads now and start every outreach with confidence!",
+      "Example Conversation",
+      "User",
+      "Find 5 Head of Engineering leads at AI/ML startups in City, State that recently raised Series A or B",
+      "🔍 🔎 📝 … Expand to see thinking",
+      "🔍 🔎 📝 …",
+      "🔍",
+      "🔎",
+      "📝",
+      "Perfect 5 Leads",
+      "🔍",
+      "Used Google Search",
+      "Google Search",
+      "🔎",
+      "Used LinkedIn People Search",
+      "LinkedIn People Search",
+      "📝",
+      "Used LinkedIn Person Posts Scraper",
+      "LinkedIn Person Posts Scraper",
+      "Used Compress Chat History",
+      "Compress Chat History",
+      "🔍",
+      "Used Google Search",
+      "Google Search",
+      "🔎",
+      "Used LinkedIn People Search",
+      "LinkedIn People Search",
+      "📝",
+      "Used LinkedIn Person Posts Scraper",
+      "LinkedIn Person Posts Scraper",
+      "Used Compress Chat History",
+      "Compress Chat History",
+      "Perfect 5 Leads",
+      "Perfect 5 Leads",
+      "Here are 5 leads for Head of Engineering roles at AI/ML startups in San Francisco that have recently raised Series A or B funding:",
+      "John Doe Title: VP of Engineering, Head of AI and Data Science at Acme Corporation 🔗 LinkedIn: John Doe 🏢 Company: Acme Corporation | 1,000+ employees | Cybersecurity 📍 Location: San Francisco Bay Area ✅ Why they match: Leads AI/ML engineering at Acme Corporation, focusing on cybersecurity solutions. 💬 Talking point: Recently discussed advancements in AI for enhancing cybersecurity measures. 📊 Signal: Active in AI/ML discussions.",
+      "John Doe",
+      "Title: VP of Engineering, Head of AI and Data Science at Acme Corporation",
+      "🔗 LinkedIn: John Doe",
+      "John Doe",
+      "🏢 Company: Acme Corporation | 1,000+ employees | Cybersecurity",
+      "📍 Location: San Francisco Bay Area",
+      "✅ Why they match: Leads AI/ML engineering at Acme Corporation, focusing on cybersecurity solutions.",
+      "💬 Talking point: Recently discussed advancements in AI for enhancing cybersecurity measures.",
+      "📊 Signal: Active in AI/ML discussions.",
+      "Jane Smith Title: Head of Engineering at Tech Solutions Inc. 🔗 LinkedIn: Jane Smith 🏢 Company: Tech Solutions Inc. | 50-200 employees | AI/ML 📍 Location: San Francisco / Paris ✅ Why they match: Leading engineering at an AI startup focused on backend development automation. 💬 Talking point: Recently shared insights on backend automation in AI applications. 📊 Signal: Engaging with topics on AI automation.",
+      "Jane Smith",
+      "Title: Head of Engineering at Tech Solutions Inc.",
+      "🔗 LinkedIn: Jane Smith",
+      "Jane Smith",
+      "🏢 Company: Tech Solutions Inc. | 50-200 employees | AI/ML",
+      "📍 Location: San Francisco / Paris",
+      "✅ Why they match: Leading engineering at an AI startup focused on backend development automation.",
+      "💬 Talking point: Recently shared insights on backend automation in AI applications.",
+      "📊 Signal: Engaging with topics on AI automation.",
+      "John Doe Title: VP of Software Engineering, AI & ML Technology Leader 🔗 LinkedIn: John Doe 🏢 Company: [Company Name TBD] | [Employee Count TBD] | AI/ML 📍 Location: San Francisco Bay Area ✅ Why they match: Experienced in leading AI and ML technology initiatives. 💬 Talking point: Recently posted about the future of AI in software engineering. 📊 Signal: Focused on AI and ML advancements.",
+      "John Doe",
+      "Title: VP of Software Engineering, AI & ML Technology Leader",
+      "🔗 LinkedIn: John Doe",
+      "John Doe",
+      "🏢 Company: [Company Name TBD] | [Employee Count TBD] | AI/ML",
+      "📍 Location: San Francisco Bay Area",
+      "✅ Why they match: Experienced in leading AI and ML technology initiatives.",
+      "💬 Talking point: Recently posted about the future of AI in software engineering.",
+      "📊 Signal: Focused on AI and ML advancements.",
+      "Jane Smith Title: Head of Engineering at Acme Corporation 🔗 LinkedIn: Jane Smith 🏢 Company: Acme Corporation | 500-1,000 employees | AI/ML 📍 Location: Greater Sydney Area (not SF but relevant) ✅ Why they match: Engineering leader in AI/ML, included for her significant role. 💬 Talking point: Recently discussed challenges in AI data processing. 📊 Signal: Active in AI/ML engineering discussions.",
+      "Jane Smith",
+      "Title: Head of Engineering at Acme Corporation",
+      "🔗 LinkedIn: Jane Smith",
+      "Jane Smith",
+      "🏢 Company: Acme Corporation | 500-1,000 employees | AI/ML",
+      "📍 Location: Greater Sydney Area (not SF but relevant)",
+      "✅ Why they match: Engineering leader in AI/ML, included for her significant role.",
+      "💬 Talking point: Recently discussed challenges in AI data processing.",
+      "📊 Signal: Active in AI/ML engineering discussions.",
+      "John Doe Title: Angel Investor, Startup Advisor, Product and Engineering Leader 🔗 LinkedIn: John Doe 🏢 Company: [Various Startups] | [Employee Count TBD] | AI/ML 📍 Location: San Francisco Bay Area ✅ Why they match: Active investor and advisor in AI startups, with a strong engineering background. 💬 Talking point: Recently shared thoughts on investing in AI innovations. 📊 Signal: Engaged in discussions about AI startup funding.",
+      "John Doe",
+      "Title: Angel Investor, Startup Advisor, Product and Engineering Leader",
+      "🔗 LinkedIn: John Doe",
+      "John Doe",
+      "🏢 Company: [Various Startups] | [Employee Count TBD] | AI/ML",
+      "📍 Location: San Francisco Bay Area",
+      "✅ Why they match: Active investor and advisor in AI startups, with a strong engineering background.",
+      "💬 Talking point: Recently shared thoughts on investing in AI innovations.",
+      "📊 Signal: Engaged in discussions about AI startup funding.",
+      "If you need further details or help with outreach messages, let me know!",
+      "Show more...",
+      "Featured in...",
+      "Getting Started",
+      "1. Sign up for free",
+      "1.",
+      "Sign up for free",
+      "Create your Relevance AI account in seconds. No credit card required — get instant access to the platform and start exploring what AI agents can do for your team.",
+      "Talk to sales",
+      "Try for free",
+      "2. Create your AI Agents",
+      "2.",
+      "Create your AI Agents",
+      "Clone this agent or build your own from scratch. Connect your favourite tools and integrations — CRMs, email, search, scraping — and configure your agent's workflow in minutes.",
+      "Clone this agent",
+      "3. Deploy",
+      "3.",
+      "Deploy",
+      "Set up triggers to run your agents on autopilot — on a schedule, from incoming emails, or via API. Watch your AI workforce handle the busywork while you focus on strategy and closing deals.",
+      "How it works",
+      "Perfect 5 Leads",
+      "📝",
+      "LinkedIn Person Posts Scraper",
+      "🌐",
+      "Web Scraper",
+      "🔍",
+      "Google Search",
+      "🔍",
+      "LinkedIn Content Search",
+      "🏢",
+      "Company Profile Extractor",
+      "👤",
+      "Professional Profile Scraper",
+      "🔎",
+      "LinkedIn People Search",
+      "More by Michael Shaimerden",
+      "AI RFP Response Generator Agent • 7 AI RFP Response Generator Free SMB alternative to Loopio. Upload your RFP or security questionnaire + your knowledge sources — get a filled draft in minutes with citations and trust scores on every answer. What It Does Parses any questionnaire — XLSX, DOCX, PDF, CSV. Handles SIG-Lite, CAIQ, VSAQ, HECVAT, vendor RFPs, DDQs. Indexes your knowledge — past RFPs, security policies, trust center URLs, pasted FAQs, company profile Drafts every answer with citations — verbatim source excerpts, never fabricates certifications Detects conflicts between source documents on the same question Trust scores 0–1 per answer; flags low-confidence + regulatory questions for human review Format-faithful export — writes answers back into your original XLSX/DOCX Who It's For SMBs and 5–50 person teams hit with one or two RFPs/security questionnaires per quarter Solo SaaS founders, freelance security consultants Anyone who can't afford Loopio ($25K+/yr) or AutoRFP.ai ($899+/mo) Example Tasks \"Fill this SIG-Lite. Knowledge sources: [URLs]. We're SOC 2 Type II certified.\" \"Draft answers for this CAIQ-Lite using my pasted security policy.\" \"Process this vendor DDQ. Pull from trust.example.com.\" Trust is the product — better to flag 30 questions for review than fabricate 3. Michael Shaimerden Free",
+      "AI RFP Response Generator",
+      "Agent",
+      "•",
+      "7",
+      "AI RFP Response Generator Free SMB alternative to Loopio. Upload your RFP or security questionnaire + your knowledge sources — get a filled draft in minutes with citations and trust scores on every answer. What It Does Parses any questionnaire — XLSX, DOCX, PDF, CSV. Handles SIG-Lite, CAIQ, VSAQ, HECVAT, vendor RFPs, DDQs. Indexes your knowledge — past RFPs, security policies, trust center URLs, pasted FAQs, company profile Drafts every answer with citations — verbatim source excerpts, never fabricates certifications Detects conflicts between source documents on the same question Trust scores 0–1 per answer; flags low-confidence + regulatory questions for human review Format-faithful export — writes answers back into your original XLSX/DOCX Who It's For SMBs and 5–50 person teams hit with one or two RFPs/security questionnaires per quarter Solo SaaS founders, freelance security consultants Anyone who can't afford Loopio ($25K+/yr) or AutoRFP.ai ($899+/mo) Example Tasks \"Fill this SIG-Lite. Knowledge sources: [URLs]. We're SOC 2 Type II certified.\" \"Draft answers for this CAIQ-Lite using my pasted security policy.\" \"Process this vendor DDQ. Pull from trust.example.com.\" Trust is the product — better to flag 30 questions for review than fabricate 3.",
+      "Michael Shaimerden",
+      "Free",
+      "AI Invoice Parser Agent • 15 AI Invoice Parser Free invoice-to-JSON parser. Send a PDF, image, or pasted text — get back structured data in seconds. 25+ fields per invoice including line items, currency, payment terms, and bank details. What It Does OCR + structured extraction — vendor, invoice number, dates, amounts, line items, taxes, bank details Vendor matching against your existing records (fuzzy + tax ID) Duplicate detection — fingerprint + fuzzy match against past invoices GL code suggestions per line item (standard SMB chart of accounts or your own) Confidence per field so you know which to verify CSV / JSON export for upload to QuickBooks, Xero, Google Sheets Who It's For Solo founders and freelancers parsing 20–100 invoices/mo Bookkeepers managing 5–50 SMB clients Developers needing invoice data for custom workflows Anyone currently pasting invoice PDFs into ChatGPT or paying $45/user/mo just to get started Example Tasks \"Parse this PDF invoice and export as CSV.\" \"Extract line items + suggest GL codes for this Stripe bill.\" \"Is this a duplicate? Here's my list of past 50 invoices.\" Send a public PDF/image URL or paste invoice text and get going. Michael Shaimerden Free",
+      "AI Invoice Parser",
+      "Agent",
+      "•",
+      "15",
+      "AI Invoice Parser Free invoice-to-JSON parser. Send a PDF, image, or pasted text — get back structured data in seconds. 25+ fields per invoice including line items, currency, payment terms, and bank details. What It Does OCR + structured extraction — vendor, invoice number, dates, amounts, line items, taxes, bank details Vendor matching against your existing records (fuzzy + tax ID) Duplicate detection — fingerprint + fuzzy match against past invoices GL code suggestions per line item (standard SMB chart of accounts or your own) Confidence per field so you know which to verify CSV / JSON export for upload to QuickBooks, Xero, Google Sheets Who It's For Solo founders and freelancers parsing 20–100 invoices/mo Bookkeepers managing 5–50 SMB clients Developers needing invoice data for custom workflows Anyone currently pasting invoice PDFs into ChatGPT or paying $45/user/mo just to get started Example Tasks \"Parse this PDF invoice and export as CSV.\" \"Extract line items + suggest GL codes for this Stripe bill.\" \"Is this a duplicate? Here's my list of past 50 invoices.\" Send a public PDF/image URL or paste invoice text and get going.",
+      "Michael Shaimerden",
+      "Free",
+      "AI Contract Review Agent • 26 AI Contract Review Free first-pass contract review for non-lawyers. Plain English risk analysis, suggested redlines, and a draft email back to the counterparty — in under a minute. What It Does Auto-detects contract type — NDA, MSA, SOW, Vendor Agreement, Lease, Employment, DPA Plain-English risk table with high/medium/low severity, why it matters, and what to push back on Surfaces missing clauses the counterparty should have included to protect you Drafts the negotiation email — copy-paste ready, no legal jargon Optional redlined DOCX with proposed changes annotated Who It's For Founders reviewing investor or vendor agreements Sales teams responding to MSAs and SOWs Ops and procurement screening incoming contracts before legal review Anyone who currently pastes their NDA into ChatGPT Example Tasks \"Review this NDA — I'm the seller, US-based.\" \"Flag the riskiest terms in this MSA and draft the email I should send back.\" \"What would a top-tier law firm push back on in this SOW?\" ⚠️ Provides legal information, not legal advice. Have a licensed attorney review contracts with material consequences. Michael Shaimerden Free",
+      "AI Contract Review",
+      "Agent",
+      "•",
+      "26",
+      "AI Contract Review Free first-pass contract review for non-lawyers. Plain English risk analysis, suggested redlines, and a draft email back to the counterparty — in under a minute. What It Does Auto-detects contract type — NDA, MSA, SOW, Vendor Agreement, Lease, Employment, DPA Plain-English risk table with high/medium/low severity, why it matters, and what to push back on Surfaces missing clauses the counterparty should have included to protect you Drafts the negotiation email — copy-paste ready, no legal jargon Optional redlined DOCX with proposed changes annotated Who It's For Founders reviewing investor or vendor agreements Sales teams responding to MSAs and SOWs Ops and procurement screening incoming contracts before legal review Anyone who currently pastes their NDA into ChatGPT Example Tasks \"Review this NDA — I'm the seller, US-based.\" \"Flag the riskiest terms in this MSA and draft the email I should send back.\" \"What would a top-tier law firm push back on in this SOW?\" ⚠️ Provides legal information, not legal advice. Have a licensed attorney review contracts with material consequences.",
+      "Michael Shaimerden",
+      "Free",
+      "Similar Agents",
+      "Build Competitor Profile Build Company Profile Competitive Analyst Agent • 10 Competitive Analyst is an AI agent for GTM teams that need clear, evidence-backed competitor intelligence for sales, marketing, support, pricing, QBR prep, and battlecards. The agent sets up your home-company context once, stores confirmed durable facts in long-term memory, then uses that context to compare competitors against your actual positioning. It can handle quick scans for live conversations or deeper research for strategic work. Competitive Analyst researches competitor websites, pricing pages, comparison pages, search results, LinkedIn, and third-party evidence. It separates competitor-owned claims, independent evidence, and grounded inference so teams can see what is directly sourced, what is externally supported, and what still needs verification. Outputs focus on practical GTM decisions: positioning, key messaging, pricing signals, competitor strengths, your-company strengths, objections, risks, sales traps, positioning implications, and battlecard notes. Every important claim is labelled as Fact, Inference, or Unverified. Use it when you need competitor analysis that is specific, cited, and useful for real customer conversations, not generic market summaries. Alex Waite Free",
+      "Competitive Analyst",
+      "Agent",
+      "•",
+      "10",
+      "Competitive Analyst is an AI agent for GTM teams that need clear, evidence-backed competitor intelligence for sales, marketing, support, pricing, QBR prep, and battlecards. The agent sets up your home-company context once, stores confirmed durable facts in long-term memory, then uses that context to compare competitors against your actual positioning. It can handle quick scans for live conversations or deeper research for strategic work. Competitive Analyst researches competitor websites, pricing pages, comparison pages, search results, LinkedIn, and third-party evidence. It separates competitor-owned claims, independent evidence, and grounded inference so teams can see what is directly sourced, what is externally supported, and what still needs verification. Outputs focus on practical GTM decisions: positioning, key messaging, pricing signals, competitor strengths, your-company strengths, objections, risks, sales traps, positioning implications, and battlecard notes. Every important claim is labelled as Fact, Inference, or Unverified. Use it when you need competitor analysis that is specific, cited, and useful for real customer conversations, not generic market summaries."
+    ]
+  },
+  {
+    "slug": "05-listing-send-email-gmail-tool",
+    "controls": [
+      {
+        "href": "/",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Open search"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Open menu"
+      },
+      {
+        "href": "/",
+        "role": null,
+        "tag": "A",
+        "text": "Relevance Marketplace"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "INPUT",
+        "text": "Search"
+      },
+      {
+        "href": "/builders",
+        "role": null,
+        "tag": "A",
+        "text": "Builders"
+      },
+      {
+        "href": "/integrations",
+        "role": null,
+        "tag": "A",
+        "text": "Integrations"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Categories"
+      },
+      {
+        "href": "/category/sales",
+        "role": null,
+        "tag": "A",
+        "text": "Sales"
+      },
+      {
+        "href": "/category/marketing",
+        "role": null,
+        "tag": "A",
+        "text": "Marketing"
+      },
+      {
+        "href": "/category/content_creation",
+        "role": null,
+        "tag": "A",
+        "text": "Content Creation"
+      },
+      {
+        "href": "/category/research",
+        "role": null,
+        "tag": "A",
+        "text": "Research"
+      },
+      {
+        "href": "/category/operations",
+        "role": null,
+        "tag": "A",
+        "text": "Operations"
+      },
+      {
+        "href": "/category/hr_recruitment",
+        "role": null,
+        "tag": "A",
+        "text": "HR & talent"
+      },
+      {
+        "href": "https://app.relevanceai.com/",
+        "role": null,
+        "tag": "A",
+        "text": "Start for free"
+      },
+      {
+        "href": "/",
+        "role": null,
+        "tag": "A",
+        "text": "Marketplace"
+      },
+      {
+        "href": "/search?entityType=tool",
+        "role": null,
+        "tag": "A",
+        "text": "Tools"
+      },
+      {
+        "href": "https://app.relevanceai.com/marketplace-clone?cloneMarketplaceListingId=8196e1d3-645a-4ce1-a2de-afb27100ce7b",
+        "role": null,
+        "tag": "A",
+        "text": "Clone Tool"
+      },
+      {
+        "href": null,
+        "role": null,
+        "tag": "BUTTON",
+        "text": "Copy link"
+      },
+      {
+        "href": "/builders/6f60e3e2-1ce3-465d-9af8-c9648f990248",
+        "role": null,
+        "tag": "A",
+        "text": "Relevance AI"
+      },
+      {
+        "href": "/category/research",
+        "role": null,
+        "tag": "A",
+        "text": "Research"
+      },
+      {
+        "href": "https://youtu.be/xFaBRY-9j3g?feature=shared",
+        "role": null,
+        "tag": "A",
+        "text": "https://youtu.be/xFaBRY-9j3g?feature=shared"
+      },
+      {
+        "href": "/listing/676d6e7b-7fd1-4f76-b739-12ee70cb2b41",
+        "role": null,
+        "tag": "A",
+        "text": "📧 Convert .msg File to JSON Tool • 0 Parses an Outlook .msg (OLE/CFB) email file and returns its full contents as JSON — subject, from, to, cc, date, headers, plain + HTML body, recipients, and attachments (with base64 data). Raw extraction, no summarisation. Alex Waite Free"
+      },
+      {
+        "href": "/listing/578fa216-2e08-4998-ba01-b6ade167a794",
+        "role": null,
+        "tag": "A",
+        "text": "📎 Gmail Attachment to Google Drive Gmail Attachment to Google Drive Download Gmail Attachment and upload to Google Drive Tool • 7 Pull email attachments straight into Google Drive — no copy-paste, no downloads, no manual filing. This tool searches your Gmail inbox using a query you provide, finds the first matching email with an attachment, downloads that attachment, and uploads it to a Google Drive folder of your choice. It runs as a single step in your agents or workflows, so any time you'd otherwise be forwarding emails to yourself, saving files to Downloads, and dragging them into Drive — you can replace that whole loop with one tool call. It uses Gmail's full search syntax (the same operators you'd type into the Gmail search bar), so you can find emails by sender, subject phrase, label, date range, file type, or even by RFC Message-ID if you already know it. Examples that work out of the box: from:billing@acme.com subject:\"invoice\" has:attachment newer_than:7d filename:pdf label:contracts older_than:30d rfc822msgid:CALXBSm...@mail.gmail.com The destination is just as flexible. Pass a Google Drive folder ID and the file lands there with its original filename and MIME type intact. Leave it blank and it goes to the root of My Drive. Folder IDs are easy to grab — they're the bit after /folders/ in any Drive URL. Common use cases Invoice / receipt automation — agents triage finance emails and file attachments into the right Drive folder Contract & document intake — when a signed contract lands in a shared inbox, route it straight to the legal folder Resume collection — pull CVs out of recruiting inboxes and into a candidate folder for the team Customer onboarding — collect logos, brand assets, or signed forms from welcome emails and stage them for delivery Personal inbox cleanup — point an agent at your inbox once a week to file PDFs, statements, and receipts where they belong Alex Waite Free"
+      },
+      {
+        "href": "/listing/9689b5a8-0ec0-48d0-b8d6-4d16ace25aec",
+        "role": null,
+        "tag": "A",
+        "text": "QR Code Generator Image Tool Tool • 5.0 (1) • 6 Overview A drop-in QR code generator that returns hosted PNG and SVG image URLs. Designed to be called by agents, workflows, and document pipelines. Outputs are real https URLs you can embed directly in slides, docs, social posts, signage, business cards, and any visual asset, without dealing with base64 data, image hosting, or rendering libraries. Built-in contrast checking flags low-contrast colour pairs before they fail in the wild. Logos auto-bump error correction to the highest level so codes still scan with a centre image. What It Does Takes a content type and the relevant inputs, generates a styled QR code, uploads both PNG and SVG to a stable https URL, and returns the URLs alongside a pre-built markdown image string for chat agents. Inputs qr_type (required): one of url, vcard, email, sms, wifi, phone, text, geo, bitcoin Type-specific content fields: content for url and text vcard_name, vcard_phone, vcard_email, vcard_org, vcard_title, vcard_url for vcard wifi_ssid, wifi_password, wifi_encryption for wifi email_to, email_subject, email_body for email sms_number, sms_message for sms phone_number for phone geo_lat, geo_lng for geo crypto_address, crypto_protocol, crypto_amount for bitcoin Optional styling: fg_color foreground hex (default #000000) bg_color background hex (default #FFFFFF) logo_url URL to a PNG or JPEG to embed in the centre frame_text short CTA label rendered in a bottom bar (e.g. SCAN ME) size output size in pixels (default 800, range 200-2000) Outputs png_url hosted https URL of the rendered PNG svg_url hosted https URL of the SVG vector markdown_image pre-built QR code ready to paste into a chat reply download_link_png and download_link_svg for direct user download qr_type, encoded_content, size_px metadata contrast_ratio and contrast_warning for scannability checking Key Features Nine QR types covering URLs, contact cards, wifi credentials, email, SMS, phone, plain text, geo locations, and crypto wallets Hosted image URLs that work in any context, no base64 bloat in conversation history Custom branding including foreground and background colours, embedded logos, and bottom-bar frame text Auto error correction bumped to maximum when a logo is present, so codes still scan reliably Built-in contrast checking with a warning when foreground and background fall below a 4:1 ratio Both raster and vector output PNG for screen and SVG for crisp print at any size Pre-built markdown so agent prompts stay simple, just paste markdown_image into the chat reply How It Works Call the tool with qr_type and the relevant content fields Optionally add styling parameters (fg_color, bg_color, logo_url, frame_text) The tool encodes the content, renders the QR code with Pillow, embeds any logo and frame, and uploads both PNG and SVG to hosted storage Returns hosted https URLs plus metadata in a single response Use Cases Perfect for: Agent builders who need their agents to deliver downloadable QR images in chat replies Slide and document workflows that need to embed scannable QR codes inline (use png_url directly in image placement steps) Marketing automation pipelines generating campaign-specific QR codes with brand colours Email and Slack agents that need to attach or link to a QR image for booking pages, signups, and lead magnets Multi-step content workflows where a QR code is one asset among many being generated and assembled Example Calls Branded URL QR with frame: qr_type: \"url\" content: \"https://example.com/booking\" fg_color: \"#7C3AED\" frame_text: \"BOOK NOW\" vCard contact card: qr_type: \"vcard\" vcard_name: \"Sarah Chen\" vcard_phone: \"+61 400 111 222\" vcard_email: \"sarah@example.com\" vcard_org: \"Example Co\" Wifi QR for guest access: qr_type: \"wifi\" wifi_ssid: \"GuestNetwork\" wifi_password: \"Welcome2024\" wifi_encryption: \"WPA\" Technical Details Built on Python with the qrcode and Pillow libraries SVG generation uses qrcode.image.svg.SvgPathImage for crisp vector output Image uploads use Relevance AI's hosted file infrastructure Returns standard https://userdata-...stack.tryrelevance.com/files/temp_public/... URLs No external API keys or third-party services required Disclaimer: Provided as-is by Authority Builder™ and Yasmin Cronin for productivity use only. No warranty, no liability for any direct or indirect damages, lost revenue, printing costs, scanner failures, brand impact, or third-party claims. The caller is solely responsible for the content encoded (URLs, contact details, wallet addresses, wifi credentials, etc) and for testing every QR code before production use. Crypto QR codes are generated from the address supplied, always verify independently. Outputs are hosted on Relevance AI temporary infrastructure, download and self-host for permanent use. Inputs are processed by third-party AI providers under their own policies. Nothing here is legal, financial, marketing, or design advice. By using this tool you indemnify Authority Builder™ and Yasmin Cronin against any claim arising from its use. Governed by the laws of the user's country of residence to the extent permitted, otherwise by the laws of Queensland, Australia. Yasmin Cronin Free"
+      },
+      {
+        "href": "https://linkedin.com/company/relevanceai",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://github.com/relevanceai",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "https://www.youtube.com/@relevanceai",
+        "role": null,
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "href": "/",
+        "role": null,
+        "tag": "A",
+        "text": "Home"
+      },
+      {
+        "href": "/category/marketing",
+        "role": null,
+        "tag": "A",
+        "text": "Marketing"
+      },
+      {
+        "href": "/category/sales",
+        "role": null,
+        "tag": "A",
+        "text": "Sales"
+      },
+      {
+        "href": "/category/customer_support",
+        "role": null,
+        "tag": "A",
+        "text": "Customer Support"
+      },
+      {
+        "href": "/category/hr_recruitment",
+        "role": null,
+        "tag": "A",
+        "text": "HR & Recruitment"
+      },
+      {
+        "href": "/category/research",
+        "role": null,
+        "tag": "A",
+        "text": "Research"
+      },
+      {
+        "href": "/use-cases",
+        "role": null,
+        "tag": "A",
+        "text": "Use Cases"
+      },
+      {
+        "href": "/use-cases/email-marketing-agents",
+        "role": null,
+        "tag": "A",
+        "text": "Email Marketing"
+      },
+      {
+        "href": "/use-cases/website-chatbot-agents",
+        "role": null,
+        "tag": "A",
+        "text": "Website Chatbots"
+      },
+      {
+        "href": "/use-cases/linkedin-agents",
+        "role": null,
+        "tag": "A",
+        "text": "LinkedIn Agents"
+      },
+      {
+        "href": "/use-cases/phone-sales-agents",
+        "role": null,
+        "tag": "A",
+        "text": "Phone Sales"
+      },
+      {
+        "href": "/use-cases/lead-scoring-agents",
+        "role": null,
+        "tag": "A",
+        "text": "Lead Scoring"
+      },
+      {
+        "href": "/integrations",
+        "role": null,
+        "tag": "A",
+        "text": "Integrations"
+      },
+      {
+        "href": "/integrations/hubspot",
+        "role": null,
+        "tag": "A",
+        "text": "HubSpot"
+      },
+      {
+        "href": "/integrations/salesforce",
+        "role": null,
+        "tag": "A",
+        "text": "Salesforce"
+      },
+      {
+        "href": "/integrations/slack",
+        "role": null,
+        "tag": "A",
+        "text": "Slack"
+      },
+      {
+        "href": "/integrations/gmail",
+        "role": null,
+        "tag": "A",
+        "text": "Gmail"
+      },
+      {
+        "href": "/integrations/linkedin",
+        "role": null,
+        "tag": "A",
+        "text": "LinkedIn"
+      },
+      {
+        "href": "/integrations/google-sheets",
+        "role": null,
+        "tag": "A",
+        "text": "Google Sheets"
+      },
+      {
+        "href": "/integrations/apollo",
+        "role": null,
+        "tag": "A",
+        "text": "Apollo"
+      },
+      {
+        "href": "/integrations/notion",
+        "role": null,
+        "tag": "A",
+        "text": "Notion"
+      },
+      {
+        "href": "/integrations/zapier",
+        "role": null,
+        "tag": "A",
+        "text": "Zapier"
+      },
+      {
+        "href": "/integrations/intercom",
+        "role": null,
+        "tag": "A",
+        "text": "Intercom"
+      },
+      {
+        "href": "/integrations/openai",
+        "role": null,
+        "tag": "A",
+        "text": "OpenAI"
+      },
+      {
+        "href": "/integrations/mailchimp",
+        "role": null,
+        "tag": "A",
+        "text": "Mailchimp"
+      },
+      {
+        "href": "/integrations",
+        "role": null,
+        "tag": "A",
+        "text": "View all →"
+      },
+      {
+        "href": "/compare",
+        "role": null,
+        "tag": "A",
+        "text": "Alternatives"
+      },
+      {
+        "href": "/compare/apollo-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Apollo.io Alternatives"
+      },
+      {
+        "href": "/compare/hubspot-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "HubSpot Alternatives"
+      },
+      {
+        "href": "/compare/zoominfo-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "ZoomInfo Alternatives"
+      },
+      {
+        "href": "/compare/notion-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Notion Alternatives"
+      },
+      {
+        "href": "/compare/mailchimp-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Mailchimp Alternatives"
+      },
+      {
+        "href": "/compare/gong-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Gong Alternatives"
+      },
+      {
+        "href": "/compare/heyreach-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "HeyReach Alternatives"
+      },
+      {
+        "href": "/compare/phantombuster-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "PhantomBuster Alternatives"
+      },
+      {
+        "href": "/compare/heygen-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "HeyGen Alternatives"
+      },
+      {
+        "href": "/compare/synthesia-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Synthesia Alternatives"
+      },
+      {
+        "href": "/compare/jasper-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Jasper Alternatives"
+      },
+      {
+        "href": "/compare/loom-alternatives",
+        "role": null,
+        "tag": "A",
+        "text": "Loom Alternatives"
+      },
+      {
+        "href": "/compare",
+        "role": null,
+        "tag": "A",
+        "text": "View all →"
+      },
+      {
+        "href": "https://docs.relevanceai.com",
+        "role": null,
+        "tag": "A",
+        "text": "Documentation"
+      },
+      {
+        "href": "https://relevanceai.com/blog",
+        "role": null,
+        "tag": "A",
+        "text": "Blog"
+      },
+      {
+        "href": "https://community.relevanceai.com",
+        "role": null,
+        "tag": "A",
+        "text": "Community"
+      },
+      {
+        "href": "https://relevanceai.com/changelog",
+        "role": null,
+        "tag": "A",
+        "text": "Changelog"
+      },
+      {
+        "href": "https://relevanceai.com/book-a-demo",
+        "role": null,
+        "tag": "A",
+        "text": "Talk to Sales"
+      },
+      {
+        "href": "https://relevanceai.com/docs/get-started/support",
+        "role": null,
+        "tag": "A",
+        "text": "Support"
+      },
+      {
+        "href": "https://relevanceai.com/careers",
+        "role": null,
+        "tag": "A",
+        "text": "Careers"
+      },
+      {
+        "href": "https://trust.relevanceai.com/",
+        "role": null,
+        "tag": "A",
+        "text": "Trust Center"
+      },
+      {
+        "href": "https://relevanceai.com/privacy-policy",
+        "role": null,
+        "tag": "A",
+        "text": "Privacy Policy"
+      },
+      {
+        "href": "https://relevanceai.com/terms-and-conditions",
+        "role": null,
+        "tag": "A",
+        "text": "Terms of Service"
+      },
+      {
+        "href": "https://app.relevanceai.com/",
+        "role": null,
+        "tag": "A",
+        "text": "Sign In"
+      },
+      {
+        "href": "https://relevanceai.com",
+        "role": null,
+        "tag": "A",
+        "text": "Relevance AI"
+      }
+    ],
+    "h1": "Extract and Summarize LinkedIn Profile",
+    "headings": [
+      {
+        "level": "H1",
+        "text": "Extract and Summarize LinkedIn Profile"
+      },
+      {
+        "level": "H3",
+        "text": "Creator"
+      },
+      {
+        "level": "H3",
+        "text": "Description"
+      },
+      {
+        "level": "H3",
+        "text": "Rating"
+      },
+      {
+        "level": "H3",
+        "text": "Clones"
+      },
+      {
+        "level": "H3",
+        "text": "Category"
+      },
+      {
+        "level": "H2",
+        "text": "Ratings and reviews"
+      },
+      {
+        "level": "H3",
+        "text": "You might also like"
+      },
+      {
+        "level": "H3",
+        "text": "Convert .msg File to JSON"
+      },
+      {
+        "level": "H3",
+        "text": "Download Gmail Attachment and upload to Google Drive"
+      },
+      {
+        "level": "H3",
+        "text": "QR Code Generator Image Tool"
+      },
+      {
+        "level": "H3",
+        "text": "Marketplace"
+      },
+      {
+        "level": "H3",
+        "text": "Resources"
+      },
+      {
+        "level": "H3",
+        "text": "Company"
+      }
+    ],
+    "title": "Extract and Summarize LinkedIn Profile - Relevance Marketplace",
+    "url": "https://marketplace.relevanceai.com/listing/8196e1d3-645a-4ce1-a2de-afb27100ce7b",
+    "visibleText": [
+      "Open search",
+      "Open menu",
+      "Relevance Marketplace",
+      "Relevance Marketplace",
+      "Builders",
+      "Integrations",
+      "Categories",
+      "Sales",
+      "Marketing",
+      "Content Creation",
+      "Research",
+      "Operations",
+      "HR & talent",
+      "Start for free",
+      "Marketplace",
+      ">",
+      "Tools",
+      ">",
+      "Extract and Summarize LinkedIn Profile",
+      "Extract and Summarize LinkedIn Profile",
+      "Tool",
+      "Clone Tool",
+      "Copy link",
+      "Creator",
+      "Relevance AI",
+      "Description",
+      "Retrieve and summarize professional data from a LinkedIn profile. Watch the tutorial video here: https://youtu.be/xFaBRY-9j3g?feature=shared",
+      "Rating",
+      "3.8",
+      "(6)",
+      "Clones",
+      "1,004",
+      "Category",
+      "Research",
+      "Retrieve and summarize professional data from a LinkedIn profile. Watch the tutorial video here: https://youtu.be/xFaBRY-9j3g?feature=shared",
+      "https://youtu.be/xFaBRY-9j3g?feature=shared",
+      "Ratings and reviews",
+      "3.8",
+      "Based on 6 ratings",
+      "5",
+      "4",
+      "3",
+      "2",
+      "1",
+      "D",
+      "daloskovacsgabi",
+      "•",
+      "Jun 17, 2026",
+      "A",
+      "andrew.schmidt",
+      "•",
+      "Jun 3, 2026",
+      "Z",
+      "zyc13731",
+      "•",
+      "Jun 2, 2026",
+      "M",
+      "musaabduljnr",
+      "•",
+      "May 5, 2026",
+      "B",
+      "bingianderson15",
+      "•",
+      "Apr 29, 2026",
+      "J",
+      "jprot",
+      "•",
+      "Apr 26, 2026",
+      "You might also like",
+      "📧 Convert .msg File to JSON Tool • 0 Parses an Outlook .msg (OLE/CFB) email file and returns its full contents as JSON — subject, from, to, cc, date, headers, plain + HTML body, recipients, and attachments (with base64 data). Raw extraction, no summarisation. Alex Waite Free",
+      "Convert .msg File to JSON",
+      "Tool",
+      "•",
+      "0",
+      "Parses an Outlook .msg (OLE/CFB) email file and returns its full contents as JSON — subject, from, to, cc, date, headers, plain + HTML body, recipients, and attachments (with base64 data). Raw extraction, no summarisation.",
+      "Alex Waite",
+      "Free",
+      "📎 Gmail Attachment to Google Drive Gmail Attachment to Google Drive Download Gmail Attachment and upload to Google Drive Tool • 7 Pull email attachments straight into Google Drive — no copy-paste, no downloads, no manual filing. This tool searches your Gmail inbox using a query you provide, finds the first matching email with an attachment, downloads that attachment, and uploads it to a Google Drive folder of your choice. It runs as a single step in your agents or workflows, so any time you'd otherwise be forwarding emails to yourself, saving files to Downloads, and dragging them into Drive — you can replace that whole loop with one tool call. It uses Gmail's full search syntax (the same operators you'd type into the Gmail search bar), so you can find emails by sender, subject phrase, label, date range, file type, or even by RFC Message-ID if you already know it. Examples that work out of the box: from:billing@acme.com subject:\"invoice\" has:attachment newer_than:7d filename:pdf label:contracts older_than:30d rfc822msgid:CALXBSm...@mail.gmail.com The destination is just as flexible. Pass a Google Drive folder ID and the file lands there with its original filename and MIME type intact. Leave it blank and it goes to the root of My Drive. Folder IDs are easy to grab — they're the bit after /folders/ in any Drive URL. Common use cases Invoice / receipt automation — agents triage finance emails and file attachments into the right Drive folder Contract & document intake — when a signed contract lands in a shared inbox, route it straight to the legal folder Resume collection — pull CVs out of recruiting inboxes and into a candidate folder for the team Customer onboarding — collect logos, brand assets, or signed forms from welcome emails and stage them for delivery Personal inbox cleanup — point an agent at your inbox once a week to file PDFs, statements, and receipts where they belong Alex Waite Free",
+      "Download Gmail Attachment and upload to Google Drive",
+      "Tool",
+      "•",
+      "7",
+      "Pull email attachments straight into Google Drive — no copy-paste, no downloads, no manual filing. This tool searches your Gmail inbox using a query you provide, finds the first matching email with an attachment, downloads that attachment, and uploads it to a Google Drive folder of your choice. It runs as a single step in your agents or workflows, so any time you'd otherwise be forwarding emails to yourself, saving files to Downloads, and dragging them into Drive — you can replace that whole loop with one tool call. It uses Gmail's full search syntax (the same operators you'd type into the Gmail search bar), so you can find emails by sender, subject phrase, label, date range, file type, or even by RFC Message-ID if you already know it. Examples that work out of the box: from:billing@acme.com subject:\"invoice\" has:attachment newer_than:7d filename:pdf label:contracts older_than:30d rfc822msgid:CALXBSm...@mail.gmail.com The destination is just as flexible. Pass a Google Drive folder ID and the file lands there with its original filename and MIME type intact. Leave it blank and it goes to the root of My Drive. Folder IDs are easy to grab — they're the bit after /folders/ in any Drive URL. Common use cases Invoice / receipt automation — agents triage finance emails and file attachments into the right Drive folder Contract & document intake — when a signed contract lands in a shared inbox, route it straight to the legal folder Resume collection — pull CVs out of recruiting inboxes and into a candidate folder for the team Customer onboarding — collect logos, brand assets, or signed forms from welcome emails and stage them for delivery Personal inbox cleanup — point an agent at your inbox once a week to file PDFs, statements, and receipts where they belong",
+      "Alex Waite",
+      "Free",
+      "QR Code Generator Image Tool Tool • 5.0 (1) • 6 Overview A drop-in QR code generator that returns hosted PNG and SVG image URLs. Designed to be called by agents, workflows, and document pipelines. Outputs are real https URLs you can embed directly in slides, docs, social posts, signage, business cards, and any visual asset, without dealing with base64 data, image hosting, or rendering libraries. Built-in contrast checking flags low-contrast colour pairs before they fail in the wild. Logos auto-bump error correction to the highest level so codes still scan with a centre image. What It Does Takes a content type and the relevant inputs, generates a styled QR code, uploads both PNG and SVG to a stable https URL, and returns the URLs alongside a pre-built markdown image string for chat agents. Inputs qr_type (required): one of url, vcard, email, sms, wifi, phone, text, geo, bitcoin Type-specific content fields: content for url and text vcard_name, vcard_phone, vcard_email, vcard_org, vcard_title, vcard_url for vcard wifi_ssid, wifi_password, wifi_encryption for wifi email_to, email_subject, email_body for email sms_number, sms_message for sms phone_number for phone geo_lat, geo_lng for geo crypto_address, crypto_protocol, crypto_amount for bitcoin Optional styling: fg_color foreground hex (default #000000) bg_color background hex (default #FFFFFF) logo_url URL to a PNG or JPEG to embed in the centre frame_text short CTA label rendered in a bottom bar (e.g. SCAN ME) size output size in pixels (default 800, range 200-2000) Outputs png_url hosted https URL of the rendered PNG svg_url hosted https URL of the SVG vector markdown_image pre-built QR code ready to paste into a chat reply download_link_png and download_link_svg for direct user download qr_type, encoded_content, size_px metadata contrast_ratio and contrast_warning for scannability checking Key Features Nine QR types covering URLs, contact cards, wifi credentials, email, SMS, phone, plain text, geo locations, and crypto wallets Hosted image URLs that work in any context, no base64 bloat in conversation history Custom branding including foreground and background colours, embedded logos, and bottom-bar frame text Auto error correction bumped to maximum when a logo is present, so codes still scan reliably Built-in contrast checking with a warning when foreground and background fall below a 4:1 ratio Both raster and vector output PNG for screen and SVG for crisp print at any size Pre-built markdown so agent prompts stay simple, just paste markdown_image into the chat reply How It Works Call the tool with qr_type and the relevant content fields Optionally add styling parameters (fg_color, bg_color, logo_url, frame_text) The tool encodes the content, renders the QR code with Pillow, embeds any logo and frame, and uploads both PNG and SVG to hosted storage Returns hosted https URLs plus metadata in a single response Use Cases Perfect for: Agent builders who need their agents to deliver downloadable QR images in chat replies Slide and document workflows that need to embed scannable QR codes inline (use png_url directly in image placement steps) Marketing automation pipelines generating campaign-specific QR codes with brand colours Email and Slack agents that need to attach or link to a QR image for booking pages, signups, and lead magnets Multi-step content workflows where a QR code is one asset among many being generated and assembled Example Calls Branded URL QR with frame: qr_type: \"url\" content: \"https://example.com/booking\" fg_color: \"#7C3AED\" frame_text: \"BOOK NOW\" vCard contact card: qr_type: \"vcard\" vcard_name: \"Sarah Chen\" vcard_phone: \"+61 400 111 222\" vcard_email: \"sarah@example.com\" vcard_org: \"Example Co\" Wifi QR for guest access: qr_type: \"wifi\" wifi_ssid: \"GuestNetwork\" wifi_password: \"Welcome2024\" wifi_encryption: \"WPA\" Technical Details Built on Python with the qrcode and Pillow libraries SVG generation uses qrcode.image.svg.SvgPathImage for crisp vector output Image uploads use Relevance AI's hosted file infrastructure Returns standard https://userdata-...stack.tryrelevance.com/files/temp_public/... URLs No external API keys or third-party services required Disclaimer: Provided as-is by Authority Builder™ and Yasmin Cronin for productivity use only. No warranty, no liability for any direct or indirect damages, lost revenue, printing costs, scanner failures, brand impact, or third-party claims. The caller is solely responsible for the content encoded (URLs, contact details, wallet addresses, wifi credentials, etc) and for testing every QR code before production use. Crypto QR codes are generated from the address supplied, always verify independently. Outputs are hosted on Relevance AI temporary infrastructure, download and self-host for permanent use. Inputs are processed by third-party AI providers under their own policies. Nothing here is legal, financial, marketing, or design advice. By using this tool you indemnify Authority Builder™ and Yasmin Cronin against any claim arising from its use. Governed by the laws of the user's country of residence to the extent permitted, otherwise by the laws of Queensland, Australia. Yasmin Cronin Free",
+      "QR Code Generator Image Tool",
+      "Tool",
+      "•",
+      "5.0",
+      "(1)",
+      "•",
+      "6",
+      "Overview A drop-in QR code generator that returns hosted PNG and SVG image URLs. Designed to be called by agents, workflows, and document pipelines. Outputs are real https URLs you can embed directly in slides, docs, social posts, signage, business cards, and any visual asset, without dealing with base64 data, image hosting, or rendering libraries. Built-in contrast checking flags low-contrast colour pairs before they fail in the wild. Logos auto-bump error correction to the highest level so codes still scan with a centre image. What It Does Takes a content type and the relevant inputs, generates a styled QR code, uploads both PNG and SVG to a stable https URL, and returns the URLs alongside a pre-built markdown image string for chat agents. Inputs qr_type (required): one of url, vcard, email, sms, wifi, phone, text, geo, bitcoin Type-specific content fields: content for url and text vcard_name, vcard_phone, vcard_email, vcard_org, vcard_title, vcard_url for vcard wifi_ssid, wifi_password, wifi_encryption for wifi email_to, email_subject, email_body for email sms_number, sms_message for sms phone_number for phone geo_lat, geo_lng for geo crypto_address, crypto_protocol, crypto_amount for bitcoin Optional styling: fg_color foreground hex (default #000000) bg_color background hex (default #FFFFFF) logo_url URL to a PNG or JPEG to embed in the centre frame_text short CTA label rendered in a bottom bar (e.g. SCAN ME) size output size in pixels (default 800, range 200-2000) Outputs png_url hosted https URL of the rendered PNG svg_url hosted https URL of the SVG vector markdown_image pre-built QR code ready to paste into a chat reply download_link_png and download_link_svg for direct user download qr_type, encoded_content, size_px metadata contrast_ratio and contrast_warning for scannability checking Key Features Nine QR types covering URLs, contact cards, wifi credentials, email, SMS, phone, plain text, geo locations, and crypto wallets Hosted image URLs that work in any context, no base64 bloat in conversation history Custom branding including foreground and background colours, embedded logos, and bottom-bar frame text Auto error correction bumped to maximum when a logo is present, so codes still scan reliably Built-in contrast checking with a warning when foreground and background fall below a 4:1 ratio Both raster and vector output PNG for screen and SVG for crisp print at any size Pre-built markdown so agent prompts stay simple, just paste markdown_image into the chat reply How It Works Call the tool with qr_type and the relevant content fields Optionally add styling parameters (fg_color, bg_color, logo_url, frame_text) The tool encodes the content, renders the QR code with Pillow, embeds any logo and frame, and uploads both PNG and SVG to hosted storage Returns hosted https URLs plus metadata in a single response Use Cases Perfect for: Agent builders who need their agents to deliver downloadable QR images in chat replies Slide and document workflows that need to embed scannable QR codes inline (use png_url directly in image placement steps) Marketing automation pipelines generating campaign-specific QR codes with brand colours Email and Slack agents that need to attach or link to a QR image for booking pages, signups, and lead magnets Multi-step content workflows where a QR code is one asset among many being generated and assembled Example Calls Branded URL QR with frame: qr_type: \"url\" content: \"https://example.com/booking\" fg_color: \"#7C3AED\" frame_text: \"BOOK NOW\" vCard contact card: qr_type: \"vcard\" vcard_name: \"Sarah Chen\" vcard_phone: \"+61 400 111 222\" vcard_email: \"sarah@example.com\" vcard_org: \"Example Co\" Wifi QR for guest access: qr_type: \"wifi\" wifi_ssid: \"GuestNetwork\" wifi_password: \"Welcome2024\" wifi_encryption: \"WPA\" Technical Details Built on Python with the qrcode and Pillow libraries SVG generation uses qrcode.image.svg.SvgPathImage for crisp vector output Image uploads use Relevance AI's hosted file infrastructure Returns standard https://userdata-...stack.tryrelevance.com/files/temp_public/... URLs No external API keys or third-party services required Disclaimer: Provided as-is by Authority Builder™ and Yasmin Cronin for productivity use only. No warranty, no liability for any direct or indirect damages, lost revenue, printing costs, scanner failures, brand impact, or third-party claims. The caller is solely responsible for the content encoded (URLs, contact details, wallet addresses, wifi credentials, etc) and for testing every QR code before production use. Crypto QR codes are generated from the address supplied, always verify independently. Outputs are hosted on Relevance AI temporary infrastructure, download and self-host for permanent use. Inputs are processed by third-party AI providers under their own policies. Nothing here is legal, financial, marketing, or design advice. By using this tool you indemnify Authority Builder™ and Yasmin Cronin against any claim arising from its use. Governed by the laws of the user's country of residence to the extent permitted, otherwise by the laws of Queensland, Australia.",
+      "Yasmin Cronin",
+      "Free",
+      "Relevance Marketplace",
+      "Discover amazing AI agents from trusted builders. Find everything you need in our curated marketplace.",
+      "Marketplace",
+      "Home",
+      "Home",
+      "Marketing",
+      "Marketing",
+      "Sales",
+      "Sales",
+      "Customer Support",
+      "Customer Support",
+      "HR & Recruitment",
+      "HR & Recruitment",
+      "Research",
+      "Research",
+      "Use Cases",
+      "Email Marketing",
+      "Email Marketing",
+      "Website Chatbots",
+      "Website Chatbots",
+      "LinkedIn Agents",
+      "LinkedIn Agents",
+      "Phone Sales",
+      "Phone Sales",
+      "Lead Scoring",
+      "Lead Scoring",
+      "Integrations",
+      "HubSpot",
+      "HubSpot",
+      "Salesforce",
+      "Salesforce",
+      "Slack",
+      "Slack",
+      "Gmail",
+      "Gmail",
+      "LinkedIn",
+      "LinkedIn",
+      "Google Sheets",
+      "Google Sheets",
+      "Apollo",
+      "Apollo",
+      "Notion",
+      "Notion",
+      "Zapier",
+      "Zapier",
+      "Intercom",
+      "Intercom",
+      "OpenAI",
+      "OpenAI",
+      "Mailchimp",
+      "Mailchimp",
+      "View all →",
+      "View all →",
+      "Alternatives",
+      "Apollo.io Alternatives",
+      "Apollo.io Alternatives",
+      "HubSpot Alternatives",
+      "HubSpot Alternatives",
+      "ZoomInfo Alternatives",
+      "ZoomInfo Alternatives",
+      "Notion Alternatives",
+      "Notion Alternatives",
+      "Mailchimp Alternatives",
+      "Mailchimp Alternatives",
+      "Gong Alternatives",
+      "Gong Alternatives",
+      "HeyReach Alternatives",
+      "HeyReach Alternatives",
+      "PhantomBuster Alternatives",
+      "PhantomBuster Alternatives",
+      "HeyGen Alternatives",
+      "HeyGen Alternatives",
+      "Synthesia Alternatives",
+      "Synthesia Alternatives",
+      "Jasper Alternatives",
+      "Jasper Alternatives",
+      "Loom Alternatives",
+      "Loom Alternatives",
+      "View all →",
+      "View all →",
+      "Resources",
+      "Documentation",
+      "Documentation",
+      "Blog",
+      "Blog",
+      "Community",
+      "Community",
+      "Changelog",
+      "Changelog",
+      "Talk to Sales",
+      "Talk to Sales",
+      "Support",
+      "Support",
+      "Company",
+      "Careers",
+      "Careers",
+      "Trust Center",
+      "Trust Center",
+      "Privacy Policy",
+      "Privacy Policy",
+      "Terms of Service",
+      "Terms of Service",
+      "Sign In",
+      "Sign In",
+      "© 2026 Relevance AI. All rights reserved.",
+      "Powered by",
+      "Relevance AI",
+      "Relevance AI"
+    ]
+  }
+]

@@ -1,0 +1,103 @@
+[
+  {
+    "blockedActions" : [
+
+    ],
+    "claims" : [
+      {
+        "evidenceReferences" : [
+
+        ],
+        "id" : "claim-CE940649-3D05-43C1-B863-7364F475C360",
+        "supportLevel" : "unreviewed",
+        "text" : "Market stance is review-ready."
+      }
+    ],
+    "createdAt" : "2026-06-27T07:51:47.992Z",
+    "domainSummary" : "Crypto review packet",
+    "eventHistory" : [
+
+    ],
+    "evidenceGaps" : [
+      {
+        "detail" : "Confirm source timestamp",
+        "id" : "evidence-gap-42B964EF-8ED4-4125-BC55-3E4A8568BB94",
+        "severity" : "warning",
+        "title" : "Evidence gap"
+      }
+    ],
+    "finalAnswer" : "Review packet final answer is ready for manual review.",
+    "id" : "visual-review-packet",
+    "loopContractID" : "crypto-market-report-loop",
+    "nextQuestions" : [
+      "Attach latest market note"
+    ],
+    "reviewDecision" : {
+      "decidedAt" : "2026-06-27T07:51:47.991Z",
+      "decision" : "needsFollowUp",
+      "id" : "review-decision-BC5F5EF3-7358-450F-A202-CFFAA1561A61",
+      "nextAction" : "Ask a run-scoped follow-up.",
+      "notes" : "Visual seed for Run Result state review.",
+      "reviewer" : "local-user"
+    },
+    "reviewNotes" : "Visual seed for Run Result state review.",
+    "runID" : "visual-run-result-state",
+    "schemaVersion" : "loopops-review-packet-v1",
+    "uncertainty" : "medium",
+    "updatedAt" : "2026-06-27T07:51:47.992Z"
+  },
+  {
+    "blockedActions" : [
+
+    ],
+    "claims" : [
+      {
+        "evidenceReferences" : [
+
+        ],
+        "id" : "claim-F7B5C555-5B34-4500-BBC2-41D35A464DD7",
+        "supportLevel" : "unreviewed",
+        "text" : "Review packet final answer is ready for manual review."
+      }
+    ],
+    "createdAt" : "2026-06-27T07:51:47.992Z",
+    "domainSummary" : "Crypto review packet",
+    "eventHistory" : [
+      {
+        "actor" : "LoopOps",
+        "detail" : "0 evidence gap(s) captured.",
+        "id" : "review-event-visual-run-result-state-created",
+        "kind" : "created",
+        "occurredAt" : "2026-06-27T07:51:47.973Z",
+        "title" : "Packet created"
+      }
+    ],
+    "evidenceGaps" : [
+      {
+        "detail" : "Confirm source timestamp",
+        "id" : "evidence-gap-4C18A161-1092-4C23-A08A-B750A1C1C2EF",
+        "severity" : "warning",
+        "title" : "Evidence gap"
+      }
+    ],
+    "finalAnswer" : "Review packet final answer is ready for manual review.",
+    "id" : "visual-run-result-state",
+    "loopContractID" : "crypto-market-report-loop",
+    "nextQuestions" : [
+      "Attach latest market note"
+    ],
+    "reviewDecision" : {
+      "decidedAt" : "2026-06-27T07:51:47.992Z",
+      "decision" : "needsFollowUp",
+      "id" : "review-decision-E5496E8B-16B1-45FA-9864-0C34DBF432C2",
+      "nextAction" : "Ask a run-scoped follow-up.",
+      "notes" : "Created from the run result. Human review is required before external action.",
+      "reviewer" : "local-user"
+    },
+    "reviewNotes" : "Created from the run result. Human review is required before external action.",
+    "runID" : "visual-run-result-state",
+    "schemaVersion" : "loopops-review-packet-v1",
+    "uncertainty" : "review_ready",
+    "updatedAt" : "2026-06-27T07:51:47.992Z"
+  }
+]

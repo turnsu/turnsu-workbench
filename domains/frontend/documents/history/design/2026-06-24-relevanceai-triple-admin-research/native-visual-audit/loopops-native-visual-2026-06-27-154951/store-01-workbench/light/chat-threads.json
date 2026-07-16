@@ -1,0 +1,26 @@
+[
+  {
+    "followUpRunIDs" : [
+
+    ],
+    "id" : "run-visual-run-result-state",
+    "memoryCandidates" : [
+
+    ],
+    "messages" : [
+      {
+        "attachments" : [
+
+        ],
+        "createdAt" : "2026-06-27T07:49:51Z",
+        "id" : "2846A71D-3AAE-484D-990A-1B0A7423D10A",
+        "role" : "user",
+        "text" : "Summarize only this run's evidence gaps."
+      }
+    ],
+    "scope" : "run",
+    "scopeID" : "visual-run-result-state",
+    "title" : "Market Report Loop",
+    "updatedAt" : "2026-06-27T07:49:51Z"
+  }
+]

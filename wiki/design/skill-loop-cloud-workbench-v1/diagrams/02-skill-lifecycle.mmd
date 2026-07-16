@@ -1,0 +1,15 @@
+stateDiagram-v2
+    [*] --> Draft: Create / Upload / Fork
+    Draft --> Validating: Run validation
+    Validating --> Draft: Fix issues
+    Validating --> Tested: Checks pass
+    Tested --> Testing: Run test
+    Testing --> Tested: Test passes
+    Testing --> Draft: Change content
+    Tested --> PublishReview: Publish version
+    PublishReview --> Tested: Changes requested
+    PublishReview --> Published: Approved
+    Published --> Draft: Create next version
+    Published --> Deprecated: Deprecate
+    Deprecated --> Archived: Archive
+    Draft --> Archived: Discard

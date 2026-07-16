@@ -1,0 +1,42 @@
+flowchart TD
+    Shell["Workspace shell"]
+    Create["Create"]
+    Skills["Skills"]
+    Loops["Loops"]
+    Library["Team library"]
+    Workspace["Workspace menu"]
+
+    Shell --> Skills
+    Shell --> Loops
+    Shell --> Library
+    Shell --> Create
+    Shell --> Workspace
+
+    Create --> CreateSkill["Create Skill"]
+    Create --> UploadSkill["Upload Skill"]
+    Create --> CreateLoop["Create Loop"]
+    Create --> UploadLoop["Upload Loop"]
+
+    Skills --> SkillDetail["Skill detail"]
+    SkillDetail --> SkillEdit["Draft editor"]
+    SkillDetail --> SkillTests["Tests"]
+    SkillDetail --> SkillVersions["Versions"]
+    SkillDetail --> SkillUsage["Loop usage"]
+
+    Loops --> LoopDetail["Loop detail"]
+    LoopDetail --> Builder["Builder"]
+    LoopDetail --> Runs["Runs"]
+    LoopDetail --> LoopVersions["Versions"]
+    Builder --> Definition["Definition"]
+    Builder --> Outline["Outline"]
+    Builder --> Canvas["Canvas"]
+
+    Library --> SharedSkills["Published Skills"]
+    Library --> SharedLoops["Published Loops"]
+    Library --> StartingPoints["Starting points"]
+    Library --> Collections["Collections"]
+
+    Workspace --> Members["Members"]
+    Workspace --> Connections["Connections"]
+    Workspace --> Publishing["Publishing rules"]
+    Workspace --> Audit["Audit history"]

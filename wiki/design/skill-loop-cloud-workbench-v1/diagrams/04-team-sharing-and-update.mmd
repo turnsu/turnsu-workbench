@@ -1,0 +1,18 @@
+sequenceDiagram
+    participant A as Author
+    participant W as Product workspace
+    participant L as Team library
+    participant T as Teammate
+
+    A->>W: Validate and submit version
+    W-->>A: Diff, permissions, dependencies, tests
+    A->>W: Publish approved version
+    W->>L: Add immutable release
+    T->>L: Discover asset
+    L-->>T: Purpose, owner, version, validation, permissions
+    T->>W: Install or fork
+    W-->>T: Bind local connections and pin version
+    A->>W: Publish updated version
+    W-->>T: Update available with impact
+    T->>W: Review and explicitly update
+    W-->>T: New draft, compile and retest required

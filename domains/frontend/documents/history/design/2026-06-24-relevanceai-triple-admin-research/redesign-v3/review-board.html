@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LoopOps Redesign V3 Reference Board</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f7f8;
+        --surface: #ffffff;
+        --subtle: #f8f9fb;
+        --line: #dfe3e8;
+        --strong-line: #c9ced6;
+        --text: #15171a;
+        --muted: #5f6772;
+        --faint: #89919d;
+        --blue: #0a84ff;
+        --amber: #b46b00;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 252px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      .sidebar {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        padding: 18px 16px;
+        background: #eef0f3;
+        border-right: 1px solid var(--line);
+      }
+
+      .brand {
+        margin-bottom: 22px;
+        font-weight: 700;
+        font-size: 15px;
+      }
+
+      .nav {
+        display: grid;
+        gap: 4px;
+      }
+
+      .nav a,
+      .statusPill {
+        border-radius: 6px;
+        padding: 7px 9px;
+        text-decoration: none;
+      }
+
+      .nav a:hover {
+        background: #dfe8f8;
+      }
+
+      .statusPill {
+        display: inline-flex;
+        width: fit-content;
+        margin-top: 18px;
+        color: var(--amber);
+        background: #fff7e8;
+        border: 1px solid #ead6aa;
+        font-weight: 600;
+      }
+
+      main {
+        min-width: 0;
+        padding: 24px 28px 60px;
+      }
+
+      .hero {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: end;
+        padding-bottom: 18px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 4px;
+        font-size: 26px;
+        line-height: 1.2;
+      }
+
+      h2 {
+        margin-bottom: 6px;
+        font-size: 19px;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        font-size: 15px;
+      }
+
+      p {
+        color: var(--muted);
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        height: 32px;
+        padding: 0 12px;
+        border: 1px solid var(--strong-line);
+        border-radius: 6px;
+        background: var(--surface);
+        text-decoration: none;
+      }
+
+      .button.primary {
+        border-color: var(--blue);
+        background: var(--blue);
+        color: #fff;
+      }
+
+      .section {
+        margin-top: 22px;
+        padding: 18px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+
+      .split {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 16px;
+      }
+
+      .evidenceGrid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .moduleGrid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .module {
+        padding: 14px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+
+      .moduleHeader,
+      .artifactHeader {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: start;
+        margin-bottom: 10px;
+      }
+
+      .moduleLinks,
+      .reviewQuestions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .moduleLinks a,
+      .reviewQuestions span {
+        padding: 4px 7px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--muted);
+        background: #fff;
+        font-size: 11px;
+        text-decoration: none;
+      }
+
+      .artifact {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--subtle);
+      }
+
+      .artifactHeader {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--line);
+        background: #fff;
+      }
+
+      .artifactHeader span,
+      .meta {
+        color: var(--faint);
+        font-size: 11px;
+      }
+
+      img {
+        display: block;
+        width: 100%;
+        height: auto;
+        background: #fff;
+      }
+
+      .mobilePreview {
+        max-height: 820px;
+        overflow: auto;
+      }
+
+      .decisionTable {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .decisionTable th,
+      .decisionTable td {
+        padding: 10px 8px;
+        border-top: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .decisionTable th {
+        color: var(--faint);
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .decision {
+        color: var(--amber);
+        font-weight: 700;
+      }
+
+      .note {
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--subtle);
+      }
+
+      @media (max-width: 900px) {
+        .shell,
+        .split,
+        .evidenceGrid {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          position: static;
+          height: auto;
+        }
+
+        main {
+          padding: 16px 12px 44px;
+        }
+
+        .hero {
+          align-items: stretch;
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">looloomi redesign-v3</div>
+        <nav class="nav" aria-label="Reference board">
+          <a href="#overview">Overview</a>
+          <a href="#modules">Modules</a>
+          <a href="#mobile">Mobile</a>
+          <a href="#notes">Notes</a>
+          <a href="#handoff">Handoff</a>
+        </nav>
+        <div class="statusPill">reference</div>
+      </aside>
+
+      <main>
+        <header class="hero" id="overview">
+          <div>
+            <p class="meta">Reference target, replaceable by stronger UI</p>
+            <h1>LoopOps Redesign V3 Reference Board</h1>
+            <p>Use this board to inspect target screenshots and module intent. It is a reference page and does not block implementation.</p>
+          </div>
+          <div class="actions">
+            <a class="button primary" href="human-review-form.md">Open notes</a>
+            <a class="button" href="target-mockups/index.html">Open target</a>
+            <a class="button" href="implementation-handoff.md">Implementation handoff</a>
+          </div>
+        </header>
+
+        <section class="section split">
+          <div>
+            <h2>Lean Operating Model</h2>
+            <p>Modules can be redesigned and implemented independently. Human feedback guides quality, but no status table blocks product iteration.</p>
+            <div class="reviewQuestions">
+              <span>Product-first UI</span>
+              <span>Notion-like density</span>
+              <span>Scoped chat</span>
+              <span>External actions require confirmation</span>
+            </div>
+          </div>
+          <div class="note">
+            <h3>Current State</h3>
+            <p>Old targets remain useful as references, but the UI can be rebuilt from scratch when a stronger interaction model emerges.</p>
+          </div>
+        </section>
+
+        <section class="section" id="modules">
+          <div class="moduleHeader">
+            <div>
+              <h2>Module Targets</h2>
+              <p>Each module includes a desktop target screenshot, source spec, and a direct target-page link.</p>
+            </div>
+            <a class="button" href="before-after.md">Before/after matrix</a>
+          </div>
+
+          <div class="moduleGrid">
+            <article class="module">
+              <div class="moduleHeader">
+                <div>
+                  <h3>Workbench / Active Queue / Run Result</h3>
+                  <p>Queue, selected result, review packet and run-scoped chat share one coherent surface.</p>
+                </div>
+                <span class="decision">reference</span>
+              </div>
+              <div class="moduleLinks">
+                <a href="modules/workbench-run-result.md">Spec</a>
+                <a href="target-mockups/index.html?module=workbench">Single target</a>
+                <a href="target-mockups/modules/workbench-target.png">Screenshot</a>
+              </div>
+              <div class="artifact">
+                <img src="target-mockups/modules/workbench-target.png" alt="Workbench redesign target" />
+              </div>
+            </article>
+
+            <article class="module">
+              <div class="moduleHeader">
+                <div>
+                  <h3>Loop Library / Marketplace</h3>
+                  <p>Templates and owned loops behave like a database with readiness and clear run/setup actions.</p>
+                </div>
+                <span class="decision">reference</span>
+              </div>
+              <div class="moduleLinks">
+                <a href="modules/loop-library-marketplace.md">Spec</a>
+                <a href="target-mockups/index.html?module=library">Single target</a>
+                <a href="target-mockups/modules/loop-library-target.png">Screenshot</a>
+              </div>
+              <div class="artifact">
+                <img src="target-mockups/modules/loop-library-target.png" alt="Loop Library redesign target" />
+              </div>
+            </article>
+
+            <article class="module">
+              <div class="moduleHeader">
+                <div>
+                  <h3>Skill OS / Tool Builder / Tool Logs</h3>
+                  <p>Second library for skills, tool creation and readable evidence logs.</p>
+                </div>
+                <span class="decision">reference</span>
+              </div>
+              <div class="moduleLinks">
+                <a href="modules/skill-os-tool-builder-logs.md">Spec</a>
+                <a href="target-mockups/index.html?module=skillos">Single target</a>
+                <a href="target-mockups/modules/skill-os-tool-logs-target.png">Screenshot</a>
+              </div>
+              <div class="artifact">
+                <img src="target-mockups/modules/skill-os-tool-logs-target.png" alt="Skill OS redesign target" />
+              </div>
+            </article>
+
+            <article class="module">
+              <div class="moduleHeader">
+                <div>
+                  <h3>Studio / Builder Chat / Execution Path</h3>
+                  <p>Loop Contract page, ordered path and patch receipt stay visible and separable.</p>
+                </div>
+                <span class="decision">reference</span>
+              </div>
+              <div class="moduleLinks">
+                <a href="modules/studio-builder-execution-path.md">Spec</a>
+                <a href="target-mockups/index.html?module=studio">Single target</a>
+                <a href="target-mockups/modules/studio-target.png">Screenshot</a>
+              </div>
+              <div class="artifact">
+                <img src="target-mockups/modules/studio-target.png" alt="Studio redesign target" />
+              </div>
+            </article>
+
+            <article class="module">
+              <div class="moduleHeader">
+                <div>
+                  <h3>Knowledge / Toast / Attach</h3>
+                  <p>Sources are database objects, attachment is scoped, and feedback is recoverable.</p>
+                </div>
+                <span class="decision">reference</span>
+              </div>
+              <div class="moduleLinks">
+                <a href="modules/knowledge-toast-attach.md">Spec</a>
+                <a href="target-mockups/index.html?module=knowledge">Single target</a>
+                <a href="target-mockups/modules/knowledge-target.png">Screenshot</a>
+              </div>
+              <div class="artifact">
+                <img src="target-mockups/modules/knowledge-target.png" alt="Knowledge redesign target" />
+              </div>
+            </article>
+
+            <article class="module">
+              <div class="moduleHeader">
+                <div>
+                  <h3>Scoped Chat / Quick GUI</h3>
+                  <p>Scope, persistence, model, search and category controls live close to the composer.</p>
+                </div>
+                <span class="decision">reference</span>
+              </div>
+              <div class="moduleLinks">
+                <a href="modules/scoped-chat-quick-gui.md">Spec</a>
+                <a href="target-mockups/index.html?module=chat">Single target</a>
+                <a href="target-mockups/modules/scoped-chat-target.png">Screenshot</a>
+              </div>
+              <div class="artifact">
+                <img src="target-mockups/modules/scoped-chat-target.png" alt="Scoped Chat redesign target" />
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="section evidenceGrid" id="mobile">
+          <article class="artifact">
+            <div class="artifactHeader">
+              <h2>Desktop Overview</h2>
+              <span>1440 x 3000</span>
+            </div>
+            <img src="target-mockups/target-overview-1440-full.png" alt="Desktop overview target" />
+          </article>
+          <article class="artifact">
+            <div class="artifactHeader">
+              <h2>Mobile Overview</h2>
+              <span>390 x 6000</span>
+            </div>
+            <div class="mobilePreview">
+              <img src="target-mockups/target-overview-mobile-390.png" alt="Mobile overview target" />
+            </div>
+          </article>
+        </section>
+
+        <section class="section" id="notes">
+          <div class="moduleHeader">
+            <div>
+              <h2>Reference Notes</h2>
+              <p>Use this table as a module index. Notes guide redesign priorities; they do not authorize or block implementation.</p>
+            </div>
+            <a class="button primary" href="human-review-form.md">Record notes</a>
+          </div>
+          <table class="decisionTable">
+            <thead>
+              <tr>
+                <th>Module</th>
+                <th>Evidence</th>
+                <th>Use</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Workbench / Active Queue / Run Result</td><td>Desktop target + mobile overview</td><td class="decision">reference</td></tr>
+              <tr><td>Loop Library / Marketplace</td><td>Desktop target + mobile overview</td><td class="decision">reference</td></tr>
+              <tr><td>Skill OS / Tool Builder / Tool Logs</td><td>Desktop target + mobile overview</td><td class="decision">reference</td></tr>
+              <tr><td>Studio / Builder Chat / Execution Path</td><td>Desktop target + mobile overview</td><td class="decision">reference</td></tr>
+              <tr><td>Knowledge / Toast / Attach</td><td>Desktop target + mobile overview</td><td class="decision">reference</td></tr>
+              <tr><td>Scoped Chat / Quick GUI</td><td>Desktop target + mobile overview</td><td class="decision">reference</td></tr>
+              <tr><td>Design Manager / QA</td><td>QA guidance</td><td class="decision">reference</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" id="handoff">
+          <h2>Implementation Handoff</h2>
+          <p>Implementation can proceed module by module. Use the handoff for component boundaries and verification guidance, not as a checkpoint.</p>
+          <div class="actions">
+            <a class="button" href="implementation-handoff.md">Open handoff</a>
+            <a class="button" href="review-status.md">Open status</a>
+            <a class="button" href="visual-system.md">Open visual system</a>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

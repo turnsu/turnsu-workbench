@@ -1,0 +1,128 @@
+[
+  {
+    "bindings" : [
+      {
+        "enabled" : true,
+        "id" : "cmc-market-radar",
+        "kind" : "skill",
+        "order" : 0,
+        "required" : false,
+        "source" : "starter-stack",
+        "title" : "CoinMarketCap market radar"
+      },
+      {
+        "enabled" : true,
+        "id" : "market-regime-review",
+        "kind" : "skill",
+        "order" : 1,
+        "required" : false,
+        "source" : "starter-stack",
+        "title" : "Market regime review"
+      },
+      {
+        "enabled" : true,
+        "id" : "cmc-skill-hub",
+        "kind" : "extensionPackage",
+        "order" : 2,
+        "required" : false,
+        "source" : "starter-stack",
+        "title" : "CMC Skill Hub capability"
+      }
+    ],
+    "createdAt" : "2026-06-27T00:39:44Z",
+    "id" : "skill-stack-crypto-market",
+    "name" : "Crypto Market OS",
+    "summary" : "CMC market scan, regime review, and read-only market package.",
+    "updatedAt" : "2026-06-27T00:39:44Z"
+  },
+  {
+    "bindings" : [
+      {
+        "enabled" : true,
+        "id" : "equity-company-deep-dive",
+        "kind" : "skill",
+        "order" : 0,
+        "required" : false,
+        "source" : "starter-stack",
+        "title" : "Company deep dive"
+      },
+      {
+        "enabled" : true,
+        "id" : "equity-thesis-tracker",
+        "kind" : "skill",
+        "order" : 1,
+        "required" : false,
+        "source" : "starter-stack",
+        "title" : "Equity thesis tracker"
+      },
+      {
+        "enabled" : true,
+        "id" : "equity-earnings-review",
+        "kind" : "skill",
+        "order" : 2,
+        "required" : false,
+        "source" : "starter-stack",
+        "title" : "Earnings review"
+      },
+      {
+        "enabled" : true,
+        "id" : "markets-research",
+        "kind" : "extensionPackage",
+        "order" : 3,
+        "required" : false,
+        "source" : "starter-stack",
+        "title" : "Markets research capability"
+      }
+    ],
+    "createdAt" : "2026-06-27T00:39:44Z",
+    "id" : "skill-stack-markets-research",
+    "name" : "Markets Research OS",
+    "summary" : "Company, earnings, thesis, and markets research package.",
+    "updatedAt" : "2026-06-27T00:39:44Z"
+  },
+  {
+    "bindings" : [
+      {
+        "enabled" : true,
+        "id" : "meeting-cloud-asr",
+        "kind" : "skill",
+        "order" : 0,
+        "required" : false,
+        "source" : "starter-stack",
+        "title" : "Cloud transcription"
+      },
+      {
+        "enabled" : true,
+        "id" : "meeting-minutes",
+        "kind" : "skill",
+        "order" : 1,
+        "required" : false,
+        "source" : "starter-stack",
+        "title" : "Meeting minutes"
+      },
+      {
+        "enabled" : true,
+        "id" : "document-generation",
+        "kind" : "skill",
+        "order" : 2,
+        "required" : false,
+        "source" : "starter-stack",
+        "title" : "Document drafting"
+      },
+      {
+        "enabled" : true,
+        "id" : "office-meeting-agent",
+        "kind" : "extensionPackage",
+        "order" : 3,
+        "required" : false,
+        "source" : "starter-stack",
+        "title" : "Office meeting agent"
+      }
+    ],
+    "createdAt" : "2026-06-27T00:39:44Z",
+    "id" : "skill-stack-office-draft",
+    "name" : "Office Draft OS",
+    "summary" : "Meeting transcription, minutes, document draft, and delivery preview.",
+    "updatedAt" : "2026-06-27T00:39:44Z"
+  }
+]

@@ -1,0 +1,29 @@
+{
+  "reviewId": "loopops-review-2026-06-25-143957",
+  "status": "pending-manual-review",
+  "reviewer": "chenge",
+  "created": "2026-06-25-143957",
+  "surfaces": "web,native",
+  "permissionModel": "no open, AppleScript, browser automation, Accessibility, or screen recording required by this recorder",
+  "entrypoints": {
+    "webUrl": "http://127.0.0.1:5189/",
+    "webOfflineArtifact": "/Users/chenge/Desktop/intelligence-agent-web3/intelligence-agent-web3/domains/frontend/web/code/web-prototype/dist/loopops-admin-offline.html",
+    "nativeAppBundle": "/Users/chenge/Desktop/intelligence-agent-web3/intelligence-agent-web3/.build/debug-app/WeChatIntelligenceRadar.app",
+    "nativeChecklist": "/Users/chenge/Desktop/intelligence-agent-web3/intelligence-agent-web3/domains/frontend/documents/design/2026-06-24-relevanceai-triple-admin-research/13-native-manual-review-checklist.md",
+    "completionMatrix": "/Users/chenge/Desktop/intelligence-agent-web3/intelligence-agent-web3/domains/frontend/documents/design/2026-06-24-relevanceai-triple-admin-research/10-objective-completion-matrix.md"
+  },
+  "blockers": "human-review-not-yet-recorded",
+  "notes": "Full no-permission objective audit passed with swift test; awaiting human visual/product review on 5189.",
+  "checklist": [
+    "Web Workbench active queue and selected Run Result are visible",
+    "Web Loop Library can start one loop and multiple selected loops",
+    "Web Skill OS create-tool, tool drawer, and logs are reachable without hidden runtime/provider/gate labels",
+    "Web Knowledge attach flow updates scope and evidence context",
+    "Web Chat panel can seed prompts from command chips and review/chat scopes stay clear",
+    "Native Workbench Review Guide paths route to Loop Library, Skill OS, Knowledge, and Chat",
+    "Native Loop Library run actions and Run Result panel are visible",
+    "Native Studio skill execution path supports visible add/remove/order review",
+    "Native Review Packet keeps external action boundaries explicit",
+    "No permission popup is required for scripted preflight or record generation"
+  ]
+}

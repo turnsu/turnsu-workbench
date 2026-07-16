@@ -1,0 +1,412 @@
+{
+  "capturedAt" : "2026-07-15T18:50:40Z",
+  "captureStatus" : "failed",
+  "failures" : [
+    {
+      "actualPath" : null,
+      "actualRoute" : "\/loops",
+      "capturedAt" : "2026-07-15T18:49:26Z",
+      "error" : "No ready Loop exists",
+      "evidenceCategory" : "loop-reference",
+      "interactionPreconditions" : [
+        "A real ready Loop must exist"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : null,
+      "objectState" : "preflight",
+      "referencePath" : "wiki\/design\/skill-loop-cloud-workbench-v1\/key-frames\/11-run-preflight.png",
+      "screenId" : "loop-run-preflight",
+      "structuralAssertions" : [
+        "The selected Loop lifecycle state is visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+        "Capture failed: No ready Loop exists"
+      ]
+    },
+    {
+      "actualPath" : null,
+      "actualRoute" : "\/loops",
+      "capturedAt" : "2026-07-15T18:49:26Z",
+      "error" : "No ready Loop exists",
+      "evidenceCategory" : "loop-reference",
+      "interactionPreconditions" : [
+        "A real ready Loop must exist"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : null,
+      "objectState" : "waiting-review",
+      "referencePath" : "wiki\/design\/skill-loop-cloud-workbench-v1\/key-frames\/05-run-waiting-review.png",
+      "screenId" : "loop-run-waiting-review",
+      "structuralAssertions" : [
+        "The selected Loop lifecycle state is visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+        "Capture failed: No ready Loop exists"
+      ]
+    },
+    {
+      "actualPath" : null,
+      "actualRoute" : "\/loops",
+      "capturedAt" : "2026-07-15T18:49:26Z",
+      "error" : "No ready Loop exists",
+      "evidenceCategory" : "loop-reference",
+      "interactionPreconditions" : [
+        "A real ready Loop must exist"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : null,
+      "objectState" : "completed",
+      "referencePath" : "wiki\/design\/skill-loop-cloud-workbench-v1\/key-frames\/06-run-completed.png",
+      "screenId" : "loop-run-completed",
+      "structuralAssertions" : [
+        "The selected Loop lifecycle state is visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+        "Capture failed: No ready Loop exists"
+      ]
+    },
+    {
+      "actualPath" : null,
+      "actualRoute" : "\/loops",
+      "capturedAt" : "2026-07-15T18:49:26Z",
+      "error" : "No ready Loop exists",
+      "evidenceCategory" : "loop-reference",
+      "interactionPreconditions" : [
+        "A real ready Loop must exist"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : null,
+      "objectState" : "publish-review",
+      "referencePath" : "wiki\/design\/skill-loop-cloud-workbench-v1\/key-frames\/07-publish-review.png",
+      "screenId" : "loop-publish-review",
+      "structuralAssertions" : [
+        "The selected Loop lifecycle state is visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+        "Capture failed: No ready Loop exists"
+      ]
+    },
+    {
+      "actualPath" : null,
+      "actualRoute" : "\/library",
+      "capturedAt" : "2026-07-15T18:49:26Z",
+      "error" : "No adoptable Team release exists",
+      "evidenceCategory" : "loop-reference",
+      "interactionPreconditions" : [
+        "A Team asset with an available update must exist"
+      ],
+      "locale" : "zh",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : null,
+      "objectState" : "update-review",
+      "referencePath" : "wiki\/design\/skill-loop-cloud-workbench-v1\/key-frames\/08-team-library-update.png",
+      "screenId" : "loop-team-library-update",
+      "structuralAssertions" : [
+        "Version transition and update impact are visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+        "Capture failed: No adoptable Team release exists"
+      ]
+    },
+    {
+      "actualPath" : null,
+      "actualRoute" : "\/library",
+      "capturedAt" : "2026-07-15T18:49:45Z",
+      "error" : "No Team Loop release exists",
+      "evidenceCategory" : "team-library",
+      "interactionPreconditions" : [
+        "A published Team Loop release must exist"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : null,
+      "objectState" : "detail",
+      "referencePath" : null,
+      "screenId" : "team-library-loop-detail",
+      "structuralAssertions" : [
+        "Team Loop detail is visible"
+      ],
+      "theme" : "dark",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+        "Capture failed: No Team Loop release exists"
+      ]
+    },
+    {
+      "actualPath" : null,
+      "actualRoute" : "\/library",
+      "capturedAt" : "2026-07-15T18:49:45Z",
+      "error" : "No publishable Loop exists",
+      "evidenceCategory" : "team-library",
+      "interactionPreconditions" : [
+        "A real saved Loop must exist"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : null,
+      "objectState" : "publish-review",
+      "referencePath" : null,
+      "screenId" : "team-library-publish-review",
+      "structuralAssertions" : [
+        "The Team publication review is visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+        "Capture failed: No publishable Loop exists"
+      ]
+    },
+    {
+      "actualPath" : null,
+      "actualRoute" : "\/library",
+      "capturedAt" : "2026-07-15T18:49:45Z",
+      "error" : "No adoptable Team release exists",
+      "evidenceCategory" : "team-library",
+      "interactionPreconditions" : [
+        "An installed Team asset must have a newer release"
+      ],
+      "locale" : "zh",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : null,
+      "objectState" : "update-available",
+      "referencePath" : null,
+      "screenId" : "team-library-update-impact",
+      "structuralAssertions" : [
+        "Version transition and update impact are visible"
+      ],
+      "theme" : "dark",
+      "viewport" : {
+        "height" : 844,
+        "width" : 390
+      },
+      "visibleDeviations" : [
+        "Capture failed: No adoptable Team release exists"
+      ]
+    },
+    {
+      "actualPath" : null,
+      "actualRoute" : "\/loops",
+      "capturedAt" : "2026-07-15T18:50:06Z",
+      "error" : "Missing prepared state state-update-available; provide LOOPOPS_EVIDENCE_STATE_FILE without DOM or fetch stubs",
+      "evidenceCategory" : "generic-state",
+      "interactionPreconditions" : [
+        "A real Product API\/session state for state-update-available must be prepared before capture"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workspace",
+      "objectState" : "update-available",
+      "referencePath" : null,
+      "screenId" : "state-update-available",
+      "structuralAssertions" : [
+        "The state reason and a concrete recovery action are visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 844,
+        "width" : 390
+      },
+      "visibleDeviations" : [
+        "Capture failed: Missing prepared state state-update-available; provide LOOPOPS_EVIDENCE_STATE_FILE without DOM or fetch stubs"
+      ]
+    },
+    {
+      "actualPath" : null,
+      "actualRoute" : "\/loops",
+      "capturedAt" : "2026-07-15T18:50:06Z",
+      "error" : "Missing prepared state state-success; provide LOOPOPS_EVIDENCE_STATE_FILE without DOM or fetch stubs",
+      "evidenceCategory" : "generic-state",
+      "interactionPreconditions" : [
+        "A real Product API\/session state for state-success must be prepared before capture"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workspace",
+      "objectState" : "success",
+      "referencePath" : null,
+      "screenId" : "state-success",
+      "structuralAssertions" : [
+        "The state reason and a concrete recovery action are visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 844,
+        "width" : 390
+      },
+      "visibleDeviations" : [
+        "Capture failed: Missing prepared state state-success; provide LOOPOPS_EVIDENCE_STATE_FILE without DOM or fetch stubs"
+      ]
+    },
+    {
+      "actualPath" : null,
+      "actualRoute" : "\/loops",
+      "capturedAt" : "2026-07-15T18:50:06Z",
+      "error" : "Missing prepared state state-reconnecting; provide LOOPOPS_EVIDENCE_STATE_FILE without DOM or fetch stubs",
+      "evidenceCategory" : "generic-state",
+      "interactionPreconditions" : [
+        "A real Product API\/session state for state-reconnecting must be prepared before capture"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workspace",
+      "objectState" : "reconnecting",
+      "referencePath" : null,
+      "screenId" : "state-reconnecting",
+      "structuralAssertions" : [
+        "The state reason and a concrete recovery action are visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 844,
+        "width" : 390
+      },
+      "visibleDeviations" : [
+        "Capture failed: Missing prepared state state-reconnecting; provide LOOPOPS_EVIDENCE_STATE_FILE without DOM or fetch stubs"
+      ]
+    },
+    {
+      "actualPath" : null,
+      "actualRoute" : "\/loops\/workflow-e36ab0e4-a9df-47a4-9e55-5fd936d5114f\/edit",
+      "capturedAt" : "2026-07-15T18:50:38Z",
+      "error" : "Timed out while waiting for visible selector [data-testid='loopops.builder.definition'] textarea",
+      "evidenceCategory" : "generic-state",
+      "interactionPreconditions" : [
+        "Two real Product API writes target the same saved revision",
+        "The browser keeps unsaved local edits while the second write advances the server revision"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workflow-e36ab0e4-a9df-47a4-9e55-5fd936d5114f",
+      "objectState" : "revision-conflict",
+      "referencePath" : null,
+      "screenId" : "state-revision-conflict",
+      "structuralAssertions" : [
+        "The conflict reason is visible",
+        "Download local changes and explicit latest-version recovery are available"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+        "Capture failed: Timed out while waiting for visible selector [data-testid='loopops.builder.definition'] textarea"
+      ]
+    },
+    {
+      "actualPath" : null,
+      "actualRoute" : "\/loops\/visual-evidence-missing-workflow\/edit",
+      "capturedAt" : "2026-07-15T18:50:40Z",
+      "error" : "Missing h1 for state-server-error",
+      "evidenceCategory" : "generic-state",
+      "interactionPreconditions" : [
+        "The Product API returns a real not-found response for an unknown Loop"
+      ],
+      "locale" : "zh",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "visual-evidence-missing-workflow",
+      "objectState" : "server-error",
+      "referencePath" : null,
+      "screenId" : "state-server-error",
+      "structuralAssertions" : [
+        "The error is translated into product language",
+        "Retry and return-to-Loops recovery actions are visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+        "Capture failed: Missing h1 for state-server-error"
+      ]
+    }
+  ]
+}

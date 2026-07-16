@@ -1,0 +1,17 @@
+[
+  {
+    "createdAt" : "2026-06-27T07:49:51Z",
+    "id" : "visual-knowledge-source",
+    "kind" : "blank",
+    "linkedRunID" : "visual-run-result-state",
+    "linkedRunIDs" : [
+      "visual-run-result-state"
+    ],
+    "reuseMode" : "attachToLoop",
+    "sourceLabel" : "Manual note",
+    "status" : "ready",
+    "summary" : "Reusable evidence attached to this visual run.",
+    "title" : "Market evidence note",
+    "updatedAt" : "2026-06-27T07:49:51Z"
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "sessionId": "loopops-session-2026-06-26-040939",
+  "created": "2026-06-26-040939",
+  "permissionModel": "no open, AppleScript, Accessibility, screen recording, or browser automation",
+  "web": {
+    "status": 0,
+    "entrypoint": "http://127.0.0.1:5184/",
+    "bind": "127.0.0.1:5184",
+    "server": "available",
+    "log": "/Users/chenge/Desktop/intelligence-agent-web3/intelligence-agent-web3/domains/frontend/documents/design/2026-06-24-relevanceai-triple-admin-research/review-sessions/loopops-session-2026-06-26-040939-web.log"
+  },
+  "native": {
+    "status": 0,
+    "appBundle": "/Users/chenge/Desktop/intelligence-agent-web3/intelligence-agent-web3/.build/debug-app/WeChatIntelligenceRadar.app",
+    "checklist": "/Users/chenge/Desktop/intelligence-agent-web3/intelligence-agent-web3/domains/frontend/documents/design/2026-06-24-relevanceai-triple-admin-research/13-native-manual-review-checklist.md",
+    "log": "/Users/chenge/Desktop/intelligence-agent-web3/intelligence-agent-web3/domains/frontend/documents/design/2026-06-24-relevanceai-triple-admin-research/review-sessions/loopops-session-2026-06-26-040939-native.log"
+  },
+  "completionMatrix": "/Users/chenge/Desktop/intelligence-agent-web3/intelligence-agent-web3/domains/frontend/documents/design/2026-06-24-relevanceai-triple-admin-research/10-objective-completion-matrix.md",
+  "recordCommand": "LOOPOPS_WEB_URL=\"http://127.0.0.1:5184/\" LOOPOPS_REVIEW_STATUS=pass LOOPOPS_REVIEW_BLOCKERS=\"\" LOOPOPS_REVIEW_NOTES=\"\" scripts/record-loopops-review.command"
+}

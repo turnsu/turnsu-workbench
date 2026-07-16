@@ -1,0 +1,156 @@
+{
+  "capturedAt" : "2026-07-13T10:57:57Z",
+  "shots" : [
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/final-390\/01-loops-lifecycle-board.png",
+      "h1" : "Loops",
+      "h2s" : [
+        "Move each Loop to its next useful state",
+        "Drafts",
+        "Ready",
+        "Shared"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Loops lifecycle board",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "01",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:8798\/loops"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/final-390\/02-skills-registry.png",
+      "h1" : "Skills",
+      "h2s" : [
+        "Meeting action extractor",
+        "How this skill works",
+        "Add to a workflow",
+        "Used in",
+        "Version"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Skills registry",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "02",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:8798\/skills"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/final-390\/03-loop-builder-canvas-light.png",
+      "h1" : "Loop builder",
+      "h2s" : [
+        "Templates",
+        "Meeting action Loop"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Loop builder canvas light",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "03",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:8798\/builder"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/final-390\/04-loop-builder-canvas-dark.png",
+      "h1" : "Loop builder",
+      "h2s" : [
+        "Templates",
+        "Meeting action Loop"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Loop builder canvas dark",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "04",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:8798\/builder"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/final-390\/05-loop-builder-canvas-chinese.png",
+      "h1" : "工作流编排",
+      "h2s" : [
+        "模板",
+        "Meeting action Loop"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Loop builder canvas Chinese",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "05",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:8798\/builder"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/final-390\/06-team-library.png",
+      "h1" : "Team library",
+      "h2s" : [
+        "Find a reusable starting point"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Team library",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "06",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:8798\/library"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/final-390\/07-team-loop-detail.png",
+      "h1" : "Team Loop",
+      "h2s" : [
+        "Meeting action Loop copy copy"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Team Loop detail",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "07",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:8798\/library\/loops\/workflow-b772c8c3-88ba-428a-8efa-6f26665dcd5b"
+    },
+    {
+      "clientWidth" : 373,
+      "file" : "\/Users\/chenge\/Desktop\/intelligence-agent-web3\/intelligence-agent-web3\/wiki\/qa\/artifacts\/lifecycle-web-20260713\/final-390\/08-publish-loop-review.png",
+      "h1" : "Publish Loop",
+      "h2s" : [
+        "Publish Meeting action Loop copy copy"
+      ],
+      "hasHorizontalOverflow" : false,
+      "name" : "Publish Loop review",
+      "overflowDetails" : [
+
+      ],
+      "scrollWidth" : 373,
+      "step" : "08",
+      "title" : "LoopOps Admin",
+      "url" : "http:\/\/127.0.0.1:8798\/loops\/workflow-b772c8c3-88ba-428a-8efa-6f26665dcd5b\/publish"
+    }
+  ],
+  "targetUrl" : "http:\/\/127.0.0.1:8798\/",
+  "viewport" : {
+    "height" : 844,
+    "width" : 390
+  }
+}

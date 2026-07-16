@@ -1,0 +1,16 @@
+[
+  {
+    "createdAt" : "2026-06-27T07:51:47Z",
+    "durationLabel" : "1s",
+    "id" : "visual-tool-log",
+    "inputSummary" : "Run result and market notes",
+    "outputSummary" : "Timestamp gap found.",
+    "reviewState" : "Needs review",
+    "runID" : "visual-run-result-state",
+    "source" : "Skill OS",
+    "status" : "Run scoped",
+    "summary" : "Checked selected run evidence.",
+    "title" : "Evidence freshness checker",
+    "toolID" : "visual-tool"
+  }
+]

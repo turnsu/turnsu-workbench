@@ -1,0 +1,1815 @@
+[
+  {
+    "slug": "05-platform",
+    "buttons": [
+      "Open menu",
+      "Product",
+      "Agents",
+      "Resources",
+      "GTM",
+      "Enterprise",
+      "Agent Sprawl",
+      "Sign in",
+      "Contact sales",
+      "Book a demo",
+      "Try it out",
+      "View all features",
+      "Browse all integrations",
+      "Read more",
+      "Read more",
+      "Read more",
+      "Read more",
+      "Agents@Work",
+      "Agents@Work",
+      "Case study",
+      "Case study",
+      "Agents@Work",
+      "Case study",
+      "Case study",
+      "Case study",
+      "Sales",
+      "Marketing",
+      "Operations",
+      "Research",
+      "Support",
+      "AI Agents",
+      "AI Workforce",
+      "Multi-Agent Systems",
+      "AI Tools",
+      "AI BDR Agent",
+      "Integrations",
+      "Custom Actions for GPTs",
+      "Slides",
+      "Contact Support",
+      "Documentation",
+      "Changelog",
+      "API & MCP",
+      "Pricing",
+      "Book demo",
+      "Enterprise",
+      "Partners",
+      "Expert Partner Directory",
+      "Relevance Community",
+      "Learn",
+      "Customers",
+      "Blog",
+      "Topics",
+      "Tools",
+      "Workflows",
+      "Careers",
+      "Trust Center",
+      "Media Enquiries",
+      "Privacy policy",
+      "Security policy",
+      "Terms"
+    ],
+    "cards": [],
+    "h1": "The platform for delegating millions of tasks to agents",
+    "headings": [
+      {
+        "level": "H1",
+        "text": "The platform for delegating millions of tasks to agents"
+      },
+      {
+        "level": "H2",
+        "text": "Building agents is the easy part... How do you put them to real work?"
+      },
+      {
+        "level": "H3",
+        "text": "How do you trigger agents at the right time, with the right data and tools?"
+      },
+      {
+        "level": "H3",
+        "text": "How do you orchestrate specialist agents to reliably complete tasks?"
+      },
+      {
+        "level": "H3",
+        "text": "How do you evaluate, monitor and improve agent quality at enterprise scale?"
+      },
+      {
+        "level": "H3",
+        "text": "How do you give agents secure, governed access to your systems?"
+      },
+      {
+        "level": "H2",
+        "text": "The agent infrastructure for enterprise"
+      },
+      {
+        "level": "H2",
+        "text": "100s of features needed to specialize and optimize agents"
+      },
+      {
+        "level": "H3",
+        "text": "Instructions & identity"
+      },
+      {
+        "level": "H3",
+        "text": "Models"
+      },
+      {
+        "level": "H3",
+        "text": "Tools & actions"
+      },
+      {
+        "level": "H3",
+        "text": "Knowledge & memory"
+      },
+      {
+        "level": "H3",
+        "text": "Autonomy & approval"
+      },
+      {
+        "level": "H3",
+        "text": "Triggers & scheduling"
+      },
+      {
+        "level": "H3",
+        "text": "Channels & sharing"
+      },
+      {
+        "level": "H3",
+        "text": "Oversight & quality"
+      },
+      {
+        "level": "H3",
+        "text": "Multi-agent orchestration"
+      },
+      {
+        "level": "H2",
+        "text": "Connect to 1,000+ apps"
+      },
+      {
+        "level": "H2",
+        "text": "The hard parts of governance, already built"
+      },
+      {
+        "level": "H3",
+        "text": "Monitoring dashboards"
+      },
+      {
+        "level": "H3",
+        "text": "RBAC"
+      },
+      {
+        "level": "H3",
+        "text": "Data residency"
+      },
+      {
+        "level": "H3",
+        "text": "Version control"
+      },
+      {
+        "level": "H3",
+        "text": "Audit logs"
+      },
+      {
+        "level": "H3",
+        "text": "Human-in-the-loop"
+      },
+      {
+        "level": "H3",
+        "text": "SSO / SAML"
+      },
+      {
+        "level": "H3",
+        "text": "PII masking"
+      },
+      {
+        "level": "H3",
+        "text": "OTEL & Delta Share"
+      },
+      {
+        "level": "H2",
+        "text": "Triggers that can run your business"
+      },
+      {
+        "level": "H2",
+        "text": "Experts and engineers build together"
+      },
+      {
+        "level": "H2",
+        "text": "Take advantage of every model"
+      }
+    ],
+    "inputs": [],
+    "title": "The Platform for Building and Running AI Agents | Relevance AI",
+    "url": "https://relevanceai.com/product"
+  },
+  {
+    "slug": "06-agents",
+    "buttons": [
+      "Open menu",
+      "Product",
+      "Agents",
+      "Resources",
+      "GTM",
+      "Enterprise",
+      "Agent Sprawl",
+      "Sign in",
+      "Contact sales",
+      "Book a demo",
+      "Try for free",
+      "Agents@Work",
+      "Agents@Work",
+      "Case study",
+      "Case study",
+      "Agents@Work",
+      "Case study",
+      "Case study",
+      "Case study",
+      "Read the story",
+      "Read the story",
+      "Read the story",
+      "Read the story",
+      "Read the story",
+      "Read the story",
+      "Read the story",
+      "Read the story",
+      "Send Payments saves 40 hours weekly by going AI-first across global operations",
+      "Read the story",
+      "Read the story",
+      "Zembl drives 30% more customer conversions with 24/7 AI sales coverage",
+      "Read the story",
+      "Read the story",
+      "Escalated 79",
+      "To review 632",
+      "Errored 30",
+      "All tasks 257",
+      "Browse all integrations",
+      "Browse marketplace",
+      "Read more",
+      "Read more",
+      "Read more",
+      "Read more",
+      "Claude Managed Agents",
+      "Claude Managed Agents",
+      "Contact our support team.",
+      "How do domain experts build agents without code?",
+      "How does Relevance AI ensure agent quality?",
+      "What governance and security controls are available?",
+      "How do agents integrate with our existing tools?",
+      "Who manages agents day-to-day?",
+      "Can we also build agents programmatically?",
+      "How do I measure agent performance and ROI?",
+      "Sales",
+      "Marketing",
+      "Operations",
+      "Research",
+      "Support",
+      "AI Agents",
+      "AI Workforce",
+      "Multi-Agent Systems",
+      "AI Tools",
+      "AI BDR Agent",
+      "Integrations",
+      "Custom Actions for GPTs",
+      "Slides",
+      "Contact Support",
+      "Documentation",
+      "Changelog",
+      "API & MCP",
+      "Pricing",
+      "Book demo",
+      "Enterprise",
+      "Partners",
+      "Expert Partner Directory",
+      "Relevance Community",
+      "Learn",
+      "Customers",
+      "Blog",
+      "Topics"
+    ],
+    "cards": [],
+    "h1": "AI agents that drive business impact, built by your team",
+    "headings": [
+      {
+        "level": "H1",
+        "text": "AI agents that drive business impact, built by your team"
+      },
+      {
+        "level": "H2",
+        "text": "Your team sets the quality bar"
+      },
+      {
+        "level": "H2",
+        "text": "Nothing runs without oversight"
+      },
+      {
+        "level": "H2",
+        "text": "Connect to 1,000+ apps"
+      },
+      {
+        "level": "H3",
+        "text": "Explore the agent marketplace"
+      },
+      {
+        "level": "H2",
+        "text": "The hard parts of governance, already built"
+      },
+      {
+        "level": "H3",
+        "text": "Monitoring dashboards"
+      },
+      {
+        "level": "H3",
+        "text": "RBAC"
+      },
+      {
+        "level": "H3",
+        "text": "Data residency"
+      },
+      {
+        "level": "H3",
+        "text": "Version control"
+      },
+      {
+        "level": "H3",
+        "text": "Audit logs"
+      },
+      {
+        "level": "H3",
+        "text": "Human-in-the-loop"
+      },
+      {
+        "level": "H3",
+        "text": "SSO / SAML"
+      },
+      {
+        "level": "H3",
+        "text": "PII masking"
+      },
+      {
+        "level": "H3",
+        "text": "OTEL & Delta Share"
+      },
+      {
+        "level": "H2",
+        "text": "For teams who own the number"
+      },
+      {
+        "level": "H2",
+        "text": "FAQs"
+      },
+      {
+        "level": "H2",
+        "text": "Your team is buried in tasks humans shouldn't do anymore"
+      }
+    ],
+    "inputs": [],
+    "title": "AI Agents - Build and Recruit Autonomous AI Agents | Relevance AI",
+    "url": "https://relevanceai.com/agents"
+  },
+  {
+    "slug": "07-workforce",
+    "buttons": [
+      "Open menu",
+      "Product",
+      "Agents",
+      "Resources",
+      "GTM",
+      "Enterprise",
+      "Agent Sprawl",
+      "Sign in",
+      "Contact sales",
+      "Book a demo",
+      "Try for free",
+      "Agents@Work",
+      "Agents@Work",
+      "Case study",
+      "Case study",
+      "Agents@Work",
+      "Case study",
+      "Case study",
+      "Case study",
+      "Browse all integrations",
+      "Learn more",
+      "Read more",
+      "Read more",
+      "Read more",
+      "Read more",
+      "Contact our support team.",
+      "What is Workforce by Relevance AI?",
+      "How does Workforce work?",
+      "What is a multi-agent system?",
+      "How do you build a multi-agent system?",
+      "Who can use Workforce?",
+      "Sales",
+      "Marketing",
+      "Operations",
+      "Research",
+      "Support",
+      "AI Agents",
+      "AI Workforce",
+      "Multi-Agent Systems",
+      "AI Tools",
+      "AI BDR Agent",
+      "Integrations",
+      "Custom Actions for GPTs",
+      "Slides",
+      "Contact Support",
+      "Documentation",
+      "Changelog",
+      "API & MCP",
+      "Pricing",
+      "Book demo",
+      "Enterprise",
+      "Partners",
+      "Expert Partner Directory",
+      "Relevance Community",
+      "Learn",
+      "Customers",
+      "Blog",
+      "Topics",
+      "Tools",
+      "Workflows",
+      "Careers",
+      "Trust Center",
+      "Media Enquiries",
+      "Privacy policy",
+      "Security policy",
+      "Terms"
+    ],
+    "cards": [],
+    "h1": "Turn proven playbooks into autonomous AI workforces",
+    "headings": [
+      {
+        "level": "H1",
+        "text": "Turn proven playbooks into autonomous AI workforces"
+      },
+      {
+        "level": "H2",
+        "text": "Your best practices, scaled infinitely"
+      },
+      {
+        "level": "H2",
+        "text": "Connect to 1,000+ apps"
+      },
+      {
+        "level": "H2",
+        "text": "Build and manage in our powerful visual builder"
+      },
+      {
+        "level": "H2",
+        "text": "Introducing Programmatic GTM — a scalable and governable way for GTM teams to leverage Claude Code & Codex"
+      },
+      {
+        "level": "H2",
+        "text": "FAQs"
+      },
+      {
+        "level": "H2",
+        "text": "Your team is buried in tasks humans shouldn't do anymore"
+      }
+    ],
+    "inputs": [],
+    "title": "AI Workforce - Build and Manage Unified AI Agent Teams | Relevance AI",
+    "url": "https://relevanceai.com/workforce"
+  },
+  {
+    "slug": "08-tools-directory",
+    "buttons": [
+      "Watch now",
+      "Watch now",
+      "home",
+      "AI Agents Build an AI Agent in seconds.",
+      "AI Workforce Create & manage AI teams.",
+      "AI Tools Give AI agents superpowers.",
+      "Integrations Power your AI agents.",
+      "API Easily trigger your AI agents.",
+      "Invent Create custom AI Agents just by describing them.",
+      "Metadata Capture high-value data from every agent task, automatically.",
+      "Scheduling Control when your AI agents run, and how much they do.",
+      "Approvals Control when you need, automation when you don’t.",
+      "Knowledge Give every agent the context your best people rely on.",
+      "Collaboration & Sharing Work solo or scale as a team, with total clarity.",
+      "Chat Embed Turn any AI Agent into a live chat experience.",
+      "Phone Agent Add voice-calling superpowers to your product.",
+      "Relevance Chat Use agents like teammates.",
+      "Slack Use agents without any no context switching.",
+      "Version Control Track, test, and restore your AI agents and tools with ease.",
+      "Sales Create custom AI Agents just by describing them.",
+      "Marketing Capture high-value data from every agent task, automatically.",
+      "Customer Support Control when your AI agents run, and how much they do.",
+      "Research Control when you need, automation when you don’t.",
+      "Operations Give every agent the context your best people rely on.",
+      "LATEST BLOGS",
+      "How to Submit to the Relevance AI Marketplace",
+      "Inside AI Ops: Ricky — QA Agents",
+      "AI BDR Agent Booking meetings 24/7.",
+      "Lifecycle Marketer Message every customer like they are your only customer.",
+      "Account Researcher Human-quality account research on autopilot.",
+      "CRM Enrichment Enrich your CRM with real-time.",
+      "Inbound Qualification Qualify and Book Meetings.",
+      "SEO Automatically generate SEO content & pages.",
+      "Inbox Manager Manage inbound replies and execute personalized follow-ups.",
+      "Customer Support Automatically handle support requests.",
+      "MRP Agent Get complex work done with simple tools.",
+      "LATEST DROP",
+      "Control your meeting agent in real time with chat commands",
+      "Documentation",
+      "Blog",
+      "Customers",
+      "Community",
+      "Changelog",
+      "Templates",
+      "AI Ops Bootcamp",
+      "Careers",
+      "What is the AI Workforce",
+      "Partner Directory",
+      "Become Partner",
+      "Affiliate Program",
+      "CUSTOMERS",
+      "How Canva uses AI agents to redesign go-to-market work Read more",
+      "LEARN",
+      "What is the AI Workforce?",
+      "Enterprise",
+      "Agent Sprawl",
+      "Pricing",
+      "Link Five",
+      "Link Six",
+      "Link Seven",
+      "Login",
+      "Talk to Sales",
+      "Sign Up",
+      "AI Agents Build an AI Agent in seconds.",
+      "AI Workforce Create & manage AI teams.",
+      "AI Tools Give AI agents superpowers.",
+      "Integrations Power your AI agents.",
+      "API Easily trigger your AI agents.",
+      "Invent Create custom AI Agents just by describing them.",
+      "Metadata Capture high-value data from every agent task, automatically.",
+      "Scheduling Control when your AI agents run, and how much they do.",
+      "Approvals Control when you need, automation when you don’t.",
+      "Knowledge Give every agent the context your best people rely on.",
+      "Collaboration & Sharing Work solo or scale as a team, with total clarity.",
+      "Chat Embed Turn any AI Agent into a live chat experience.",
+      "Phone Agent Add voice-calling superpowers to your product.",
+      "Relevance Chat Use agents like teammates.",
+      "Slack Use agents without any no context switching.",
+      "Version Control Track, test, and restore your AI agents and tools with ease.",
+      "Sales Create custom AI Agents just by describing them."
+    ],
+    "cards": [
+      "Remove the delete-this-class class from the navbar13_component div. This will change the positioning of the navbar to fixed.",
+      "Add the navbar-on-page class to the page-wrapper class. This will ensure that the navbar is centered on the page.",
+      "Add the max-width-full class to the main-wrapper class. This will ensure all sections inside of the main wrapper are full-wdith.",
+      "Remove the delete-this-class class from the navbar13_component div. This will change the positioning of the navbar to fixed.",
+      "Add the navbar-on-page class to the page-wrapper class. This will ensure that the navbar is centered on the page.",
+      "Add the max-width-full class to the main-wrapper class. This will ensure all sections inside of the main wrapper are full-wdith.",
+      "Free your team. Build your first AI agent today! If you're exploring Relevance AI for the first time or discovering new features, we'll quickly guide you to start doing great work immediately. Try for free Request Demo F"
+    ],
+    "h1": "Tools",
+    "headings": [
+      {
+        "level": "H1",
+        "text": "Tools"
+      },
+      {
+        "level": "H1",
+        "text": "Free your team. Build your first AI agent today!"
+      }
+    ],
+    "inputs": [],
+    "title": "Tools",
+    "url": "https://relevanceai.com/tools"
+  },
+  {
+    "slug": "09-workflows-directory",
+    "buttons": [
+      "Learn more",
+      "Watch now",
+      "Watch now",
+      "home",
+      "AI Agents Build an AI Agent in seconds.",
+      "AI Workforce Create & manage AI teams.",
+      "AI Tools Give AI agents superpowers.",
+      "Integrations Power your AI agents.",
+      "API Easily trigger your AI agents.",
+      "Invent Create custom AI Agents just by describing them.",
+      "Metadata Capture high-value data from every agent task, automatically.",
+      "Scheduling Control when your AI agents run, and how much they do.",
+      "Approvals Control when you need, automation when you don’t.",
+      "Knowledge Give every agent the context your best people rely on.",
+      "Collaboration & Sharing Work solo or scale as a team, with total clarity.",
+      "Chat Embed Turn any AI Agent into a live chat experience.",
+      "Phone Agent Add voice-calling superpowers to your product.",
+      "Relevance Chat Use agents like teammates.",
+      "Slack Use agents without any no context switching.",
+      "Version Control Track, test, and restore your AI agents and tools with ease.",
+      "Sales Create custom AI Agents just by describing them.",
+      "Marketing Capture high-value data from every agent task, automatically.",
+      "Customer Support Control when your AI agents run, and how much they do.",
+      "Research Control when you need, automation when you don’t.",
+      "Operations Give every agent the context your best people rely on.",
+      "LATEST BLOGS",
+      "How to Submit to the Relevance AI Marketplace",
+      "Inside AI Ops: Ricky — QA Agents",
+      "AI BDR Agent Booking meetings 24/7.",
+      "Lifecycle Marketer Message every customer like they are your only customer.",
+      "Account Researcher Human-quality account research on autopilot.",
+      "CRM Enrichment Enrich your CRM with real-time.",
+      "Inbound Qualification Qualify and Book Meetings.",
+      "SEO Automatically generate SEO content & pages.",
+      "Inbox Manager Manage inbound replies and execute personalized follow-ups.",
+      "Customer Support Automatically handle support requests.",
+      "MRP Agent Get complex work done with simple tools.",
+      "LATEST DROP",
+      "Control your meeting agent in real time with chat commands",
+      "Documentation",
+      "Blog",
+      "Customers",
+      "Community",
+      "Changelog",
+      "Templates",
+      "AI Ops Bootcamp",
+      "Careers",
+      "What is the AI Workforce",
+      "Partner Directory",
+      "Become Partner",
+      "Affiliate Program",
+      "CUSTOMERS",
+      "How Canva uses AI agents to redesign go-to-market work Read more",
+      "LEARN",
+      "What is the AI Workforce?",
+      "Enterprise",
+      "Agent Sprawl",
+      "Pricing",
+      "Link Five",
+      "Link Six",
+      "Link Seven",
+      "Login",
+      "Talk to Sales",
+      "Sign Up",
+      "AI Agents Build an AI Agent in seconds.",
+      "AI Workforce Create & manage AI teams.",
+      "AI Tools Give AI agents superpowers.",
+      "Integrations Power your AI agents.",
+      "API Easily trigger your AI agents.",
+      "Invent Create custom AI Agents just by describing them.",
+      "Metadata Capture high-value data from every agent task, automatically.",
+      "Scheduling Control when your AI agents run, and how much they do.",
+      "Approvals Control when you need, automation when you don’t.",
+      "Knowledge Give every agent the context your best people rely on.",
+      "Collaboration & Sharing Work solo or scale as a team, with total clarity.",
+      "Chat Embed Turn any AI Agent into a live chat experience.",
+      "Phone Agent Add voice-calling superpowers to your product.",
+      "Relevance Chat Use agents like teammates.",
+      "Slack Use agents without any no context switching.",
+      "Version Control Track, test, and restore your AI agents and tools with ease."
+    ],
+    "cards": [
+      "Remove the delete-this-class class from the navbar13_component div. This will change the positioning of the navbar to fixed.",
+      "Add the navbar-on-page class to the page-wrapper class. This will ensure that the navbar is centered on the page.",
+      "Add the max-width-full class to the main-wrapper class. This will ensure all sections inside of the main wrapper are full-wdith.",
+      "Remove the delete-this-class class from the navbar13_component div. This will change the positioning of the navbar to fixed.",
+      "Add the navbar-on-page class to the page-wrapper class. This will ensure that the navbar is centered on the page.",
+      "Add the max-width-full class to the main-wrapper class. This will ensure all sections inside of the main wrapper are full-wdith.",
+      "Free your team. Build your first AI agent today! If you're exploring Relevance AI for the first time or discovering new features, we'll quickly guide you to start doing great work immediately. Try for free Request Demo F"
+    ],
+    "h1": "Free your team. Build your first AI agent today!",
+    "headings": [
+      {
+        "level": "H3",
+        "text": "AI Descriptive Keyphrase Extraction"
+      },
+      {
+        "level": "H3",
+        "text": "AIDA Framework"
+      },
+      {
+        "level": "H3",
+        "text": "Anonymize text"
+      },
+      {
+        "level": "H3",
+        "text": "Audio Premium"
+      },
+      {
+        "level": "H3",
+        "text": "BAB Framework"
+      },
+      {
+        "level": "H3",
+        "text": "Blog Post Generator"
+      },
+      {
+        "level": "H3",
+        "text": "Calculate number of days"
+      },
+      {
+        "level": "H3",
+        "text": "Chart Generator for CSV"
+      },
+      {
+        "level": "H3",
+        "text": "Clean Text"
+      },
+      {
+        "level": "H3",
+        "text": "Cluster Classification"
+      },
+      {
+        "level": "H3",
+        "text": "Cluster text"
+      },
+      {
+        "level": "H3",
+        "text": "Cluster Vectors"
+      },
+      {
+        "level": "H3",
+        "text": "Co-occurrence Analysis"
+      },
+      {
+        "level": "H3",
+        "text": "Concatenate Text"
+      },
+      {
+        "level": "H3",
+        "text": "Content Improver"
+      },
+      {
+        "level": "H3",
+        "text": "Conversation Analysis"
+      },
+      {
+        "level": "H3",
+        "text": "Copy dataset"
+      },
+      {
+        "level": "H3",
+        "text": "Create Questions"
+      },
+      {
+        "level": "H3",
+        "text": "Delete Tags"
+      },
+      {
+        "level": "H3",
+        "text": "Detect Language"
+      },
+      {
+        "level": "H3",
+        "text": "Document AI"
+      },
+      {
+        "level": "H3",
+        "text": "Excel Formula Explain"
+      },
+      {
+        "level": "H3",
+        "text": "Excel Formula Fix"
+      },
+      {
+        "level": "H3",
+        "text": "Excel Formula Generator"
+      },
+      {
+        "level": "H3",
+        "text": "Export Tags"
+      },
+      {
+        "level": "H3",
+        "text": "Export To CSV"
+      },
+      {
+        "level": "H3",
+        "text": "Export to CSV (Wide Format)"
+      },
+      {
+        "level": "H3",
+        "text": "Extract Answer"
+      },
+      {
+        "level": "H3",
+        "text": "Extract Appstore Reviews (Apple)"
+      },
+      {
+        "level": "H3",
+        "text": "Extract Aspect Based Sentiment"
+      },
+      {
+        "level": "H3",
+        "text": "Extract dendrogram"
+      },
+      {
+        "level": "H3",
+        "text": "Extract emotion"
+      },
+      {
+        "level": "H3",
+        "text": "Extract Figma Frames"
+      },
+      {
+        "level": "H3",
+        "text": "Extract Glassdoor Reviews"
+      },
+      {
+        "level": "H3",
+        "text": "Extract Playstore Reviews (Android)"
+      },
+      {
+        "level": "H3",
+        "text": "Extract Reddit Comments"
+      },
+      {
+        "level": "H3",
+        "text": "Extract sentiment"
+      },
+      {
+        "level": "H3",
+        "text": "Extract Steam Reviews"
+      },
+      {
+        "level": "H3",
+        "text": "Extract Text Count"
+      },
+      {
+        "level": "H3",
+        "text": "Extract YouTube Comments"
+      }
+    ],
+    "inputs": [],
+    "title": "Workflows | Relevance AI",
+    "url": "https://relevanceai.com/workflows"
+  },
+  {
+    "slug": "10-knowledge",
+    "buttons": [
+      "Watch now",
+      "Watch now",
+      "home",
+      "AI Agents Build an AI Agent in seconds.",
+      "AI Workforce Create & manage AI teams.",
+      "AI Tools Give AI agents superpowers.",
+      "Integrations Power your AI agents.",
+      "API Easily trigger your AI agents.",
+      "Invent Create custom AI Agents just by describing them.",
+      "Metadata Capture high-value data from every agent task, automatically.",
+      "Scheduling Control when your AI agents run, and how much they do.",
+      "Approvals Control when you need, automation when you don’t.",
+      "Knowledge Give every agent the context your best people rely on.",
+      "Collaboration & Sharing Work solo or scale as a team, with total clarity.",
+      "Chat Embed Turn any AI Agent into a live chat experience.",
+      "Phone Agent Add voice-calling superpowers to your product.",
+      "Relevance Chat Use agents like teammates.",
+      "Slack Use agents without any no context switching.",
+      "Version Control Track, test, and restore your AI agents and tools with ease.",
+      "Sales Create custom AI Agents just by describing them.",
+      "Marketing Capture high-value data from every agent task, automatically.",
+      "Customer Support Control when your AI agents run, and how much they do.",
+      "Research Control when you need, automation when you don’t.",
+      "Operations Give every agent the context your best people rely on.",
+      "LATEST BLOGS",
+      "How to Submit to the Relevance AI Marketplace",
+      "Inside AI Ops: Ricky — QA Agents",
+      "AI BDR Agent Booking meetings 24/7.",
+      "Lifecycle Marketer Message every customer like they are your only customer.",
+      "Account Researcher Human-quality account research on autopilot.",
+      "CRM Enrichment Enrich your CRM with real-time.",
+      "Inbound Qualification Qualify and Book Meetings.",
+      "SEO Automatically generate SEO content & pages.",
+      "Inbox Manager Manage inbound replies and execute personalized follow-ups.",
+      "Customer Support Automatically handle support requests.",
+      "MRP Agent Get complex work done with simple tools.",
+      "LATEST DROP",
+      "Control your meeting agent in real time with chat commands",
+      "Documentation",
+      "Blog",
+      "Customers",
+      "Community",
+      "Changelog",
+      "Templates",
+      "AI Ops Bootcamp",
+      "Careers",
+      "What is the AI Workforce",
+      "Partner Directory",
+      "Become Partner",
+      "Affiliate Program",
+      "CUSTOMERS",
+      "How Canva uses AI agents to redesign go-to-market work Read more",
+      "LEARN",
+      "What is the AI Workforce?",
+      "Enterprise",
+      "Agent Sprawl",
+      "Pricing",
+      "Link Five",
+      "Link Six",
+      "Link Seven",
+      "Login",
+      "Talk to Sales",
+      "Sign Up",
+      "AI Agents Build an AI Agent in seconds.",
+      "AI Workforce Create & manage AI teams.",
+      "AI Tools Give AI agents superpowers.",
+      "Integrations Power your AI agents.",
+      "API Easily trigger your AI agents.",
+      "Invent Create custom AI Agents just by describing them.",
+      "Metadata Capture high-value data from every agent task, automatically.",
+      "Scheduling Control when your AI agents run, and how much they do.",
+      "Approvals Control when you need, automation when you don’t.",
+      "Knowledge Give every agent the context your best people rely on.",
+      "Collaboration & Sharing Work solo or scale as a team, with total clarity.",
+      "Chat Embed Turn any AI Agent into a live chat experience.",
+      "Phone Agent Add voice-calling superpowers to your product.",
+      "Relevance Chat Use agents like teammates.",
+      "Slack Use agents without any no context switching.",
+      "Version Control Track, test, and restore your AI agents and tools with ease.",
+      "Sales Create custom AI Agents just by describing them."
+    ],
+    "cards": [
+      "Remove the delete-this-class class from the navbar13_component div. This will change the positioning of the navbar to fixed.",
+      "Add the navbar-on-page class to the page-wrapper class. This will ensure that the navbar is centered on the page.",
+      "Add the max-width-full class to the main-wrapper class. This will ensure all sections inside of the main wrapper are full-wdith.",
+      "Remove the delete-this-class class from the navbar13_component div. This will change the positioning of the navbar to fixed.",
+      "Add the navbar-on-page class to the page-wrapper class. This will ensure that the navbar is centered on the page.",
+      "Add the max-width-full class to the main-wrapper class. This will ensure all sections inside of the main wrapper are full-wdith.",
+      "Knowledge Give every agent the context your best people rely on One central knowledge base for your entire AI workforce. Upload once. Reuse everywhere. Update instantly. Try for free Request Demo",
+      "Knowledge Give every agent the context your best people rely on One central knowledge base for your entire AI workforce. Upload once. Reuse everywhere. Update instantly. Try for free Request Demo",
+      "Knowledge Give every agent the context your best people rely on One central knowledge base for your entire AI workforce. Upload once. Reuse everywhere. Update instantly.",
+      "AI Workforce Learn more",
+      "AI Workforce Learn more",
+      "Build your first agent Free to use. easy to try. Everything you need to get started. Start now",
+      "Build your first agent Free to use. easy to try. Everything you need to get started. Start now",
+      "Build your first agent Free to use. easy to try. Everything you need to get started.",
+      "Learn new skills Learn new skills to with our free guided learning modules with our resident AI builders. Start learning",
+      "Learn new skills Learn new skills to with our free guided learning modules with our resident AI builders. Start learning",
+      "Learn new skills Learn new skills to with our free guided learning modules with our resident AI builders.",
+      "Talk to a Rep Tell us about your business needs and we’ll help you to find answers. Contact us",
+      "Talk to a Rep Tell us about your business needs and we’ll help you to find answers. Contact us",
+      "Talk to a Rep Tell us about your business needs and we’ll help you to find answers.",
+      "How Canva uses AI agents to redesign go-to-market work",
+      "How Autodesk built an AI workforce",
+      "How KPMG is turning AI agents into an operating model",
+      "Free your team. Build your first AI agent today! If you're exploring Relevance AI for the first time or discovering new features, we'll quickly guide you to start doing great work immediately. Try for free Request Demo F",
+      "Free your team. Build your first AI agent today! If you're exploring Relevance AI for the first time or discovering new features, we'll quickly guide you to start doing great work immediately. Try for free Request Demo F"
+    ],
+    "h1": "Give every agent the context your best people rely on",
+    "headings": [
+      {
+        "level": "H1",
+        "text": "Give every agent the context your best people rely on"
+      },
+      {
+        "level": "H2",
+        "text": "Organize and update with zero effort"
+      },
+      {
+        "level": "H2",
+        "text": "Connect to any agent or tool—instantly"
+      },
+      {
+        "level": "H2",
+        "text": "Train your agents with real context — then scale it effortlessly"
+      },
+      {
+        "level": "H2",
+        "text": "FAQs"
+      },
+      {
+        "level": "H2",
+        "text": "Discover more features to unlock your AI workforce"
+      },
+      {
+        "level": "H3",
+        "text": "AI Workforce"
+      },
+      {
+        "level": "H3",
+        "text": "AI Teams"
+      },
+      {
+        "level": "H3",
+        "text": "AI Tools"
+      },
+      {
+        "level": "H2",
+        "text": "Ready to take the next step with Relevance?"
+      },
+      {
+        "level": "H3",
+        "text": "Build your first agent"
+      },
+      {
+        "level": "H3",
+        "text": "Learn new skills"
+      },
+      {
+        "level": "H3",
+        "text": "Talk to a Rep"
+      },
+      {
+        "level": "H2",
+        "text": "Building their AI Workforce"
+      },
+      {
+        "level": "H2",
+        "text": "Free your team. Build your first AI agent today!"
+      }
+    ],
+    "inputs": [],
+    "title": "Knowledge – Relevance AI",
+    "url": "https://relevanceai.com/knowledge"
+  },
+  {
+    "slug": "11-approvals",
+    "buttons": [
+      "Watch now",
+      "Watch now",
+      "home",
+      "AI Agents Build an AI Agent in seconds.",
+      "AI Workforce Create & manage AI teams.",
+      "AI Tools Give AI agents superpowers.",
+      "Integrations Power your AI agents.",
+      "API Easily trigger your AI agents.",
+      "Invent Create custom AI Agents just by describing them.",
+      "Metadata Capture high-value data from every agent task, automatically.",
+      "Scheduling Control when your AI agents run, and how much they do.",
+      "Approvals Control when you need, automation when you don’t.",
+      "Knowledge Give every agent the context your best people rely on.",
+      "Collaboration & Sharing Work solo or scale as a team, with total clarity.",
+      "Chat Embed Turn any AI Agent into a live chat experience.",
+      "Phone Agent Add voice-calling superpowers to your product.",
+      "Relevance Chat Use agents like teammates.",
+      "Slack Use agents without any no context switching.",
+      "Version Control Track, test, and restore your AI agents and tools with ease.",
+      "Sales Create custom AI Agents just by describing them.",
+      "Marketing Capture high-value data from every agent task, automatically.",
+      "Customer Support Control when your AI agents run, and how much they do.",
+      "Research Control when you need, automation when you don’t.",
+      "Operations Give every agent the context your best people rely on.",
+      "LATEST BLOGS",
+      "How to Submit to the Relevance AI Marketplace",
+      "Inside AI Ops: Ricky — QA Agents",
+      "AI BDR Agent Booking meetings 24/7.",
+      "Lifecycle Marketer Message every customer like they are your only customer.",
+      "Account Researcher Human-quality account research on autopilot.",
+      "CRM Enrichment Enrich your CRM with real-time.",
+      "Inbound Qualification Qualify and Book Meetings.",
+      "SEO Automatically generate SEO content & pages.",
+      "Inbox Manager Manage inbound replies and execute personalized follow-ups.",
+      "Customer Support Automatically handle support requests.",
+      "MRP Agent Get complex work done with simple tools.",
+      "LATEST DROP",
+      "Control your meeting agent in real time with chat commands",
+      "Documentation",
+      "Blog",
+      "Customers",
+      "Community",
+      "Changelog",
+      "Templates",
+      "AI Ops Bootcamp",
+      "Careers",
+      "What is the AI Workforce",
+      "Partner Directory",
+      "Become Partner",
+      "Affiliate Program",
+      "CUSTOMERS",
+      "How Canva uses AI agents to redesign go-to-market work Read more",
+      "LEARN",
+      "What is the AI Workforce?",
+      "Enterprise",
+      "Agent Sprawl",
+      "Pricing",
+      "Link Five",
+      "Link Six",
+      "Link Seven",
+      "Login",
+      "Talk to Sales",
+      "Sign Up",
+      "AI Agents Build an AI Agent in seconds.",
+      "AI Workforce Create & manage AI teams.",
+      "AI Tools Give AI agents superpowers.",
+      "Integrations Power your AI agents.",
+      "API Easily trigger your AI agents.",
+      "Invent Create custom AI Agents just by describing them.",
+      "Metadata Capture high-value data from every agent task, automatically.",
+      "Scheduling Control when your AI agents run, and how much they do.",
+      "Approvals Control when you need, automation when you don’t.",
+      "Knowledge Give every agent the context your best people rely on.",
+      "Collaboration & Sharing Work solo or scale as a team, with total clarity.",
+      "Chat Embed Turn any AI Agent into a live chat experience.",
+      "Phone Agent Add voice-calling superpowers to your product.",
+      "Relevance Chat Use agents like teammates.",
+      "Slack Use agents without any no context switching.",
+      "Version Control Track, test, and restore your AI agents and tools with ease.",
+      "Sales Create custom AI Agents just by describing them."
+    ],
+    "cards": [
+      "Remove the delete-this-class class from the navbar13_component div. This will change the positioning of the navbar to fixed.",
+      "Add the navbar-on-page class to the page-wrapper class. This will ensure that the navbar is centered on the page.",
+      "Add the max-width-full class to the main-wrapper class. This will ensure all sections inside of the main wrapper are full-wdith.",
+      "Remove the delete-this-class class from the navbar13_component div. This will change the positioning of the navbar to fixed.",
+      "Add the navbar-on-page class to the page-wrapper class. This will ensure that the navbar is centered on the page.",
+      "Add the max-width-full class to the main-wrapper class. This will ensure all sections inside of the main wrapper are full-wdith.",
+      "Approvals and Escalations Control when you need—automation when you don’t Add approvals where you want control, and let agents escalate when they need help. Try for free Request Demo",
+      "Approvals and Escalations Control when you need—automation when you don’t Add approvals where you want control, and let agents escalate when they need help. Try for free Request Demo",
+      "Approvals and Escalations Control when you need—automation when you don’t Add approvals where you want control, and let agents escalate when they need help.",
+      "AI Workforce Learn more",
+      "AI Workforce Learn more",
+      "Build your first agent Free to use. easy to try. Everything you need to get started. Start now",
+      "Build your first agent Free to use. easy to try. Everything you need to get started. Start now",
+      "Build your first agent Free to use. easy to try. Everything you need to get started.",
+      "Learn new skills Learn new skills to with our free guided learning modules with our resident AI builders. Start learning",
+      "Learn new skills Learn new skills to with our free guided learning modules with our resident AI builders. Start learning",
+      "Learn new skills Learn new skills to with our free guided learning modules with our resident AI builders.",
+      "Talk to a Rep Tell us about your business needs and we’ll help you to find answers. Contact us",
+      "Talk to a Rep Tell us about your business needs and we’ll help you to find answers. Contact us",
+      "Talk to a Rep Tell us about your business needs and we’ll help you to find answers.",
+      "How Canva uses AI agents to redesign go-to-market work",
+      "How Autodesk built an AI workforce",
+      "How KPMG is turning AI agents into an operating model",
+      "Free your team. Build your first AI agent today! If you're exploring Relevance AI for the first time or discovering new features, we'll quickly guide you to start doing great work immediately. Try for free Request Demo F",
+      "Free your team. Build your first AI agent today! If you're exploring Relevance AI for the first time or discovering new features, we'll quickly guide you to start doing great work immediately. Try for free Request Demo F"
+    ],
+    "h1": "Control when you need—automation when you don’t",
+    "headings": [
+      {
+        "level": "H1",
+        "text": "Control when you need—automation when you don’t"
+      },
+      {
+        "level": "H2",
+        "text": "From automation to collaboration—instantly"
+      },
+      {
+        "level": "H2",
+        "text": "What needs your attention today?"
+      },
+      {
+        "level": "H2",
+        "text": "Scale with confidence — add approvals and smart escalations anywhere"
+      },
+      {
+        "level": "H2",
+        "text": "FAQs"
+      },
+      {
+        "level": "H2",
+        "text": "Discover more features to unlock your AI workforce"
+      },
+      {
+        "level": "H3",
+        "text": "AI Workforce"
+      },
+      {
+        "level": "H3",
+        "text": "AI Teams"
+      },
+      {
+        "level": "H3",
+        "text": "AI Tools"
+      },
+      {
+        "level": "H2",
+        "text": "Ready to take the next step with Relevance?"
+      },
+      {
+        "level": "H3",
+        "text": "Build your first agent"
+      },
+      {
+        "level": "H3",
+        "text": "Learn new skills"
+      },
+      {
+        "level": "H3",
+        "text": "Talk to a Rep"
+      },
+      {
+        "level": "H2",
+        "text": "Building their AI Workforce"
+      },
+      {
+        "level": "H2",
+        "text": "Free your team. Build your first AI agent today!"
+      }
+    ],
+    "inputs": [],
+    "title": "Approvals & escalations – Relevance AI",
+    "url": "https://relevanceai.com/approvals-escalations"
+  },
+  {
+    "slug": "12-integrations",
+    "buttons": [
+      "Learn more",
+      "Watch now",
+      "Watch now",
+      "home",
+      "AI Agents Build an AI Agent in seconds.",
+      "AI Workforce Create & manage AI teams.",
+      "AI Tools Give AI agents superpowers.",
+      "Integrations Power your AI agents.",
+      "API Easily trigger your AI agents.",
+      "Invent Create custom AI Agents just by describing them.",
+      "Metadata Capture high-value data from every agent task, automatically.",
+      "Scheduling Control when your AI agents run, and how much they do.",
+      "Approvals Control when you need, automation when you don’t.",
+      "Knowledge Give every agent the context your best people rely on.",
+      "Collaboration & Sharing Work solo or scale as a team, with total clarity.",
+      "Chat Embed Turn any AI Agent into a live chat experience.",
+      "Phone Agent Add voice-calling superpowers to your product.",
+      "Relevance Chat Use agents like teammates.",
+      "Slack Use agents without any no context switching.",
+      "Version Control Track, test, and restore your AI agents and tools with ease.",
+      "Sales Create custom AI Agents just by describing them.",
+      "Marketing Capture high-value data from every agent task, automatically.",
+      "Customer Support Control when your AI agents run, and how much they do.",
+      "Research Control when you need, automation when you don’t.",
+      "Operations Give every agent the context your best people rely on.",
+      "LATEST BLOGS",
+      "How to Submit to the Relevance AI Marketplace",
+      "Inside AI Ops: Ricky — QA Agents",
+      "AI BDR Agent Booking meetings 24/7.",
+      "Lifecycle Marketer Message every customer like they are your only customer.",
+      "Account Researcher Human-quality account research on autopilot.",
+      "CRM Enrichment Enrich your CRM with real-time.",
+      "Inbound Qualification Qualify and Book Meetings.",
+      "SEO Automatically generate SEO content & pages.",
+      "Inbox Manager Manage inbound replies and execute personalized follow-ups.",
+      "Customer Support Automatically handle support requests.",
+      "Sales Notetaker Capture every detail from your sales calls.",
+      "MRP Agent Get complex work done with simple tools.",
+      "LATEST DROP",
+      "Control your meeting agent in real time with chat commands",
+      "Documentation",
+      "Blog",
+      "Customers",
+      "Community",
+      "Changelog",
+      "Templates",
+      "AI Ops Bootcamp",
+      "Careers",
+      "What is the AI Workforce",
+      "Partner Directory",
+      "Become Partner",
+      "Affiliate Program",
+      "CUSTOMERS",
+      "How Canva uses AI agents to redesign go-to-market work Read more",
+      "LEARN",
+      "What is the AI Workforce?",
+      "Enterprise",
+      "Pricing",
+      "Link Five",
+      "Link Six",
+      "Link Seven",
+      "Login",
+      "Talk to Sales",
+      "Sign Up",
+      "AI Agents Build an AI Agent in seconds.",
+      "AI Workforce Create & manage AI teams.",
+      "AI Tools Give AI agents superpowers.",
+      "Integrations Power your AI agents.",
+      "API Easily trigger your AI agents.",
+      "Invent Create custom AI Agents just by describing them.",
+      "Metadata Capture high-value data from every agent task, automatically.",
+      "Scheduling Control when your AI agents run, and how much they do.",
+      "Approvals Control when you need, automation when you don’t.",
+      "Knowledge Give every agent the context your best people rely on.",
+      "Collaboration & Sharing Work solo or scale as a team, with total clarity.",
+      "Chat Embed Turn any AI Agent into a live chat experience.",
+      "Phone Agent Add voice-calling superpowers to your product.",
+      "Relevance Chat Use agents like teammates.",
+      "Slack Use agents without any no context switching.",
+      "Version Control Track, test, and restore your AI agents and tools with ease."
+    ],
+    "cards": [
+      "Remove the delete-this-class class from the navbar13_component div. This will change the positioning of the navbar to fixed.",
+      "Add the navbar-on-page class to the page-wrapper class. This will ensure that the navbar is centered on the page.",
+      "Add the max-width-full class to the main-wrapper class. This will ensure all sections inside of the main wrapper are full-wdith.",
+      "Remove the delete-this-class class from the navbar13_component div. This will change the positioning of the navbar to fixed.",
+      "Add the navbar-on-page class to the page-wrapper class. This will ensure that the navbar is centered on the page.",
+      "Add the max-width-full class to the main-wrapper class. This will ensure all sections inside of the main wrapper are full-wdith.",
+      "Build your first agent Free to use. easy to try. Everything you need to get started. Start now",
+      "Build your first agent Free to use. easy to try. Everything you need to get started. Start now",
+      "Build your first agent Free to use. easy to try. Everything you need to get started.",
+      "Learn new skills Learn new skills to with our free guided learning modules with our resident AI builders. Start learning",
+      "Learn new skills Learn new skills to with our free guided learning modules with our resident AI builders. Start learning",
+      "Learn new skills Learn new skills to with our free guided learning modules with our resident AI builders.",
+      "Talk to a Rep Tell us about your business needs and we’ll help you to find answers. Contact us",
+      "Talk to a Rep Tell us about your business needs and we’ll help you to find answers. Contact us",
+      "Talk to a Rep Tell us about your business needs and we’ll help you to find answers.",
+      "Free your team. Build your first AI agent today! If you're exploring Relevance AI for the first time or discovering new features, we'll quickly guide you to start doing great work immediately. Try for free Request Demo F",
+      "Free your team. Build your first AI agent today! If you're exploring Relevance AI for the first time or discovering new features, we'll quickly guide you to start doing great work immediately. Try for free Request Demo F"
+    ],
+    "h1": "Power your AI agents with 2000+ integrations — from Slack to Salesforce",
+    "headings": [
+      {
+        "level": "H1",
+        "text": "Power your AI agents with 2000+ integrations — from Slack to Salesforce"
+      },
+      {
+        "level": "H2",
+        "text": "Integrations connect your agents. Triggers, Actions, and LLMs power the work"
+      },
+      {
+        "level": "H2",
+        "text": "See what your agent can do across 2000+ tools"
+      },
+      {
+        "level": "H2",
+        "text": "Start workflows instantly with powerful event-based triggers"
+      },
+      {
+        "level": "H2",
+        "text": "Choose the best LLM for the job—OpenAI, Claude, Gemini & more"
+      },
+      {
+        "level": "H2",
+        "text": "FAQs"
+      },
+      {
+        "level": "H2",
+        "text": "Ready to take the next step with Relevance?"
+      },
+      {
+        "level": "H3",
+        "text": "Build your first agent"
+      },
+      {
+        "level": "H3",
+        "text": "Learn new skills"
+      },
+      {
+        "level": "H3",
+        "text": "Talk to a Rep"
+      },
+      {
+        "level": "H2",
+        "text": "Free your team. Build your first AI agent today!"
+      }
+    ],
+    "inputs": [
+      {
+        "label": "",
+        "placeholder": "Search for apps, providers, categories..",
+        "type": "text"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "radio"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "radio"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "radio"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "radio"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "radio"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "radio"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "radio"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "radio"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "radio"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "radio"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "radio"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "radio"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "radio"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "radio"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "radio"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "radio"
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": "submit"
+      }
+    ],
+    "title": "Integrations - Onboard your AI Agents with your tech stack",
+    "url": "https://relevanceai.com/integrations"
+  },
+  {
+    "slug": "13-relevance-chat",
+    "buttons": [
+      "Watch now",
+      "Watch now",
+      "home",
+      "AI Agents Build an AI Agent in seconds.",
+      "AI Workforce Create & manage AI teams.",
+      "AI Tools Give AI agents superpowers.",
+      "Integrations Power your AI agents.",
+      "API Easily trigger your AI agents.",
+      "Invent Create custom AI Agents just by describing them.",
+      "Metadata Capture high-value data from every agent task, automatically.",
+      "Scheduling Control when your AI agents run, and how much they do.",
+      "Approvals Control when you need, automation when you don’t.",
+      "Knowledge Give every agent the context your best people rely on.",
+      "Collaboration & Sharing Work solo or scale as a team, with total clarity.",
+      "Chat Embed Turn any AI Agent into a live chat experience.",
+      "Phone Agent Add voice-calling superpowers to your product.",
+      "Relevance Chat Use agents like teammates.",
+      "Slack Use agents without any no context switching.",
+      "Version Control Track, test, and restore your AI agents and tools with ease.",
+      "Sales Create custom AI Agents just by describing them.",
+      "Marketing Capture high-value data from every agent task, automatically.",
+      "Customer Support Control when your AI agents run, and how much they do.",
+      "Research Control when you need, automation when you don’t.",
+      "Operations Give every agent the context your best people rely on.",
+      "LATEST BLOGS",
+      "How to Submit to the Relevance AI Marketplace",
+      "Inside AI Ops: Ricky — QA Agents",
+      "AI BDR Agent Booking meetings 24/7.",
+      "Lifecycle Marketer Message every customer like they are your only customer.",
+      "Account Researcher Human-quality account research on autopilot.",
+      "CRM Enrichment Enrich your CRM with real-time.",
+      "Inbound Qualification Qualify and Book Meetings.",
+      "SEO Automatically generate SEO content & pages.",
+      "Inbox Manager Manage inbound replies and execute personalized follow-ups.",
+      "Customer Support Automatically handle support requests.",
+      "MRP Agent Get complex work done with simple tools.",
+      "LATEST DROP",
+      "Control your meeting agent in real time with chat commands",
+      "Documentation",
+      "Blog",
+      "Customers",
+      "Community",
+      "Changelog",
+      "Templates",
+      "AI Ops Bootcamp",
+      "Careers",
+      "What is the AI Workforce",
+      "Partner Directory",
+      "Become Partner",
+      "Affiliate Program",
+      "CUSTOMERS",
+      "How Canva uses AI agents to redesign go-to-market work Read more",
+      "LEARN",
+      "What is the AI Workforce?",
+      "Enterprise",
+      "Agent Sprawl",
+      "Pricing",
+      "Link Five",
+      "Link Six",
+      "Link Seven",
+      "Login",
+      "Talk to Sales",
+      "Sign Up",
+      "AI Agents Build an AI Agent in seconds.",
+      "AI Workforce Create & manage AI teams.",
+      "AI Tools Give AI agents superpowers.",
+      "Integrations Power your AI agents.",
+      "API Easily trigger your AI agents.",
+      "Invent Create custom AI Agents just by describing them.",
+      "Metadata Capture high-value data from every agent task, automatically.",
+      "Scheduling Control when your AI agents run, and how much they do.",
+      "Approvals Control when you need, automation when you don’t.",
+      "Knowledge Give every agent the context your best people rely on.",
+      "Collaboration & Sharing Work solo or scale as a team, with total clarity.",
+      "Chat Embed Turn any AI Agent into a live chat experience.",
+      "Phone Agent Add voice-calling superpowers to your product.",
+      "Relevance Chat Use agents like teammates.",
+      "Slack Use agents without any no context switching.",
+      "Version Control Track, test, and restore your AI agents and tools with ease.",
+      "Sales Create custom AI Agents just by describing them."
+    ],
+    "cards": [
+      "Remove the delete-this-class class from the navbar13_component div. This will change the positioning of the navbar to fixed.",
+      "Add the navbar-on-page class to the page-wrapper class. This will ensure that the navbar is centered on the page.",
+      "Add the max-width-full class to the main-wrapper class. This will ensure all sections inside of the main wrapper are full-wdith.",
+      "Remove the delete-this-class class from the navbar13_component div. This will change the positioning of the navbar to fixed.",
+      "Add the navbar-on-page class to the page-wrapper class. This will ensure that the navbar is centered on the page.",
+      "Add the max-width-full class to the main-wrapper class. This will ensure all sections inside of the main wrapper are full-wdith.",
+      "Relevance Chat Use agents like teammates A single chat interface that connects you to your agents, model choices, and tools from generating slides to browsing the web. Try now",
+      "Relevance Chat Use agents like teammates A single chat interface that connects you to your agents, model choices, and tools from generating slides to browsing the web. Try now",
+      "Relevance Chat Use agents like teammates A single chat interface that connects you to your agents, model choices, and tools from generating slides to browsing the web.",
+      "Ask Type what you need. Use @ to call an agent or just chat normally.",
+      "Run Switch models, search the web, pull context, create content, or let an agent handle steps.",
+      "Your teammate It keeps your work, remembers your context, and lets you pick up right where you left off.",
+      "Free your team. Build your first AI agent today! If you're exploring Relevance AI for the first time or discovering new features, we'll quickly guide you to start doing great work immediately. Try for free Request Demo F",
+      "Free your team. Build your first AI agent today! If you're exploring Relevance AI for the first time or discovering new features, we'll quickly guide you to start doing great work immediately. Try for free Request Demo F"
+    ],
+    "h1": "Use agents like teammates",
+    "headings": [
+      {
+        "level": "H1",
+        "text": "Use agents like teammates"
+      },
+      {
+        "level": "H2",
+        "text": "What it is"
+      },
+      {
+        "level": "H1",
+        "text": "How it works"
+      },
+      {
+        "level": "H1",
+        "text": "Ask"
+      },
+      {
+        "level": "H1",
+        "text": "Run"
+      },
+      {
+        "level": "H1",
+        "text": "Your teammate"
+      },
+      {
+        "level": "H2",
+        "text": "Create slides from chat"
+      },
+      {
+        "level": "H2",
+        "text": "Free your team. Build your first AI agent today!"
+      }
+    ],
+    "inputs": [],
+    "title": "Relevance Chat",
+    "url": "https://relevanceai.com/relevance-chat"
+  },
+  {
+    "slug": "14-docs",
+    "buttons": [
+      "/docs/llms.txt",
+      "Skip to main content",
+      "Relevance AI Documentation home page",
+      "Product",
+      "Search... ⌘K",
+      "Log In",
+      "Sign Up",
+      "Sign Up",
+      "Toggle dark mode",
+      "Search...",
+      "More actions",
+      "NavigationOverviewIntroduction",
+      "Getting Started",
+      "Build with Relevance AI",
+      "Integrations",
+      "Access & Administration",
+      "Enterprise",
+      "Guides",
+      "Community",
+      "Contact Support",
+      "JavaScript SDK",
+      "Changelog",
+      "Introduction",
+      "Quick Start",
+      "Pricing",
+      "Agents",
+      "Tools",
+      "Workforces",
+      "Knowledge",
+      "API integration",
+      "Programmatic GTM",
+      "Overview",
+      "Using Agents and Workforces",
+      "Chat Agents",
+      "Saved prompts",
+      "Mobile app",
+      "Super GTM",
+      "Marketplace",
+      "Relevance Builders",
+      "Browser issues",
+      "Agents not working",
+      "Contact support",
+      "On this page",
+      "Why Relevance AI?",
+      "Quick Links",
+      "Core Features",
+      "Build your first agent",
+      "How It Works",
+      "Popular Use Cases",
+      "Learning Resources",
+      "Expand image: The Relevance AI platform",
+      "​",
+      "​",
+      "Create Your First Agent Follow our step-by-step guide to build and deploy your first AI agent",
+      "Try Relevance Chat Start using AI agents instantly — no setup required",
+      "Watch Video Tutorials Learn from our video library covering agents, tools, and best practices",
+      "Get Help & Support Access our support team, community, and troubleshooting guides",
+      "​",
+      "Agents AI entities that autonomously complete tasks like human employees",
+      "Chat Built-in chat interface for human-like conversations with your agents",
+      "Workforces Multi-agent teams where specialized AI agents collaborate on complex tasks",
+      "Knowledge RAG solution giving agents access to specific information beyond pre-trained knowledge",
+      "Tools No-code workflow builder for integrations and automations",
+      "Marketplace Pre-built agents, tools, and workforces you can clone and customize",
+      "​",
+      "​",
+      "​",
+      "​",
+      "Community Join our Community to connect with other users and get help from the Relevance AI team",
+      "Blog & Updates Stay updated with the latest features, best practices, and customer stories",
+      "Start building now!",
+      "Yes",
+      "No",
+      "Suggest edits",
+      "Raise issue",
+      "Quick Start",
+      "Send message",
+      "twitter",
+      "github",
+      "linkedin"
+    ],
+    "cards": [
+      "Using Agents and Workforces",
+      "Build your first agent",
+      "Deploy agents in minutes using our no-code builder or pre-built templates",
+      "Scale on demand without hiring or training new team members",
+      "Integrate seamlessly with your existing tools and workflows",
+      "Maintain control with human oversight and approval workflows",
+      "Customize everything from agent behavior to escalation protocols",
+      "Create Your First Agent Follow our step-by-step guide to build and deploy your first AI agent Try Relevance Chat Start using AI agents instantly — no setup required Watch Video Tutorials Learn from our video library cove",
+      "Create Your First Agent Follow our step-by-step guide to build and deploy your first AI agent",
+      "Try Relevance Chat Start using AI agents instantly — no setup required",
+      "Watch Video Tutorials Learn from our video library covering agents, tools, and best practices",
+      "Get Help & Support Access our support team, community, and troubleshooting guides",
+      "Agents AI entities that autonomously complete tasks like human employees Chat Built-in chat interface for human-like conversations with your agents Workforces Multi-agent teams where specialized AI agents collaborate on ",
+      "Agents AI entities that autonomously complete tasks like human employees",
+      "Chat Built-in chat interface for human-like conversations with your agents",
+      "Workforces Multi-agent teams where specialized AI agents collaborate on complex tasks",
+      "Knowledge RAG solution giving agents access to specific information beyond pre-trained knowledge",
+      "Tools No-code workflow builder for integrations and automations",
+      "Marketplace Pre-built agents, tools, and workforces you can clone and customize",
+      "Build agents — create AI agents that autonomously complete tasks. Use Invent to generate one from a description, clone a pre-built agent from the Marketplace, or build from scratch.",
+      "Give them tools — equip agents with actions like sending emails, updating your CRM, searching the web, or calling any API — all built in a no-code tool builder.",
+      "Add knowledge — connect your data so agents respond with accuracy. Upload files, sync from Google Drive, SharePoint, Notion, or pull from websites.",
+      "Connect them into workforces — link multiple agents together on a visual canvas to handle complex, multi-step workflows. Each agent focuses on what it’s best at, and the workforce handles the handoffs.",
+      "Set guardrails and deploy — configure escalations, approval workflows, and triggers, then put your workforce to work.",
+      "Community Join our Community to connect with other users and get help from the Relevance AI team Blog & Updates Stay updated with the latest features, best practices, and customer stories",
+      "Community Join our Community to connect with other users and get help from the Relevance AI team",
+      "Blog & Updates Stay updated with the latest features, best practices, and customer stories"
+    ],
+    "h1": "Introduction",
+    "headings": [
+      {
+        "level": "H2",
+        "text": "Documentation Index"
+      },
+      {
+        "level": "H3",
+        "text": "Overview"
+      },
+      {
+        "level": "H3",
+        "text": "Core Concepts"
+      },
+      {
+        "level": "H3",
+        "text": "Chat"
+      },
+      {
+        "level": "H3",
+        "text": "Marketplace"
+      },
+      {
+        "level": "H3",
+        "text": "Troubleshooting"
+      },
+      {
+        "level": "H2",
+        "text": "On this page"
+      },
+      {
+        "level": "H1",
+        "text": "Introduction"
+      },
+      {
+        "level": "H2",
+        "text": "​ Why Relevance AI?"
+      },
+      {
+        "level": "H2",
+        "text": "​ Quick Links"
+      },
+      {
+        "level": "H2",
+        "text": "Create Your First Agent"
+      },
+      {
+        "level": "H2",
+        "text": "Try Relevance Chat"
+      },
+      {
+        "level": "H2",
+        "text": "Watch Video Tutorials"
+      },
+      {
+        "level": "H2",
+        "text": "Get Help & Support"
+      },
+      {
+        "level": "H2",
+        "text": "​ Core Features"
+      },
+      {
+        "level": "H2",
+        "text": "Agents"
+      },
+      {
+        "level": "H2",
+        "text": "Chat"
+      },
+      {
+        "level": "H2",
+        "text": "Workforces"
+      },
+      {
+        "level": "H2",
+        "text": "Knowledge"
+      },
+      {
+        "level": "H2",
+        "text": "Tools"
+      },
+      {
+        "level": "H2",
+        "text": "Marketplace"
+      },
+      {
+        "level": "H2",
+        "text": "​ Build your first agent"
+      },
+      {
+        "level": "H2",
+        "text": "​ How It Works"
+      },
+      {
+        "level": "H2",
+        "text": "​ Popular Use Cases"
+      },
+      {
+        "level": "H2",
+        "text": "​ Learning Resources"
+      },
+      {
+        "level": "H2",
+        "text": "Community"
+      },
+      {
+        "level": "H2",
+        "text": "Blog & Updates"
+      }
+    ],
+    "inputs": [
+      {
+        "label": "Ask a question...",
+        "placeholder": "Ask a question...",
+        "type": null
+      },
+      {
+        "label": "",
+        "placeholder": null,
+        "type": null
+      }
+    ],
+    "title": "Introduction - Relevance AI Documentation",
+    "url": "https://relevanceai.com/docs/get-started/introduction"
+  }
+]

@@ -1,0 +1,1481 @@
+{
+  "capturedAt" : "2026-07-15T18:50:40Z",
+  "captureStatus" : "failed",
+  "duplicateScreenIds" : [
+
+  ],
+  "failedScreenIds" : [
+    "loop-run-preflight",
+    "loop-run-waiting-review",
+    "loop-run-completed",
+    "loop-publish-review",
+    "loop-team-library-update",
+    "team-library-loop-detail",
+    "team-library-publish-review",
+    "team-library-update-impact",
+    "state-update-available",
+    "state-success",
+    "state-reconnecting",
+    "state-revision-conflict",
+    "state-server-error"
+  ],
+  "missingScreenIds" : [
+
+  ],
+  "schemaVersion" : 2,
+  "shots" : [
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/00-loop-lifecycle-board.png",
+      "actualRoute" : "\/loops",
+      "capturedAt" : "2026-07-15T18:48:37Z",
+      "clientHeight" : 1058,
+      "clientWidth" : 1487,
+      "evidenceCategory" : "loop-reference",
+      "h1" : "Loop lifecycle",
+      "h2s" : [
+        "Drafts",
+        "Ready",
+        "Shared"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "Fresh Product API Loops, Skills, and Team releases are loaded"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workspace",
+      "objectState" : "populated",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : "wiki\/design\/skill-loop-cloud-workbench-v1\/visual-directions\/selected-ai-native-lifecycle-board.png",
+      "screenId" : "loop-lifecycle-board",
+      "scrollWidth" : 1487,
+      "structuralAssertions" : [
+        "Top navigation, command entry, and Draft\/Ready\/Shared lanes are visible",
+        "No legacy left sidebar is visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 1058,
+        "width" : 1487
+      },
+      "visibleDeviations" : [
+        "The isolated Product API workspace has no validated Ready Loop or published Shared Loop, so those lanes show their real empty states."
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/01-loop-create.png",
+      "actualRoute" : "\/loops\/new",
+      "capturedAt" : "2026-07-15T18:48:39Z",
+      "clientHeight" : 1058,
+      "clientWidth" : 1487,
+      "evidenceCategory" : "loop-reference",
+      "h1" : "Create Loop",
+      "h2s" : [
+        "Describe a goal"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "The global Create action opened the real Loop creation route"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "new-loop",
+      "objectState" : "goal-entry",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : "wiki\/design\/skill-loop-cloud-workbench-v1\/key-frames\/01-create-loop.png",
+      "screenId" : "loop-create",
+      "scrollWidth" : 1487,
+      "structuralAssertions" : [
+        "Five creation methods are visible",
+        "Goal, expected result, and proposal review action are distinct"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 1058,
+        "width" : 1487
+      },
+      "visibleDeviations" : [
+        "The global account area uses the current workspace identity instead of the reference avatar and workspace name."
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/02-loop-ai-proposal-review.png",
+      "actualRoute" : "\/loops\/new",
+      "capturedAt" : "2026-07-15T18:49:06Z",
+      "clientHeight" : 1058,
+      "clientWidth" : 1470,
+      "evidenceCategory" : "loop-reference",
+      "h1" : "Review proposed Loop",
+      "h2s" : [
+        "What this Loop is for",
+        "Proposed changes"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "A writable Product API workspace is active",
+        "LOOPOPS_CAPTURE_ALLOW_MUTATIONS=1 explicitly permits creating the evidence Loop",
+        "The configured Builder provider returns a real proposal"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workflow-e4f50877-3c0e-48bb-9083-8178a45ef43d",
+      "objectState" : "proposal-review",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : "wiki\/design\/skill-loop-cloud-workbench-v1\/key-frames\/02-review-ai-proposal.png",
+      "screenId" : "loop-ai-proposal-review",
+      "scrollWidth" : 1470,
+      "structuralAssertions" : [
+        "The proposal review is visible",
+        "Apply and dismiss actions are visible",
+        "No draft graph mutation occurs before confirmation"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 1058,
+        "width" : 1487
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/03-loop-builder-outline.png",
+      "actualRoute" : "\/loops\/workflow-e4f50877-3c0e-48bb-9083-8178a45ef43d\/edit",
+      "capturedAt" : "2026-07-15T18:49:09Z",
+      "clientHeight" : 1058,
+      "clientWidth" : 1487,
+      "evidenceCategory" : "loop-reference",
+      "h1" : "Weekly Product Review",
+      "h2s" : [
+        "Skill picker",
+        "Prepare a Weekly Product Review with product signals, key risks, decisio",
+        "Step editor"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "A real saved Workflow revision is selected"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workflow-e4f50877-3c0e-48bb-9083-8178a45ef43d",
+      "objectState" : "editing-outline",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : "wiki\/design\/skill-loop-cloud-workbench-v1\/key-frames\/03-builder-outline.png",
+      "screenId" : "loop-builder-outline",
+      "scrollWidth" : 1487,
+      "structuralAssertions" : [
+        "Outline is the primary editor",
+        "Skill Library and Step editor remain contextual"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 1058,
+        "width" : 1487
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/04-loop-builder-canvas.png",
+      "actualRoute" : "\/loops\/workflow-e4f50877-3c0e-48bb-9083-8178a45ef43d\/edit",
+      "capturedAt" : "2026-07-15T18:49:14Z",
+      "clientHeight" : 1058,
+      "clientWidth" : 1487,
+      "evidenceCategory" : "loop-reference",
+      "h1" : "Weekly Product Review",
+      "h2s" : [
+        "Skill picker",
+        "Prepare a Weekly Product Review with product signals, key risks, decisio",
+        "Step editor"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "The same Workflow revision is opened in Canvas mode"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workflow-e4f50877-3c0e-48bb-9083-8178a45ef43d",
+      "objectState" : "editing-canvas",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : "wiki\/design\/skill-loop-cloud-workbench-v1\/key-frames\/04-builder-canvas.png",
+      "screenId" : "loop-builder-canvas",
+      "scrollWidth" : 1487,
+      "structuralAssertions" : [
+        "Canvas, node graph, zoom controls, minimap, and compact test dock are visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 1058,
+        "width" : 1487
+      },
+      "visibleDeviations" : [
+        "The isolated workspace exposes one executable Skill instead of the five business Skills shown in the reference.",
+        "That Skill has no declared input or output ports, so it is marked Needs setup and only compatible real ports are connected."
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/loop-builder-outline-mobile.png",
+      "actualRoute" : "\/loops\/workflow-e4f50877-3c0e-48bb-9083-8178a45ef43d\/edit",
+      "capturedAt" : "2026-07-15T18:49:17Z",
+      "clientHeight" : 844,
+      "clientWidth" : 373,
+      "evidenceCategory" : "responsive",
+      "h1" : "Weekly Product Review",
+      "h2s" : [
+        "Skill picker",
+        "Prepare a Weekly Product Review with product signals, key risks, decisio"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "The same saved Workflow revision is opened on a 390px viewport",
+        "Outline mode is selected"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workflow-e4f50877-3c0e-48bb-9083-8178a45ef43d",
+      "objectState" : "editing-outline-mobile",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "loop-builder-outline-mobile",
+      "scrollWidth" : 373,
+      "structuralAssertions" : [
+        "The ordered steps remain readable without page-level horizontal overflow",
+        "Outline actions remain reachable on mobile"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 844,
+        "width" : 390
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/loop-builder-canvas-mobile.png",
+      "actualRoute" : "\/loops\/workflow-e4f50877-3c0e-48bb-9083-8178a45ef43d\/edit",
+      "capturedAt" : "2026-07-15T18:49:20Z",
+      "clientHeight" : 844,
+      "clientWidth" : 373,
+      "evidenceCategory" : "responsive",
+      "h1" : "每周产品复盘",
+      "h2s" : [
+        "技能选择",
+        "Prepare a Weekly Product Review with product signals, key risks, decisio"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "The same saved Workflow revision is opened on a 390px viewport",
+        "Canvas mode is selected"
+      ],
+      "locale" : "zh",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workflow-e4f50877-3c0e-48bb-9083-8178a45ef43d",
+      "objectState" : "editing-canvas-mobile",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "loop-builder-canvas-mobile",
+      "scrollWidth" : 373,
+      "structuralAssertions" : [
+        "The workflow graph appears in the first viewport",
+        "The desktop Skill picker is replaced by an explicit mobile library action"
+      ],
+      "theme" : "dark",
+      "viewport" : {
+        "height" : 844,
+        "width" : 390
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/loop-builder-library-mobile.png",
+      "actualRoute" : "\/loops\/workflow-e4f50877-3c0e-48bb-9083-8178a45ef43d\/edit",
+      "capturedAt" : "2026-07-15T18:49:23Z",
+      "clientHeight" : 844,
+      "clientWidth" : 373,
+      "evidenceCategory" : "responsive",
+      "h1" : "每周产品复盘",
+      "h2s" : [
+        "技能选择",
+        "Prepare a Weekly Product Review with product signals, key risks, decisio"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "Canvas mode is selected on a 390px viewport",
+        "The user opens the Skill picker"
+      ],
+      "locale" : "zh",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workflow-e4f50877-3c0e-48bb-9083-8178a45ef43d",
+      "objectState" : "skill-library-open-mobile",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "loop-builder-library-mobile",
+      "scrollWidth" : 373,
+      "structuralAssertions" : [
+        "The Skill picker is an opaque full-screen temporary drawer",
+        "Search, categories, add actions, and the close action remain reachable"
+      ],
+      "theme" : "dark",
+      "viewport" : {
+        "height" : 844,
+        "width" : 390
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/09-loop-overview.png",
+      "actualRoute" : "\/loops\/workflow-e4f50877-3c0e-48bb-9083-8178a45ef43d",
+      "capturedAt" : "2026-07-15T18:49:25Z",
+      "clientHeight" : 1024,
+      "clientWidth" : 1423,
+      "evidenceCategory" : "loop-reference",
+      "h1" : "Loop overview",
+      "h2s" : [
+        "Weekly Product Review"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "A real Workflow and canonical revision are loaded"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workflow-e4f50877-3c0e-48bb-9083-8178a45ef43d",
+      "objectState" : "overview",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : "wiki\/design\/skill-loop-cloud-workbench-v1\/key-frames\/09-loop-overview.png",
+      "screenId" : "loop-overview",
+      "scrollWidth" : 1423,
+      "structuralAssertions" : [
+        "Purpose, ordered steps, revision, latest Run, and next action are visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 1024,
+        "width" : 1440
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/10-loop-builder-definition.png",
+      "actualRoute" : "\/loops\/workflow-e4f50877-3c0e-48bb-9083-8178a45ef43d\/edit",
+      "capturedAt" : "2026-07-15T18:49:26Z",
+      "clientHeight" : 800,
+      "clientWidth" : 1280,
+      "evidenceCategory" : "loop-reference",
+      "h1" : "Weekly Product Review",
+      "h2s" : [
+        "Skill picker",
+        "Prepare a Weekly Product Review with product signals, key risks, decisio",
+        "Step editor"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "The same Workflow revision is opened in Definition mode"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workflow-e4f50877-3c0e-48bb-9083-8178a45ef43d",
+      "objectState" : "editing-definition",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : "wiki\/design\/skill-loop-cloud-workbench-v1\/key-frames\/10-builder-definition.png",
+      "screenId" : "loop-builder-definition",
+      "scrollWidth" : 1280,
+      "structuralAssertions" : [
+        "Goal, context, completion, verification, result, and stop rules are visible"
+      ],
+      "theme" : "dark",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/skills-library.png",
+      "actualRoute" : "\/skills",
+      "capturedAt" : "2026-07-15T18:49:28Z",
+      "clientHeight" : 1024,
+      "clientWidth" : 1440,
+      "evidenceCategory" : "skills",
+      "h1" : "Skills",
+      "h2s" : [
+        "Decision follow-up writer",
+        "How this skill works",
+        "Add to a workflow",
+        "Used in"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "Fresh Product API Skill catalog is loaded"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workspace",
+      "objectState" : "populated",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "skills-library",
+      "scrollWidth" : 1440,
+      "structuralAssertions" : [
+        "Search, create action, Skill list, and detail preview are visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 1024,
+        "width" : 1440
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/skill-detail.png",
+      "actualRoute" : "\/skills\/skill-47ffc00d-368a-40a4-99f4-c870ee146daf",
+      "capturedAt" : "2026-07-15T18:49:29Z",
+      "clientHeight" : 800,
+      "clientWidth" : 1280,
+      "evidenceCategory" : "skills",
+      "h1" : "技能概览",
+      "h2s" : [
+        "Decision follow-up writer",
+        "需要",
+        "生成",
+        "权限与设置",
+        "技能包文件",
+        "被用于"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "A real managed Skill is selected"
+      ],
+      "locale" : "zh",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "skill-47ffc00d-368a-40a4-99f4-c870ee146daf",
+      "objectState" : "overview",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "skill-detail",
+      "scrollWidth" : 1280,
+      "structuralAssertions" : [
+        "Needs, creates, permissions, files, usage, and version are visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/skill-versions-diff-usage.png",
+      "actualRoute" : "\/skills\/skill-47ffc00d-368a-40a4-99f4-c870ee146daf\/versions",
+      "capturedAt" : "2026-07-15T18:49:31Z",
+      "clientHeight" : 1024,
+      "clientWidth" : 1440,
+      "evidenceCategory" : "skills",
+      "h1" : "技能版本",
+      "h2s" : [
+        "Decision follow-up writer",
+        "版本记录",
+        "比较版本",
+        "使用这个技能的工作流"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "The Skill has Product API version and usage queries"
+      ],
+      "locale" : "zh",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "skill-47ffc00d-368a-40a4-99f4-c870ee146daf",
+      "objectState" : "versions-diff-usage",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "skill-versions-diff-usage",
+      "scrollWidth" : 1440,
+      "structuralAssertions" : [
+        "Version history, comparison, diff, and Loop usage are visible"
+      ],
+      "theme" : "dark",
+      "viewport" : {
+        "height" : 1024,
+        "width" : 1440
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/skill-publish-update-impact.png",
+      "actualRoute" : "\/skills\/skill-47ffc00d-368a-40a4-99f4-c870ee146daf\/versions",
+      "capturedAt" : "2026-07-15T18:49:33Z",
+      "clientHeight" : 844,
+      "clientWidth" : 373,
+      "evidenceCategory" : "skills",
+      "h1" : "Skill versions",
+      "h2s" : [
+        "Decision follow-up writer",
+        "Version history",
+        "Compare versions",
+        "Workflows using this Skill"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "The Skill has a published version and update\/usage information"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "skill-47ffc00d-368a-40a4-99f4-c870ee146daf",
+      "objectState" : "publish-update-impact",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "skill-publish-update-impact",
+      "scrollWidth" : 373,
+      "structuralAssertions" : [
+        "Immutable version history and affected Loops are visible on mobile"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 844,
+        "width" : 390
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/skill-edit-files-permissions.png",
+      "actualRoute" : "\/skills\/skill-47ffc00d-368a-40a4-99f4-c870ee146daf\/files",
+      "capturedAt" : "2026-07-15T18:49:35Z",
+      "clientHeight" : 800,
+      "clientWidth" : 1280,
+      "evidenceCategory" : "skills",
+      "h1" : "Skill files",
+      "h2s" : [
+        "Decision follow-up writer",
+        "Skill files could not be loaded"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "A real Skill draft\/package is loaded"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "skill-47ffc00d-368a-40a4-99f4-c870ee146daf",
+      "objectState" : "editing-files-permissions",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "skill-edit-files-permissions",
+      "scrollWidth" : 1280,
+      "structuralAssertions" : [
+        "Package files and permission acknowledgement are visible",
+        "Save remains explicit"
+      ],
+      "theme" : "dark",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/skill-validation-test.png",
+      "actualRoute" : "\/skills\/skill-47ffc00d-368a-40a4-99f4-c870ee146daf\/tests",
+      "capturedAt" : "2026-07-15T18:49:36Z",
+      "clientHeight" : 1024,
+      "clientWidth" : 1423,
+      "evidenceCategory" : "skills",
+      "h1" : "Test and publish",
+      "h2s" : [
+        "Decision follow-up writer",
+        "Run a safe example",
+        "Confirm permissions",
+        "Publish a fixed version"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "A real Skill draft is loaded"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "skill-47ffc00d-368a-40a4-99f4-c870ee146daf",
+      "objectState" : "test-and-validation",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "skill-validation-test",
+      "scrollWidth" : 1423,
+      "structuralAssertions" : [
+        "Test, permission review, validation, and publish actions are distinct"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 1024,
+        "width" : 1440
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/skill-create.png",
+      "actualRoute" : "\/skills",
+      "capturedAt" : "2026-07-15T18:49:39Z",
+      "clientHeight" : 800,
+      "clientWidth" : 1263,
+      "evidenceCategory" : "skills",
+      "h1" : "Skills",
+      "h2s" : [
+        "Decision follow-up writer",
+        "How this skill works",
+        "Add to a workflow",
+        "Used in",
+        "Add a Skill"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "Global Create is available in a writable workspace"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "new-skill",
+      "objectState" : "create-draft",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "skill-create",
+      "scrollWidth" : 1263,
+      "structuralAssertions" : [
+        "Create Skill metadata and empty package state are visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/skill-upload-import.png",
+      "actualRoute" : "\/skills",
+      "capturedAt" : "2026-07-15T18:49:42Z",
+      "clientHeight" : 844,
+      "clientWidth" : 373,
+      "evidenceCategory" : "skills",
+      "h1" : "技能",
+      "h2s" : [
+        "Decision follow-up writer",
+        "这个技能如何工作",
+        "加入工作流",
+        "被用于",
+        "添加技能"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "Global Create opened the real Skill upload flow"
+      ],
+      "locale" : "zh",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "new-skill-package",
+      "objectState" : "upload-import",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "skill-upload-import",
+      "scrollWidth" : 373,
+      "structuralAssertions" : [
+        "File upload and repository import choices are available in the responsive dialog"
+      ],
+      "theme" : "dark",
+      "viewport" : {
+        "height" : 844,
+        "width" : 390
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/team-library-search.png",
+      "actualRoute" : "\/library",
+      "capturedAt" : "2026-07-15T18:49:43Z",
+      "clientHeight" : 1024,
+      "clientWidth" : 1440,
+      "evidenceCategory" : "team-library",
+      "h1" : "Team library",
+      "h2s" : [
+        "Meeting Follow-up"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "Fresh Team releases and installations are loaded"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workspace",
+      "objectState" : "search-and-filter",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "team-library-search",
+      "scrollWidth" : 1440,
+      "structuralAssertions" : [
+        "Search, type filters, ownership\/version, and install\/update actions are visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 1024,
+        "width" : 1440
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/team-library-skill-detail.png",
+      "actualRoute" : "\/library\/skills\/skill-b9bc7118-a95d-417a-aed9-a1dbaf889e63",
+      "capturedAt" : "2026-07-15T18:49:45Z",
+      "clientHeight" : 800,
+      "clientWidth" : 1280,
+      "evidenceCategory" : "team-library",
+      "h1" : "团队技能",
+      "h2s" : [
+        "Meeting action extractor"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "A published Team Skill release exists"
+      ],
+      "locale" : "zh",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "skill-b9bc7118-a95d-417a-aed9-a1dbaf889e63",
+      "objectState" : "detail",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "team-library-skill-detail",
+      "scrollWidth" : 1280,
+      "structuralAssertions" : [
+        "Owner, version, compatibility, permissions, needs, creates, and install\/update are visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/global-create.png",
+      "actualRoute" : "\/loops",
+      "capturedAt" : "2026-07-15T18:49:48Z",
+      "clientHeight" : 844,
+      "clientWidth" : 373,
+      "evidenceCategory" : "global-create",
+      "h1" : "Loop lifecycle",
+      "h2s" : [
+        "Drafts",
+        "Ready",
+        "Shared"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "The Product API workspace is loaded"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workspace",
+      "objectState" : "open",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "global-create",
+      "scrollWidth" : 373,
+      "structuralAssertions" : [
+        "Create Skill, Upload Skill, Create Loop, and Upload Loop are visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 844,
+        "width" : 390
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/inbox-needs-attention.png",
+      "actualRoute" : "\/loops",
+      "capturedAt" : "2026-07-15T18:49:51Z",
+      "clientHeight" : 844,
+      "clientWidth" : 373,
+      "evidenceCategory" : "inbox",
+      "h1" : "工作流生命周期",
+      "h2s" : [
+        "草稿",
+        "可运行",
+        "团队共享"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "Product API readiness and update issues are loaded"
+      ],
+      "locale" : "zh",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workspace",
+      "objectState" : "open",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "inbox-needs-attention",
+      "scrollWidth" : 373,
+      "structuralAssertions" : [
+        "Needs-attention count and product-safe recovery destinations are visible"
+      ],
+      "theme" : "dark",
+      "viewport" : {
+        "height" : 844,
+        "width" : 390
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/generic-state-offline.png",
+      "actualRoute" : "\/loops",
+      "capturedAt" : "2026-07-15T18:49:53Z",
+      "clientHeight" : 844,
+      "clientWidth" : 373,
+      "evidenceCategory" : "generic-state",
+      "h1" : "Loop lifecycle",
+      "h2s" : [
+        "Drafts",
+        "Ready",
+        "Shared"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "Fresh Product API data is loaded before the isolated browser emits an offline event"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workspace",
+      "objectState" : "offline",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "state-offline",
+      "scrollWidth" : 373,
+      "structuralAssertions" : [
+        "Cached content remains visible",
+        "The offline reason and retry action are visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 844,
+        "width" : 390
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/generic-state-recovery.png",
+      "actualRoute" : "\/loops",
+      "capturedAt" : "2026-07-15T18:49:56Z",
+      "clientHeight" : 844,
+      "clientWidth" : 373,
+      "evidenceCategory" : "generic-state",
+      "h1" : "工作流生命周期",
+      "h2s" : [
+        "草稿",
+        "可运行",
+        "团队共享"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "The isolated browser transitions from offline to online with cached Product API data"
+      ],
+      "locale" : "zh",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workspace",
+      "objectState" : "recovery",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "state-recovery",
+      "scrollWidth" : 373,
+      "structuralAssertions" : [
+        "Connection recovery is announced without obscuring the primary action",
+        "Dismiss remains available"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 844,
+        "width" : 390
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/generic-state-populated.png",
+      "actualRoute" : "\/loops",
+      "capturedAt" : "2026-07-15T18:49:59Z",
+      "clientHeight" : 844,
+      "clientWidth" : 373,
+      "evidenceCategory" : "generic-state",
+      "h1" : "工作流生命周期",
+      "h2s" : [
+        "草稿",
+        "可运行",
+        "团队共享"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "Fresh Product API Loop data is loaded"
+      ],
+      "locale" : "zh",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workspace",
+      "objectState" : "populated",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "state-populated",
+      "scrollWidth" : 373,
+      "structuralAssertions" : [
+        "A populated lifecycle list is visible on mobile"
+      ],
+      "theme" : "dark",
+      "viewport" : {
+        "height" : 844,
+        "width" : 390
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/generic-state-empty-search.png",
+      "actualRoute" : "\/library",
+      "capturedAt" : "2026-07-15T18:50:00Z",
+      "clientHeight" : 800,
+      "clientWidth" : 1280,
+      "evidenceCategory" : "generic-state",
+      "h1" : "Team library",
+      "h2s" : [
+        "No matching shared items"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "Team Library is populated before applying an impossible search query"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workspace",
+      "objectState" : "empty-search",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "state-empty-search",
+      "scrollWidth" : 1280,
+      "structuralAssertions" : [
+        "No-results message, query context, and clear-search recovery are visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/generic-state-validation-error.png",
+      "actualRoute" : "\/skills\/skill-47ffc00d-368a-40a4-99f4-c870ee146daf\/tests",
+      "capturedAt" : "2026-07-15T18:50:02Z",
+      "clientHeight" : 800,
+      "clientWidth" : 1263,
+      "evidenceCategory" : "generic-state",
+      "h1" : "测试与发布",
+      "h2s" : [
+        "Decision follow-up writer",
+        "运行安全示例",
+        "确认权限",
+        "发布固定版本"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "A Skill draft has not yet passed its required test and permission review"
+      ],
+      "locale" : "zh",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "skill-47ffc00d-368a-40a4-99f4-c870ee146daf",
+      "objectState" : "validation-error",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "state-validation-error",
+      "scrollWidth" : 1263,
+      "structuralAssertions" : [
+        "Validation blocking reason and the required next action are visible"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/generic-state-blocked.png",
+      "actualRoute" : "\/loops\/workflow-efb5bd4a-604c-495f-bfad-f66753e2fed3\/run",
+      "capturedAt" : "2026-07-15T18:50:03Z",
+      "clientHeight" : 800,
+      "clientWidth" : 1280,
+      "evidenceCategory" : "generic-state",
+      "h1" : "Prepare run",
+      "h2s" : [
+        "Prepare this run"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "The Product API compiler reports a real blocked Workflow"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workflow-efb5bd4a-604c-495f-bfad-f66753e2fed3",
+      "objectState" : "blocked",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "state-blocked",
+      "scrollWidth" : 1280,
+      "structuralAssertions" : [
+        "Blocking reasons and a recovery action are visible"
+      ],
+      "theme" : "dark",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/generic-state-needs-setup.png",
+      "actualRoute" : "\/loops\/workflow-efb5bd4a-604c-495f-bfad-f66753e2fed3\/run",
+      "capturedAt" : "2026-07-15T18:50:06Z",
+      "clientHeight" : 844,
+      "clientWidth" : 373,
+      "evidenceCategory" : "generic-state",
+      "h1" : "准备运行",
+      "h2s" : [
+        "准备本次运行"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "A real draft Loop has unresolved server compile or required-information checks"
+      ],
+      "locale" : "zh",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "workflow-efb5bd4a-604c-495f-bfad-f66753e2fed3",
+      "objectState" : "needs-setup",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "state-needs-setup",
+      "scrollWidth" : 373,
+      "structuralAssertions" : [
+        "The missing setup is explained",
+        "Open Builder or fill required information is available"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 844,
+        "width" : 390
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/generic-state-loading.png",
+      "actualRoute" : "\/loops",
+      "capturedAt" : "2026-07-15T18:50:06Z",
+      "clientHeight" : 800,
+      "clientWidth" : 1280,
+      "evidenceCategory" : "generic-state",
+      "h1" : "",
+      "h2s" : [
+        "Opening your workspace"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "A fresh HttpOnly Product API session opens the workspace before initial server queries settle"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "visual-evidence-empty-workspace",
+      "objectState" : "loading",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "state-loading",
+      "scrollWidth" : 1280,
+      "structuralAssertions" : [
+        "The product explains that workspace data is loading",
+        "Navigation remains stable without fake content"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/generic-state-first-use.png",
+      "actualRoute" : "\/loops",
+      "capturedAt" : "2026-07-15T18:50:08Z",
+      "clientHeight" : 1024,
+      "clientWidth" : 1440,
+      "evidenceCategory" : "generic-state",
+      "h1" : "Loop lifecycle",
+      "h2s" : [
+        "Drafts",
+        "Ready",
+        "Shared"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "A new Product API workspace and owner session are created through the test identity boundary"
+      ],
+      "locale" : "en",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "visual-evidence-empty-workspace",
+      "objectState" : "first-use",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "state-first-use",
+      "scrollWidth" : 1440,
+      "structuralAssertions" : [
+        "The empty lifecycle lanes explain what to do next",
+        "Create Loop remains the primary recovery action"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 1024,
+        "width" : 1440
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/generic-state-empty.png",
+      "actualRoute" : "\/skills",
+      "capturedAt" : "2026-07-15T18:50:11Z",
+      "clientHeight" : 844,
+      "clientWidth" : 373,
+      "evidenceCategory" : "generic-state",
+      "h1" : "技能",
+      "h2s" : [
+        "还没有工作区技能"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "The same new Product API workspace contains no managed Skills"
+      ],
+      "locale" : "zh",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "visual-evidence-empty-workspace",
+      "objectState" : "empty",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "state-empty",
+      "scrollWidth" : 373,
+      "structuralAssertions" : [
+        "The empty state explains the missing content",
+        "Create Skill remains reachable on mobile"
+      ],
+      "theme" : "dark",
+      "viewport" : {
+        "height" : 844,
+        "width" : 390
+      },
+      "visibleDeviations" : [
+
+      ]
+    },
+    {
+      "actualPath" : "\/private\/tmp\/selected-direction-audit-20260716-v19\/generic-state-permission-denied.png",
+      "actualRoute" : "\/loops",
+      "capturedAt" : "2026-07-15T18:50:12Z",
+      "clientHeight" : 800,
+      "clientWidth" : 1263,
+      "evidenceCategory" : "generic-state",
+      "h1" : "工作流生命周期",
+      "h2s" : [
+        "草稿",
+        "可运行",
+        "团队共享"
+      ],
+      "hasHorizontalOverflow" : false,
+      "interactionPreconditions" : [
+        "A real viewer membership opens the workspace through an HttpOnly Product API session"
+      ],
+      "locale" : "zh",
+      "manualVerdict" : {
+        "reviewedAt" : null,
+        "reviewer" : null,
+        "status" : "pending"
+      },
+      "objectId" : "visual-evidence-empty-workspace",
+      "objectState" : "permission-denied",
+      "overflowDetails" : [
+
+      ],
+      "referencePath" : null,
+      "screenId" : "state-permission-denied",
+      "scrollWidth" : 1263,
+      "structuralAssertions" : [
+        "View-only access is explained",
+        "A specific access-request recovery action is visible",
+        "Write actions are disabled"
+      ],
+      "theme" : "light",
+      "viewport" : {
+        "height" : 800,
+        "width" : 1280
+      },
+      "visibleDeviations" : [
+
+      ]
+    }
+  ],
+  "targetUrl" : "http:\/\/127.0.0.1:8898\/",
+  "unexpectedScreenIds" : [
+
+  ],
+  "viewportMatrix" : [
+    {
+      "height" : 1058,
+      "width" : 1487
+    },
+    {
+      "height" : 1024,
+      "width" : 1440
+    },
+    {
+      "height" : 800,
+      "width" : 1280
+    },
+    {
+      "height" : 844,
+      "width" : 390
+    }
+  ]
+}

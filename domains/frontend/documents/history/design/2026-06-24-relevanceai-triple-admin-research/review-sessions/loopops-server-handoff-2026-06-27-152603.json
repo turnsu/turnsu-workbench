@@ -1,0 +1,28 @@
+{
+  "id": "loopops-server-handoff-2026-06-27-152603",
+  "createdAt": "2026-06-27T15:26:03+08:00",
+  "status": "ready-for-manual-review",
+  "webReviewURL": "http://127.0.0.1:5188/",
+  "stableServer": {
+    "url": "http://127.0.0.1:5188/",
+    "probe": "curl -I --max-time 2 http://127.0.0.1:5188/",
+    "result": "HTTP/1.1 200 OK"
+  },
+  "duplicateFallbackServer": {
+    "url": "http://127.0.0.1:5189/",
+    "probe": "curl -I --max-time 2 http://127.0.0.1:5189/",
+    "result": "stopped"
+  },
+  "permissionModel": {
+    "browserOpened": false,
+    "nativeAppOpened": false,
+    "systemAutomation": false,
+    "appleScript": false,
+    "accessibility": false,
+    "screenRecording": false,
+    "trackedExecSessionRunning": false
+  },
+  "humanReviewGallery": "domains/frontend/documents/design/2026-06-24-relevanceai-triple-admin-research/human-review-gallery.html",
+  "nativeVisualGallery": "domains/frontend/documents/design/2026-06-24-relevanceai-triple-admin-research/native-visual-audit/loopops-native-visual-2026-06-27-144538/README.md",
+  "pendingReviewRecord": "domains/frontend/documents/design/2026-06-24-relevanceai-triple-admin-research/review-records/loopops-review-2026-06-27-145550.md"
+}
