@@ -189,6 +189,49 @@ test("proposal generation binds a typed model result to the current revision and
   assert.equal(store.audits[0].action, "builder_proposal.generated");
 });
 
+test("production Builder proposal uses an independent bounded container Worker", async () => {
+  const revision = makeRevision();
+  const store = proposalStore(revision);
+  const requests = [];
+  const candidate = {
+    summary: "Update the goal.",
+    operations: [{
+      op: "updateDefinition",
+      definition: {
+        goal: "Worker goal", context: "", constraints: [], doneWhen: ["Done"],
+        verify: [], expectedResult: "Result", stopRules: [],
+      },
+    }],
+    diagnostics: [],
+    permissionImpact: [],
+  };
+  const application = createWorkbenchApplication({
+    store,
+    agentRuntime: { async generateBuilderProposal() { throw new Error("shared_session_must_not_run"); } },
+    executionBroker: {
+      async execute(request) {
+        requests.push(structuredClone(request));
+        return { status: "completed", output: candidate };
+      },
+    },
+    clock: () => NOW,
+    idFactory: (kind) => `${kind}-bounded-builder`,
+  });
+  const proposal = await application.generateLoopProposal({
+    workflowId: revision.workflowId,
+    idempotencyKey: "proposal-bounded-worker",
+    ifMatch: `"${revision.revisionId}"`,
+    request: { data: { instruction: "Update the goal." } },
+  });
+
+  assert.equal(proposal.status, "proposed");
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].mode, "bounded_agent");
+  assert.equal(requests[0].isolation, "container");
+  assert.equal(requests[0].capabilities.toolAllowlist.length, 0);
+  assert.equal(requests[0].controller.kind, "agent_turn");
+});
+
 test("proposal apply requires the same base revision and saves one immutable revision transaction", async () => {
   const revision = makeRevision();
   const store = proposalStore(revision);

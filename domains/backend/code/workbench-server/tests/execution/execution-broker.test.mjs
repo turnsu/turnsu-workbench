@@ -208,3 +208,55 @@ test("child capabilities must be a strict subset of the parent lease", () => {
     externalActions: false,
   }, parent), false);
 });
+
+test("orchestrator children become independent product invocations without changing the outer controller", async () => {
+  const { value, persistence } = broker();
+  value.registerBackend({
+    mode: "agent_orchestrator",
+    isolation: "process",
+    backend: {
+      async execute() {
+        return {
+          output: { workflowStatus: "completed" },
+          usage: { steps: 2, modelRequests: 2, inputBytes: 10, outputBytes: 10 },
+          children: ["research", "review"].map((childRef) => ({
+            childRef,
+            goal: `${childRef} bounded task`,
+            status: "completed",
+            output: { childRef },
+            summary: `${childRef} complete`,
+            usage: { steps: 1, modelRequests: 1, inputBytes: 5, outputBytes: 5 },
+            capabilities: {
+              toolAllowlist: ["read"], connectionIds: [], network: false,
+              filesystem: "none", externalActions: false,
+            },
+          })),
+        };
+      },
+    },
+  });
+  const input = request({
+    mode: "agent_orchestrator",
+    limits: { ...request().limits, maxSteps: 4, maxModelRequests: 4, maxChildren: 2 },
+    capabilities: {
+      toolAllowlist: ["read"], connectionIds: [], network: false,
+      filesystem: "scratch_readonly", externalActions: false,
+    },
+    resultSchema: {
+      type: "object",
+      properties: { workflowStatus: { type: "string" } },
+      required: ["workflowStatus"],
+      additionalProperties: false,
+    },
+  });
+
+  const result = await value.execute(input);
+  const invocations = await persistence.listInvocations({ controllerId: "run-alpha" });
+  const children = invocations.filter((invocation) => invocation.parentInvocationId === input.invocationId);
+
+  assert.equal(result.status, "completed");
+  assert.equal(children.length, 2);
+  assert(children.every((invocation) => invocation.mode === "bounded_agent"));
+  assert(children.every((invocation) => invocation.controller.controllerId === "run-alpha"));
+  assert.equal((persistence.events.get(input.invocationId) ?? []).filter((event) => event.type === "execution.child_recorded").length, 2);
+});

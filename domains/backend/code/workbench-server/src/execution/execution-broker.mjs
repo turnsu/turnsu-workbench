@@ -127,7 +127,16 @@ export class ExecutionBroker {
         assertCapability: (capability) => assertCapabilityAllowed(request.capabilities, capability),
       });
       if (controller.signal.aborted) throw controller.signal.reason;
-      const result = normalizeResult({ request, startedAt, finishedAt: this.#clock(), backendResult });
+      await this.#recordExternalChildren(request, lease, backendResult?.children);
+      const result = normalizeResult({
+        request,
+        startedAt,
+        finishedAt: this.#clock(),
+        backendResult: {
+          ...backendResult,
+          children: undefined,
+        },
+      });
       validateResultAgainstRequest(request, result);
       const accepted = await this.#persistence.completeAttempt(request.attemptId, fence, result);
       if (!accepted) return this.#lateResult(request.invocationId);
@@ -203,6 +212,134 @@ export class ExecutionBroker {
       state: structuredClone(state),
       createdAt: this.#clock(),
     });
+  }
+
+  async #recordExternalChildren(parentRequest, parentLease, children) {
+    if (children === undefined) return [];
+    if (parentRequest.mode !== "agent_orchestrator" || !Array.isArray(children)) {
+      throw new ExecutionBrokerError("orchestrator_children_invalid");
+    }
+    if (children.length > parentRequest.limits.maxChildren) {
+      throw new ExecutionBrokerError("execution_child_budget_exceeded");
+    }
+    const totalModelRequests = children.reduce((sum, child) => sum + Number(child?.usage?.modelRequests ?? 0), 0);
+    const totalSteps = children.reduce((sum, child) => sum + Number(child?.usage?.steps ?? 0), 0);
+    if (totalModelRequests > parentRequest.limits.maxModelRequests || totalSteps > parentRequest.limits.maxSteps) {
+      throw new ExecutionBrokerError("execution_child_budget_exceeded");
+    }
+
+    const invocationIds = [];
+    for (const child of children) {
+      const capabilities = child?.capabilities ?? parentRequest.capabilities;
+      if (!capabilitiesAreSubset(capabilities, parentLease.capabilities)) {
+        throw new ExecutionBrokerError("execution_child_capability_escalation", "Child Worker requested broader capabilities.", { status: "permission_denied" });
+      }
+      const createdAt = this.#clock();
+      const invocationId = this.#idFactory("invocation");
+      const attemptId = this.#idFactory("execution-attempt");
+      const childRequest = {
+        schemaVersion: SCHEMA_VERSION,
+        invocationId,
+        attemptId,
+        workspaceId: parentRequest.workspaceId,
+        controller: structuredClone(parentRequest.controller),
+        mode: "bounded_agent",
+        isolation: parentRequest.isolation,
+        goal: String(child?.goal || "Execute orchestrator child work.").slice(0, 8000),
+        input: isJsonValue(child?.input) ? structuredClone(child.input) : {},
+        limits: {
+          timeoutMs: Math.min(child?.limits?.timeoutMs ?? parentRequest.limits.timeoutMs, parentRequest.limits.timeoutMs),
+          maxSteps: Math.min(Math.max(child?.usage?.steps ?? 1, 1), parentRequest.limits.maxSteps),
+          maxModelRequests: Math.min(Math.max(child?.usage?.modelRequests ?? 0, 0), parentRequest.limits.maxModelRequests),
+          maxChildren: 0,
+          maxInputBytes: parentRequest.limits.maxInputBytes,
+          maxOutputBytes: parentRequest.limits.maxOutputBytes,
+        },
+        capabilities: structuredClone(capabilities),
+        resultSchema: { type: "object", additionalProperties: true },
+        evidenceRequirements: [],
+        metadata: {
+          parentInvocationId: parentRequest.invocationId,
+          externalChildRef: String(child?.childRef || "agwab-child").slice(0, 128),
+        },
+      };
+      validateRequest(childRequest);
+      const childLease = {
+        schemaVersion: SCHEMA_VERSION,
+        capabilityLeaseId: this.#idFactory("capability-lease"),
+        invocationId,
+        attemptId,
+        workspaceId: parentRequest.workspaceId,
+        fence: parentLease.fence,
+        status: "active",
+        capabilities: structuredClone(capabilities),
+        issuedAt: createdAt,
+        expiresAt: parentLease.expiresAt,
+        revokedAt: null,
+        updatedAt: createdAt,
+      };
+      await this.#persistence.createInvocation({
+        schemaVersion: SCHEMA_VERSION,
+        invocationId,
+        attemptId,
+        workspaceId: parentRequest.workspaceId,
+        controller: structuredClone(parentRequest.controller),
+        mode: "bounded_agent",
+        isolation: parentRequest.isolation,
+        request: structuredClone(childRequest),
+        parentInvocationId: parentRequest.invocationId,
+        status: "queued",
+        eventSequence: 0,
+        executionFence: parentLease.fence,
+        result: null,
+        startedAt: null,
+        finishedAt: null,
+        createdAt,
+        updatedAt: createdAt,
+      });
+      await this.#persistence.createAttempt({
+        schemaVersion: SCHEMA_VERSION,
+        attemptId,
+        invocationId,
+        attemptNumber: 1,
+        status: "queued",
+        fence: parentLease.fence,
+        checkpointSequence: 0,
+        result: null,
+        startedAt: null,
+        finishedAt: null,
+        createdAt,
+        updatedAt: createdAt,
+      });
+      await this.#persistence.issueLease(childLease);
+      const startedAt = this.#clock();
+      await this.#persistence.markRunning(invocationId, attemptId, startedAt);
+      await this.#event(childRequest, "execution.started", "running", { parentInvocationId: parentRequest.invocationId });
+      const childResult = normalizeResult({
+        request: childRequest,
+        startedAt,
+        finishedAt: this.#clock(),
+        backendResult: {
+          status: normalizeExternalChildStatus(child?.status),
+          output: isObject(child?.output) ? structuredClone(child.output) : {},
+          summary: String(child?.summary || "Orchestrator child completed.").slice(0, 4000),
+          evidence: Array.isArray(child?.evidence) ? child.evidence.filter(isObject).map((item) => structuredClone(item)) : [],
+          usage: {
+            steps: Number(child?.usage?.steps ?? 0),
+            modelRequests: Number(child?.usage?.modelRequests ?? 0),
+            inputBytes: Number(child?.usage?.inputBytes ?? byteLength(child?.input)),
+            outputBytes: Number(child?.usage?.outputBytes ?? byteLength(child?.output)),
+          },
+        },
+      });
+      validateResultAgainstRequest(childRequest, childResult);
+      await this.#persistence.completeAttempt(attemptId, parentLease.fence, childResult);
+      await this.#persistence.revokeLease(invocationId, childResult.finishedAt);
+      await this.#event(childRequest, `execution.${childResult.status}`, childResult.status, { summary: childResult.summary });
+      await this.#event(parentRequest, "execution.child_recorded", "running", { childInvocationId: invocationId, status: childResult.status });
+      invocationIds.push(invocationId);
+    }
+    return invocationIds;
   }
 
   async #lateResult(invocationId) {
@@ -357,6 +494,18 @@ function productResult(result) {
 function byteLength(value) {
   if (value === undefined) return 0;
   return Buffer.byteLength(JSON.stringify(value), "utf8");
+}
+
+function normalizeExternalChildStatus(status) {
+  return TERMINAL.has(status) ? status : status === "interrupted" ? "cancelled" : status === "skipped" ? "partial" : "failed";
+}
+
+function isObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isJsonValue(value) {
+  return value === null || ["string", "number", "boolean"].includes(typeof value) || Array.isArray(value) || isObject(value);
 }
 
 function backendKey(mode, isolation) {

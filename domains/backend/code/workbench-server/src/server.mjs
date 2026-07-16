@@ -175,6 +175,7 @@ export function createWorkbenchComposition({
   store = new ProductMongoStore(),
   agentRuntime,
   executionBroker,
+  executionBackends = [],
   agentTurnRunner,
   agentExecutor = null,
   runner,
@@ -207,6 +208,9 @@ export function createWorkbenchComposition({
       isolation: "process",
       backend: createDeterministicSkillBackend({ agentRuntime: runtimeBundle.agentRuntime }),
     });
+  }
+  for (const registration of executionBackends) {
+    productExecutionBroker.registerBackend(registration);
   }
   const productRunner = runner ?? createWorkflowRunner({
     store,
@@ -264,6 +268,7 @@ export function createWorkbenchServer({
   store,
   agentRuntime,
   executionBroker,
+  executionBackends,
   agentTurnRunner,
   agentExecutor,
   runner,
@@ -315,6 +320,7 @@ export function createWorkbenchServer({
       store: productStore,
       agentRuntime,
       executionBroker,
+      executionBackends,
       agentTurnRunner,
       agentExecutor,
       runner,

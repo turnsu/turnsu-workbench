@@ -1212,7 +1212,7 @@ export function createWorkbenchApplication({
     },
     async generateLoopProposal({ workflowId, idempotencyKey, ifMatch, request, auth }) {
       const context = await resolveAuth(auth, "member");
-      if (typeof agentRuntime?.generateBuilderProposal !== "function") {
+      if (!executionBroker && typeof agentRuntime?.generateBuilderProposal !== "function") {
         throw storeError("builder_proposal_unavailable", "Workflow suggestions are not available yet.");
       }
       await ready();
@@ -1239,15 +1239,56 @@ export function createWorkbenchApplication({
           { workspaceId: context.workspaceId, ...options },
         );
         if (!revision) throw storeError("workflow_revision_not_found", "Workflow revision not found.");
-        const candidate = await agentRuntime.generateBuilderProposal({
-          instruction: request.data.instruction,
-          workflowId,
-          workspaceId: context.workspaceId,
-          revision: clone(revision),
-        });
+        const proposalId = idFactory("proposal");
+        let candidate;
+        if (executionBroker) {
+          const invocationId = idFactory("invocation");
+          const result = await executionBroker.execute({
+            schemaVersion: "workbench-execution-fabric-v1",
+            invocationId,
+            attemptId: idFactory("execution-attempt"),
+            workspaceId: context.workspaceId,
+            controller: { kind: "agent_turn", controllerId: `builder-${proposalId}`.slice(0, 128), fence: 1 },
+            mode: "bounded_agent",
+            isolation: "container",
+            goal: `Generate a structured Workflow proposal for this instruction: ${request.data.instruction}`.slice(0, 8000),
+            input: { workflowId, revision: clone(revision), instruction: request.data.instruction },
+            limits: {
+              timeoutMs: 90_000,
+              maxSteps: 16,
+              maxModelRequests: 8,
+              maxChildren: 0,
+              maxInputBytes: 1_000_000,
+              maxOutputBytes: 1_000_000,
+            },
+            capabilities: {
+              toolAllowlist: [], connectionIds: [], network: false,
+              filesystem: "none", externalActions: false,
+            },
+            resultSchema: { type: "object", additionalProperties: true },
+            evidenceRequirements: [{
+              requirementId: "builder-proposal-json",
+              kind: "output",
+              required: true,
+              description: "Return a typed proposal without modifying the canonical Workflow.",
+            }],
+            metadata: { agentKind: "builder_proposal", objectKind: "workflow", objectId: workflowId },
+          });
+          if (result.status !== "completed") {
+            throw storeError("builder_proposal_unavailable", "Workflow suggestions are currently blocked.", { status: result.status });
+          }
+          candidate = result.output;
+        } else {
+          candidate = await agentRuntime.generateBuilderProposal({
+            instruction: request.data.instruction,
+            workflowId,
+            workspaceId: context.workspaceId,
+            revision: clone(revision),
+          });
+        }
         const proposal = {
           schemaVersion: "workbench-v1",
-          proposalId: idFactory("proposal"),
+          proposalId,
           workspaceId: context.workspaceId,
           workflowId,
           baseRevisionId: revision.revisionId,

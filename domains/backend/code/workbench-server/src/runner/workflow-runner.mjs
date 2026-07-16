@@ -54,7 +54,10 @@ function executionRequestFor({ run, node, step, skill, attempt, input, lease }) 
       required: true,
       description: `Return a contract-valid result for ${node.title}.`,
     }]),
-    metadata: { executionRef: structuredClone(skill.executionRef) },
+    metadata: {
+      executionRef: structuredClone(skill.executionRef),
+      outerNodeId: node.nodeId,
+    },
   };
 }
 
