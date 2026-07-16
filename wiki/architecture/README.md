@@ -3,6 +3,8 @@
 The current cross-domain architecture source is:
 
 - [CURRENT_SYSTEM_ARCHITECTURE.md](CURRENT_SYSTEM_ARCHITECTURE.md)
+- [2026-07-16-backend-agent-local-production-hardening-design.md](2026-07-16-backend-agent-local-production-hardening-design.md)
+  for the approved single-machine production target and release gates
 
 Product and design constraints remain:
 

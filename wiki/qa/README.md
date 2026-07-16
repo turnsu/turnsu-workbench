@@ -6,6 +6,8 @@ Current web QA lives with the web prototype:
 - [2026-07-10-skill-workflow-loop-first-slice-acceptance.md](2026-07-10-skill-workflow-loop-first-slice-acceptance.md)
 - [2026-07-16-selected-direction-visual-restoration.md](2026-07-16-selected-direction-visual-restoration.md)
 - [2026-07-16-backend-agent-slices-0-4-acceptance.md](2026-07-16-backend-agent-slices-0-4-acceptance.md)
+- [2026-07-16-backend-agent-slices-0-4-independent-code-review.md](2026-07-16-backend-agent-slices-0-4-independent-code-review.md)
+- [2026-07-16-backend-agent-slices-0-4-production-readiness-review.md](2026-07-16-backend-agent-slices-0-4-production-readiness-review.md)
 
 The rejected 2026-07-14 visual closure and final-audit records were removed. They incorrectly
 treated functional screenshot coverage as completed visual implementation. New visual acceptance
