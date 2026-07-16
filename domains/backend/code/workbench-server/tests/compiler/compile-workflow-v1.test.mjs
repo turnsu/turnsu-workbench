@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   Check,
   CompileResultSchema,
-  ExecutionPlanV1Schema,
+  ExecutionPlanV2Schema,
   WorkflowRevisionSchema,
 } from "@looloomi/workbench-contracts";
 
@@ -100,7 +100,10 @@ test("compiles a linear graph to a frozen contract-valid plan", () => {
     "node-output-b",
   ]);
   assert.equal(Check(CompileResultSchema, result), true);
-  assert.equal(Check(ExecutionPlanV1Schema, result.executionPlan), true);
+  assert.equal(Check(ExecutionPlanV2Schema, result.executionPlan), true);
+  assert.equal(result.executionPlan.planVersion, "2");
+  assert.equal(result.executionPlan.steps[1].executionMode, "deterministic_skill");
+  assert.equal(result.executionPlan.steps[1].limits.maxModelRequests, 0);
   assert.deepEqual(result.executionPlan.pinnedSkills, [
     { skillId: "skill-research-b", version: "1.0.0" },
   ]);

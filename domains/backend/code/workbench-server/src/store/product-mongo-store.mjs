@@ -409,6 +409,26 @@ export class ProductMongoStore {
       reviewDecisions: new ReviewDecisionRepository(
         collection(PRODUCT_COLLECTIONS.reviewDecisions),
       ),
+      executionInvocations: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.executionInvocations),
+        { idField: "invocationId" },
+      ),
+      executionAttempts: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.executionAttempts),
+        { idField: "attemptId" },
+      ),
+      executionEvents: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.executionEvents),
+        { idField: "eventId", immutable: true },
+      ),
+      executionCheckpoints: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.executionCheckpoints),
+        { idField: "checkpointId", immutable: true },
+      ),
+      capabilityLeases: new ProductRecordRepository(
+        collection(PRODUCT_COLLECTIONS.capabilityLeases),
+        { idField: "capabilityLeaseId" },
+      ),
       idempotencyRecords: new IdempotencyRepository(
         collection(PRODUCT_COLLECTIONS.idempotencyRecords),
       ),

@@ -40,6 +40,11 @@ export const PRODUCT_COLLECTIONS = Object.freeze({
   runTerminalTransitions: "run_terminal_transitions",
   runReadModels: "run_read_models",
   reviewDecisions: "review_decisions",
+  executionInvocations: "execution_invocations",
+  executionAttempts: "execution_attempts",
+  executionEvents: "execution_events",
+  executionCheckpoints: "execution_checkpoints",
+  capabilityLeases: "capability_leases",
   idempotencyRecords: "idempotency_records",
   auditEvents: "audit_events",
 });
@@ -334,6 +339,42 @@ export const PRODUCT_INDEX_DEFINITIONS = Object.freeze([
     collection: PRODUCT_COLLECTIONS.runReadModels,
     indexes: [
       { key: { runId: 1 }, options: { unique: true, name: "runId_1" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.executionInvocations,
+    indexes: [
+      { key: { invocationId: 1 }, options: { unique: true, name: "invocationId_1" } },
+      { key: { workspaceId: 1, "controller.kind": 1, "controller.controllerId": 1, createdAt: -1 }, options: { name: "workspace_controller_createdAt" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.executionAttempts,
+    indexes: [
+      { key: { attemptId: 1 }, options: { unique: true, name: "attemptId_1" } },
+      { key: { invocationId: 1, attemptNumber: 1 }, options: { unique: true, name: "invocationId_1_attemptNumber_1" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.executionEvents,
+    indexes: [
+      { key: { eventId: 1 }, options: { unique: true, name: "eventId_1" } },
+      { key: { invocationId: 1, sequence: 1 }, options: { unique: true, name: "invocationId_1_sequence_1" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.executionCheckpoints,
+    indexes: [
+      { key: { checkpointId: 1 }, options: { unique: true, name: "checkpointId_1" } },
+      { key: { invocationId: 1, attemptId: 1, sequence: 1 }, options: { unique: true, name: "invocation_attempt_sequence" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.capabilityLeases,
+    indexes: [
+      { key: { capabilityLeaseId: 1 }, options: { unique: true, name: "capabilityLeaseId_1" } },
+      { key: { invocationId: 1, attemptId: 1 }, options: { unique: true, name: "invocationId_1_attemptId_1" } },
+      { key: { expiresAt: 1 }, options: { name: "expiresAt_1" } },
     ],
   },
   {

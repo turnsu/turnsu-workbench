@@ -32,6 +32,11 @@ import {
 } from "./application/workbench-application.mjs";
 import { bootstrapWorkbenchCatalog } from "./application/catalog-bootstrap.mjs";
 import { createWorkbenchHttpHandler } from "./http/workbench-http-handler.mjs";
+import {
+  createDeterministicSkillBackend,
+  ExecutionBroker,
+  MongoExecutionPersistence,
+} from "./execution/index.mjs";
 import { createWorkflowRunner } from "./runner/index.mjs";
 import { createDockerSkillExecutor, createInProcessAgentAdapter } from "./runtime/index.mjs";
 import { MongoWorkbenchSessionStore } from "./security/mongo-workbench-session-store.mjs";
@@ -168,6 +173,7 @@ export function createDefaultAgentRuntime({
 export function createWorkbenchComposition({
   store = new ProductMongoStore(),
   agentRuntime,
+  executionBroker,
   runner,
   skillUploadService,
   skillValidationService,
@@ -187,17 +193,31 @@ export function createWorkbenchComposition({
       idFactory,
       uploadedSkillRuntime: skillValidationService,
     });
+  const productExecutionBroker = executionBroker ?? new ExecutionBroker({
+    persistence: new MongoExecutionPersistence({ store }),
+    clock,
+    idFactory,
+  });
+  if (!executionBroker) {
+    productExecutionBroker.registerBackend({
+      mode: "deterministic_skill",
+      isolation: "process",
+      backend: createDeterministicSkillBackend({ agentRuntime: runtimeBundle.agentRuntime }),
+    });
+  }
   const productRunner = runner ?? createWorkflowRunner({
     store,
     resolveExecution: createExecutionResolver({ store }),
     resolveResourceText: textResourceService?.readText?.bind(textResourceService),
     agentRuntime: runtimeBundle.agentRuntime,
+    executionBroker: productExecutionBroker,
     clock,
     idFactory,
   });
   const application = createWorkbenchApplication({
     store,
     agentRuntime: runtimeBundle.agentRuntime,
+    executionBroker: productExecutionBroker,
     runner: productRunner,
     skillUploadService,
     skillValidationService,
@@ -209,6 +229,7 @@ export function createWorkbenchComposition({
   return {
     store,
     agentRuntime: runtimeBundle.agentRuntime,
+    executionBroker: productExecutionBroker,
     piRuntime: runtimeBundle.piRuntime,
     disposeRuntime: runtimeBundle.dispose,
     runner: productRunner,

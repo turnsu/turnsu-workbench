@@ -4,6 +4,7 @@ import { MongoClient } from "mongodb";
 
 import {
   backfillDefaultWorkspaceMigration,
+  agentExecutionFabricMigration,
   ProductMigrationRunner,
   runnerTerminalTransitionsMigration,
 } from "../src/store/migrations/index.mjs";
@@ -26,7 +27,11 @@ try {
   await client.connect();
   const runner = new ProductMigrationRunner({
     db: client.db(dbName),
-    migrations: [backfillDefaultWorkspaceMigration, runnerTerminalTransitionsMigration],
+    migrations: [
+      backfillDefaultWorkspaceMigration,
+      runnerTerminalTransitionsMigration,
+      agentExecutionFabricMigration,
+    ],
   });
   const result = await runner.run({
     dryRun,

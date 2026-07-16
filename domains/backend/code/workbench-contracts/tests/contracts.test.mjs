@@ -190,6 +190,50 @@ test("run event sequence and identity shape is strict", () => {
   );
 });
 
+test("ExecutionPlanV2 fixes execution mode, limits, capabilities, schema, and evidence per step", () => {
+  const step = {
+    ...structuredClone(executionPlanExample.steps[0]),
+    executionMode: "deterministic_skill",
+    isolation: "process",
+    limits: {
+      timeoutMs: 60_000,
+      maxSteps: 1,
+      maxModelRequests: 0,
+      maxChildren: 0,
+      maxInputBytes: 1_000_000,
+      maxOutputBytes: 1_000_000,
+    },
+    capabilities: {
+      toolAllowlist: [],
+      connectionIds: [],
+      network: false,
+      filesystem: "none",
+      externalActions: false,
+    },
+    resultSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
+    evidenceRequirements: [{
+      requirementId: "output:node-input",
+      kind: "output",
+      required: true,
+      description: "Return the node output.",
+    }],
+  };
+  const plan = {
+    ...structuredClone(executionPlanExample),
+    schemaVersion: "workbench-execution-plan-v2",
+    planVersion: "2",
+    steps: [step],
+    pinnedSkills: [],
+    reviewGates: [],
+    primaryOutput: { nodeId: "node-input", portId: "value" },
+  };
+  assert.equal(contracts.Check(contracts.ExecutionPlanV2Schema, plan), true);
+  assert.equal(contracts.Check(contracts.ExecutionPlanV1Schema, executionPlanExample), true);
+  const missingLimits = structuredClone(plan);
+  delete missingLimits.steps[0].limits;
+  assert.equal(contracts.Check(contracts.ExecutionPlanV2Schema, missingLimits), false);
+});
+
 test("workspace Connection contracts are product-safe, revisioned, and explicitly rebound", () => {
   const now = "2026-07-14T00:00:00.000Z";
   const connection = {

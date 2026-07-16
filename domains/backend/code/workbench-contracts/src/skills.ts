@@ -66,7 +66,7 @@ export const SkillExecutionRefSchema = strictObject({
   capabilityId: Type.String({ minLength: 1, maxLength: 128 }),
   taskIntent: Type.String({ minLength: 1, maxLength: 128 }),
   adapterVersion: VersionSchema,
-  executionMode: stringEnum(["agent", "deterministic"]),
+  executionMode: stringEnum(["agent", "deterministic", "orchestrator"]),
 });
 
 export const SkillReadinessSchema = strictObject({

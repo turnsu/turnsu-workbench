@@ -5,6 +5,7 @@ import {
   DataSchemaSchema,
   DiagnosticSchema,
   ExecutionPlanV1SchemaVersionSchema,
+  ExecutionPlanV2SchemaVersionSchema,
   NodeIdSchema,
   ResourceIdSchema,
   UtcTimestampSchema,
@@ -14,6 +15,13 @@ import {
 } from "./common.js";
 import { strictObject } from "./schema.js";
 import { PinnedSkillRefSchema } from "./skills.js";
+import {
+  EvidenceRequirementSchema,
+  ExecutionCapabilitiesSchema,
+  ExecutionIsolationSchema,
+  ExecutionLimitsSchema,
+  ExecutionModeSchema,
+} from "./execution.js";
 import {
   InputBindingSchema,
   PrimaryOutputSchema,
@@ -50,6 +58,42 @@ export const ExecutionPlanV1Schema = strictObject(
   },
   { $id: "ExecutionPlanV1" },
 );
+
+export const ExecutionPlanV2StepSchema = strictObject({
+  nodeId: NodeIdSchema,
+  kind: WorkflowNodeKindSchema,
+  skillRef: Type.Optional(PinnedSkillRefSchema),
+  dependsOn: Type.Array(NodeIdSchema, { uniqueItems: true }),
+  inputBindings: Type.Array(InputBindingSchema),
+  executionMode: ExecutionModeSchema,
+  isolation: ExecutionIsolationSchema,
+  limits: ExecutionLimitsSchema,
+  capabilities: ExecutionCapabilitiesSchema,
+  resultSchema: DataSchemaSchema,
+  evidenceRequirements: Type.Array(EvidenceRequirementSchema, { maxItems: 64 }),
+});
+
+export const ExecutionPlanV2Schema = strictObject(
+  {
+    schemaVersion: ExecutionPlanV2SchemaVersionSchema,
+    planVersion: Type.Literal("2"),
+    workflowId: WorkflowIdSchema,
+    workflowRevisionId: WorkflowRevisionIdSchema,
+    generatedAt: UtcTimestampSchema,
+    contentHash: ContentHashSchema,
+    maxParallelism: Type.Integer({ minimum: 1, maximum: 64 }),
+    pinnedSkills: Type.Array(PinnedSkillRefSchema),
+    steps: Type.Array(ExecutionPlanV2StepSchema, { minItems: 1 }),
+    reviewGates: Type.Array(ExecutionReviewGateSchema),
+    primaryOutput: PrimaryOutputSchema,
+  },
+  { $id: "ExecutionPlanV2" },
+);
+
+export const ExecutionPlanSchema = Type.Union([
+  ExecutionPlanV1Schema,
+  ExecutionPlanV2Schema,
+]);
 
 export const RequiredRunInputSchema = strictObject({
   inputKey: Type.String({ minLength: 1, maxLength: 128 }),
@@ -117,7 +161,7 @@ const CompileResultProperties = {
 export const ReadyCompileResultSchema = strictObject({
   ...CompileResultProperties,
   status: Type.Literal("ready"),
-  executionPlan: ExecutionPlanV1Schema,
+  executionPlan: ExecutionPlanSchema,
 });
 
 export const BlockedCompileResultSchema = strictObject({
@@ -141,4 +185,6 @@ export const CompileResultSchema = Type.Union(
 
 export type ExecutionPlanStep = Static<typeof ExecutionPlanStepSchema>;
 export type ExecutionPlanV1 = Static<typeof ExecutionPlanV1Schema>;
+export type ExecutionPlanV2Step = Static<typeof ExecutionPlanV2StepSchema>;
+export type ExecutionPlanV2 = Static<typeof ExecutionPlanV2Schema>;
 export type CompileResult = Static<typeof CompileResultSchema>;

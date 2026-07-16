@@ -7,6 +7,57 @@ const WORKBENCH_SCHEMA_VERSION = "workbench-v1";
 const RUN_EVENT_SCHEMA_VERSION = "workbench-run-event-v1";
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 
+const DEFAULT_EXECUTION_CAPABILITIES = Object.freeze({
+  toolAllowlist: [],
+  connectionIds: [],
+  network: false,
+  filesystem: "none",
+  externalActions: false,
+});
+
+function executionRequestFor({ run, node, step, skill, attempt, input, lease }) {
+  const mode = step.executionMode ?? (
+    skill.executionRef?.executionMode === "orchestrator"
+      ? "agent_orchestrator"
+      : skill.executionRef?.executionMode === "agent"
+        ? "bounded_agent"
+        : "deterministic_skill"
+  );
+  const agentic = mode !== "deterministic_skill";
+  return {
+    schemaVersion: "workbench-execution-fabric-v1",
+    invocationId: attempt.invocationId,
+    attemptId: attempt.nodeRunId,
+    workspaceId: run.executionSnapshot.workspaceId,
+    controller: {
+      kind: "workflow_run",
+      controllerId: run.runId,
+      fence: lease.fence,
+    },
+    mode,
+    isolation: step.isolation ?? (agentic ? "container" : "process"),
+    goal: String(node.description || node.title || `Execute ${node.nodeId}`).slice(0, 8000),
+    input: structuredClone(input),
+    limits: structuredClone(step.limits ?? {
+      timeoutMs: node.timeoutSeconds * 1000,
+      maxSteps: agentic ? 32 : 1,
+      maxModelRequests: agentic ? 16 : 0,
+      maxChildren: mode === "agent_orchestrator" ? 16 : 0,
+      maxInputBytes: 1_000_000,
+      maxOutputBytes: 1_000_000,
+    }),
+    capabilities: structuredClone(step.capabilities ?? DEFAULT_EXECUTION_CAPABILITIES),
+    resultSchema: structuredClone(step.resultSchema ?? skill.definition.outputSchema),
+    evidenceRequirements: structuredClone(step.evidenceRequirements ?? [{
+      requirementId: `output:${node.nodeId}`,
+      kind: "output",
+      required: true,
+      description: `Return a contract-valid result for ${node.title}.`,
+    }]),
+    metadata: { executionRef: structuredClone(skill.executionRef) },
+  };
+}
+
 function hasDurableRunnerRepositories(repositories) {
   const runJobs = repositories?.runJobs;
   const runLeases = repositories?.runLeases;
@@ -53,6 +104,7 @@ export class WorkflowRunner {
   #resolveExecution;
   #resolveResourceText;
   #agentRuntime;
+  #executionBroker;
   #clock;
   #idFactory;
   #hub = new RunEventHub();
@@ -70,6 +122,7 @@ export class WorkflowRunner {
     resolveExecution,
     resolveResourceText = null,
     agentRuntime,
+    executionBroker = null,
     clock = () => new Date().toISOString(),
     idFactory,
     scheduleOnStart = true,
@@ -94,6 +147,9 @@ export class WorkflowRunner {
     for (const method of ["invokeSkillNode", "buildAuthoritativeFinal"]) {
       if (typeof agentRuntime?.[method] !== "function") throw new TypeError("workflow_runner_agent_runtime_invalid");
     }
+    if (executionBroker !== null && typeof executionBroker?.execute !== "function") {
+      throw new TypeError("workflow_runner_execution_broker_invalid");
+    }
     if (typeof clock !== "function" || typeof idFactory !== "function") {
       throw new TypeError("workflow_runner_clock_and_id_factory_required");
     }
@@ -107,6 +163,7 @@ export class WorkflowRunner {
     this.#resolveExecution = resolveExecution;
     this.#resolveResourceText = resolveResourceText;
     this.#agentRuntime = agentRuntime;
+    this.#executionBroker = executionBroker;
     this.#clock = clock;
     this.#idFactory = idFactory;
     this.#scheduleOnStart = scheduleOnStart;
@@ -706,12 +763,26 @@ export class WorkflowRunner {
         const skill = this.#pinnedSkill(execution, node);
         validatePortInput(node, input);
         validateSchema(skill.definition.inputSchema, input, "skill_input_invalid");
-        output = await this.#agentRuntime.invokeSkillNode({
-          invocationId: attempt.invocationId,
-          workspaceId: run.executionSnapshot?.workspaceId,
-          executionRef: skill.executionRef,
-          input, timeoutMs: node.timeoutSeconds * 1000, signal: controller.signal,
-        });
+        if (this.#executionBroker) {
+          const result = await this.#executionBroker.execute(
+            executionRequestFor({ run, node, step, skill, attempt, input, lease }),
+            { signal: controller.signal },
+          );
+          if (result.status !== "completed") {
+            throw new WorkflowRunnerError(`execution_${result.status}`, result.summary, {
+              invocationId: attempt.invocationId,
+              status: result.status,
+            });
+          }
+          output = result.output;
+        } else {
+          output = await this.#agentRuntime.invokeSkillNode({
+            invocationId: attempt.invocationId,
+            workspaceId: run.executionSnapshot?.workspaceId,
+            executionRef: skill.executionRef,
+            input, timeoutMs: node.timeoutSeconds * 1000, signal: controller.signal,
+          });
+        }
         validateSchema(skill.definition.outputSchema, output, "skill_output_invalid");
         validatePortOutput(node, output);
       } else if (node.kind === "Output") output = outputNodeOutput(node, input);

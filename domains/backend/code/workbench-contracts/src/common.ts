@@ -6,6 +6,10 @@ export const WORKBENCH_SCHEMA_VERSION = "workbench-v1" as const;
 export const WORKBENCH_API_SCHEMA_VERSION = "workbench-api-v1" as const;
 export const EXECUTION_PLAN_V1_SCHEMA_VERSION =
   "workbench-execution-plan-v1" as const;
+export const EXECUTION_PLAN_V2_SCHEMA_VERSION =
+  "workbench-execution-plan-v2" as const;
+export const EXECUTION_FABRIC_SCHEMA_VERSION =
+  "workbench-execution-fabric-v1" as const;
 export const RUN_EVENT_V1_SCHEMA_VERSION = "workbench-run-event-v1" as const;
 
 export const WorkbenchSchemaVersionSchema = Type.Literal(
@@ -16,6 +20,12 @@ export const WorkbenchApiSchemaVersionSchema = Type.Literal(
 );
 export const ExecutionPlanV1SchemaVersionSchema = Type.Literal(
   EXECUTION_PLAN_V1_SCHEMA_VERSION,
+);
+export const ExecutionPlanV2SchemaVersionSchema = Type.Literal(
+  EXECUTION_PLAN_V2_SCHEMA_VERSION,
+);
+export const ExecutionFabricSchemaVersionSchema = Type.Literal(
+  EXECUTION_FABRIC_SCHEMA_VERSION,
 );
 export const RunEventV1SchemaVersionSchema = Type.Literal(
   RUN_EVENT_V1_SCHEMA_VERSION,
@@ -62,6 +72,19 @@ export const RunCommandIdSchema = stableId("Run command identifier");
 export const RunAttemptIdSchema = stableId("Run attempt identifier");
 export const AuditEventIdSchema = stableId("Audit event identifier");
 export const EvidenceIdSchema = stableId("Evidence identifier");
+export const InvocationIdSchema = stableId("Execution invocation identifier");
+export const ExecutionAttemptIdSchema = stableId("Execution attempt identifier");
+export const CapabilityLeaseIdSchema = stableId("Capability lease identifier");
+export const AgentDefinitionIdSchema = stableId("Agent definition identifier");
+export const AgentSessionIdSchema = stableId("Agent session identifier");
+export const AgentTurnIdSchema = stableId("Agent turn identifier");
+export const AgentMessageIdSchema = stableId("Agent message identifier");
+export const AgentBranchIdSchema = stableId("Agent branch identifier");
+export const MergeConflictIdSchema = stableId("Merge conflict identifier");
+export const MemoryCandidateIdSchema = stableId("Memory candidate identifier");
+export const DurableMemoryIdSchema = stableId("Durable memory identifier");
+export const MemoryEventIdSchema = stableId("Memory event identifier");
+export const MemoryTombstoneIdSchema = stableId("Memory tombstone identifier");
 
 export const VersionSchema = Type.String({ minLength: 1, maxLength: 64 });
 export const ContentHashSchema = Type.String({

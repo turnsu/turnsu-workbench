@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   backfillDefaultWorkspaceMigration,
+  agentExecutionFabricMigration,
   defineMigration,
   MigrationError,
   ProductMigrationRunner,
@@ -12,6 +13,7 @@ import {
 class FakeCollection {
   constructor(documents = []) {
     this.documents = documents.map((document) => structuredClone(document));
+    this.indexes = [];
   }
 
   find(filter = {}) {
@@ -91,6 +93,11 @@ class FakeCollection {
     const index = this.documents.findIndex((document) => matches(document, filter));
     if (index >= 0) this.documents.splice(index, 1);
     return { deletedCount: index >= 0 ? 1 : 0 };
+  }
+
+  async createIndexes(indexes) {
+    this.indexes.push(...structuredClone(indexes));
+    return indexes.map((index) => index.name);
   }
 }
 
@@ -235,6 +242,28 @@ test("terminal transition migration plans, backfills one marker per terminal Run
     version: "002-runner-terminal-transitions",
     status: "already_applied",
   }]);
+});
+
+test("execution fabric migration creates all five durable collection indexes", async () => {
+  const db = new FakeDb();
+  const runner = new ProductMigrationRunner({
+    db,
+    migrations: [agentExecutionFabricMigration],
+    clock: () => new Date("2026-07-16T00:00:00.000Z"),
+  });
+  const planned = await runner.plan();
+  assert.deepEqual(planned.pending, ["003-agent-execution-fabric"]);
+  const result = await runner.run();
+  assert.equal(result.completed[0].result.createdIndexes, true);
+  for (const name of [
+    "execution_invocations",
+    "execution_attempts",
+    "execution_events",
+    "execution_checkpoints",
+    "capability_leases",
+  ]) {
+    assert.ok(db.collection(name).indexes.length >= 2, name);
+  }
 });
 
 test("migration runner refuses checksum drift and an active foreign lock", async () => {

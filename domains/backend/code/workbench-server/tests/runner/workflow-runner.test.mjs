@@ -549,6 +549,44 @@ test("WorkflowRunner reads server-owned text material without exposing object co
   assertProductSafe(completed);
 });
 
+test("WorkflowRunner delegates Skill nodes through the Product Execution Broker", async () => {
+  const requests = [];
+  const fixture = createFixture({
+    executionBroker: {
+      async execute(executionRequest, { signal }) {
+        assert.equal(signal.aborted, false);
+        requests.push(structuredClone(executionRequest));
+        return {
+          schemaVersion: "workbench-execution-fabric-v1",
+          invocationId: executionRequest.invocationId,
+          attemptId: executionRequest.attemptId,
+          status: "completed",
+          isolation: "process",
+          output: { brief: `Broker: ${executionRequest.input.topic}` },
+          summary: "completed",
+          evidence: [],
+          usage: { steps: 1, modelRequests: 0, inputBytes: 1, outputBytes: 1 },
+          startedAt: NOW,
+          finishedAt: NOW,
+        };
+      },
+    },
+  });
+  const run = await fixture.runner.startRun(startRequest("idem-broker"));
+  await waitFor(async () => (await fixture.runner.getRun(run.runId)).run.status === "waiting_review");
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].mode, "deterministic_skill");
+  assert.equal(requests[0].controller.kind, "workflow_run");
+  assert.equal(requests[0].controller.controllerId, run.runId);
+  assert.equal(requests[0].limits.maxModelRequests, 0);
+  assert.deepEqual(requests[0].metadata.executionRef, {
+    capabilityId: "workflow-conformance",
+    taskIntent: "echo",
+    adapterVersion: "1",
+    executionMode: "deterministic",
+  });
+});
+
 function startRequest(idempotencyKey) {
   return {
     workflowId: "workflow-runner",
@@ -575,6 +613,7 @@ function createFixture({
   leaseDurationMs,
   resolveResourceText,
   faultInjector,
+  executionBroker = null,
 } = {}) {
   let invocations = 0;
   const invocationInputs = [];
@@ -631,6 +670,7 @@ function createFixture({
     },
     resolveResourceText,
     agentRuntime,
+    executionBroker,
     scheduleOnStart,
     workerId,
     leaseDurationMs,

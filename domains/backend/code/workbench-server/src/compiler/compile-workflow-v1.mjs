@@ -1,7 +1,7 @@
 import {
   Check,
   Errors,
-  EXECUTION_PLAN_V1_SCHEMA_VERSION,
+  EXECUTION_PLAN_V2_SCHEMA_VERSION,
   SkillDefinitionSchema,
   UtcTimestampSchema,
   WORKBENCH_SCHEMA_VERSION,
@@ -37,6 +37,64 @@ const safeId = (value, fallback) =>
     : fallback;
 
 const clone = (value) => structuredClone(value);
+
+const skillKey = (reference) => `${reference.skillId}\u0000${reference.version}`;
+
+const nodeResultSchema = (node) => ({
+  type: "object",
+  properties: Object.fromEntries(
+    node.outputPorts.map((port) => [port.portId, clone(port.schema)]),
+  ),
+  required: node.outputPorts.filter((port) => port.required).map((port) => port.portId),
+  additionalProperties: false,
+});
+
+const executionModeFor = (node, resolvedSkill) => {
+  if (node.kind !== "Skill") return "deterministic_skill";
+  if (resolvedSkill?.definition?.executionRef?.executionMode === "orchestrator") {
+    return "agent_orchestrator";
+  }
+  if (resolvedSkill?.definition?.executionRef?.executionMode === "agent") {
+    return "bounded_agent";
+  }
+  return "deterministic_skill";
+};
+
+const executionPolicyFor = (node, resolvedSkill) => {
+  const executionMode = executionModeFor(node, resolvedSkill);
+  const agentic = executionMode !== "deterministic_skill";
+  const orchestrator = executionMode === "agent_orchestrator";
+  const dependencies = resolvedSkill?.definition?.dependencies ?? [];
+  return {
+    executionMode,
+    isolation: agentic ? "container" : "process",
+    limits: {
+      timeoutMs: node.timeoutSeconds * 1000,
+      maxSteps: agentic ? (orchestrator ? 128 : 32) : 1,
+      maxModelRequests: agentic ? (orchestrator ? 64 : 16) : 0,
+      maxChildren: orchestrator ? 16 : 0,
+      maxInputBytes: 1_000_000,
+      maxOutputBytes: 1_000_000,
+    },
+    capabilities: {
+      toolAllowlist: [],
+      connectionIds: dependencies
+        .filter((entry) => entry.kind === "connection" && entry.required)
+        .map((entry) => entry.id)
+        .sort(compareId),
+      network: false,
+      filesystem: "none",
+      externalActions: resolvedSkill?.definition?.risk?.externalAction === true,
+    },
+    resultSchema: nodeResultSchema(node),
+    evidenceRequirements: [{
+      requirementId: `output:${node.nodeId}`,
+      kind: "output",
+      required: true,
+      description: `Return a contract-valid result for ${node.title}.`,
+    }],
+  };
+};
 
 const duplicateValues = (values) => {
   const seen = new Set();
@@ -953,12 +1011,16 @@ export function compileWorkflowV1(revision, options) {
 
   const steps = orderedSteps.map((nodeId) => {
     const node = nodeById.get(nodeId);
+    const resolvedSkill = node.kind === "Skill"
+      ? resolvedSkills.find((entry) => skillKey(entry.definition) === skillKey(node.skillRef))
+      : null;
     return {
       nodeId,
       kind: node.kind,
       ...(node.kind === "Skill" ? { skillRef: clone(node.skillRef) } : {}),
       dependsOn: [...predecessors.get(nodeId)].sort(compareId),
       inputBindings: node.inputBindings.map(clone).sort(compareCanonical),
+      ...executionPolicyFor(node, resolvedSkill),
     };
   });
   const reviewGates = result.reviewGates.map((nodeId) => {
@@ -983,8 +1045,8 @@ export function compileWorkflowV1(revision, options) {
     }),
   );
   const executionPlan = deepFreeze({
-    schemaVersion: EXECUTION_PLAN_V1_SCHEMA_VERSION,
-    planVersion: "1",
+    schemaVersion: EXECUTION_PLAN_V2_SCHEMA_VERSION,
+    planVersion: "2",
     workflowId: revision.workflowId,
     workflowRevisionId: revision.revisionId,
     generatedAt: options.compiledAt,
