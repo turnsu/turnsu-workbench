@@ -163,6 +163,74 @@ test("cancel revokes the lease, cascades abort, and fences a late result", async
   assert.equal([...persistence.leases.values()][0].status, "revoked");
 });
 
+test("a pre-aborted request is cancelled before a backend can start", async () => {
+  const { value, persistence } = broker();
+  let backendCalls = 0;
+  value.registerBackend({
+    mode: "bounded_agent",
+    isolation: "process",
+    backend: { async execute() { backendCalls += 1; return { output: { echo: "wrong" } }; } },
+  });
+  const controller = new AbortController();
+  controller.abort(new Error("already cancelled"));
+  const input = request({
+    mode: "bounded_agent",
+    limits: { ...request().limits, maxSteps: 4, maxModelRequests: 2 },
+  });
+  const result = await value.execute(input, { signal: controller.signal });
+  assert.equal(result.status, "cancelled");
+  assert.equal(backendCalls, 0);
+  assert.equal((await persistence.getInvocation(input.invocationId)).status, "cancelled");
+  assert.equal((await persistence.getAttempt(input.attemptId)).status, "cancelled");
+});
+
+test("cancel racing terminal settlement leaves attempt and invocation on one authoritative outcome", async () => {
+  let enterSettlement;
+  let releaseSettlement;
+  const settlementEntered = new Promise((resolve) => { enterSettlement = resolve; });
+  const settlementGate = new Promise((resolve) => { releaseSettlement = resolve; });
+  class BarrierPersistence extends InMemoryExecutionPersistence {
+    async completeAttempt(...args) {
+      enterSettlement();
+      await settlementGate;
+      return super.completeAttempt(...args);
+    }
+  }
+  const persistence = new BarrierPersistence();
+  const { value } = broker(persistence);
+  value.registerBackend({
+    mode: "bounded_agent",
+    isolation: "process",
+    backend: {
+      async execute() {
+        return {
+          output: { echo: "late-success" },
+          usage: { steps: 1, modelRequests: 1, inputBytes: 1, outputBytes: 1 },
+        };
+      },
+    },
+  });
+  const input = request({
+    mode: "bounded_agent",
+    limits: { ...request().limits, maxSteps: 4, maxModelRequests: 2 },
+  });
+  const executing = value.execute(input);
+  await settlementEntered;
+  const cancelling = value.cancel(input.invocationId, { reason: "race" });
+  await new Promise((resolve) => setImmediate(resolve));
+  releaseSettlement();
+  const [executionResult, cancellationResult] = await Promise.all([executing, cancelling]);
+  const invocation = await persistence.getInvocation(input.invocationId);
+  const attempt = await persistence.getAttempt(input.attemptId);
+
+  assert.equal(executionResult.status, "cancelled");
+  assert.equal(cancellationResult.status, "cancelled");
+  assert.equal(invocation.status, "cancelled");
+  assert.equal(attempt.status, "cancelled");
+  assert.equal(invocation.result.status, attempt.result.status);
+  assert.equal(invocation.executionFence, attempt.fence);
+});
+
 test("unavailable isolation and invalid result states remain distinct", async () => {
   const missingContainer = broker().value;
   const sandbox = await missingContainer.execute(request({

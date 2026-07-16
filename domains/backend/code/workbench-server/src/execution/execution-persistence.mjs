@@ -47,6 +47,9 @@ export class InMemoryExecutionPersistence {
   async markRunning(invocationId, attemptId, startedAt) {
     const invocation = this.#invocation(invocationId);
     const attempt = this.#attempt(attemptId);
+    if (invocation.status !== "queued" || attempt.status !== "queued") {
+      throw new Error("execution_attempt_not_startable");
+    }
     invocation.status = "running";
     invocation.startedAt = startedAt;
     attempt.status = "running";
@@ -56,14 +59,17 @@ export class InMemoryExecutionPersistence {
   async completeAttempt(attemptId, fence, result) {
     const attempt = this.#attempt(attemptId);
     if (attempt.status !== "running" || attempt.fence !== fence) return false;
-    attempt.status = result.status;
-    attempt.result = clone(result);
-    attempt.finishedAt = result.finishedAt;
     const invocation = this.#invocation(attempt.invocationId);
-    if (invocation.executionFence !== fence || invocation.status === "cancellation_requested") return false;
+    if (invocation.executionFence !== fence || invocation.status !== "running") return false;
     invocation.status = result.status;
     invocation.result = clone(result);
     invocation.finishedAt = result.finishedAt;
+    invocation.updatedAt = result.finishedAt;
+    attempt.status = result.status;
+    attempt.result = clone(result);
+    attempt.finishedAt = result.finishedAt;
+    attempt.updatedAt = result.finishedAt;
+    await this.revokeLease(invocation.invocationId, result.finishedAt);
     return true;
   }
 
@@ -72,6 +78,8 @@ export class InMemoryExecutionPersistence {
     if (isTerminal(invocation.status)) return clone(invocation);
     invocation.status = "cancellation_requested";
     invocation.cancelRequestedAt = cancelledAt;
+    invocation.updatedAt = cancelledAt;
+    await this.revokeLease(invocationId, cancelledAt);
     return clone(invocation);
   }
 
@@ -91,11 +99,12 @@ export class InMemoryExecutionPersistence {
     invocation.result = clone(result);
     invocation.finishedAt = result.finishedAt;
     for (const attempt of this.attempts.values()) {
-      if (attempt.invocationId !== invocationId || attempt.status !== "running") continue;
+      if (attempt.invocationId !== invocationId || !["queued", "running"].includes(attempt.status)) continue;
       attempt.fence += 1;
       attempt.status = "cancelled";
       attempt.result = clone(result);
       attempt.finishedAt = result.finishedAt;
+      attempt.updatedAt = result.finishedAt;
     }
     return clone(result);
   }

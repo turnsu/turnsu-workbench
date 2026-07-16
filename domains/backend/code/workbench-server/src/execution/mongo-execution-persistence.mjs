@@ -64,42 +64,68 @@ export class MongoExecutionPersistence {
 
   async markRunning(invocationId, attemptId, startedAt, { session } = {}) {
     const repositories = await this.#repositories();
-    const attempt = await repositories.executionAttempts.collection.updateOne(
-      { attemptId, invocationId, status: "queued" },
-      { $set: { status: "running", startedAt, updatedAt: startedAt } },
-      options(session),
-    );
-    if (attempt.matchedCount !== 1) throw new Error("execution_attempt_not_startable");
-    await repositories.executionInvocations.collection.updateOne(
-      { invocationId, status: "queued" },
-      { $set: { status: "running", startedAt, updatedAt: startedAt } },
-      options(session),
-    );
+    return this.#transaction(session, async (transactionSession) => {
+      const invocation = await repositories.executionInvocations.collection.updateOne(
+        { invocationId, attemptId, status: "queued" },
+        { $set: { status: "running", startedAt, updatedAt: startedAt } },
+        options(transactionSession),
+      );
+      if (invocation.matchedCount !== 1) throw new Error("execution_attempt_not_startable");
+      const attempt = await repositories.executionAttempts.collection.updateOne(
+        { attemptId, invocationId, status: "queued" },
+        { $set: { status: "running", startedAt, updatedAt: startedAt } },
+        options(transactionSession),
+      );
+      if (attempt.matchedCount !== 1) throw new Error("execution_attempt_not_startable");
+      return true;
+    });
   }
 
   async completeAttempt(attemptId, fence, result, { session } = {}) {
     const repositories = await this.#repositories();
-    const attempt = document(await repositories.executionAttempts.collection.findOneAndUpdate(
-      { attemptId, fence, status: "running" },
-      { $set: { status: result.status, result: clone(result), finishedAt: result.finishedAt, updatedAt: result.finishedAt } },
-      after(session),
-    ));
-    if (!attempt) return false;
-    const invocation = await repositories.executionInvocations.collection.updateOne(
-      { invocationId: attempt.invocationId, executionFence: fence, status: "running" },
-      { $set: { status: result.status, result: clone(result), finishedAt: result.finishedAt, updatedAt: result.finishedAt } },
-      options(session),
-    );
-    return invocation.matchedCount === 1;
+    return this.#transaction(session, async (transactionSession) => {
+      const attempt = await repositories.executionAttempts.collection.findOne(
+        { attemptId, fence, status: "running" },
+        options(transactionSession),
+      );
+      if (!attempt) return false;
+      const invocation = await repositories.executionInvocations.collection.updateOne(
+        { invocationId: attempt.invocationId, attemptId, executionFence: fence, status: "running" },
+        { $set: { status: result.status, result: clone(result), finishedAt: result.finishedAt, updatedAt: result.finishedAt } },
+        options(transactionSession),
+      );
+      if (invocation.matchedCount !== 1) return false;
+      const attemptUpdate = await repositories.executionAttempts.collection.updateOne(
+        { attemptId, invocationId: attempt.invocationId, fence, status: "running" },
+        { $set: { status: result.status, result: clone(result), finishedAt: result.finishedAt, updatedAt: result.finishedAt } },
+        options(transactionSession),
+      );
+      if (attemptUpdate.matchedCount !== 1) throw new Error("execution_attempt_terminal_conflict");
+      await repositories.capabilityLeases.collection.updateMany(
+        { invocationId: attempt.invocationId, attemptId, fence, status: "active" },
+        { $set: { status: "revoked", revokedAt: result.finishedAt, updatedAt: result.finishedAt } },
+        options(transactionSession),
+      );
+      return true;
+    });
   }
 
   async requestCancel(invocationId, cancelledAt, { session } = {}) {
     const repositories = await this.#repositories();
-    return clone(document(await repositories.executionInvocations.collection.findOneAndUpdate(
-      { invocationId, status: { $in: ["queued", "running"] } },
-      { $set: { status: "cancellation_requested", cancelRequestedAt: cancelledAt, updatedAt: cancelledAt } },
-      after(session),
-    )));
+    return this.#transaction(session, async (transactionSession) => {
+      const invocation = document(await repositories.executionInvocations.collection.findOneAndUpdate(
+        { invocationId, status: { $in: ["queued", "running"] } },
+        { $set: { status: "cancellation_requested", cancelRequestedAt: cancelledAt, updatedAt: cancelledAt } },
+        after(transactionSession),
+      ));
+      if (!invocation) return null;
+      await repositories.capabilityLeases.collection.updateMany(
+        { invocationId, status: "active" },
+        { $set: { status: "revoked", revokedAt: cancelledAt, updatedAt: cancelledAt } },
+        options(transactionSession),
+      );
+      return clone(invocation);
+    });
   }
 
   async revokeLease(invocationId, revokedAt, { session } = {}) {
@@ -113,24 +139,36 @@ export class MongoExecutionPersistence {
 
   async cancelAttempt(invocationId, result, { session } = {}) {
     const repositories = await this.#repositories();
-    const invocation = document(await repositories.executionInvocations.collection.findOneAndUpdate(
-      { invocationId, status: { $in: ["queued", "running", "cancellation_requested"] } },
-      {
-        $inc: { executionFence: 1 },
-        $set: { status: "cancelled", result: clone(result), finishedAt: result.finishedAt, updatedAt: result.finishedAt },
-      },
-      after(session),
-    ));
-    if (!invocation) return (await this.getInvocation(invocationId))?.result ?? null;
-    await repositories.executionAttempts.collection.updateMany(
-      { invocationId, status: { $in: ["queued", "running"] } },
-      {
-        $inc: { fence: 1 },
-        $set: { status: "cancelled", result: clone(result), finishedAt: result.finishedAt, updatedAt: result.finishedAt },
-      },
-      options(session),
-    );
-    return clone(result);
+    return this.#transaction(session, async (transactionSession) => {
+      const invocation = document(await repositories.executionInvocations.collection.findOneAndUpdate(
+        { invocationId, status: { $in: ["queued", "running", "cancellation_requested"] } },
+        {
+          $inc: { executionFence: 1 },
+          $set: { status: "cancelled", result: clone(result), finishedAt: result.finishedAt, updatedAt: result.finishedAt },
+        },
+        after(transactionSession),
+      ));
+      if (!invocation) {
+        return clone((await repositories.executionInvocations.collection.findOne(
+          { invocationId }, options(transactionSession),
+        ))?.result ?? null);
+      }
+      const attempt = await repositories.executionAttempts.collection.updateMany(
+        { invocationId, status: { $in: ["queued", "running"] } },
+        {
+          $inc: { fence: 1 },
+          $set: { status: "cancelled", result: clone(result), finishedAt: result.finishedAt, updatedAt: result.finishedAt },
+        },
+        options(transactionSession),
+      );
+      if (attempt.matchedCount !== 1) throw new Error("execution_attempt_terminal_conflict");
+      await repositories.capabilityLeases.collection.updateMany(
+        { invocationId, status: "active" },
+        { $set: { status: "revoked", revokedAt: result.finishedAt, updatedAt: result.finishedAt } },
+        options(transactionSession),
+      );
+      return clone(result);
+    });
   }
 
   async getInvocation(invocationId, { session } = {}) {
@@ -167,5 +205,10 @@ export class MongoExecutionPersistence {
       invocationId: { $in: invocationIds },
       sequence: { $gt: afterSequence },
     }, options(session)).sort({ occurredAt: 1, invocationId: 1, sequence: 1 }).limit(Math.min(Math.max(limit, 1), 1000)).toArray();
+  }
+
+  async #transaction(session, callback) {
+    if (session) return callback(session);
+    return this.store.withTransaction(callback);
   }
 }

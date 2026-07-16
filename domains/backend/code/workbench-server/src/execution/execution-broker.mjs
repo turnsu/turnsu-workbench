@@ -101,13 +101,20 @@ export class ExecutionBroker {
 
     const backend = this.#backends.get(backendKey(request.mode, request.isolation));
     const controller = new AbortController();
-    const active = { controller, backend, request, fence, startedAt: createdAt };
+    const active = { controller, backend, request, fence, startedAt: createdAt, cancellationPromise: null };
     this.#active.set(request.invocationId, active);
     const abortFromCaller = () => {
-      void this.cancel(request.invocationId, { reason: signal?.reason });
+      active.cancellationPromise ??= this.cancel(request.invocationId, { reason: signal?.reason });
     };
-    if (signal?.aborted) abortFromCaller();
-    else signal?.addEventListener("abort", abortFromCaller, { once: true });
+    if (signal?.aborted) {
+      abortFromCaller();
+      try {
+        return await active.cancellationPromise;
+      } finally {
+        if (this.#active.get(request.invocationId) === active) this.#active.delete(request.invocationId);
+      }
+    }
+    signal?.addEventListener("abort", abortFromCaller, { once: true });
 
     let timeout;
     try {
@@ -139,7 +146,7 @@ export class ExecutionBroker {
       });
       validateResultAgainstRequest(request, result);
       const accepted = await this.#persistence.completeAttempt(request.attemptId, fence, result);
-      if (!accepted) return this.#lateResult(request.invocationId);
+      if (!accepted) return this.#lateResult(request.invocationId, active);
       await this.#persistence.revokeLease(request.invocationId, result.finishedAt);
       await this.#event(request, "execution.completed", result.status, { summary: result.summary });
       return result;
@@ -149,7 +156,7 @@ export class ExecutionBroker {
       const result = failureResult(request, active.startedAt, this.#clock(), error, controller.signal);
       const accepted = await this.#persistence.completeAttempt(request.attemptId, fence, result);
       await this.#persistence.revokeLease(request.invocationId, result.finishedAt);
-      if (!accepted) return this.#lateResult(request.invocationId);
+      if (!accepted) return this.#lateResult(request.invocationId, active);
       await this.#event(request, `execution.${result.status}`, result.status, { summary: result.summary });
       return result;
     } finally {
@@ -159,7 +166,15 @@ export class ExecutionBroker {
     }
   }
 
-  async cancel(invocationId, { reason } = {}) {
+  cancel(invocationId, { reason } = {}) {
+    const active = this.#active.get(invocationId);
+    if (active?.cancellationPromise) return active.cancellationPromise;
+    const operation = this.#cancel(invocationId, { reason });
+    if (active) active.cancellationPromise = operation;
+    return operation;
+  }
+
+  async #cancel(invocationId, { reason } = {}) {
     const now = this.#clock();
     const invocation = await this.#persistence.requestCancel(invocationId, now);
     if (!invocation) return (await this.#persistence.getInvocation(invocationId))?.result ?? null;
@@ -342,7 +357,8 @@ export class ExecutionBroker {
     return invocationIds;
   }
 
-  async #lateResult(invocationId) {
+  async #lateResult(invocationId, active = null) {
+    await active?.cancellationPromise;
     const invocation = await this.#persistence.getInvocation(invocationId);
     if (invocation?.result) return productResult(invocation.result);
     throw new ExecutionBrokerError("execution_result_rejected_by_fence", "A late execution result was rejected.");
