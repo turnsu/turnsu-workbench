@@ -707,6 +707,7 @@ function projectInternalError(error, requestId) {
   return {
     requestId,
     name: safeToken(error?.name, "Error"),
+    ...(typeof error?.code === "string" && safeToken(error.code) ? { code: safeToken(error.code) } : {}),
     ...(Number.isInteger(error?.code) ? { numericCode: error.code } : {}),
     ...(safeToken(error?.codeName) ? { codeName: safeToken(error.codeName) } : {}),
     labels,

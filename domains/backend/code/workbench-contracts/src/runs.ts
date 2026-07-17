@@ -2,6 +2,7 @@ import { Type, type Static } from "typebox";
 
 import {
   EXECUTION_PLAN_V1_SCHEMA_VERSION,
+  EXECUTION_PLAN_V2_SCHEMA_VERSION,
   ContentHashSchema,
   EventIdSchema,
   EvidenceIdSchema,
@@ -108,7 +109,10 @@ export const WorkflowRunSchema = strictObject(
     retryOf: Type.Optional(RunIdSchema),
     inputs: JsonObjectSchema,
     resourceRefs: Type.Array(ResourceRefSchema),
-    executionPlanVersion: Type.Literal(EXECUTION_PLAN_V1_SCHEMA_VERSION),
+    executionPlanVersion: Type.Union([
+      Type.Literal(EXECUTION_PLAN_V1_SCHEMA_VERSION),
+      Type.Literal(EXECUTION_PLAN_V2_SCHEMA_VERSION),
+    ]),
     executionPlanContentHash: ContentHashSchema,
     status: WorkflowRunStatusSchema,
     currentNodeId: Type.Union([NodeIdSchema, Type.Null()]),

@@ -335,6 +335,14 @@ test("workflow runs are pinned to an immutable execution plan hash", () => {
   queuedWithoutFinal.authoritativeReadModel = { available: false, version: 0 };
   assert.equal(contracts.Check(contracts.WorkflowRunSchema, queuedWithoutFinal), true);
 
+  const executionPlanV2Run = structuredClone(queuedWithoutFinal);
+  executionPlanV2Run.executionPlanVersion = contracts.EXECUTION_PLAN_V2_SCHEMA_VERSION;
+  assert.equal(contracts.Check(contracts.WorkflowRunSchema, executionPlanV2Run), true);
+
+  const unknownExecutionPlanRun = structuredClone(queuedWithoutFinal);
+  unknownExecutionPlanRun.executionPlanVersion = "workbench-execution-plan-v3";
+  assert.equal(contracts.Check(contracts.WorkflowRunSchema, unknownExecutionPlanRun), false);
+
   const unpinnedRun = structuredClone(runExample);
   delete unpinnedRun.executionPlanContentHash;
   assert.equal(contracts.Check(contracts.WorkflowRunSchema, unpinnedRun), false);

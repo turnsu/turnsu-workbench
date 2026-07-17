@@ -355,3 +355,34 @@ test("unknown Builder failures emit only a safe internal diagnostic", async () =
   }]);
   assert.equal(JSON.stringify(diagnostics).includes("private-provider-token"), false);
 });
+
+test("product-coded internal failures preserve only the safe code in diagnostics", async () => {
+  const diagnostics = [];
+  const failure = new Error("private database detail");
+  failure.name = "ProductStoreError";
+  failure.code = "run_snapshot_persistence_unavailable";
+  const application = {
+    async generateLoopProposal() { throw failure; },
+  };
+  const { handler, session } = setup(application, {
+    internalErrorReporter: (diagnostic) => diagnostics.push(diagnostic),
+  });
+  const response = await invoke(handler, {
+    method: "POST",
+    url: `/api/workbench/v1/loops/${WORKFLOW_ID}/proposals`,
+    headers: mutationHeaders(session),
+    body: generateRequest(),
+  });
+
+  assert.equal(response.status, 500);
+  assert.equal(response.body.includes("private database detail"), false);
+  assert.equal(diagnostics.length, 1);
+  assert.deepEqual({ ...diagnostics[0], stackFrames: undefined }, {
+    requestId: "request-builder-http-1",
+    name: "ProductStoreError",
+    code: "run_snapshot_persistence_unavailable",
+    labels: [],
+    stackFrames: undefined,
+  });
+  assert.ok(diagnostics[0].stackFrames.every((frame) => frame.startsWith("at ")));
+});

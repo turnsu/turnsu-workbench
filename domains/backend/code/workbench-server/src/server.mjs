@@ -583,7 +583,7 @@ function createInternalErrorReporter({ env, logger, metrics }) {
     metrics.increment("workbench_internal_errors_total", { component: "http" });
     logger.error("http.request.internal_error", {
       requestId: diagnostic.requestId,
-      code: diagnostic.codeName ?? diagnostic.name,
+      code: diagnostic.code ?? diagnostic.codeName ?? diagnostic.name,
       component: "http",
     });
     if (proofDiagnostics) process.stderr.write(`workbench_internal_error=${JSON.stringify(diagnostic)}\n`);

@@ -33,20 +33,23 @@ test("portable Loop upload, import commit, export, cache validation, isolation, 
   const store = new ProductMongoStore({ uri: MONGODB_URI, dbName: DATABASE_NAME });
   const db = await store.connect();
   await store.dropTestDatabase();
-  const composed = createWorkbenchServer({
+  let composed = null;
+  context.after(async () => {
+    await composed?.close();
+    await store.dropTestDatabase();
+    await store.close();
+    await rm(objectStoreRoot, { recursive: true, force: true });
+  });
+  composed = createWorkbenchServer({
     store,
-    agentRuntime: {},
+    agentRuntime: {
+      async invokeSkillNode() { throw new Error("unexpected_skill_execution"); },
+    },
     runner: {},
     objectStoreRoot,
     bootstrapCatalog: false,
     distDirectory: null,
     env: { ...process.env, WORKBENCH_TEST_MODE: "1", WECHAT_AGENT_TEST_MODE: "1" },
-  });
-  context.after(async () => {
-    await composed.close();
-    await store.dropTestDatabase();
-    await store.close();
-    await rm(objectStoreRoot, { recursive: true, force: true });
   });
   await composed.ready;
   const port = await listen(composed.server);
