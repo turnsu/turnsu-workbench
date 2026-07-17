@@ -39,7 +39,7 @@ export async function verifyReleaseEvidence({ root, sourceCommit, agentImage, sk
     verifyImageScan(join(evidenceRoot, "agent-image-scan.json"), agentImage),
     verifyImageScan(join(evidenceRoot, "skill-image-scan.json"), skillImage),
     verifyImageScan(join(evidenceRoot, "mongo-image-scan.json"), mongoImage),
-    verifySecretScan(join(evidenceRoot, "secret-scan.json")),
+    verifySecretScan(join(evidenceRoot, "secret-scan.json"), sourceCommit),
   ]);
   return Object.freeze({ ok: true, sourceCommit, gates: REQUIRED_GATES.length });
 }
@@ -72,10 +72,12 @@ async function verifyImageScan(path, expectedImage) {
   }
 }
 
-async function verifySecretScan(path) {
+async function verifySecretScan(path, sourceCommit) {
   const value = await readJson(path);
   if (value?.schemaVersion !== "looloomi-secret-scan-v1"
+    || value.scanner !== "looloomi-local-secret-scan-v1" || value.sourceCommit !== sourceCommit
     || !Number.isSafeInteger(value.filesScanned) || value.filesScanned < 1
+    || !Number.isSafeInteger(value.oversizedFilesSkipped) || value.oversizedFilesSkipped !== 0
     || !Number.isSafeInteger(value.findings) || value.findings !== 0) {
     throw evidenceError("release_secret_scan_failed");
   }

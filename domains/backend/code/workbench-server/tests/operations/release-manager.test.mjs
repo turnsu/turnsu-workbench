@@ -46,7 +46,13 @@ async function writeReleaseEvidence(path, { dependencyVulnerabilities = 0 } = {}
     })}\n`);
   }
   await writeFile(`${evidence}/secret-scan.json`, `${JSON.stringify({
-    schemaVersion: "looloomi-secret-scan-v1", filesScanned: 1, findings: 0,
+    schemaVersion: "looloomi-secret-scan-v1",
+    scanner: "looloomi-local-secret-scan-v1",
+    sourceCommit: SOURCE_COMMIT,
+    filesScanned: 1,
+    binaryFilesSkipped: 0,
+    oversizedFilesSkipped: 0,
+    findings: 0,
   })}\n`);
 }
 

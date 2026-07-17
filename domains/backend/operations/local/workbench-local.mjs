@@ -23,6 +23,7 @@ import {
   rollbackRelease,
 } from "./release-manager.mjs";
 import { stageLocalRelease } from "./release-bundle.mjs";
+import { scanReleaseSecrets } from "./release-secret-scan.mjs";
 import {
   authenticatedMongoUri,
   buildDaemonEnvironment,
@@ -58,6 +59,8 @@ const command = args.shift();
 try {
   const result = await dispatch(command, args);
   if (result !== undefined) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  if (result?.schemaVersion === "looloomi-secret-scan-v1"
+    && (result.findings !== 0 || result.oversizedFilesSkipped !== 0)) process.exitCode = 1;
 } catch (error) {
   process.stderr.write(`${JSON.stringify({ code: safeCode(error?.code) })}\n`);
   process.exitCode = 1;
@@ -150,6 +153,13 @@ async function dispatch(name, argv) {
         sourceRoot: repositoryRoot,
         destination: requiredAfter(argv, "--destination"),
       });
+    case "scan-release-secrets": {
+      const sourceCommit = await runChecked("git", ["rev-parse", "HEAD"]);
+      return scanReleaseSecrets({
+        root: requiredAfter(argv, "--bundle"),
+        sourceCommit: sourceCommit.stdout.trim(),
+      });
+    }
     case "activate":
     case "upgrade": {
       const config = await readLocalConfig(paths);
@@ -178,7 +188,7 @@ async function dispatch(name, argv) {
         "init-secrets", "set-model-key", "configure", "install", "preflight", "start", "stop",
         "restart", "status", "backup", "restore-drill", "upgrade", "rollback", "diagnostics",
         "doctor", "watchdog", "mongo-up", "mongo-down", "migrate", "serve", "stage-release", "manifest",
-        "activate", "install-launchagents",
+        "activate", "install-launchagents", "scan-release-secrets",
       ] };
     default:
       throw coded("local_command_unknown");
