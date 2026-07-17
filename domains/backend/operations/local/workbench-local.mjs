@@ -21,6 +21,7 @@ import {
   activateRelease,
   buildReleaseManifest,
   rollbackRelease,
+  verifyReleaseManifest,
 } from "./release-manager.mjs";
 import { stageLocalRelease } from "./release-bundle.mjs";
 import { scanReleaseSecrets } from "./release-secret-scan.mjs";
@@ -163,9 +164,11 @@ async function dispatch(name, argv) {
     case "activate":
     case "upgrade": {
       const config = await readLocalConfig(paths);
+      const bundleRoot = requiredAfter(argv, "--bundle");
+      await verifyCandidateBundle(bundleRoot);
       const backup = await createBackup(paths);
       const activated = await activateRelease({
-        bundleRoot: requiredAfter(argv, "--bundle"),
+        bundleRoot,
         installRoot: paths.root,
         healthCheck: (candidate, manifest) => candidateHealthCheck(candidate, manifest, { paths, config }),
       });
@@ -193,6 +196,13 @@ async function dispatch(name, argv) {
     default:
       throw coded("local_command_unknown");
   }
+}
+
+async function verifyCandidateBundle(bundleRoot) {
+  let manifest;
+  try { manifest = JSON.parse(await readFile(join(bundleRoot, "release-manifest.json"), "utf8")); }
+  catch { throw coded("release_manifest_invalid"); }
+  return verifyReleaseManifest({ root: bundleRoot, manifest });
 }
 
 async function doctor({ paths, requireRunning }) {

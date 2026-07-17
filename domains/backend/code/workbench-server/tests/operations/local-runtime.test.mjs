@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -13,6 +13,7 @@ import {
   writeLocalConfig,
 } from "../../../../operations/local/local-runtime.mjs";
 import { LOCAL_SECRET_ACCOUNTS } from "../../../../operations/local/keychain.mjs";
+import { buildReleaseManifest } from "../../../../operations/local/release-manager.mjs";
 
 const DIGEST = `sha256:${"a".repeat(64)}`;
 
@@ -85,4 +86,51 @@ test("local operations CLI exposes the production lifecycle without external sid
     "install", "preflight", "start", "stop", "restart", "status", "backup",
     "restore-drill", "upgrade", "rollback", "diagnostics",
   ]) assert.ok(commands.includes(command), command);
+});
+
+test("local upgrade verifies release gates before creating a backup or reading runtime secrets", async (t) => {
+  const root = await mkdtemp("/private/tmp/looloomi-local-upgrade-gate-");
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const paths = localPaths(`${root}/install`);
+  await writeLocalConfig({
+    modelBaseUrl: "https://provider.example/v1",
+    model: "provider/model-a",
+    agentImage: DIGEST,
+    skillImage: `repository/skill@${DIGEST}`,
+    port: 8798,
+    database: "looloomi_upgrade_test",
+    logLevel: "info",
+  }, paths);
+  const bundle = `${root}/bundle`;
+  await mkdir(`${bundle}/app`, { recursive: true });
+  await mkdir(`${bundle}/release-evidence`, { recursive: true });
+  await writeFile(`${bundle}/app/server.mjs`, "export const ready = true;\n");
+  await writeFile(`${bundle}/release-evidence/release-gates.json`, `${JSON.stringify({
+    schemaVersion: "looloomi-release-gates-v1",
+    sourceCommit: "c".repeat(40),
+    generatedAt: "2026-07-17T00:00:00.000Z",
+    gates: {},
+  })}\n`);
+  const manifest = await buildReleaseManifest({
+    root: bundle,
+    version: "blocked-candidate",
+    files: ["app/server.mjs", "release-evidence/release-gates.json"],
+    sourceCommit: "c".repeat(40),
+    agentImage: DIGEST,
+    skillImage: `repository/skill@${DIGEST}`,
+    mongoImage: `mongo@${DIGEST}`,
+    frontendTreeHash: "d".repeat(40),
+  });
+  await writeFile(`${bundle}/release-manifest.json`, `${JSON.stringify(manifest)}\n`);
+
+  const cli = new URL("../../../../operations/local/workbench-local.mjs", import.meta.url);
+  const failure = await new Promise((resolve) => {
+    execFile(process.execPath, [cli.pathname, "upgrade", "--root", paths.root, "--bundle", bundle],
+      { maxBuffer: 128 * 1024 }, (error, stdout, stderr) => resolve({ error, stdout, stderr }));
+  });
+  assert.notEqual(failure.error, null);
+  const productError = failure.stderr.trim().split("\n").find((line) => line.startsWith("{"));
+  assert.deepEqual(JSON.parse(productError), { code: "release_gates_not_passed" });
+  assert.equal(failure.stdout, "");
+  assert.deepEqual(await readdir(paths.backups), []);
 });
