@@ -400,6 +400,7 @@ async function createManifest({ bundleRoot, version, paths }) {
     mongoImage: MONGO_IMAGE,
     frontendTreeHash: FROZEN_FRONTEND_TREE,
   });
+  await verifyReleaseManifest({ root: bundleRoot, manifest });
   await writeFile(join(bundleRoot, "release-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
   return { version, files: manifest.files.length };
 }

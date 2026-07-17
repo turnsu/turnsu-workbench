@@ -111,6 +111,18 @@ test("local upgrade verifies release gates before creating a backup or reading r
     generatedAt: "2026-07-17T00:00:00.000Z",
     gates: {},
   })}\n`);
+  const cli = new URL("../../../../operations/local/workbench-local.mjs", import.meta.url);
+  const manifestFailure = await new Promise((resolve) => {
+    execFile(process.execPath, [cli.pathname, "manifest", "--root", paths.root, "--bundle", bundle,
+      "--version", "blocked-candidate"], { maxBuffer: 128 * 1024 },
+    (error, stdout, stderr) => resolve({ error, stdout, stderr }));
+  });
+  assert.notEqual(manifestFailure.error, null);
+  assert.equal(manifestFailure.stdout, "");
+  const manifestProductError = manifestFailure.stderr.trim().split("\n").find((line) => line.startsWith("{"));
+  assert.deepEqual(JSON.parse(manifestProductError), { code: "release_gates_not_passed" });
+  await assert.rejects(readFile(`${bundle}/release-manifest.json`, "utf8"), { code: "ENOENT" });
+
   const manifest = await buildReleaseManifest({
     root: bundle,
     version: "blocked-candidate",
@@ -123,7 +135,6 @@ test("local upgrade verifies release gates before creating a backup or reading r
   });
   await writeFile(`${bundle}/release-manifest.json`, `${JSON.stringify(manifest)}\n`);
 
-  const cli = new URL("../../../../operations/local/workbench-local.mjs", import.meta.url);
   const failure = await new Promise((resolve) => {
     execFile(process.execPath, [cli.pathname, "upgrade", "--root", paths.root, "--bundle", bundle],
       { maxBuffer: 128 * 1024 }, (error, stdout, stderr) => resolve({ error, stdout, stderr }));
