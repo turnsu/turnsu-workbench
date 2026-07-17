@@ -3,13 +3,19 @@ import { createReadStream } from "node:fs";
 import { cp, lstat, mkdir, readFile, readlink, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 
+import { verifyReleaseEvidence } from "./release-evidence.mjs";
+
 const VERSION = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const DIGEST_IMAGE = /^(?:[A-Za-z0-9][A-Za-z0-9._/+:~-]*@)?sha256:[a-f0-9]{64}$/;
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
 const GIT_TREE = /^[a-f0-9]{40}$/;
+const GIT_COMMIT = /^[a-f0-9]{40}$/;
 
-export async function buildReleaseManifest({ root, version, files, agentImage, skillImage, mongoImage, frontendTreeHash } = {}) {
+export async function buildReleaseManifest({
+  root, version, files, sourceCommit, agentImage, skillImage, mongoImage, frontendTreeHash,
+} = {}) {
   if (!VERSION.test(version || "") || !Array.isArray(files) || files.length === 0
+    || !GIT_COMMIT.test(sourceCommit || "")
     || !DIGEST_IMAGE.test(agentImage || "") || !DIGEST_IMAGE.test(skillImage || "")
     || !DIGEST_IMAGE.test(mongoImage || "") || !GIT_TREE.test(frontendTreeHash || "")) {
     throw new TypeError("release_manifest_input_invalid");
@@ -23,8 +29,9 @@ export async function buildReleaseManifest({ root, version, files, agentImage, s
     entries.push({ path, bytes: info.size, digest: await fileDigest(absolute) });
   }
   return Object.freeze({
-    schemaVersion: "looloomi-local-release-v1",
+    schemaVersion: "looloomi-local-release-v2",
     version,
+    sourceCommit,
     agentImage,
     skillImage,
     mongoImage,
@@ -44,6 +51,13 @@ export async function verifyReleaseManifest({ root, manifest } = {}) {
       throw releaseError("release_integrity_failed");
     }
   }
+  await verifyReleaseEvidence({
+    root,
+    sourceCommit: manifest.sourceCommit,
+    agentImage: manifest.agentImage,
+    skillImage: manifest.skillImage,
+    mongoImage: manifest.mongoImage,
+  });
   return { ok: true, version: manifest.version, files: manifest.files.length };
 }
 
@@ -120,7 +134,8 @@ async function existingLink(path) {
 }
 
 function validateManifest(manifest) {
-  if (manifest?.schemaVersion !== "looloomi-local-release-v1" || !VERSION.test(manifest.version || "")
+  if (manifest?.schemaVersion !== "looloomi-local-release-v2" || !VERSION.test(manifest.version || "")
+    || !GIT_COMMIT.test(manifest.sourceCommit || "")
     || !DIGEST_IMAGE.test(manifest.agentImage || "") || !DIGEST_IMAGE.test(manifest.skillImage || "")
     || !DIGEST_IMAGE.test(manifest.mongoImage || "")
     || !GIT_TREE.test(manifest.frontendTreeHash || "")

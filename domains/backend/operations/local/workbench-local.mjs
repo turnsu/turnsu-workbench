@@ -365,6 +365,7 @@ async function createManifest({ bundleRoot, version, paths }) {
   const config = await readLocalConfig(paths);
   const frontendStatus = await runChecked("git", ["status", "--porcelain", "--", "domains/frontend"]);
   const frontendTree = await runChecked("git", ["rev-parse", "HEAD:domains/frontend"]);
+  const sourceCommit = await runChecked("git", ["rev-parse", "HEAD"]);
   if (frontendStatus.stdout.trim() || frontendTree.stdout.trim() !== FROZEN_FRONTEND_TREE) {
     throw coded("frozen_frontend_integrity_failed");
   }
@@ -372,6 +373,7 @@ async function createManifest({ bundleRoot, version, paths }) {
   const manifest = await buildReleaseManifest({
     root: bundleRoot,
     version,
+    sourceCommit: sourceCommit.stdout.trim(),
     files: files.filter((path) => path !== "release-manifest.json"),
     agentImage: config.agentImage,
     skillImage: config.skillImage,
