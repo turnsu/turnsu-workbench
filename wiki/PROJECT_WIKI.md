@@ -1,6 +1,6 @@
 # Project Wiki
 
-Updated: 2026-07-16
+Updated: 2026-07-17
 
 ## Product Direction
 
@@ -69,6 +69,7 @@ Loop creation and Team library discovery.
 - Agent Runtime: [../domains/agent/code/agent-runtime/](../domains/agent/code/agent-runtime/)
 - P0 acceptance: [qa/2026-07-10-skill-workflow-loop-first-slice-acceptance.md](qa/2026-07-10-skill-workflow-loop-first-slice-acceptance.md)
 - Backend/Agent Slice 0–4 acceptance: [qa/2026-07-16-backend-agent-slices-0-4-acceptance.md](qa/2026-07-16-backend-agent-slices-0-4-acceptance.md)
+- Backend/Agent single-machine production readiness: [qa/2026-07-17-backend-agent-slices-0-4-single-machine-production-readiness.md](qa/2026-07-17-backend-agent-slices-0-4-single-machine-production-readiness.md) — code-complete, release `NO-GO`
 
 ## Historical Boundary
 

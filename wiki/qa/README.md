@@ -8,6 +8,8 @@ Current web QA lives with the web prototype:
 - [2026-07-16-backend-agent-slices-0-4-acceptance.md](2026-07-16-backend-agent-slices-0-4-acceptance.md)
 - [2026-07-16-backend-agent-slices-0-4-independent-code-review.md](2026-07-16-backend-agent-slices-0-4-independent-code-review.md)
 - [2026-07-16-backend-agent-slices-0-4-production-readiness-review.md](2026-07-16-backend-agent-slices-0-4-production-readiness-review.md)
+- [2026-07-17-backend-agent-slices-0-4-single-machine-production-readiness.md](2026-07-17-backend-agent-slices-0-4-single-machine-production-readiness.md)
+  — current Backend/Agent code-closure and single-machine release decision (`NO-GO`)
 
 The rejected 2026-07-14 visual closure and final-audit records were removed. They incorrectly
 treated functional screenshot coverage as completed visual implementation. New visual acceptance

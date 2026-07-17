@@ -1,11 +1,28 @@
 # Backend / Agent Slice 0–4 单机生产加固实施计划
 
 - 日期：2026-07-17
-- 状态：执行中
+- 状态：实现完成；生产发布验收 NO-GO
 - 设计依据：[单机生产加固设计](../architecture/2026-07-16-backend-agent-local-production-hardening-design.md)
 - 审查输入：[独立代码审查](../qa/2026-07-16-backend-agent-slices-0-4-independent-code-review.md)、[生产就绪审查](../qa/2026-07-16-backend-agent-slices-0-4-production-readiness-review.md)
 - 分支：`codex/backend-agent-slices-0-4`
 - 前端基线：`1ba9916:domains/frontend`，tree `d6aa607bab850e6f30a2c92c4823896806871937`
+
+## 0. 执行结果
+
+| 工作包 | 结果 |
+|---|---|
+| WP1 Product Agent + Proposal V2 | 完成 |
+| WP2 Atomic Execution State | 完成 |
+| WP3 Canonical Memory | 完成 |
+| WP4 Agent Image + Stdio Gateway | 完成并通过真实 Docker |
+| WP5 AgwaB Live Children | 完成 |
+| WP6 Remote Allowlist | 完成到 loopback/fake 边界 |
+| WP7 Local Production Operations | 完成并通过认证 Mongo/backup/restore |
+| WP8 Release Rehearsal | 已执行；fail-closed NO-GO |
+
+WP8 没有被“完成实现”自动改写为 GO。真实 Provider、authoritative dependency audit、
+image CVE scan、可重复 cold capacity 和完整 upgrade/rollback 仍未通过。当前证据见
+[单机生产就绪复审](../qa/2026-07-17-backend-agent-slices-0-4-single-machine-production-readiness.md)。
 
 ## 1. 执行原则
 

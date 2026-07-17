@@ -1,5 +1,11 @@
 # Backend and Agent Slices 0–4 Acceptance
 
+> **Current status (2026-07-17):** this record is development evidence, not the production
+> release decision. The independent review findings were subsequently implemented; current
+> code closure, real Docker/Mongo evidence, residual risks and the fail-closed `NO-GO` decision
+> are recorded in
+> [the single-machine production readiness report](2026-07-17-backend-agent-slices-0-4-single-machine-production-readiness.md).
+
 - Date: 2026-07-16
 - Scope: worktree normalization plus backend/Agent Slice 0–4
 - Result: code-level acceptance passed; environment-gated live services are not represented as passed

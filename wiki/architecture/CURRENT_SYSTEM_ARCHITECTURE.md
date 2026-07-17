@@ -1,17 +1,17 @@
 # Skill / Workflow / Loop Workbench Current System Architecture
 
-- Date: 2026-07-16
+- Date: 2026-07-17
 - Status: current cross-domain architecture
 - Current deployment scope: local-first, workspace-scoped Skill / Workflow / Loop Web workbench
 - Target product scope: Skill & Loop cloud workbench with workspace-scoped team sharing; see the target PRDs
-- Implementation status: Backend and Agent Slice 0–4 development baseline exists; production hardening is in progress and the current release decision is NO-GO. The functional Web remains frozen at the normalization baseline and is outside this backend change.
+- Implementation status: Backend and Agent Slice 0–4 and the single-machine operating unit are implemented. The original R0 code blockers are closed, but the current release decision remains NO-GO because external supply-chain, real Provider, repeatable cold-capacity, and full upgrade/rollback gates are not complete. The functional Web remains frozen at the normalization baseline and is outside this backend change.
 
-> **Production status override (2026-07-16):** the independent code review and production
-> readiness review found open execution, Memory, sandbox, concurrency, Remote-safety and
-> operations blockers. Statements below that describe Slice 0–4 components as implemented refer
-> to the development baseline, not to production acceptance. The approved target and release gates
-> are defined in [Backend / Agent Slice 0–4 Local Production Hardening Design](2026-07-16-backend-agent-local-production-hardening-design.md).
-> Until those gates pass, the authoritative release status is `NO-GO`.
+> **Production status override (2026-07-17):** the blockers found by the independent code review
+> have been implemented and exercised through Product, Mongo and Docker paths. This closes the
+> Slice 0–4 code-completeness finding; it does not authorize a production release. The current
+> gate-by-gate evidence and remaining blockers are recorded in
+> [the single-machine production readiness report](../qa/2026-07-17-backend-agent-slices-0-4-single-machine-production-readiness.md).
+> Until every fail-closed release gate passes, the authoritative release status is `NO-GO`.
 
 ## 1. Document Authority
 
@@ -184,9 +184,9 @@ Current limitations:
   external-action Skills. Text/Markdown/JSON Resources are server-owned and executable through
   Material nodes; PDF/OCR extraction and provider credential onboarding are outside this V1.
 
-### 3.5 Agent Execution Platform, Memory, and Isolation Development Baseline
+### 3.5 Agent Execution Platform, Memory, and Isolation
 
-The intended control chain, partially represented by the current development baseline, is:
+The implemented control chain is:
 
 ```text
 Product API / AgentTurnRunner / WorkflowRunner
@@ -208,13 +208,13 @@ Ownership is deliberately split:
 
 `deterministic_skill` calls a fixed Skill/script without creating a PI Session.
 `bounded_agent` creates one budgeted Worker. `agent_orchestrator` may create a dynamic child
-graph only inside the current immutable outer node. The present AgwaB adapters are not registered
-in the default Product composition, and child work is only projected after the parent returns.
-Production hardening must stream those children into product invocation/event records without
-allowing AgwaB to become another Run authority.
+graph only inside the current immutable outer node. Default Product composition supplies a
+`ProductAgentExecutor` and registers the bounded container and AgwaB orchestrator paths through
+the Product-owned Broker. AgwaB children are opened while the parent is running, receive separate
+product invocation/attempt/event/checkpoint records, inherit only a permission subset, and are
+cancelled and fenced with the parent. The outer pinned Loop graph remains unchanged.
 
-The built-in Agent definitions are `main`, `skill_creator`, and `loop_creator`, but the current
-default composition supplies no Agent executor, so default Turns become blocked. Main Sessions
+The built-in Agent definitions are `main`, `skill_creator`, and `loop_creator`. Main Sessions
 are scoped by `user × workspace`; Module Sessions are scoped by
 `user × workspace × object × branch`. Collaborators therefore never share transcript, PI
 Session, permission lease, or temporary branch. Module Agents produce structured proposals.
@@ -225,41 +225,52 @@ PI compatibility is pinned to Node `22.22.3`, Pi `0.80.7`, `pi-subagent` `0.4.8`
 `pi-workflow` `0.8.1`. The backend uses its own YAML dependency and the Agent domain's public
 Skill loader adapter rather than PI internal files or transitive dependencies.
 
-Mongo is the intended sole durable Memory truth. Agents and Workers submit a `MemoryCandidate`,
-but the current automatic-promotion path incorrectly trusts caller-supplied canonical/verified
-fields and can therefore create `DurableMemory` without server-side canonical verification.
-Production hardening must close that path. Retrieval first applies workspace, subject, scope, and permission
-filters, then text/tag/confidence/recency ranking; Context Capsules contain only bounded summaries
-and evidence references. Embedding is an uncalled adapter boundary in this version. Physical
-deletion removes content and retains only a content-free hash tombstone.
+Mongo is the sole durable Memory truth. Agent, Worker and public submissions always create a
+`MemoryCandidate`; automatic promotion is available only to the internal canonical ingestion path,
+which rereads the Product object, revision, validation and evidence hash before applying policy.
+Retrieval first applies workspace, subject, scope, and permission filters, then
+text/tag/confidence/recency ranking; Context Capsules contain only bounded summaries and evidence
+references. Embedding is an uncalled adapter boundary in this version. Physical deletion removes
+content and retains only a content-free hash tombstone.
 
-The current shared Container Sandbox host adapter preserves the existing uploaded-script contract and is intended to apply
+The shared Container Sandbox preserves the existing uploaded-script contract and applies
 digest-pinned images, no network, read-only roots, non-root UID, dropped capabilities,
-`no-new-privileges`, and CPU/memory/PID/file/output bounds. Agent containers have a separate
-version-pinned image, no source-tree mount and no Provider, Mongo, Connection, or user secrets.
-The current host adapter expects an externally supplied Agent image and a Unix-socket Gateway, but
-the repository does not yet contain the required Agent worker image. The approved macOS production
-target replaces the host-mounted socket assumption with framed stdio RPC to a container supervisor,
-while keeping a container-internal Unix socket for Pi/AgwaB children. Model and tool access must
-revalidate invocation, attempt, fence, lease, allowlist, permissions and budget for every request.
-Docker unavailability must produce `sandbox_unavailable`; there is no host-process success fallback.
+`no-new-privileges`, and CPU/memory/PID/file/output bounds. The repository contains a buildable
+Agent image and Worker/Supervisor protocol pinned to Node 22.22.3, Pi 0.80.7, pi-subagent 0.4.8 and
+pi-workflow 0.8.1. Host-to-container communication uses framed stdio RPC; Provider, Mongo,
+Connection and user secrets never enter the container. The Gateway revalidates invocation,
+attempt, fence, lease, allowlist, permissions and budget for every request. Docker unavailability
+produces `sandbox_unavailable`; there is no host-process success fallback.
 
 `RemoteWorkerTransport` defines `probe`, `dispatch`, `streamEvents`, `checkpoint`, `cancel`,
 `resume`, and `dispose`. The adapter reorders and deduplicates bounded product events, resumes
-after disconnect from the last committed sequence, and cascades cancellation. Its current
-payload redaction is blacklist-based and is not a production-safe contract; the approved target
-uses per-event allowlists. Only a loopback/fake transport exists. There is no real device registration, mTLS,
-relay, NAT traversal, fleet scheduler, or public user-selectable Remote backend.
+after disconnect from the last committed sequence, cascades cancellation, and constructs event,
+artifact, evidence and result payloads from explicit product allowlists. Unknown transport,
+Provider, tool, host-path, image, socket and credential fields are dropped. Only a loopback/fake
+transport exists. There is no real device registration, mTLS, relay, NAT traversal, fleet
+scheduler, or public user-selectable Remote backend.
 
 ### 3.6 Current Acceptance Boundary And Post-V1 Limits
 
-The V1 Backend and Agent development baseline has open production blockers documented in the
+The R0 implementation findings in the
 [independent code review](../qa/2026-07-16-backend-agent-slices-0-4-independent-code-review.md)
-and [production readiness review](../qa/2026-07-16-backend-agent-slices-0-4-production-readiness-review.md).
-In particular, the default Agent executor and AgwaB product path are not closed, Memory promotion
-trusts caller assertions, the Agent worker image is absent, execution terminal races are not proven,
-and production deployment/recovery evidence is missing. The earlier live provider-backed aggregate
-proof remains evidence for its narrow Builder boundary only; it is not Slice 0–4 production proof.
+and [production readiness review](../qa/2026-07-16-backend-agent-slices-0-4-production-readiness-review.md)
+are closed by the default Product Agent/AgwaB chain, server-verified Memory promotion, buildable
+credential-free Agent sandbox, atomic terminal state, and Remote allowlists. Authenticated Mongo
+restart, migration, process-kill recovery, encrypted backup/restore, Docker isolation, bounded
+capacity, liveness/readiness/metrics and local release integrity have also been exercised.
+
+Production release is still blocked. The final candidate has no real Provider smoke; the available
+offline npm audit reports conflict with an install-time report of three low-severity findings; no
+authoritative Agent/Skill/Mongo image CVE reports were produced; cold eight-worker startup was not
+repeatable on every attempt; and a real upgrade/rollback cannot be declared passed while those
+earlier gates reject the candidate. The release manager now verifies all source-bound evidence
+before writing a manifest, before reading runtime secrets, and before backup or activation. Missing
+or blocked evidence therefore produces `release_gates_not_passed`, not a degraded success. See the
+[2026-07-17 readiness report](../qa/2026-07-17-backend-agent-slices-0-4-single-machine-production-readiness.md).
+
+The earlier live provider-backed aggregate proof remains evidence for its narrow Builder boundary
+only; it is not Slice 0–4 production proof.
 The Web visual result
 was explicitly rejected on 2026-07-15 because the implementation did not match the selected
 lifecycle board and key-frame hierarchy. This is active implementation work, not a pending approval
@@ -273,12 +284,12 @@ After that visual baseline is accepted, the remaining deployment or expansion it
 | P3 / deployment | External-action reliability | Durable claim/fence/checkpoint/recovery, terminal reconciliation and process-kill proof are implemented. Future Skills that perform non-idempotent external actions need provider-specific effect receipts and reconciliation policy. |
 | P3 / scale | Builder throughput | Generation currently holds the idempotency transaction during the bounded model call. A two-phase reservation is required before high-throughput deployment. |
 | P3 / product expansion | Rich Resources and replay | PDF/OCR/binary extraction, provider credential onboarding, richer evidence lineage, pause/resume controls and cross-organization federation remain outside this V1. |
-| P2 / deployment proof | Container and persistence integration | Sandbox policy and no-fallback behavior are covered by negative unit tests, but the current machine had no Docker daemon and no configured Mongo integration service. Real image labels, kernel isolation, and Mongo restart tests remain environment-gated. |
+| P1 / release proof | External security and Provider gates | A real Provider smoke, authoritative dependency advisory query, exact-digest image CVE reports and repeatable cold-capacity run are required before GO. |
 | P2 / remote execution | Real device transport | The transport contract and loopback fault suite are implemented; device identity, mTLS, relay/NAT, upgrade, quota, and fleet scheduling require a separate design and acceptance cycle. |
 
-Historical artifacts remain invalid as current health proof. The earlier acceptance and
-end-to-end records remain useful development evidence for their tested boundaries, but neither
-is production proof for the Slice 0–4 design described here.
+Historical artifacts remain invalid as current health proof. The dated 2026-07-17 readiness
+report is the current release evidence source; its verdict remains NO-GO until a later report
+records all gates as passed.
 
 ## 4. Implemented P0 Architecture and Target Evolution
 

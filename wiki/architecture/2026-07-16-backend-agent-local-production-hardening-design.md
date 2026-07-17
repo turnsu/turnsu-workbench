@@ -1,11 +1,16 @@
 # Backend / Agent Slice 0–4 单机生产加固设计
 
 - 日期：2026-07-16
-- 状态：设计已确认，实施与生产验收待完成
+- 状态：设计已实现；生产发布验收 NO-GO
 - 目标部署：单台 macOS 长期稳定运行
 - 发布状态：NO-GO；只有本文定义的门全部通过后才可改为 GO
 - 适用范围：`domains/backend`、`domains/agent` 与非前端运维配置
 - 前端边界：`domains/frontend/**` 保持归一化基线零变更
+
+> 2026-07-17 实施结果：本文定义的单机架构与 fail-closed release manager 已落地，原始
+> R0 代码阻断项已关闭。真实 Provider、authoritative dependency audit、image CVE scan、
+> 可重复 cold capacity 和完整 upgrade/rollback 仍阻断 GO。逐门证据见
+> [单机生产就绪复审](../qa/2026-07-17-backend-agent-slices-0-4-single-machine-production-readiness.md)。
 
 ## 1. 背景与证据
 

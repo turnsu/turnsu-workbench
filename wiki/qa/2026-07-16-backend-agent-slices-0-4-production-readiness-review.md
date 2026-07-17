@@ -178,3 +178,15 @@
 
 - 本文不把 Docker daemon 不可用、Mongo 未配置、真实 Provider 未调用、无真实 Remote 设备解释为通过或可忽略。
 - 本次未修改应用实现、部署配置或数据；本文是主线程修复、预发验证和上线决策的输入。
+
+## 2026-07-17 复审闭环
+
+本文对提交 `0365db6` 的 `NO-GO` 判断仍是准确的历史结论。后续单机方案 A 已实现默认
+Product Agent/AgwaB 链、治理 Memory、原子 Execution、真实 Agent/Skill sandbox、Remote
+allowlist、认证 Mongo、观测、备份恢复和 fail-closed release manager，原 R0 代码阻断项
+已经关闭。
+
+这不等于当前版本可上线。真实 Provider、authoritative dependency advisory、三个精确镜像
+CVE 报告、可重复 cold capacity 和完整 upgrade/rollback rehearsal 尚未通过；当前 release
+manager 已正确拒绝生成可激活 manifest。最新逐门证据与 `NO-GO` 决策见
+[2026-07-17 单机生产就绪复审](2026-07-17-backend-agent-slices-0-4-single-machine-production-readiness.md)。

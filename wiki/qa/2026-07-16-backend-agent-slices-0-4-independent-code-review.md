@@ -135,3 +135,12 @@ Session、分支、FIFO、proposal merge 的数据层可用，但产品 Agent AP
 
 - 本次没有运行 Docker、Mongo、真实 Provider 或真实 Remote 设备；这些环境缺失项仍是部署级未验证，不可记录为成功。
 - 本次未修改前端、后端或 Agent 实现；本文仅提供主线程修复与复验的依据。
+
+## 2026-07-17 复审闭环
+
+本文对提交 `0365db6` 的原始判断保持不变；它是修复前的历史证据。后续实现已经关闭本文
+列出的 Product Agent/AgwaB 接入、Memory 信任、Agent image、终态竞态和 Remote allowlist
+问题，并完成真实 Docker、认证 Mongo、备份恢复和进程中断验证。当前代码完成度与仍然
+阻断生产发布的外部环境门，以
+[单机生产就绪复审](2026-07-17-backend-agent-slices-0-4-single-machine-production-readiness.md)
+为准。

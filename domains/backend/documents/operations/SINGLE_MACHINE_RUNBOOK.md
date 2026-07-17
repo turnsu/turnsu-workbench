@@ -64,12 +64,17 @@ Release staging 只复制 allowlist 运行文件，依赖符号链接会被解�
 
 ```bash
 workbench_local stage-release --destination /absolute/path/looloomi-release-<version>
+workbench_local scan-release-secrets \
+  --bundle /absolute/path/looloomi-release-<version> \
+  > /absolute/path/looloomi-release-<version>/release-evidence/secret-scan.json
 workbench_local manifest \
   --bundle /absolute/path/looloomi-release-<version> \
   --version <version>
 ```
 
-Manifest 固定 source commit、每个文件 hash、Agent/Skill/Mongo image digest 与冻结前端 tree。生成 manifest 和激活 release 都会重新验证 `release-evidence/`：Contracts、Backend、Agent、认证 Mongo、Docker 隔离、默认 Agent composition、备份恢复、升级回滚、容量、secret scan、两份 CycloneDX SBOM、零漏洞依赖审计以及三个精确 digest 镜像的 high/critical 零漏洞扫描必须全部通过；证据缺失或失败时拒绝激活。首次安装和以后升级都走同一个失败关闭路径：升级前加密备份，候选版本执行自己的 migration，以临时端口启动完整 Product composition，且 `/readyz` 必须同时通过 Mongo primary、migration checksum、Agent sandbox 和真实 Provider probe；之后才原子切换 `current` 并重载 launchd。
+`scan-release-secrets` 只输出 path/rule，不输出匹配正文；发现凭证或未扫描的大文本时返回非零。不要用 `|| true` 掩盖结果。
+
+Manifest 固定 source commit、每个文件 hash、Agent/Skill/Mongo image digest 与冻结前端 tree。生成 manifest 和激活 release 都会重新验证 `release-evidence/`：Contracts、Backend、Agent、认证 Mongo、Docker 隔离、默认 Agent composition、备份恢复、升级回滚、容量、secret scan、两份 CycloneDX SBOM、零漏洞依赖审计以及三个精确 digest 镜像的 high/critical 零漏洞扫描必须全部通过。证据缺失或失败时，`manifest` 返回非零且不写 `release-manifest.json`；`upgrade` 也会在读取运行密钥、创建备份或产生切换副作用前拒绝候选。首次安装和以后升级都走同一个失败关闭路径：升级前加密备份，候选版本执行自己的 migration，以临时端口启动完整 Product composition，且 `/readyz` 必须同时通过 Mongo primary、migration checksum、Agent sandbox 和真实 Provider probe；之后才原子切换 `current` 并重载 launchd。
 
 ```bash
 workbench_local upgrade --bundle /absolute/path/looloomi-release-<version>
