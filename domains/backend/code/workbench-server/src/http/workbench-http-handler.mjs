@@ -504,10 +504,14 @@ export function createWorkbenchHttpHandler({
   allowedHosts,
   testIdentityResolver = null,
   internalErrorReporter = null,
+  requestObserver = null,
 } = {}) {
   if (!application) throw new TypeError("workbench_application_required");
   if (internalErrorReporter !== null && typeof internalErrorReporter !== "function") {
     throw new TypeError("workbench_internal_error_reporter_invalid");
+  }
+  if (requestObserver !== null && typeof requestObserver !== "function") {
+    throw new TypeError("workbench_request_observer_invalid");
   }
   const validateHost = createWorkbenchHostValidator({ allowedHosts, origin });
   if (sessionTokenFactory || csrfTokenFactory || clock) {
@@ -515,6 +519,22 @@ export function createWorkbenchHttpHandler({
   }
   return async (req, res) => {
     const requestId = requestIdFactory();
+    const startedAt = Date.now();
+    let operation = "unmatched";
+    if (requestObserver && typeof res.once === "function") {
+      res.once("finish", () => {
+        try {
+          requestObserver({
+            requestId,
+            traceId: traceIdFrom(req.headers.traceparent),
+            method: req.method,
+            operation,
+            statusCode: res.statusCode ?? res.status ?? 500,
+            durationMs: Math.max(0, Date.now() - startedAt),
+          });
+        } catch {}
+      });
+    }
     try {
       const requestHost = validateHost(req.headers.host);
       if (req.headers.authorization) {
@@ -523,6 +543,7 @@ export function createWorkbenchHttpHandler({
       const url = new URL(req.url, `http://${requestHost}`);
       const route = routeDefinitions.find(({ endpoint, pattern }) => endpoint.method === req.method && pattern.test(url.pathname));
       if (!route) throw new ProductStoreError("route_not_found", "Workbench route not found.");
+      operation = route.endpoint.operationId;
       const match = route.pattern.exec(url.pathname);
       const path = Object.fromEntries(Object.entries(match?.groups ?? {}).map(([key, value]) => [key, decodeURIComponent(value)]));
       validate(route.endpoint.pathParamsSchema, path, "Path parameters");
@@ -664,6 +685,12 @@ export function createWorkbenchHttpHandler({
       writeJson(res, status, body);
     }
   };
+}
+
+function traceIdFrom(traceparent) {
+  if (typeof traceparent !== "string") return undefined;
+  const match = /^00-([a-f0-9]{32})-[a-f0-9]{16}-[a-f0-9]{2}$/.exec(traceparent);
+  return match?.[1];
 }
 
 function projectInternalError(error, requestId) {

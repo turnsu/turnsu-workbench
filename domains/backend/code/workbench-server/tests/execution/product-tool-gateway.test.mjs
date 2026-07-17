@@ -19,7 +19,7 @@ const capabilities = {
   externalActions: false,
 };
 
-async function fixture({ maxModelRequests = 1, maxSteps = 3, clock = () => NOW } = {}) {
+async function fixture({ maxModelRequests = 1, maxSteps = 3, clock = () => NOW, observer = null } = {}) {
   const persistence = new InMemoryExecutionPersistence();
   const request = {
     limits: { maxModelRequests, maxSteps, maxOutputBytes: 10_000 },
@@ -50,6 +50,7 @@ async function fixture({ maxModelRequests = 1, maxSteps = 3, clock = () => NOW }
     clock,
     modelExecutor: async (input) => { calls.push({ kind: "model", input }); return { text: "model result" }; },
     toolExecutor: async (input) => { calls.push({ kind: "tool", input }); return { items: ["result"] }; },
+    observer,
   });
   const binding = { invocationId: "invocation-a", attemptId: "attempt-a", capabilityLeaseId: "lease-a" };
   const message = (overrides = {}) => ({
@@ -72,6 +73,18 @@ test("Gateway holds Provider and Tool execution while enforcing lease and allowl
   await assert.rejects(gateway.handle(message({ toolId: "shell" }), binding), { code: "gateway_tool_forbidden" });
   await assert.rejects(gateway.handle(message({ connectionId: "connection-b" }), binding), { code: "gateway_connection_forbidden" });
   assert.equal(JSON.stringify(calls).includes("secret"), false);
+});
+
+test("Gateway observer receives only bounded allow/reject decisions", async () => {
+  const decisions = [];
+  const { gateway, binding, message } = await fixture({ observer: (decision) => decisions.push(decision) });
+  await gateway.handle(message(), binding);
+  await assert.rejects(gateway.handle(message({ toolId: "forbidden", input: { bearer: "must-not-observe" } }), binding));
+  assert.deepEqual(decisions, [
+    { outcome: "allowed", code: "ok", operation: "tool" },
+    { outcome: "rejected", code: "gateway_tool_forbidden", operation: "tool" },
+  ]);
+  assert.equal(JSON.stringify(decisions).includes("must-not-observe"), false);
 });
 
 test("Gateway rejects expired/revoked leases, model over-budget, and child escalation", async () => {

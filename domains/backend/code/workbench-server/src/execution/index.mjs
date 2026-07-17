@@ -7,6 +7,11 @@ export {
 export { InMemoryExecutionPersistence } from "./execution-persistence.mjs";
 export { MongoExecutionPersistence } from "./mongo-execution-persistence.mjs";
 export { ProductToolGateway, ProductToolGatewayError } from "./product-tool-gateway.mjs";
+export {
+  createConfiguredOpenAICompatibleModelExecutor,
+  createOpenAICompatibleModelExecutor,
+  ModelProviderError,
+} from "./openai-compatible-model-executor.mjs";
 export { StdioToolGatewayServer } from "./stdio-tool-gateway-server.mjs";
 export { AGENT_GATEWAY_CONTAINER_SOCKET, UnixToolGatewayServer } from "./unix-tool-gateway-server.mjs";
 export {

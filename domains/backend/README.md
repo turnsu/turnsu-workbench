@@ -7,6 +7,7 @@ Backend owns product data services, storage, daemon/API boundaries, and runtime 
 - [Current full-stack architecture](../../wiki/architecture/CURRENT_SYSTEM_ARCHITECTURE.md)
 - [Backend boundaries](documents/boundaries.md)
 - [Code ownership map](code/README.md)
+- [Single-machine production runbook](documents/operations/SINGLE_MACHINE_RUNBOOK.md)
 
 ## Backend Responsibilities
 
@@ -28,6 +29,9 @@ Backend owns product data services, storage, daemon/API boundaries, and runtime 
 ## Current Main Sources
 
 Backend code is currently split across Swift `Services`, `runtime/`, selected `scripts/`, and selected Node daemon files inside `domains/agent/code/agent-runtime`.
+
+The active Product API and single-machine operational runtime are under
+`domains/backend/code/workbench-server` and `domains/backend/operations/local`.
 
 ## Migrated Docs
 

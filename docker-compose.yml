@@ -1,36 +1,38 @@
 services:
   mongodb:
-    image: mongo:7
-    container_name: looloomi-mongodb
+    image: mongo@sha256:340c1c56fb10e95cf79ff547f8664b96bc6ead9909bc355238cbf865a9695a6f
+    container_name: "${WORKBENCH_MONGO_CONTAINER_NAME:-looloomi-mongodb}"
     restart: unless-stopped
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    entrypoint: ["/bin/bash", "/opt/looloomi/mongo-entrypoint.sh"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME_FILE: /run/secrets/mongo_root_username
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongo_root_password
+      MONGO_REPLICA_HOST: "${WORKBENCH_MONGO_REPLICA_HOST:-127.0.0.1:27017}"
+      MONGO_PORT: "${WORKBENCH_MONGO_PORT:-27017}"
+    secrets:
+      - mongo_root_username
+      - mongo_root_password
+      - mongo_replica_key
     ports:
-      - "127.0.0.1:27017:27017"
+      - "${WORKBENCH_MONGO_BIND_IP:-127.0.0.1}:${WORKBENCH_MONGO_PORT:-27017}:${WORKBENCH_MONGO_PORT:-27017}"
     volumes:
-      - looloomi-mongodb-data:/data/db
+      - "${WORKBENCH_MONGO_DATA_DIR:?WORKBENCH_MONGO_DATA_DIR is required}:/data/db"
+      - "${WORKBENCH_MONGO_CONFIG_DIR:?WORKBENCH_MONGO_CONFIG_DIR is required}:/data/configdb"
+      - ./domains/backend/operations/local/mongo-container:/opt/looloomi:ro
+    pids_limit: 512
+    mem_limit: 2g
+    cpus: 2
     healthcheck:
-      test:
-        - CMD-SHELL
-        - >-
-          mongosh --quiet --host 127.0.0.1:27017 --eval '
-          try {
-            const status = rs.status();
-            if (status.set !== "rs0") quit(2);
-            quit(status.myState === 1 ? 0 : 1);
-          } catch (error) {
-            if (error.code === 94 || error.codeName === "NotYetInitialized") {
-              const result = rs.initiate({
-                _id: "rs0",
-                members: [{ _id: 0, host: "127.0.0.1:27017" }]
-              });
-              quit(result.ok === 1 ? 1 : 2);
-            }
-            quit(2);
-          }'
+      test: ["CMD", "/bin/bash", "/opt/looloomi/mongo-healthcheck.sh"]
       interval: 5s
-      timeout: 3s
-      retries: 30
-      start_period: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 10s
 
-volumes:
-  looloomi-mongodb-data:
+secrets:
+  mongo_root_username:
+    file: "${WORKBENCH_SECRETS_DIR:?WORKBENCH_SECRETS_DIR is required}/mongo-root-username"
+  mongo_root_password:
+    file: "${WORKBENCH_SECRETS_DIR:?WORKBENCH_SECRETS_DIR is required}/mongo-root-password"
+  mongo_replica_key:
+    file: "${WORKBENCH_SECRETS_DIR:?WORKBENCH_SECRETS_DIR is required}/mongo-replica-key"

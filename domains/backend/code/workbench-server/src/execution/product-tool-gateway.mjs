@@ -19,6 +19,7 @@ export class ProductToolGateway {
   #modelExecutor;
   #toolExecutor;
   #clock;
+  #observer;
   #usage = new Map();
 
   constructor({
@@ -26,19 +27,33 @@ export class ProductToolGateway {
     modelExecutor = null,
     toolExecutor = null,
     clock = () => new Date().toISOString(),
+    observer = null,
   } = {}) {
     if (!persistence?.getActiveLease || !persistence?.getInvocation || typeof clock !== "function") {
       throw new TypeError("product_tool_gateway_persistence_required");
     }
     if (modelExecutor !== null && typeof modelExecutor !== "function") throw new TypeError("product_model_executor_invalid");
     if (toolExecutor !== null && typeof toolExecutor !== "function") throw new TypeError("product_tool_executor_invalid");
+    if (observer !== null && typeof observer !== "function") throw new TypeError("product_gateway_observer_invalid");
     this.#persistence = persistence;
     this.#modelExecutor = modelExecutor;
     this.#toolExecutor = toolExecutor;
     this.#clock = clock;
+    this.#observer = observer;
   }
 
   async handle(message, binding) {
+    try {
+      const result = await this.#dispatch(message, binding);
+      this.#observer?.({ outcome: "allowed", code: "ok", operation: message?.operation });
+      return result;
+    } catch (error) {
+      this.#observer?.({ outcome: "rejected", code: safeObserverCode(error?.code), operation: message?.operation });
+      throw error;
+    }
+  }
+
+  async #dispatch(message, binding) {
     validateGatewayMessage(message, binding);
     const { invocation, lease } = await this.#authorize(message, binding);
     const limits = invocation.request?.limits;
@@ -151,6 +166,10 @@ function denied(code) {
 
 function blocked(code) {
   return new ProductToolGatewayError(code, "Gateway backend is unavailable.", { status: "blocked" });
+}
+
+function safeObserverCode(value) {
+  return typeof value === "string" && /^[a-z][a-z0-9_]{0,63}$/.test(value) ? value : "gateway_error";
 }
 
 function byteLength(value) {

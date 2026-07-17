@@ -45,6 +45,7 @@ import {
 } from "./memory/index.mjs";
 import {
   createDeterministicSkillBackend,
+  createConfiguredOpenAICompatibleModelExecutor,
   createRemoteExecutionBackend,
   ExecutionBroker,
   MongoExecutionPersistence,
@@ -68,6 +69,12 @@ import {
 import { createTextResourceService } from "./resources/index.mjs";
 import { FilesystemObjectStore } from "./storage/index.mjs";
 import { ProductMongoStore } from "./store/index.mjs";
+import {
+  createJsonLogger,
+  createOperationsHttpHandler,
+  createProductReadiness,
+  MetricsRegistry,
+} from "./operations/index.mjs";
 import { createStaticHandler } from "./web/static-handler.mjs";
 
 export const DEFAULT_WORKBENCH_PORT = 8798;
@@ -223,6 +230,7 @@ export function createWorkbenchComposition({
   gatewayModelExecutor = null,
   gatewayToolExecutor = null,
   memoryService,
+  metrics = null,
   runner,
   skillUploadService,
   skillValidationService,
@@ -243,6 +251,8 @@ export function createWorkbenchComposition({
       uploadedSkillRuntime: skillValidationService,
     });
   const executionPersistence = executionBroker ? null : new MongoExecutionPersistence({ store });
+  const configuredGatewayModelExecutor = gatewayModelExecutor
+    ?? createConfiguredOpenAICompatibleModelExecutor({ env });
   const productExecutionBroker = executionBroker ?? new ExecutionBroker({
     persistence: executionPersistence,
     clock,
@@ -257,9 +267,12 @@ export function createWorkbenchComposition({
   }
   const productToolGateway = toolGateway ?? (executionPersistence ? new ProductToolGateway({
     persistence: executionPersistence,
-    modelExecutor: gatewayModelExecutor,
+    modelExecutor: configuredGatewayModelExecutor,
     toolExecutor: gatewayToolExecutor,
     clock,
+    observer: metrics
+      ? ({ outcome, code }) => metrics.increment("workbench_gateway_requests_total", { outcome, code })
+      : null,
   }) : null);
   const productAgentSandbox = agentSandbox ?? (
     env.WORKBENCH_AGENT_IMAGE && productToolGateway
@@ -356,6 +369,8 @@ export function createWorkbenchComposition({
     agentRuntime: runtimeBundle.agentRuntime,
     executionBroker: productExecutionBroker,
     toolGateway: productToolGateway,
+    gatewayModelExecutor: configuredGatewayModelExecutor,
+    providerProbe: configuredGatewayModelExecutor?.probe ?? null,
     agentSandbox: productAgentSandbox,
     remoteTransport,
     agentTurnRunner: productAgentTurnRunner,
@@ -398,11 +413,17 @@ export function createWorkbenchServer({
   testIdentityResolver,
   allowedHosts,
   origin,
+  logger = null,
+  metrics = null,
+  readiness = null,
+  providerProbe = null,
   clock = defaultClock,
   idFactory = defaultIdFactory,
   env = process.env,
 } = {}) {
   const productStore = store ?? new ProductMongoStore();
+  const operationsMetrics = metrics ?? new MetricsRegistry();
+  const operationsLogger = logger ?? createJsonLogger({ level: env.WORKBENCH_LOG_LEVEL ?? "info" });
   const upload = resolveSkillUploadService({
     store: productStore,
     skillUploadService,
@@ -442,6 +463,7 @@ export function createWorkbenchServer({
       gatewayModelExecutor,
       gatewayToolExecutor,
       memoryService,
+      metrics: operationsMetrics,
       runner,
       skillUploadService: upload.service,
       skillValidationService: validation.service,
@@ -472,6 +494,7 @@ export function createWorkbenchServer({
   const recoveryReady = startupRecovery
     ? Promise.resolve().then(() => startupRecovery())
     : Promise.resolve();
+  const startupState = { ready: false, error: null };
   const ready = Promise.all([storeReady, catalogReady, identityReady, upload.ready, validation.ready, validation.recovery, recoveryReady, resources.ready])
     .then(async () => {
       if (typeof composition.agentSandbox?.scavenge === "function") {
@@ -483,7 +506,28 @@ export function createWorkbenchServer({
       if (typeof composition.agentTurnRunner?.recover === "function") {
         await composition.agentTurnRunner.recover();
       }
+      startupState.ready = true;
+    })
+    .catch((error) => {
+      startupState.error = error;
+      throw error;
     });
+  const productionMode = String(env.WORKBENCH_LOCAL_PRODUCTION || "") === "1";
+  const productReadiness = readiness ?? createProductReadiness({
+    store: productStore,
+    startupState,
+    agentSandbox: composition.agentSandbox,
+    providerProbe: providerProbe ?? composition.providerProbe,
+    requireAgent: productionMode,
+    requireProvider: productionMode,
+    requireMigrations: productionMode,
+  });
+  const operations = createOperationsHttpHandler({
+    readiness: productReadiness,
+    metrics: operationsMetrics,
+    store: productStore,
+    logger: operationsLogger,
+  });
   const api = httpHandler ?? createWorkbenchHttpHandler({
     application: composition.application,
     sessionStore: sessionStore ?? new MongoWorkbenchSessionStore({ store: productStore, clock }),
@@ -491,17 +535,29 @@ export function createWorkbenchServer({
     allowedHosts,
     origin,
     clock,
-    internalErrorReporter: createProofInternalErrorReporter(env),
+    internalErrorReporter: createInternalErrorReporter({ env, logger: operationsLogger, metrics: operationsMetrics }),
+    requestObserver: createRequestObserver({ logger: operationsLogger, metrics: operationsMetrics }),
   });
   const staticHandler = createStaticHandler({ distDirectory });
   const server = http.createServer(async (req, res) => {
-    await ready;
-    if (new URL(req.url, "http://localhost").pathname.startsWith("/api/workbench/v1")) {
-      return api(req, res);
-    }
-    if (!await staticHandler(req, res)) {
-      res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
-      res.end(JSON.stringify({ code: "route_not_found" }));
+    const pathname = new URL(req.url, "http://localhost").pathname;
+    try {
+      if (await operations(req, res)) return;
+      await ready;
+      if (pathname.startsWith("/api/workbench/v1")) return api(req, res);
+      if (!await staticHandler(req, res)) {
+        res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ code: "route_not_found" }));
+      }
+    } catch {
+      if (res.headersSent) return res.destroy();
+      const body = JSON.stringify({ code: "service_not_ready" });
+      res.writeHead(503, {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+        "content-length": Buffer.byteLength(body),
+      });
+      res.end(body);
     }
   });
   const close = async () => {
@@ -512,13 +568,42 @@ export function createWorkbenchServer({
     composition.disposeRuntime?.();
     await productStore.close?.();
   };
-  return { ...composition, server, ready, close };
+  return {
+    ...composition,
+    server,
+    ready,
+    close,
+    operations: { handler: operations, readiness: productReadiness, metrics: operationsMetrics, logger: operationsLogger },
+  };
 }
 
-function createProofInternalErrorReporter(env) {
-  if (String(env.WORKBENCH_PROOF_DIAGNOSTICS || "") !== "1") return null;
+function createInternalErrorReporter({ env, logger, metrics }) {
+  const proofDiagnostics = String(env.WORKBENCH_PROOF_DIAGNOSTICS || "") === "1";
   return (diagnostic) => {
-    process.stderr.write(`workbench_internal_error=${JSON.stringify(diagnostic)}\n`);
+    metrics.increment("workbench_internal_errors_total", { component: "http" });
+    logger.error("http.request.internal_error", {
+      requestId: diagnostic.requestId,
+      code: diagnostic.codeName ?? diagnostic.name,
+      component: "http",
+    });
+    if (proofDiagnostics) process.stderr.write(`workbench_internal_error=${JSON.stringify(diagnostic)}\n`);
+  };
+}
+
+function createRequestObserver({ logger, metrics }) {
+  return ({ requestId, traceId, method, operation, statusCode, durationMs }) => {
+    const status = String(statusCode);
+    metrics.increment("workbench_http_requests_total", { operation, status });
+    metrics.observe("workbench_http_request_duration_ms", { operation, status }, durationMs);
+    logger.info("http.request.completed", {
+      requestId,
+      traceId,
+      method,
+      operation,
+      statusCode,
+      durationMs,
+      component: "http",
+    });
   };
 }
 

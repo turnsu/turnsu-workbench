@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
@@ -219,5 +220,43 @@ test("an injected application can host API tests without constructing runtime de
   });
   t.after(() => composed.server.close());
   assert.equal(composed.application, application);
+  await composed.ready;
+});
+
+test("liveness remains available during startup recovery while readiness fails closed", async (t) => {
+  let releaseRecovery;
+  const recovery = new Promise((resolve) => { releaseRecovery = resolve; });
+  const composed = createWorkbenchServer({
+    application: {},
+    bootstrapCatalog: false,
+    distDirectory: null,
+    startupRecovery: () => recovery,
+    readiness: { async check() { return { ready: false, checks: [{ name: "startup", status: "failed" }] }; } },
+    logger: { info() {}, warn() {}, error() {}, debug() {} },
+    httpHandler: async (_req, res) => { res.writeHead(204); res.end(); },
+  });
+  t.after(() => composed.close());
+  const invoke = (url) => new Promise((resolve) => {
+    const req = new EventEmitter();
+    req.url = url;
+    req.method = "GET";
+    req.headers = {};
+    const res = new EventEmitter();
+    res.statusCode = 200;
+    res.body = "";
+    res.writeHead = (statusCode, headers) => { res.statusCode = statusCode; res.headers = headers; };
+    res.end = (value = "") => { res.body += value; res.emit("finish"); resolve(res); };
+    res.destroy = () => resolve(res);
+    composed.server.emit("request", req, res);
+  });
+
+  const health = await invoke("/healthz");
+  assert.equal(health.statusCode, 200);
+  assert.deepEqual(JSON.parse(health.body), { status: "alive" });
+  const ready = await invoke("/readyz");
+  assert.equal(ready.statusCode, 503);
+  assert.deepEqual(JSON.parse(ready.body), { status: "not_ready", checks: { startup: "failed" } });
+
+  releaseRecovery();
   await composed.ready;
 });
