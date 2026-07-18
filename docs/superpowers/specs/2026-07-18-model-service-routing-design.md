@@ -1,7 +1,7 @@
 # Product Model Routing and Unified Model Selection Design
 
 Date: 2026-07-18
-Status: design decisions approved; written specification pending final review
+Status: approved for implementation
 
 ## 1. Purpose
 
