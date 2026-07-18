@@ -1,10 +1,10 @@
 # Skill / Workflow / Loop Workbench Current System Architecture
 
-- Date: 2026-07-17
+- Date: 2026-07-18
 - Status: current cross-domain architecture
 - Current deployment scope: local-first, workspace-scoped Skill / Workflow / Loop Web workbench
 - Target product scope: Skill & Loop cloud workbench with workspace-scoped team sharing; see the target PRDs
-- Implementation status: Backend and Agent Slice 0–4 and the single-machine operating unit are implemented. The original R0 code blockers are closed, but the current release decision remains NO-GO because external supply-chain, real Provider, repeatable cold-capacity, and full upgrade/rollback gates are not complete. The functional Web remains frozen at the normalization baseline and is outside this backend change.
+- Implementation status: Backend and Agent Slice 0–4, the product model-routing layer, and the single-machine operating unit are implemented. The original R0 code blockers are closed, but the current release decision remains NO-GO because authenticated candidate Mongo, external supply-chain, real Provider, repeatable cold-capacity, and full upgrade/rollback gates are not complete. The capability-filtered model picker is frozen at frontend tree `c928dda4e262bff84186333068317413d8debce6`; later backend/Agent work must not change it.
 
 > **Production status override (2026-07-17):** the blockers found by the independent code review
 > have been implemented and exercised through Product, Mongo and Docker paths. This closes the
@@ -102,7 +102,7 @@ policy implementation details, and runtime secrets remain internal.
 | Resources | Workspace-isolated text/Markdown/JSON Resource storage, immutable `1.0.0` references, Builder create/select/attach, transactional embedded Loop materialization, compiler readiness, and Runner Material resolution | PDF/OCR/binary extraction, detach/version management, and richer context controls |
 | Connections | Product-safe workspace records, validation state, strong ETag, role enforcement and explicit binding to installations, starting points, Forks, updates and imported Workflow revisions | Real provider-specific credential onboarding and enterprise secret operations |
 | Product API | Same-origin session/CSRF, Host validation, strict contracts, idempotency, ETag, static Web, repository/resumable upload, portable Loop transfer, current-revision tested Loop publication, Team install/Fork/explicit update, Connection, proposal and Run-command endpoints | Deployment/scale hardening and production provider operations |
-| PI SDK | Valid Skill frontmatter, discovery diagnostics, explicit executor registry, Core invocation, bounded meeting-action binding and generic Docker-isolated uploaded-package tool | Agentic node modes and production egress/secret policy where required |
+| PI SDK | Valid Skill frontmatter, discovery diagnostics, explicit executor registry, Core invocation, bounded meeting-action binding, Docker-isolated uploaded-package tool, bounded Agent and in-node AgwaB orchestration | Production egress/secret policy for future external tool families |
 
 ### 3.2 Web Implementation
 
@@ -153,6 +153,31 @@ durable per-Run sequence numbers. Product API routes were not added to
 The Product backend now also owns the execution fabric, personal Agent sessions, governed
 long-term Memory, and isolation adapters. These are product modules in the same deployable
 service, not a second public Agent control plane.
+
+Model execution is owned by one in-process `ModelService` behind the Product Tool Gateway. A
+revisioned `ModelCatalog` in Mongo is the runtime truth: `model_profiles` stores product identity
+and scope, immutable `model_profile_revisions` store provider/protocol/capability/parameter/limit
+configuration, and versioned `model_routing_policies` store per-workspace capability defaults.
+The single-machine V3 config is a secret-free, idempotent operator import into that catalog; it is
+not a second runtime truth source. Session preference selects a profile, while each Agent Turn and
+compiled Workflow pins a concrete revision before execution. The public API returns product-safe
+profile/readiness/selection fields and never returns credential references, endpoint internals or
+raw provider payloads.
+
+DeepSeek and OpenAI use `openai_compatible_chat`; Anthropic uses native Messages; Gemini uses
+native `generateContent`; Stability image generation uses its own binary-response adapter and
+writes the result through the governed Product Artifact service. Stability is a typed
+`model_task`, not a PI chat turn. The first release intentionally exposes only
+`stable-image-core`, with its official seed/aspect-ratio bounds and a versioned 3-credit
+(estimated USD 0.03) single-image policy; runtime authentication probing is non-generative and
+non-billable. Image fallback is forbidden. Chat fallback is attempted only for
+compiler-pinned compatible revisions when workspace and Workflow policy explicitly allow it; a
+Session Turn does not invent a fallback route. Every attempt records requested and actual revision,
+capability, protocol, bounded usage/status and fallback state without recording prompt, image or
+Provider payload. In single-machine production, credentials are lazy-resolved from macOS Keychain
+account `model-credential:<credentialRef>` on the host. Missing credentials make the profile
+unavailable and required routes fail closed; credentials never enter the catalog import, Agent
+sandbox, environment JSON, Artifact metadata or log.
 
 ### 3.4 Agent Runtime and PI SDK
 
@@ -256,18 +281,32 @@ The R0 implementation findings in the
 [independent code review](../qa/2026-07-16-backend-agent-slices-0-4-independent-code-review.md)
 and [production readiness review](../qa/2026-07-16-backend-agent-slices-0-4-production-readiness-review.md)
 are closed by the default Product Agent/AgwaB chain, server-verified Memory promotion, buildable
-credential-free Agent sandbox, atomic terminal state, and Remote allowlists. Authenticated Mongo
-restart, migration, process-kill recovery, encrypted backup/restore, Docker isolation, bounded
-capacity, liveness/readiness/metrics and local release integrity have also been exercised.
+credential-free Agent sandbox, atomic terminal state, and Remote allowlists. Migration
+`006-model-routing` adds the revisioned catalog, routing policy, attempt indexes and Product
+Artifact metadata. The single-machine backup unit now binds two AES-256-GCM archives—Mongo and the
+complete Object Store—to one manifest and verifies restored Artifact metadata against restored
+content hashes. Normal readiness verifies required capability routes without creating billable
+image work.
 
-Production release is still blocked. The final candidate has no real Provider smoke; the available
-offline npm audit reports conflict with an install-time report of three low-severity findings; no
-authoritative Agent/Skill/Mongo image CVE reports were produced; cold eight-worker startup was not
-repeatable on every attempt; and a real upgrade/rollback cannot be declared passed while those
-earlier gates reject the candidate. The release manager now verifies all source-bound evidence
-before writing a manifest, before reading runtime secrets, and before backup or activation. Missing
-or blocked evidence therefore produces `release_gates_not_passed`, not a degraded success. See the
-[2026-07-17 readiness report](../qa/2026-07-17-backend-agent-slices-0-4-single-machine-production-readiness.md).
+The integrated local acceptance for model routing is recorded in the
+[2026-07-18 model-routing acceptance addendum](../qa/2026-07-18-model-routing-production-acceptance.md).
+It includes Contracts 44/44, Backend 431 pass / 14 gated skip / 0 fail, full Agent runtime integrity,
+and real digest-pinned bounded PI plus `pi-workflow` container execution. These are code and local
+runtime proofs, not substitutes for the release gates below.
+
+Production release is still blocked. A new Product-path release gate starts the staged candidate
+in a separate process with its bundled Node and requires separate real chat and Stability smoke
+evidence bound to the exact source commit, candidate digest and selected model
+revision. The Stability gate requires an explicit billable confirmation and verifies the resulting
+Artifact hash, authorized retrieval, cross-workspace denial and absence of a PI Session. The
+release manager also requires source/candidate-bound license evidence in addition to dependency,
+SBOM, secret and exact-image CVE evidence. It verifies all evidence before writing a manifest,
+before reading runtime secrets, and before backup or activation. Missing, stale, handwritten or
+candidate-mismatched evidence produces `release_gates_not_passed`, not degraded success. These live
+and external gates have not been executed for the integrated candidate in this document, so the
+authoritative verdict remains `NO-GO`. See the
+[2026-07-17 readiness report](../qa/2026-07-17-backend-agent-slices-0-4-single-machine-production-readiness.md)
+and the model-routing acceptance addendum in `wiki/qa/`.
 
 The earlier live provider-backed aggregate proof remains evidence for its narrow Builder boundary
 only; it is not Slice 0–4 production proof.
@@ -284,12 +323,12 @@ After that visual baseline is accepted, the remaining deployment or expansion it
 | P3 / deployment | External-action reliability | Durable claim/fence/checkpoint/recovery, terminal reconciliation and process-kill proof are implemented. Future Skills that perform non-idempotent external actions need provider-specific effect receipts and reconciliation policy. |
 | P3 / scale | Builder throughput | Generation currently holds the idempotency transaction during the bounded model call. A two-phase reservation is required before high-throughput deployment. |
 | P3 / product expansion | Rich Resources and replay | PDF/OCR/binary extraction, provider credential onboarding, richer evidence lineage, pause/resume controls and cross-organization federation remain outside this V1. |
-| P1 / release proof | External security and Provider gates | A real Provider smoke, authoritative dependency advisory query, exact-digest image CVE reports and repeatable cold-capacity run are required before GO. |
+| P1 / release proof | External security and Provider gates | Exact-candidate chat and explicitly confirmed Stability Product-path smoke, authoritative dependency/license evidence, exact-digest image CVE reports and repeatable cold-capacity/release rehearsal are required before GO. |
 | P2 / remote execution | Real device transport | The transport contract and loopback fault suite are implemented; device identity, mTLS, relay/NAT, upgrade, quota, and fleet scheduling require a separate design and acceptance cycle. |
 
-Historical artifacts remain invalid as current health proof. The dated 2026-07-17 readiness
-report is the current release evidence source; its verdict remains NO-GO until a later report
-records all gates as passed.
+Historical artifacts remain invalid as current health proof. The dated 2026-07-17 readiness report
+and the 2026-07-18 model-routing addendum together describe current evidence; both preserve a
+NO-GO verdict until a later exact-candidate report records every release gate as passed.
 
 ## 4. Implemented P0 Architecture and Target Evolution
 
