@@ -57,6 +57,10 @@ export const PRODUCT_COLLECTIONS = Object.freeze({
   durableMemories: "durable_memories",
   memoryEvents: "memory_events",
   memoryDeletionTombstones: "memory_deletion_tombstones",
+  modelProfiles: "model_profiles",
+  modelProfileRevisions: "model_profile_revisions",
+  modelRoutingPolicies: "model_routing_policies",
+  productArtifacts: "product_artifacts",
   idempotencyRecords: "idempotency_records",
   auditEvents: "audit_events",
 });
@@ -478,6 +482,39 @@ export const PRODUCT_INDEX_DEFINITIONS = Object.freeze([
       { key: { tombstoneId: 1 }, options: { unique: true, name: "tombstoneId_1" } },
       { key: { memoryIdHash: 1 }, options: { unique: true, name: "memoryIdHash_1" } },
       { key: { workspaceId: 1, deletedAt: -1 }, options: { name: "workspaceId_1_deletedAt_-1" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.modelProfiles,
+    indexes: [
+      { key: { profileId: 1 }, options: { unique: true, name: "profileId_1" } },
+      { key: { scope: 1, workspaceId: 1, enabled: 1, updatedAt: -1 }, options: { name: "scope_1_workspaceId_1_enabled_1_updatedAt_-1" } },
+      { key: { enabled: 1, currentRevisionId: 1 }, options: { name: "enabled_1_currentRevisionId_1" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.modelProfileRevisions,
+    indexes: [
+      { key: { revisionId: 1 }, options: { unique: true, name: "revisionId_1" } },
+      { key: { profileId: 1, revisionNumber: 1 }, options: { unique: true, name: "profileId_1_revisionNumber_1" } },
+      { key: { profileId: 1, configHash: 1 }, options: { unique: true, name: "profileId_1_configHash_1" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.modelRoutingPolicies,
+    indexes: [
+      { key: { workspaceId: 1 }, options: { unique: true, name: "workspaceId_1" } },
+      { key: { workspaceId: 1, policyVersion: 1 }, options: { unique: true, name: "workspaceId_1_policyVersion_1" } },
+    ],
+  },
+  {
+    collection: PRODUCT_COLLECTIONS.productArtifacts,
+    indexes: [
+      { key: { artifactId: 1 }, options: { unique: true, name: "artifactId_1" } },
+      { key: { workspaceId: 1, state: 1, updatedAt: 1 }, options: { name: "workspaceId_1_state_1_updatedAt_1" } },
+      { key: { workspaceId: 1, attemptId: 1, state: 1, createdAt: 1 }, options: { name: "workspaceId_1_attemptId_1_state_1_createdAt_1" } },
+      { key: { workspaceId: 1, invocationId: 1, state: 1, createdAt: 1 }, options: { name: "workspaceId_1_invocationId_1_state_1_createdAt_1" } },
+      { key: { workspaceId: 1, objectId: 1, state: 1 }, options: { name: "workspaceId_1_objectId_1_state_1" } },
     ],
   },
   {

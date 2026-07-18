@@ -26,10 +26,39 @@ const PAGE = Object.freeze({ nextCursor: null, hasMore: false });
 const clone = (value) => structuredClone(value);
 
 const storeError = (code, message, details = {}) => new ProductStoreError(code, message, details);
+const COMPILE_MODEL_ROUTE_ERROR_CODES = new Set([
+  "model_route_unresolved",
+  "model_profile_not_found",
+  "model_profile_forbidden",
+  "model_capability_mismatch",
+  "model_revision_unavailable",
+]);
+
+function compileModelRouteErrorCode(code) {
+  return COMPILE_MODEL_ROUTE_ERROR_CODES.has(code) ? code : "model_route_unresolved";
+}
 
 function resultPage(value) {
   if (Array.isArray(value)) return { data: value, page: PAGE };
   return { data: value.data ?? value.items ?? [], page: value.page ?? PAGE };
+}
+
+async function resolveWorkspaceDefaultModel({
+  modelCatalog,
+  workspaceId,
+  capability,
+  requiredCapabilities,
+}) {
+  if (!modelCatalog?.getWorkspacePolicy || !modelCatalog?.resolveCurrentProfile) return null;
+  const policy = await modelCatalog.getWorkspacePolicy(workspaceId);
+  const profileId = policy?.defaultProfileIdsByCapability?.[capability];
+  if (!profileId) return null;
+  return modelCatalog.resolveCurrentProfile({
+    profileId,
+    workspaceId,
+    capabilities: requiredCapabilities,
+    requireReady: true,
+  });
 }
 
 function productSafeInvocation(invocation) {
@@ -39,6 +68,12 @@ function productSafeInvocation(invocation) {
     mode: invocation.mode,
     isolation: invocation.isolation,
     status: invocation.status,
+    requestedModelRevisionId: invocation.result?.requestedModelRevisionId
+      ?? invocation.request?.modelProfileRevisionId
+      ?? invocation.request?.metadata?.modelProfileRevisionId
+      ?? null,
+    actualModelRevisionId: invocation.result?.actualModelRevisionId ?? null,
+    artifactRefs: clone(invocation.result?.artifactRefs ?? []),
     createdAt: invocation.createdAt,
     startedAt: invocation.startedAt ?? null,
     finishedAt: invocation.finishedAt ?? null,
@@ -320,6 +355,9 @@ export function createWorkbenchApplication({
   executionBroker = null,
   agentTurnRunner = null,
   memoryService = null,
+  artifactService = null,
+  modelCatalog = null,
+  modelService = null,
   runner,
   skillUploadService = null,
   skillValidationService = null,
@@ -389,8 +427,63 @@ export function createWorkbenchApplication({
       await requireRepository(store, "resources").get(ref.resourceId, { workspaceId: context.workspaceId, ...options }),
     ]));
     const resources = new Map(resourceEntries);
+    const routingPolicy = await modelCatalog?.getWorkspacePolicy?.(context.workspaceId) ?? null;
+    const workspaceSelections = {
+      agentControllerModelProfileId: routingPolicy?.defaultProfileIdsByCapability?.structured_output
+        ?? routingPolicy?.defaultProfileIdsByCapability?.tool_calling
+        ?? routingPolicy?.defaultProfileIdsByCapability?.chat,
+      imageGenerationModelProfileId: routingPolicy?.defaultProfileIdsByCapability?.image_generation,
+      workflowFallbackAllowed: routingPolicy?.workflowFallbackAllowed === true,
+    };
+    const modelResolutionByNode = new Map();
+    if (modelCatalog) {
+      await Promise.all(revision.graph.nodes.filter((node) => node.kind === "Skill").map(async (node) => {
+        const skill = byRef.get(`${node.skillRef.skillId}:${node.skillRef.version}`)?.definition;
+        const executionMode = skill?.executionRef?.executionMode;
+        if (!skill || !["agent", "orchestrator", "model"].includes(executionMode)) return;
+        const modelCapability = executionMode === "model"
+          ? skill.executionRef.requiredModelCapability
+          : "structured_output";
+        const requiredCapabilities = executionMode === "model"
+          ? [modelCapability]
+          : ["chat", "tool_calling", "structured_output"];
+        const profileId = node.configuration?.modelProfileId
+          ?? (modelCapability === "image_generation"
+            ? revision.runSettings?.imageGenerationModelProfileId ?? workspaceSelections.imageGenerationModelProfileId
+            : revision.runSettings?.agentControllerModelProfileId ?? workspaceSelections.agentControllerModelProfileId);
+        if (!profileId) return;
+        try {
+          const resolvedModel = await modelCatalog.resolveCurrentProfile({
+            profileId,
+            workspaceId: context.workspaceId,
+            capabilities: requiredCapabilities,
+            requireReady: true,
+          });
+          modelResolutionByNode.set(node.nodeId, {
+            profileId,
+            revision: {
+              revisionId: resolvedModel.revision.revisionId,
+              capabilities: clone(resolvedModel.revision.capabilities),
+              protocol: resolvedModel.revision.protocol,
+              limits: clone(resolvedModel.revision.limits ?? {}),
+            },
+            fallbackRevisions: [],
+          });
+        } catch (error) {
+          modelResolutionByNode.set(node.nodeId, {
+            errorCode: compileModelRouteErrorCode(error?.code),
+          });
+        }
+      }));
+    }
     const compileResult = compileWorkflowV1(clone(revision), {
       compiledAt: clock(),
+      modelSelections: workspaceSelections,
+      modelResolver({ nodeId }) {
+        const route = modelResolutionByNode.get(nodeId) ?? null;
+        if (route?.errorCode) throw new TypeError(route.errorCode);
+        return route;
+      },
       resolver: {
         resolveSkill(ref) { return byRef.get(`${ref.skillId}:${ref.version}`) ?? null; },
         resolveResource(ref) {
@@ -464,9 +557,31 @@ export function createWorkbenchApplication({
       await resolveAuth(auth);
       return resultPage(listBuiltinAgentDefinitions());
     },
+    async listModelProfiles({ query = {}, auth } = {}) {
+      const context = await resolveAuth(auth);
+      const capabilities = typeof query.capabilities === "string" ? query.capabilities.split(",") : [];
+      const items = modelCatalog?.listProfiles
+        ? await modelCatalog.listProfiles({
+          workspaceId: context.workspaceId,
+          capabilities,
+          includeDisabled: true,
+        })
+        : await modelService?.listModels?.({ workspaceId: context.workspaceId, capabilities }) ?? [];
+      return resultPage(items.filter((profile) => (
+        (!query.readiness || profile.readiness === query.readiness)
+        && (!query.selectedRevisionId || profile.currentRevisionId === query.selectedRevisionId || profile.selectable)
+      )).slice(0, query.limit ?? 100));
+    },
     async createAgentSession({ idempotencyKey, request, auth }) {
       const context = await resolveAuth(auth, "member");
       if (!agentTurnRunner) throw storeError("agent_turn_runner_unavailable", "Agent session service is unavailable.");
+      const modelProfileId = request.data.lastUsedModelProfileId ?? null;
+      if (modelProfileId) await modelCatalog?.resolveCurrentProfile?.({
+        profileId: modelProfileId,
+        workspaceId: context.workspaceId,
+        capabilities: [],
+        requireReady: false,
+      });
       return store.runIdempotentMutation({
         scope: `create-agent-session:${context.userId}`,
         key: idempotencyKey,
@@ -474,8 +589,29 @@ export function createWorkbenchApplication({
         workspaceId: context.workspaceId,
       }, () => agentTurnRunner.createSession({
         ...request.data,
+        ...(modelProfileId ? { lastUsedModelProfileId: modelProfileId } : {}),
         userId: context.userId,
         workspaceId: context.workspaceId,
+      }));
+    },
+    async selectAgentSessionModel({ sessionId, idempotencyKey, request, auth }) {
+      const context = await resolveAuth(auth, "member");
+      if (!agentTurnRunner?.selectModel) throw storeError("agent_turn_runner_unavailable", "Agent session service is unavailable.");
+      await modelCatalog?.resolveCurrentProfile?.({
+        profileId: request.data.modelProfileId,
+        workspaceId: context.workspaceId,
+        capabilities: [],
+        requireReady: false,
+      });
+      return store.runIdempotentMutation({
+        scope: `select-agent-session-model:${sessionId}`,
+        key: idempotencyKey,
+        request: clone(request),
+        workspaceId: context.workspaceId,
+      }, () => agentTurnRunner.selectModel({
+        sessionId,
+        lastUsedModelProfileId: request.data.modelProfileId,
+        ...context,
       }));
     },
     async getAgentSession({ sessionId, auth }) {
@@ -494,9 +630,18 @@ export function createWorkbenchApplication({
         workspaceId: context.workspaceId,
       }, () => agentTurnRunner.enqueueTurn({
         sessionId,
-        message: request.data.message,
+        ...request.data,
         ...context,
       }));
+    },
+    async listAgentTurns({ sessionId, query = {}, auth }) {
+      const context = await resolveAuth(auth);
+      const turns = await agentTurnRunner?.listTurns?.(sessionId, {
+        after: query.after ?? query.cursor ?? 0,
+        limit: query.limit ?? 100,
+      }, context);
+      if (!turns) throw storeError("agent_session_not_found", "Agent session not found.");
+      return resultPage(turns);
     },
     async getAgentTurn({ sessionId, turnId, auth }) {
       const context = await resolveAuth(auth);
@@ -519,6 +664,17 @@ export function createWorkbenchApplication({
       const events = await agentTurnRunner?.listEvents(sessionId, query.after ?? 0, query.limit ?? 500, context);
       if (!events) throw storeError("agent_session_not_found", "Agent session not found.");
       return resultPage(events);
+    },
+    async getArtifactMetadata({ artifactId, auth }) {
+      const context = await resolveAuth(auth);
+      if (!artifactService?.getMetadata) throw storeError("artifact_read_failed", "Artifact storage is unavailable.");
+      return artifactService.getMetadata({ workspaceId: context.workspaceId, artifactId });
+    },
+    async getArtifactContent({ artifactId, auth }) {
+      const context = await resolveAuth(auth);
+      if (!artifactService?.readContent) throw storeError("artifact_read_failed", "Artifact storage is unavailable.");
+      const content = await artifactService.readContent({ workspaceId: context.workspaceId, artifactId });
+      return { rawBody: content.bytes, responseHeaders: content.headers };
     },
     async listAgentHandoffs({ sessionId, auth }) {
       const context = await resolveAuth(auth);
@@ -1297,7 +1453,7 @@ export function createWorkbenchApplication({
     },
     async generateLoopProposal({ workflowId, idempotencyKey, ifMatch, request, auth }) {
       const context = await resolveAuth(auth, "member");
-      if (!executionBroker && typeof agentRuntime?.generateBuilderProposal !== "function") {
+      if (!executionBroker) {
         throw storeError("builder_proposal_unavailable", "Workflow suggestions are not available yet.");
       }
       await ready();
@@ -1326,7 +1482,21 @@ export function createWorkbenchApplication({
         if (!revision) throw storeError("workflow_revision_not_found", "Workflow revision not found.");
         const proposalId = idFactory("proposal");
         let candidate;
-        if (executionBroker) {
+        {
+          const route = request.data.modelProfileRevisionId
+            ? await modelCatalog?.resolveRevision?.({
+              revisionId: request.data.modelProfileRevisionId,
+              workspaceId: context.workspaceId,
+              capabilities: ["chat", "tool_calling", "structured_output"],
+              requireReady: true,
+            })
+            : await resolveWorkspaceDefaultModel({
+              modelCatalog,
+              workspaceId: context.workspaceId,
+              capability: "structured_output",
+              requiredCapabilities: ["chat", "tool_calling", "structured_output"],
+            });
+          if (!route) throw storeError("model_route_unresolved", "No ready Builder model is configured.");
           const invocationId = idFactory("invocation");
           const result = await executionBroker.execute({
             schemaVersion: "workbench-execution-fabric-v1",
@@ -1345,31 +1515,43 @@ export function createWorkbenchApplication({
               maxChildren: 0,
               maxInputBytes: 1_000_000,
               maxOutputBytes: 1_000_000,
+              maxImageCount: 0,
+              maxCostUsdMicros: 0,
             },
             capabilities: {
               toolAllowlist: [], connectionIds: [], network: false,
               filesystem: "none", externalActions: false,
             },
-            resultSchema: { type: "object", additionalProperties: true },
+            resultSchema: {
+              type: "object",
+              properties: {
+                summary: { type: "string" },
+                operations: { type: "array", items: { type: "object" } },
+                diagnostics: { type: "array", items: { type: "object" } },
+                permissionImpact: { type: "array", items: { type: "object" } },
+              },
+              required: ["summary", "operations", "diagnostics", "permissionImpact"],
+              additionalProperties: false,
+            },
             evidenceRequirements: [{
               requirementId: "builder-proposal-json",
               kind: "output",
               required: true,
               description: "Return a typed proposal without modifying the canonical Workflow.",
             }],
-            metadata: { agentKind: "builder_proposal", objectKind: "workflow", objectId: workflowId },
+            metadata: {
+              agentKind: "builder_proposal",
+              objectKind: "workflow",
+              objectId: workflowId,
+              modelProfileRevisionId: route.revision.revisionId,
+              modelCapability: "structured_output",
+              fallbackModelProfileRevisionIds: [],
+            },
           });
           if (result.status !== "completed") {
             throw storeError("builder_proposal_unavailable", "Workflow suggestions are currently blocked.", { status: result.status });
           }
           candidate = result.output;
-        } else {
-          candidate = await agentRuntime.generateBuilderProposal({
-            instruction: request.data.instruction,
-            workflowId,
-            workspaceId: context.workspaceId,
-            revision: clone(revision),
-          });
         }
         const proposal = {
           schemaVersion: "workbench-v1",

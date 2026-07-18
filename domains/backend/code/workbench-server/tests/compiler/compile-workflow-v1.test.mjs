@@ -17,12 +17,13 @@ import {
   makeReviewNode,
   makeRevision,
   makeSkillNode,
+  makeSkillDefinition,
   numberSchema,
   stringSchema,
 } from "./fixtures.mjs";
 
-const compile = (revision, resolver = makeResolver()) =>
-  compileWorkflowV1(revision, { resolver, compiledAt: NOW });
+const compile = (revision, resolver = makeResolver(), options = {}) =>
+  compileWorkflowV1(revision, { resolver, compiledAt: NOW, ...options });
 
 const diagnosticFor = (result, code) =>
   result.warnings.find((diagnostic) => diagnostic.code === code);
@@ -131,6 +132,225 @@ test("compiles a linear graph to a frozen contract-valid plan", () => {
     () => result.executionPlan.steps[1].dependsOn.push("node-other"),
     TypeError,
   );
+});
+
+test("pins an agent controller revision and explicit compatible Workflow fallback", () => {
+  const revision = makeRevision();
+  revision.runSettings.agentControllerModelProfileId = "claude-sonnet";
+  revision.runSettings.workflowFallbackAllowed = true;
+  const resolver = makeResolver({
+    resolveSkill(skillRef) {
+      const definition = makeSkillDefinition(skillRef);
+      definition.executionRef.executionMode = "agent";
+      return {
+        definition,
+        adapterReadiness: { status: "ready", reason: "ready" },
+        piReadiness: { status: "ready", reason: "ready" },
+      };
+    },
+  });
+  const modelResolver = (request) => {
+    assert.deepEqual(request, {
+      nodeId: "node-skill-b",
+      profileId: "claude-sonnet",
+      modelCapability: "tool_calling",
+      requiredCapabilities: ["chat", "tool_calling"],
+      executionMode: "bounded_agent",
+      fallbackAllowed: true,
+    });
+    return {
+      profileId: request.profileId,
+      revision: {
+        revisionId: "model-revision-claude-1",
+        capabilities: ["chat", "tool_calling", "structured_output"],
+        protocol: "anthropic_messages",
+      },
+      fallbackRevisions: [{
+        revisionId: "model-revision-deepseek-1",
+        capabilities: ["chat", "tool_calling"],
+        protocol: "openai_compatible_chat",
+      }],
+    };
+  };
+  const result = compile(revision, resolver, { modelResolver });
+  assert.equal(result.status, "ready");
+  const skill = result.executionPlan.steps.find((step) => step.kind === "Skill");
+  const input = result.executionPlan.steps.find((step) => step.kind === "Input");
+  assert.equal(skill.modelRoutingState, "pinned");
+  assert.equal(skill.modelProfileRevisionId, "model-revision-claude-1");
+  assert.equal(skill.modelCapability, "tool_calling");
+  assert.deepEqual(skill.fallbackModelProfileRevisionIds, ["model-revision-deepseek-1"]);
+  assert.deepEqual(skill.parameterSchema, makeSkillDefinition(skill.skillRef).inputSchema);
+  assert.equal(Object.hasOwn(input, "modelProfileRevisionId"), false);
+  assert.equal(result.executionPlan.modelRoutingState, "pinned");
+  assert.equal(Check(ExecutionPlanV2Schema, result.executionPlan), true);
+});
+
+test("uses node, Run Settings, then workspace model profile inheritance", () => {
+  const revision = makeRevision();
+  const resolver = makeResolver({
+    resolveSkill(skillRef) {
+      const definition = makeSkillDefinition(skillRef);
+      definition.executionRef.executionMode = "agent";
+      return {
+        definition,
+        adapterReadiness: { status: "ready", reason: "ready" },
+        piReadiness: { status: "ready", reason: "ready" },
+      };
+    },
+  });
+  const seen = [];
+  const modelResolver = ({ profileId }) => {
+    seen.push(profileId);
+    return {
+      profileId,
+      revision: {
+        revisionId: `model-revision-${profileId}`,
+        capabilities: ["chat", "tool_calling"],
+        protocol: "openai_compatible_chat",
+      },
+    };
+  };
+  const workspaceResult = compile(revision, resolver, {
+    modelResolver,
+    modelSelections: { agentControllerModelProfileId: "workspace-default" },
+  });
+  assert.equal(
+    workspaceResult.executionPlan.steps.find((step) => step.kind === "Skill").modelProfileRevisionId,
+    "model-revision-workspace-default",
+  );
+
+  revision.runSettings.agentControllerModelProfileId = "run-default";
+  const runResult = compile(revision, resolver, {
+    modelResolver,
+    modelSelections: { agentControllerModelProfileId: "workspace-default" },
+  });
+  assert.equal(
+    runResult.executionPlan.steps.find((step) => step.kind === "Skill").modelProfileRevisionId,
+    "model-revision-run-default",
+  );
+
+  revision.graph.nodes.find((node) => node.kind === "Skill").configuration.modelProfileId = "node-override";
+  const nodeResult = compile(revision, resolver, {
+    modelResolver,
+    modelSelections: { agentControllerModelProfileId: "workspace-default" },
+  });
+  assert.equal(
+    nodeResult.executionPlan.steps.find((step) => step.kind === "Skill").modelProfileRevisionId,
+    "model-revision-node-override",
+  );
+  assert.deepEqual(seen, ["workspace-default", "run-default", "node-override"]);
+});
+
+test("compiles an image model Skill to a process model_call with zero capabilities", () => {
+  const revision = makeRevision();
+  revision.runSettings.imageGenerationModelProfileId = "stable-image";
+  const resolver = makeResolver({
+    resolveSkill(skillRef) {
+      const definition = makeSkillDefinition(skillRef);
+      definition.executionRef = {
+        ...definition.executionRef,
+        executionMode: "model",
+        requiredModelCapability: "image_generation",
+      };
+      return {
+        definition,
+        adapterReadiness: { status: "ready", reason: "ready" },
+        piReadiness: { status: "ready", reason: "ready" },
+      };
+    },
+  });
+  const result = compile(revision, resolver, {
+    modelResolver: ({ fallbackAllowed }) => {
+      assert.equal(fallbackAllowed, false);
+      return {
+        profileId: "stable-image",
+        revision: {
+          revisionId: "model-revision-stability-1",
+          capabilities: ["image_generation"],
+          protocol: "stability_image_v2",
+          limits: {
+            maxImageCount: 1,
+            maxOutputBytes: 4_000_000,
+            maxCostUsdMicros: 500_000,
+          },
+        },
+      };
+    },
+  });
+  assert.equal(result.status, "ready");
+  const step = result.executionPlan.steps.find((candidate) => candidate.kind === "Skill");
+  assert.equal(step.executionMode, "model_call");
+  assert.equal(step.isolation, "process");
+  assert.equal(step.modelCapability, "image_generation");
+  assert.equal(step.limits.maxSteps, 1);
+  assert.equal(step.limits.maxModelRequests, 1);
+  assert.equal(step.limits.maxChildren, 0);
+  assert.equal(step.limits.maxImageCount, 1);
+  assert.equal(step.limits.maxCostUsdMicros, 500_000);
+  assert.deepEqual(step.capabilities, {
+    toolAllowlist: [], connectionIds: [], network: false,
+    filesystem: "none", externalActions: false,
+  });
+  assert.deepEqual(step.fallbackModelProfileRevisionIds, []);
+  assert.equal(Check(ExecutionPlanV2Schema, result.executionPlan), true);
+});
+
+test("blocks image controllers, Stability fallback, async resolvers, and incompatible fallbacks", async (t) => {
+  const agentRevision = makeRevision();
+  agentRevision.runSettings.agentControllerModelProfileId = "invalid-controller";
+  const agentResolver = makeResolver({
+    resolveSkill(skillRef) {
+      const definition = makeSkillDefinition(skillRef);
+      definition.executionRef.executionMode = "agent";
+      return {
+        definition,
+        adapterReadiness: { status: "ready", reason: "ready" },
+        piReadiness: { status: "ready", reason: "ready" },
+      };
+    },
+  });
+  await t.test("image-only revision cannot control an Agent", () => {
+    const result = compile(agentRevision, agentResolver, {
+      modelResolver: () => ({
+        profileId: "invalid-controller",
+        revision: {
+          revisionId: "model-revision-image-only",
+          capabilities: ["image_generation"],
+          protocol: "stability_image_v2",
+        },
+      }),
+    });
+    assert.equal(result.status, "blocked");
+    assertDiagnostic(result, "model_capability_mismatch", "node-skill-b");
+  });
+  await t.test("async model resolution cannot escape the immutable compile snapshot", () => {
+    const result = compile(agentRevision, agentResolver, {
+      modelResolver: async () => ({}),
+    });
+    assert.equal(result.status, "blocked");
+    assertDiagnostic(result, "model_route_unresolved", "node-skill-b");
+  });
+  await t.test("fallback must support the controller capabilities", () => {
+    agentRevision.runSettings.workflowFallbackAllowed = true;
+    const result = compile(agentRevision, agentResolver, {
+      modelResolver: () => ({
+        profileId: "invalid-controller",
+        revision: {
+          revisionId: "model-revision-chat-1",
+          capabilities: ["chat", "tool_calling"],
+          protocol: "openai_compatible_chat",
+        },
+        fallbackRevisions: [{
+          revisionId: "model-revision-chat-only",
+          capabilities: ["chat"],
+          protocol: "openai_compatible_chat",
+        }],
+      }),
+    });
+    assert.equal(result.status, "blocked");
+    assertDiagnostic(result, "model_fallback_incompatible", "node-skill-b");
+  });
 });
 
 test("sorts each Kahn layer by nodeId in a branched DAG", () => {

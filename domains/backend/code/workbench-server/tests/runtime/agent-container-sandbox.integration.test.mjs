@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,7 +29,11 @@ test("real Agent image runs Pi through the product stdio Gateway with no contain
     persistence,
     modelExecutor: async (call) => {
       modelCalls.push(call);
-      return { text: JSON.stringify({ response: "Real isolated Pi Worker completed." }) };
+      return {
+        text: JSON.stringify({ response: "Real isolated Pi Worker completed." }),
+        requestedModelRevisionId: call.modelProfileRevisionId,
+        actualModelRevisionId: call.modelProfileRevisionId,
+      };
     },
   });
   const sandbox = new AgentContainerSandbox({
@@ -56,7 +61,11 @@ test("real Agent image runs Pi through the product stdio Gateway with no contain
     isolation: "container",
     goal: "Return a response from the real isolated Pi Worker.",
     input: { value: 1 },
-    limits: { timeoutMs: 30_000, maxSteps: 4, maxModelRequests: 2, maxChildren: 0, maxInputBytes: 100_000, maxOutputBytes: 100_000 },
+    limits: {
+      timeoutMs: 30_000, maxSteps: 4, maxModelRequests: 2, maxChildren: 0,
+      maxInputBytes: 100_000, maxOutputBytes: 100_000, maxImageCount: 0,
+      maxCostUsdMicros: 0,
+    },
     capabilities: { toolAllowlist: [], connectionIds: [], network: false, filesystem: "none", externalActions: false },
     resultSchema: {
       type: "object",
@@ -65,12 +74,19 @@ test("real Agent image runs Pi through the product stdio Gateway with no contain
       additionalProperties: false,
     },
     evidenceRequirements: [],
-    metadata: { providerSecret: "must-not-cross" },
+    metadata: {
+      modelProfileRevisionId: "model-revision-agent-image-1",
+      fallbackModelProfileRevisionIds: [],
+      modelCapability: "structured_output",
+      providerSecret: "must-not-cross",
+    },
   };
 
   const result = await broker.execute(request);
-  assert.equal(result.status, "completed");
+  assert.equal(result.status, "completed", JSON.stringify(result));
   assert.equal(result.isolation, "container");
+  assert.equal(result.requestedModelRevisionId, "model-revision-agent-image-1");
+  assert.equal(result.actualModelRevisionId, "model-revision-agent-image-1");
   assert.deepEqual(result.output, { response: "Real isolated Pi Worker completed." });
   assert.equal(modelCalls.length, 1);
   assert.equal(JSON.stringify(modelCalls).includes("must-not-cross"), false);
@@ -84,18 +100,23 @@ test("real pi-workflow streams dynamic children into the product timeline before
   t.after(() => rm(root, { recursive: true, force: true }));
   const persistence = new InMemoryExecutionPersistence();
   const modelCalls = [];
+  const dockerDiagnostics = [];
   const gateway = new ProductToolGateway({
     persistence,
     modelExecutor: async (call) => {
       modelCalls.push(call);
-      const context = JSON.stringify(call.input?.context ?? {});
+      const context = JSON.stringify(call.typedInput?.context ?? call.input?.context ?? {});
       if (context.includes("dynamic-decision-v1") && !context.includes("Dynamic Synthesis Handoff")) {
         return {
           text: '<control>{"schema":"dynamic-decision-v1","digest":"Synthesize the bounded result without external sources.","decisionId":"decision-0","round":0,"phase":"orientation","status":"synthesize","nextActions":[{"type":"synthesize","actionId":"synthesize-0","prompt":"Return a concise final answer with no source-backed claims.","outputProfile":"synthesis_v1","inputRefs":[]}]}</control><analysis>Direct synthesis is sufficient.</analysis><refs>[]</refs>',
+          requestedModelRevisionId: call.modelProfileRevisionId,
+          actualModelRevisionId: call.modelProfileRevisionId,
         };
       }
       return {
         text: '<control>{"schema":"dynamic-task-result-v1","digest":"Completed isolated synthesis.","summary":"Completed isolated synthesis.","claims":[],"caveats":[],"blockers":[],"omissions":[]}</control><analysis>Completed inside the pinned outer node.</analysis><refs>["workflow_artifact:dynamic.decide-r0"]</refs>',
+        requestedModelRevisionId: call.modelProfileRevisionId,
+        actualModelRevisionId: call.modelProfileRevisionId,
       };
     },
   });
@@ -103,6 +124,11 @@ test("real pi-workflow streams dynamic children into the product timeline before
     image,
     gatewayServer: new StdioToolGatewayServer({ gateway }),
     tempRoot: root,
+    spawnProcess: (...args) => {
+      const child = spawn(...args);
+      child.stderr?.on("data", (chunk) => dockerDiagnostics.push(Buffer.from(chunk)));
+      return child;
+    },
   });
   const broker = new ExecutionBroker({
     persistence,
@@ -124,11 +150,20 @@ test("real pi-workflow streams dynamic children into the product timeline before
     isolation: "container",
     goal: "Create one concise response inside this pinned outer node.",
     input: { value: 1 },
-    limits: { timeoutMs: 60_000, maxSteps: 8, maxModelRequests: 8, maxChildren: 4, maxInputBytes: 100_000, maxOutputBytes: 500_000 },
+    limits: {
+      timeoutMs: 60_000, maxSteps: 8, maxModelRequests: 8, maxChildren: 4,
+      maxInputBytes: 100_000, maxOutputBytes: 500_000, maxImageCount: 0,
+      maxCostUsdMicros: 0,
+    },
     capabilities: { toolAllowlist: [], connectionIds: [], network: false, filesystem: "none", externalActions: false },
     resultSchema: { type: "object", additionalProperties: true },
     evidenceRequirements: [],
-    metadata: { outerNodeId: "pinned-node-agwab" },
+    metadata: {
+      outerNodeId: "pinned-node-agwab",
+      modelProfileRevisionId: "model-revision-agwab-image-1",
+      fallbackModelProfileRevisionIds: [],
+      modelCapability: "structured_output",
+    },
   };
 
   const result = await broker.execute(request);
@@ -136,7 +171,24 @@ test("real pi-workflow streams dynamic children into the product timeline before
   const children = invocations.filter((item) => item.parentInvocationId === request.invocationId);
   const parentEvents = persistence.events.get(request.invocationId) ?? [];
 
-  assert.equal(result.status, "completed");
+  assert.equal(result.status, "completed", JSON.stringify({
+    result,
+    modelRoutes: modelCalls.map((call) => ({
+      revisionId: call.modelProfileRevisionId ?? null,
+      context: JSON.stringify(call.typedInput?.context ?? call.input?.context ?? {}).slice(-2_000),
+    })),
+    children: children.map((child) => ({
+      invocationId: child.invocationId,
+      childRef: child.request?.metadata?.externalChildRef,
+      status: child.status,
+      summary: child.result?.summary ?? null,
+      output: child.result?.output ?? null,
+    })),
+    parentEvents: parentEvents.map((event) => ({ type: event.type, payload: event.payload })),
+    dockerDiagnostics: Buffer.concat(dockerDiagnostics).toString("utf8").slice(-8_000),
+  }));
+  assert.equal(result.requestedModelRevisionId, "model-revision-agwab-image-1");
+  assert.equal(result.actualModelRevisionId, "model-revision-agwab-image-1");
   assert.ok(modelCalls.length >= 2);
   assert.ok(children.length >= 1);
   assert(children.every((child) => child.status === "completed"));

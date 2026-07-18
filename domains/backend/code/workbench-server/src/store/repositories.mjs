@@ -221,6 +221,335 @@ export class ProductRecordRepository extends Repository {
   }
 }
 
+export class ModelProfileRepository extends Repository {
+  insert(profile, options) {
+    return this.insertDocument(profile, options);
+  }
+
+  async ensure(profile, options = {}) {
+    const payload = withoutMongoId(profile);
+    await this.collection.updateOne(
+      { profileId: payload.profileId },
+      { $setOnInsert: payload },
+      writeOptions(options, { upsert: true }),
+    );
+    return this.getInternal(payload.profileId, options);
+  }
+
+  async getInternal(profileId, options = {}) {
+    return withoutMongoId(
+      await this.collection.findOne({ profileId }, writeOptions(options)),
+    );
+  }
+
+  async get(profileId, { workspaceId, ...options } = {}) {
+    return withoutMongoId(
+      await this.collection.findOne(
+        {
+          profileId,
+          $or: workspaceId
+            ? [{ scope: "global" }, { scope: "workspace", workspaceId }]
+            : [{ scope: "global" }],
+        },
+        writeOptions(options),
+      ),
+    );
+  }
+
+  listAuthorized({ workspaceId, enabled, ...options } = {}) {
+    const filter = {
+      $or: workspaceId
+        ? [{ scope: "global" }, { scope: "workspace", workspaceId }]
+        : [{ scope: "global" }],
+      ...(typeof enabled === "boolean" ? { enabled } : {}),
+    };
+    return listDocuments(
+      this.collection,
+      filter,
+      { ...options, sort: { displayName: 1, profileId: 1 } },
+    );
+  }
+
+  async updateMetadata(
+    profileId,
+    { scope, workspaceId, displayName, enabled, updatedAt },
+    options = {},
+  ) {
+    return withoutMongoId(
+      await this.collection.findOneAndUpdate(
+        {
+          profileId,
+          scope,
+          ...(scope === "workspace" ? { workspaceId } : {}),
+        },
+        { $set: { displayName, enabled, updatedAt } },
+        writeOptions(options, { returnDocument: "after" }),
+      ),
+    );
+  }
+
+  async advanceCurrentRevision(
+    profileId,
+    { expectedCurrentRevisionId, currentRevisionId, updatedAt },
+    options = {},
+  ) {
+    return withoutMongoId(
+      await this.collection.findOneAndUpdate(
+        { profileId, currentRevisionId: expectedCurrentRevisionId },
+        { $set: { currentRevisionId, updatedAt } },
+        writeOptions(options, { returnDocument: "after" }),
+      ),
+    );
+  }
+}
+
+export class ModelProfileRevisionRepository extends Repository {
+  insert(revision, options) {
+    return this.insertDocument(revision, options);
+  }
+
+  async get(revisionId, options = {}) {
+    return withoutMongoId(
+      await this.collection.findOne({ revisionId }, writeOptions(options)),
+    );
+  }
+
+  async getForProfile(profileId, revisionId, options = {}) {
+    return withoutMongoId(
+      await this.collection.findOne({ profileId, revisionId }, writeOptions(options)),
+    );
+  }
+
+  async findByConfigHash(profileId, configHash, options = {}) {
+    return withoutMongoId(
+      await this.collection.findOne({ profileId, configHash }, writeOptions(options)),
+    );
+  }
+
+  async latestByProfile(profileId, options = {}) {
+    const documents = await listDocuments(
+      this.collection,
+      { profileId },
+      { ...options, limit: 1, sort: { revisionNumber: -1 } },
+    );
+    return documents[0] ?? null;
+  }
+
+  listByProfile(profileId, options = {}) {
+    return listDocuments(
+      this.collection,
+      { profileId },
+      { ...options, sort: { revisionNumber: -1 } },
+    );
+  }
+
+  async update() {
+    throw new ProductStoreError(
+      "model_profile_revision_immutable",
+      "Model profile revisions are immutable.",
+    );
+  }
+
+  async delete() {
+    throw new ProductStoreError(
+      "model_profile_revision_immutable",
+      "Model profile revisions are immutable.",
+    );
+  }
+}
+
+export class WorkspaceModelRoutingPolicyRepository extends Repository {
+  insert(policy, options) {
+    return this.insertDocument(policy, options);
+  }
+
+  async get(workspaceId, options = {}) {
+    return withoutMongoId(
+      await this.collection.findOne({ workspaceId }, writeOptions(options)),
+    );
+  }
+
+  async updateVersioned(
+    workspaceId,
+    {
+      expectedPolicyVersion,
+      nextPolicyVersion,
+      defaultProfileIdsByCapability,
+      workflowFallbackAllowed,
+      updatedAt,
+    },
+    options = {},
+  ) {
+    return withoutMongoId(
+      await this.collection.findOneAndUpdate(
+        { workspaceId, policyVersion: expectedPolicyVersion },
+        {
+          $set: {
+            defaultProfileIdsByCapability,
+            workflowFallbackAllowed,
+            policyVersion: nextPolicyVersion,
+            updatedAt,
+          },
+        },
+        writeOptions(options, { returnDocument: "after" }),
+      ),
+    );
+  }
+}
+
+export class ProductArtifactRepository extends Repository {
+  create(record, options) {
+    const payload = withoutMongoId(record);
+    if (typeof payload.artifactId !== "string" || payload.artifactId.length === 0
+      || typeof payload.workspaceId !== "string" || payload.workspaceId.length === 0
+      || typeof payload.attemptId !== "string" || payload.attemptId.length === 0
+      || !Number.isInteger(payload.fence) || payload.fence < 0
+      || !["quarantined", "pending"].includes(payload.state)) {
+      throw new TypeError("product_artifact_initial_metadata_invalid");
+    }
+    return this.insertDocument(payload, options);
+  }
+
+  async getById(artifactId, { workspaceId, ...options } = {}) {
+    requiredWorkspaceId(workspaceId);
+    return withoutMongoId(
+      await this.collection.findOne({ artifactId, workspaceId }, writeOptions(options)),
+    );
+  }
+
+  async getReady(artifactId, { workspaceId, ...options } = {}) {
+    requiredWorkspaceId(workspaceId);
+    return withoutMongoId(
+      await this.collection.findOne(
+        { artifactId, workspaceId, state: "ready" },
+        writeOptions(options),
+      ),
+    );
+  }
+
+  listPending({ workspaceId, before, ...options } = {}) {
+    return listDocuments(
+      this.collection,
+      {
+        ...(workspaceId ? { workspaceId } : {}),
+        state: "pending",
+        ...(before ? { updatedAt: { $lte: before } } : {}),
+      },
+      { ...options, sort: { updatedAt: 1 } },
+    );
+  }
+
+  listForCleanup({
+    workspaceId,
+    states,
+    expiresBefore,
+    invocationId,
+    attemptId,
+    objectId,
+    before,
+    limit,
+    ...options
+  } = {}) {
+    requiredWorkspaceId(workspaceId);
+    const expectedStates = states === undefined ? null : normalizeExpectedStates(states, null);
+    return listDocuments(
+      this.collection,
+      {
+        workspaceId,
+        ...(expectedStates ? { state: { $in: expectedStates } } : {}),
+        ...(expiresBefore ? { expiresAt: { $lte: expiresBefore } } : {}),
+        ...(invocationId ? { invocationId } : {}),
+        ...(attemptId ? { attemptId } : {}),
+        ...(objectId ? { objectId } : {}),
+        ...(before ? { updatedAt: { $lte: before } } : {}),
+      },
+      { ...options, limit, sort: { updatedAt: 1 } },
+    );
+  }
+
+  markReady(artifactId, transition, options = {}) {
+    return this.#transition(artifactId, "ready", transition, ["pending"], options);
+  }
+
+  markFailed(artifactId, transition, options = {}) {
+    return this.#transition(
+      artifactId,
+      "failed",
+      transition,
+      ["quarantined", "pending"],
+      options,
+    );
+  }
+
+  async delete(artifactId, { workspaceId, expectedStates, ...options } = {}) {
+    requiredWorkspaceId(workspaceId);
+    const states = normalizeExpectedStates(expectedStates, null);
+    const result = await this.collection.deleteOne(
+      {
+        artifactId,
+        workspaceId,
+        ...(states ? { state: { $in: states } } : {}),
+      },
+      writeOptions(options),
+    );
+    return result?.deletedCount === 1;
+  }
+
+  async #transition(artifactId, nextState, transition = {}, allowedStates, options = {}) {
+    const {
+      workspaceId,
+      expectedState,
+      expectedStates,
+      expectedFence,
+      ...patch
+    } = transition ?? {};
+    requiredWorkspaceId(workspaceId);
+    if (expectedFence === undefined || expectedFence === null) {
+      throw new TypeError("artifact_transition_fence_required");
+    }
+    const states = normalizeExpectedStates(
+      expectedStates ?? (expectedState ? [expectedState] : null),
+      allowedStates,
+    );
+    if (states.some((state) => !allowedStates.includes(state))) {
+      throw new TypeError("artifact_transition_state_invalid");
+    }
+    const payload = withoutMongoId(patch);
+    for (const field of ["artifactId", "workspaceId", "attemptId", "state", "fence", "createdAt"]) {
+      delete payload[field];
+    }
+    return withoutMongoId(
+      await this.collection.findOneAndUpdate(
+        {
+          artifactId,
+          workspaceId,
+          fence: expectedFence,
+          state: states.length === 1 ? states[0] : { $in: states },
+        },
+        { $set: { ...payload, state: nextState } },
+        writeOptions(options, { returnDocument: "after" }),
+      ),
+    );
+  }
+}
+
+function requiredWorkspaceId(workspaceId) {
+  if (typeof workspaceId !== "string" || workspaceId.length === 0) {
+    throw new TypeError("artifact_workspace_id_required");
+  }
+}
+
+function normalizeExpectedStates(value, fallback) {
+  const states = value === null || value === undefined
+    ? fallback
+    : (Array.isArray(value) ? value : [value]);
+  if (states === null) return null;
+  if (states.length === 0 || states.some((state) => typeof state !== "string" || state.length === 0)) {
+    throw new TypeError("artifact_transition_state_invalid");
+  }
+  return [...new Set(states)];
+}
+
 export class WorkspaceConnectionRepository extends ProductRecordRepository {
   constructor(collection) {
     super(collection, { idField: "connectionId" });

@@ -4,6 +4,10 @@ import {
   AgentBranchIdSchema,
   AgentSessionIdSchema,
   AgentTurnIdSchema,
+  ExecutionAttemptIdSchema,
+  InvocationIdSchema,
+  ModelProfileIdSchema,
+  ModelProfileRevisionIdSchema,
   RunIdSchema,
 } from "./common.js";
 import {
@@ -12,8 +16,11 @@ import {
   AgentObjectKindSchema,
   AgentSessionEventSchema,
   AgentSessionSchema,
+  AgentMessageTurnInputSchema,
   AgentTurnSchema,
+  ImageGenerationModelTaskInputSchema,
 } from "./agents.js";
+import { ArtifactRefSchema } from "./artifacts.js";
 import {
   EmptyHeadersSchema,
   EmptyObjectSchema,
@@ -56,14 +63,33 @@ const mutationMetadata = {
 
 export const CreateAgentSessionRequestSchema = MutationRequestEnvelopeSchema(strictObject({
   definitionId: Type.String({ minLength: 1, maxLength: 128 }),
+  lastUsedModelProfileId: Type.Optional(ModelProfileIdSchema),
   objectKind: Type.Optional(AgentObjectKindSchema),
   objectId: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
   branchId: Type.Optional(AgentBranchIdSchema),
 }), "CreateAgentSessionRequest");
 
-export const CreateAgentTurnRequestSchema = MutationRequestEnvelopeSchema(strictObject({
-  message: Type.String({ minLength: 1, maxLength: 20_000 }),
-}), "CreateAgentTurnRequest");
+export const AgentMessageTurnRequestDataSchema = strictObject({
+  kind: Type.Literal("agent_message"),
+  modelProfileRevisionId: ModelProfileRevisionIdSchema,
+  input: AgentMessageTurnInputSchema,
+});
+
+export const ModelTaskTurnRequestDataSchema = strictObject({
+  kind: Type.Literal("model_task"),
+  modelProfileRevisionId: ModelProfileRevisionIdSchema,
+  input: ImageGenerationModelTaskInputSchema,
+});
+
+export const AgentTurnRequestDataSchema = Type.Union([
+  AgentMessageTurnRequestDataSchema,
+  ModelTaskTurnRequestDataSchema,
+]);
+
+export const CreateAgentTurnRequestSchema = MutationRequestEnvelopeSchema(
+  AgentTurnRequestDataSchema,
+  "CreateAgentTurnRequest",
+);
 
 export const CancelAgentTurnRequestSchema = MutationRequestEnvelopeSchema(strictObject({
   reason: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
@@ -74,16 +100,20 @@ export const ConfirmAgentHandoffRequestSchema = MutationRequestEnvelopeSchema(st
 export const AgentDefinitionListResponseSchema = ListResponseEnvelopeSchema(AgentDefinitionSchema, "AgentDefinitionListResponse");
 export const AgentSessionResponseSchema = ResponseEnvelopeSchema(AgentSessionSchema, "AgentSessionResponse");
 export const AgentTurnResponseSchema = ResponseEnvelopeSchema(AgentTurnSchema, "AgentTurnResponse");
+export const AgentTurnListResponseSchema = ListResponseEnvelopeSchema(AgentTurnSchema, "AgentTurnListResponse");
 export const AgentSessionEventListResponseSchema = ListResponseEnvelopeSchema(AgentSessionEventSchema, "AgentSessionEventListResponse");
 export const AgentHandoffListResponseSchema = ListResponseEnvelopeSchema(AgentHandoffSchema, "AgentHandoffListResponse");
 export const AgentHandoffResponseSchema = ResponseEnvelopeSchema(AgentHandoffSchema, "AgentHandoffResponse");
 
 export const ExecutionInvocationSummarySchema = strictObject({
-  invocationId: Type.String({ minLength: 1, maxLength: 128 }),
-  attemptId: Type.String({ minLength: 1, maxLength: 128 }),
+  invocationId: InvocationIdSchema,
+  attemptId: ExecutionAttemptIdSchema,
   mode: ExecutionModeSchema,
   isolation: ExecutionIsolationSchema,
   status: ExecutionStatusSchema,
+  requestedModelRevisionId: Type.Union([ModelProfileRevisionIdSchema, Type.Null()]),
+  actualModelRevisionId: Type.Union([ModelProfileRevisionIdSchema, Type.Null()]),
+  artifactRefs: Type.Array(ArtifactRefSchema, { uniqueItems: true, maxItems: 256 }),
   createdAt: Type.String({ format: "date-time", pattern: "Z$" }),
   startedAt: Type.Union([Type.String({ format: "date-time", pattern: "Z$" }), Type.Null()]),
   finishedAt: Type.Union([Type.String({ format: "date-time", pattern: "Z$" }), Type.Null()]),
@@ -137,6 +167,15 @@ export const WORKBENCH_V1_AGENT_ENDPOINTS = {
     querySchema: EmptyObjectSchema,
     requestBodySchema: CreateAgentTurnRequestSchema,
     responseBodySchema: AgentTurnResponseSchema,
+  },
+  listAgentTurns: {
+    ...readMetadata,
+    operationId: "listAgentTurns",
+    method: "GET",
+    path: `${WORKBENCH_API_PREFIX}/agent-sessions/{sessionId}/turns`,
+    pathParamsSchema: AgentSessionPathSchema,
+    querySchema: AfterQuerySchema,
+    responseBodySchema: AgentTurnListResponseSchema,
   },
   getAgentTurn: {
     ...readMetadata,

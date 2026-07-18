@@ -42,11 +42,21 @@ const request = (overrides = {}) => ({
   isolation: "container",
   goal: "Return a bounded result.",
   input: { value: 1 },
-  limits: { timeoutMs: 1_000, maxSteps: 3, maxModelRequests: 1, maxChildren: 0, maxInputBytes: 10_000, maxOutputBytes: 10_000 },
+  limits: {
+    timeoutMs: 1_000, maxSteps: 3, maxModelRequests: 1, maxChildren: 0,
+    maxInputBytes: 10_000, maxOutputBytes: 10_000, maxImageCount: 0, maxCostUsdMicros: 1_000_000,
+  },
   capabilities: { toolAllowlist: [], connectionIds: [], network: false, filesystem: "none", externalActions: false },
   resultSchema: { type: "object", properties: {}, required: [], additionalProperties: true },
   evidenceRequirements: [],
-  metadata: { outerNodeId: "node-agent", providerSecret: "must-not-cross", hostPath: "/private/repo" },
+  metadata: {
+    outerNodeId: "node-agent",
+    modelProfileRevisionId: "model-revision-agent-a",
+    modelCapability: "tool_calling",
+    fallbackModelProfileRevisionIds: [],
+    providerSecret: "must-not-cross",
+    hostPath: "/private/repo",
+  },
   ...overrides,
 });
 
@@ -103,6 +113,14 @@ test("Agent sandbox passes only governed input and strips image, host, and socke
         async handle(message) {
           gatewayRequests.push({ binding, message });
           return { text: "model result" };
+        },
+        snapshot() {
+          return binding.invocationId === "invocation-agent-a"
+            ? {
+                requestedModelRevisionId: "model-revision-agent-a",
+                actualModelRevisionId: "model-revision-agent-a",
+              }
+            : { requestedModelRevisionId: null, actualModelRevisionId: null };
         },
         async close() {},
       };
@@ -188,6 +206,8 @@ test("Agent sandbox passes only governed input and strips image, host, and socke
     },
   });
   assert.deepEqual(result.output, { ok: true });
+  assert.equal(result.requestedModelRevisionId, "model-revision-agent-a");
+  assert.equal(result.actualModelRevisionId, "model-revision-agent-a");
   assert.equal(Object.hasOwn(result, "imageDigest"), false);
   assert.equal(Object.hasOwn(result, "hostPath"), false);
   assert.equal(Object.hasOwn(result, "socketPath"), false);

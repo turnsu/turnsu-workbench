@@ -28,6 +28,9 @@ import {
   IdempotencyRepository,
   LoopImportRepository,
   MembershipRepository,
+  ModelProfileRepository,
+  ModelProfileRevisionRepository,
+  ProductArtifactRepository,
   ProductSessionRepository,
   ProductRecordRepository,
   ProductUserRepository,
@@ -49,6 +52,7 @@ import {
   WorkflowRevisionRepository,
   WorkspaceRepository,
   WorkspaceConnectionRepository,
+  WorkspaceModelRoutingPolicyRepository,
 } from "./repositories.mjs";
 import {
   canonicalRequestHash,
@@ -461,6 +465,18 @@ export class ProductMongoStore {
       memoryDeletionTombstones: new ProductRecordRepository(
         collection(PRODUCT_COLLECTIONS.memoryDeletionTombstones),
         { idField: "tombstoneId", immutable: true },
+      ),
+      modelProfiles: new ModelProfileRepository(
+        collection(PRODUCT_COLLECTIONS.modelProfiles),
+      ),
+      modelProfileRevisions: new ModelProfileRevisionRepository(
+        collection(PRODUCT_COLLECTIONS.modelProfileRevisions),
+      ),
+      modelRoutingPolicies: new WorkspaceModelRoutingPolicyRepository(
+        collection(PRODUCT_COLLECTIONS.modelRoutingPolicies),
+      ),
+      productArtifacts: new ProductArtifactRepository(
+        collection(PRODUCT_COLLECTIONS.productArtifacts),
       ),
       idempotencyRecords: new IdempotencyRepository(
         collection(PRODUCT_COLLECTIONS.idempotencyRecords),

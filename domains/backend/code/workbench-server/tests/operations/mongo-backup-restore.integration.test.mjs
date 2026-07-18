@@ -52,12 +52,17 @@ test("authenticated Mongo archive encrypts, restores to isolated database, and v
   for (const name of [
     "runs", "execution_events", "execution_checkpoints", "agent_turns",
     "memory_deletion_tombstones", "audit_events",
+    "model_profiles", "model_profile_revisions", "model_routing_policies", "product_artifacts",
   ]) {
     assert.equal(collections[name].readable, true, name);
     assert.equal(collections[name].count, 1, name);
     assert.equal(collections[name].duplicateIds, 0, name);
     assert.ok(collections._indexCounts[name] >= 1, `${name} indexes`);
   }
+  assert.equal(collections._artifacts.length, 1);
+  assert.ok(Number.isSafeInteger(collections._artifacts[0].sizeBytes));
+  assert.ok(collections._artifacts[0].sizeBytes > 0);
+  assert.match(collections._artifacts[0].contentHash, /^sha256:[a-f0-9]{64}$/);
   assert.deepEqual(
     collections._migrationLedger.map(({ version, status }) => ({ version, status })),
     [
@@ -66,6 +71,7 @@ test("authenticated Mongo archive encrypts, restores to isolated database, and v
       "003-agent-execution-fabric",
       "004-product-memory",
       "005-agent-proposals-and-active-branches",
+      "006-model-routing",
     ].map((version) => ({ version, status: "applied" })),
   );
 });

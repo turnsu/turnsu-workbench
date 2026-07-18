@@ -270,7 +270,7 @@ test("Builder Proposal routes require Idempotency-Key and If-Match and reject in
   assert.equal(dispatchCount, 0);
 });
 
-test("production Builder runtime unavailability is a product-safe 503 without provider payload", async () => {
+test("production Builder refuses the removed direct Agent runtime bypass with a product-safe 503", async () => {
   const revision = { ...makeRevision(), workflowId: WORKFLOW_ID, revisionId: REVISION_ID };
   const store = {
     async connect() {},
@@ -316,7 +316,7 @@ test("production Builder runtime unavailability is a product-safe 503 without pr
 
   assert.equal(response.status, 503, response.body);
   assert.equal(body.code, "builder_proposal_unavailable");
-  assert.deepEqual(body.details, { safe: "suggestion_runtime_unavailable" });
+  assert.deepEqual(body.details, {});
   assert.equal(response.body.includes("private-model-provider"), false);
   assert.equal(response.body.includes("private completion"), false);
   assert.equal(response.body.includes("private-provider-token"), false);

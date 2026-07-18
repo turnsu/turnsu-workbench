@@ -114,7 +114,7 @@ export class FilesystemObjectStore {
     const location = await this.#location(workspaceId, objectId);
     const record = await readRecord(location);
     if (!record) throw new ObjectStoreError("object_not_found", "The requested object was not found.");
-    const data = await readFile(location.bytesPath);
+    const data = await readObjectBytes(location.bytesPath);
     throwIfAborted(signal);
     const contentHash = hashBuffer(data);
     if (contentHash !== record.contentHash || data.byteLength !== record.sizeBytes) {
@@ -152,6 +152,7 @@ export class FilesystemObjectStore {
     if (record.state !== "quarantined") {
       throw new ObjectStoreError("object_state_invalid", "Only quarantined objects can be promoted.");
     }
+    await assertObjectBytesFile(location.bytesPath, record.sizeBytes);
     const next = { ...record, state: "promoted", updatedAt: this.#now() };
     await atomicWriteJson(location.recordPath, next);
     return publicObject(next);
@@ -168,6 +169,34 @@ export class FilesystemObjectStore {
     await rm(location.bytesPath, { force: true });
     await rm(location.recordPath, { force: true });
     return { deleted: true };
+  }
+
+  async deleteObject({ workspaceId, objectId, expectedState = null } = {}) {
+    validateAddress(workspaceId, objectId);
+    if (expectedState !== null) validateState(expectedState);
+    const location = await this.#location(workspaceId, objectId);
+    const record = await readRecord(location);
+    if (!record) {
+      await rm(location.bytesPath, { force: true }).catch((failure) => {
+        throw new ObjectStoreError("object_store_delete_failed", "The stored object could not be deleted.", {
+          retryable: true,
+          cause: failure,
+        });
+      });
+      return { deleted: false };
+    }
+    if (expectedState !== null && record.state !== expectedState) {
+      throw new ObjectStoreError("object_state_invalid", "The object state does not permit deletion.");
+    }
+    try {
+      await rm(location.bytesPath, { force: true });
+      await rm(location.recordPath, { force: true });
+      return { deleted: true, state: record.state };
+    } catch {
+      throw new ObjectStoreError("object_store_delete_failed", "The stored object could not be deleted.", {
+        retryable: true,
+      });
+    }
   }
 
   async writeUploadChunk({
@@ -317,6 +346,11 @@ export class FilesystemObjectStore {
     const workspaceDir = join(this.#rootDir, workspaceId);
     if (!workspaceDir.startsWith(`${this.#rootDir}/`)) {
       throw new ObjectStoreError("object_store_path_invalid", "The object address is invalid.");
+    }
+    try {
+      await assertPlainDirectory(this.#rootDir, workspaceDir);
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
     }
     return workspaceDir;
   }
@@ -574,6 +608,35 @@ async function readUploadChunkFile(path) {
   } catch (error) {
     if (error instanceof ObjectStoreError) throw error;
     throw new ObjectStoreError("upload_staging_invalid", "The upload staging data is invalid.");
+  }
+}
+
+async function readObjectBytes(path) {
+  try {
+    await assertObjectBytesFile(path);
+    return await readFile(path);
+  } catch (error) {
+    if (error instanceof ObjectStoreError) throw error;
+    if (error?.code === "ENOENT") {
+      throw new ObjectStoreError("object_not_found", "The requested object was not found.");
+    }
+    throw new ObjectStoreError("object_store_read_failed", "The stored object could not be read.", { retryable: true });
+  }
+}
+
+async function assertObjectBytesFile(path, expectedSize = null) {
+  try {
+    const info = await lstat(path);
+    if (!info.isFile() || info.isSymbolicLink()
+      || (expectedSize !== null && info.size !== expectedSize)) {
+      throw new ObjectStoreError("object_integrity_failed", "The stored object failed an integrity check.");
+    }
+  } catch (error) {
+    if (error instanceof ObjectStoreError) throw error;
+    if (error?.code === "ENOENT") {
+      throw new ObjectStoreError("object_not_found", "The requested object was not found.");
+    }
+    throw new ObjectStoreError("object_store_read_failed", "The stored object could not be read.", { retryable: true });
   }
 }
 

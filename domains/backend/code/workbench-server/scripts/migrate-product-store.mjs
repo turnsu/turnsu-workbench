@@ -3,12 +3,8 @@ import process from "node:process";
 import { MongoClient } from "mongodb";
 
 import {
-  backfillDefaultWorkspaceMigration,
-  agentExecutionFabricMigration,
-  productMemoryMigration,
-  agentProposalsAndActiveBranchesMigration,
+  PRODUCT_MIGRATIONS,
   ProductMigrationRunner,
-  runnerTerminalTransitionsMigration,
 } from "../src/store/migrations/index.mjs";
 
 const args = new Set(process.argv.slice(2));
@@ -29,13 +25,7 @@ try {
   await client.connect();
   const runner = new ProductMigrationRunner({
     db: client.db(dbName),
-    migrations: [
-      backfillDefaultWorkspaceMigration,
-      runnerTerminalTransitionsMigration,
-      agentExecutionFabricMigration,
-      productMemoryMigration,
-      agentProposalsAndActiveBranchesMigration,
-    ],
+    migrations: PRODUCT_MIGRATIONS,
   });
   const result = await runner.run({
     dryRun,

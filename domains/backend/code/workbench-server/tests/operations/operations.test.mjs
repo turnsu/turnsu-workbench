@@ -121,10 +121,47 @@ test("production readiness verifies Mongo primary, exact migrations, sandbox, an
     requireAgent: true,
     requireProvider: true,
     requireMigrations: true,
+    modelCatalog: {
+      async getWorkspacePolicy(workspaceId) {
+        assert.equal(workspaceId, "workspace-local");
+        return { defaultProfileIdsByCapability: { chat: "chat-default", image_generation: "image-default" } };
+      },
+      async resolveCurrentProfile({ workspaceId, profileId, capabilities, requireReady }) {
+        assert.equal(workspaceId, "workspace-local");
+        assert.equal(requireReady, true);
+        assert.equal(profileId, `${capabilities[0].replace("_generation", "")}-default`);
+        return { readiness: { state: "ready" } };
+      },
+    },
+    modelRoutingRequirements: [{
+      workspaceId: "workspace-local",
+      capabilities: ["chat", "image_generation"],
+    }],
+    requireModelRouting: true,
   });
   const report = await readiness.check();
   assert.equal(report.ready, true);
   assert.ok(report.checks.every((item) => item.status === "ok"));
+
+  const routingBlocked = createProductReadiness({
+    store,
+    startupState: { ready: true, error: null },
+    modelCatalog: {
+      async getWorkspacePolicy() { return { defaultProfileIdsByCapability: { chat: "chat-default" } }; },
+      async resolveCurrentProfile() { return { readiness: { state: "ready" } }; },
+    },
+    modelRoutingRequirements: [{
+      workspaceId: "workspace-local",
+      capabilities: ["chat", "image_generation"],
+    }],
+    requireModelRouting: true,
+  });
+  const blockedReport = await routingBlocked.check();
+  assert.equal(blockedReport.ready, false);
+  assert.deepEqual(blockedReport.checks.find((item) => item.name === "model_routing"), {
+    name: "model_routing",
+    status: "failed",
+  });
 
   rows.pop();
   const missing = await readiness.check();

@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  agentProposalsAndActiveBranchesMigration,
   backfillDefaultWorkspaceMigration,
   agentExecutionFabricMigration,
   defineMigration,
   MigrationError,
+  modelRoutingMigration,
   productMemoryMigration,
+  PRODUCT_MIGRATIONS,
   ProductMigrationRunner,
   runnerTerminalTransitionsMigration,
 } from "../../../src/store/migrations/index.mjs";
@@ -289,6 +292,62 @@ test("Product Memory migration creates governed candidate, durable, event, and t
   }
   assert.ok(db.collection("durable_memories").indexes.some((index) => index.name === "memory_text"));
   assert.ok(db.collection("durable_memories").indexes.some((index) => index.name === "expiresAt_ttl"));
+});
+
+test("model routing migration is registered after 005 and creates the exact catalog and Artifact indexes", async () => {
+  assert.deepEqual(PRODUCT_MIGRATIONS.map(({ version }) => version), [
+    "001-backfill-default-workspace",
+    "002-runner-terminal-transitions",
+    "003-agent-execution-fabric",
+    "004-product-memory",
+    "005-agent-proposals-and-active-branches",
+    "006-model-routing",
+  ]);
+  assert.equal(PRODUCT_MIGRATIONS[4], agentProposalsAndActiveBranchesMigration);
+  assert.equal(PRODUCT_MIGRATIONS[5], modelRoutingMigration);
+  assert.match(modelRoutingMigration.checksum, /^sha256:[a-f0-9]{64}$/);
+
+  const db = new FakeDb();
+  const runner = new ProductMigrationRunner({
+    db,
+    migrations: [modelRoutingMigration],
+    clock: () => new Date("2026-07-18T00:00:00.000Z"),
+  });
+  assert.deepEqual((await runner.plan()).pending, ["006-model-routing"]);
+  const result = await runner.run();
+  assert.equal(result.completed[0].result.createdIndexes, true);
+  assert.deepEqual(
+    Object.fromEntries([
+      "model_profiles",
+      "model_profile_revisions",
+      "model_routing_policies",
+      "product_artifacts",
+    ].map((name) => [name, db.collection(name).indexes.map((index) => index.name)])),
+    {
+      model_profiles: [
+        "profileId_1",
+        "scope_1_workspaceId_1_enabled_1_updatedAt_-1",
+        "enabled_1_currentRevisionId_1",
+      ],
+      model_profile_revisions: [
+        "revisionId_1",
+        "profileId_1_revisionNumber_1",
+        "profileId_1_configHash_1",
+      ],
+      model_routing_policies: ["workspaceId_1", "workspaceId_1_policyVersion_1"],
+      product_artifacts: [
+        "artifactId_1",
+        "workspaceId_1_state_1_updatedAt_1",
+        "workspaceId_1_attemptId_1_state_1_createdAt_1",
+        "workspaceId_1_invocationId_1_state_1_createdAt_1",
+        "workspaceId_1_objectId_1_state_1",
+      ],
+    },
+  );
+  assert.deepEqual((await runner.run()).completed, [{
+    version: "006-model-routing",
+    status: "already_applied",
+  }]);
 });
 
 test("migration runner refuses checksum drift and an active foreign lock", async () => {

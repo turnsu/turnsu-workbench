@@ -286,6 +286,8 @@ export class ExecutionBroker {
             maxChildren: 0,
             maxInputBytes: parentRequest.limits.maxInputBytes,
             maxOutputBytes: parentRequest.limits.maxOutputBytes,
+            maxImageCount: 0,
+            maxCostUsdMicros: parentRequest.limits.maxCostUsdMicros,
           },
           capabilities: structuredClone(capabilities),
           resultSchema: { type: "object", additionalProperties: true },
@@ -293,6 +295,17 @@ export class ExecutionBroker {
           metadata: {
             parentInvocationId: parentRequest.invocationId,
             externalChildRef: childRef,
+            ...(parentRequest.metadata?.modelProfileRevisionId ? {
+              modelProfileRevisionId: parentRequest.metadata.modelProfileRevisionId,
+              modelCapability: parentRequest.metadata.modelCapability
+                ?? parentRequest.metadata.capability
+                ?? "structured_output",
+              fallbackModelProfileRevisionIds: structuredClone(
+                parentRequest.metadata.fallbackModelProfileRevisionIds ?? [],
+              ),
+            } : parentRequest.metadata?.modelProfileId ? {
+              legacyModelProfileId: parentRequest.metadata.modelProfileId,
+            } : {}),
           },
         };
         validateRequest(childRequest);
@@ -374,6 +387,8 @@ export class ExecutionBroker {
         modelRequests: Number(child?.usage?.modelRequests ?? 0),
         inputBytes: Number(child?.usage?.inputBytes ?? byteLength(child?.input)),
         outputBytes: Number(child?.usage?.outputBytes ?? byteLength(child?.output)),
+        imageCount: Number(child?.usage?.imageCount ?? 0),
+        costUsdMicros: Number(child?.usage?.costUsdMicros ?? 0),
       };
       totalSteps += childUsage.steps;
       totalModelRequests += childUsage.modelRequests;
@@ -493,6 +508,20 @@ function validateRequest(request) {
   if (request.mode === "bounded_agent" && request.limits.maxChildren !== 0) {
     throw new ExecutionBrokerError("bounded_agent_children_forbidden");
   }
+  if (request.mode === "model_call" && (
+    request.isolation === "container"
+    || request.limits.maxChildren !== 0
+    || request.limits.maxModelRequests < 1
+    || request.capabilities.toolAllowlist.length !== 0
+    || request.capabilities.connectionIds.length !== 0
+    || request.capabilities.network !== false
+    || request.capabilities.filesystem !== "none"
+    || request.capabilities.externalActions !== false
+    || typeof request.modelProfileRevisionId !== "string"
+    || typeof request.modelCapability !== "string"
+  )) {
+    throw new ExecutionBrokerError("model_call_capabilities_invalid");
+  }
 }
 
 function validateResultAgainstRequest(request, result) {
@@ -501,6 +530,10 @@ function validateResultAgainstRequest(request, result) {
     throw new ExecutionBrokerError("execution_result_schema_mismatch");
   }
   if (result.usage.modelRequests > request.limits.maxModelRequests || result.usage.steps > request.limits.maxSteps) {
+    throw new ExecutionBrokerError("execution_budget_exceeded");
+  }
+  if (result.usage.imageCount > request.limits.maxImageCount
+    || result.usage.costUsdMicros > request.limits.maxCostUsdMicros) {
     throw new ExecutionBrokerError("execution_budget_exceeded");
   }
   if (result.usage.outputBytes > request.limits.maxOutputBytes || byteLength(result.output) > request.limits.maxOutputBytes) {
@@ -523,6 +556,11 @@ function normalizeResult({ request, startedAt, finishedAt, backendResult }) {
     attemptId: request.attemptId,
     status: backendResult?.status ?? "completed",
     isolation: request.isolation,
+    requestedModelRevisionId: backendResult?.requestedModelRevisionId
+      ?? (request.mode === "model_call" ? request.modelProfileRevisionId : request.metadata?.modelProfileRevisionId)
+      ?? null,
+    actualModelRevisionId: backendResult?.actualModelRevisionId ?? null,
+    artifactRefs: structuredClone(backendResult?.artifactRefs ?? []),
     ...(backendResult && Object.hasOwn(backendResult, "output") ? { output: structuredClone(backendResult.output) } : {}),
     summary: String(backendResult?.summary || "Execution completed.").slice(0, 4000),
     evidence: Array.isArray(backendResult?.evidence) ? structuredClone(backendResult.evidence) : [],
@@ -531,6 +569,8 @@ function normalizeResult({ request, startedAt, finishedAt, backendResult }) {
       modelRequests: backendResult?.usage?.modelRequests ?? 0,
       inputBytes: backendResult?.usage?.inputBytes ?? byteLength(request.input),
       outputBytes: backendResult?.usage?.outputBytes ?? byteLength(backendResult?.output),
+      imageCount: backendResult?.usage?.imageCount ?? 0,
+      costUsdMicros: backendResult?.usage?.costUsdMicros ?? 0,
     },
     startedAt,
     finishedAt,
@@ -546,9 +586,21 @@ function failureResult(request, startedAt, finishedAt, error, signal) {
     attemptId: request.attemptId,
     status,
     isolation: request.isolation,
+    requestedModelRevisionId: request.mode === "model_call"
+      ? request.modelProfileRevisionId
+      : request.metadata?.modelProfileRevisionId ?? null,
+    actualModelRevisionId: null,
+    artifactRefs: [],
     summary: safeFailureSummary(status),
     evidence: [],
-    usage: { steps: 0, modelRequests: 0, inputBytes: byteLength(request.input), outputBytes: 0 },
+    usage: {
+      steps: 0,
+      modelRequests: 0,
+      inputBytes: byteLength(request.input),
+      outputBytes: 0,
+      imageCount: 0,
+      costUsdMicros: 0,
+    },
     startedAt,
     finishedAt,
   });

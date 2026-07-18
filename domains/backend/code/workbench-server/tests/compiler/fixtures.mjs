@@ -215,6 +215,7 @@ export function makeRevision() {
     runSettings: {
       maxParallelism: 1,
       defaultTimeoutSeconds: 300,
+      workflowFallbackAllowed: false,
     },
     contentHash: "sha256:0000000000000000",
     authoredBy: "user-test",

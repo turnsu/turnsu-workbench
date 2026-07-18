@@ -157,6 +157,7 @@ test("composition registers an injected Remote transport internally for every co
   assert.equal(composed.remoteTransport, remoteTransport);
   assert.deepEqual(registrations.map(({ mode, isolation }) => ({ mode, isolation })), [
     { mode: "deterministic_skill", isolation: "remote" },
+    { mode: "model_call", isolation: "remote" },
     { mode: "bounded_agent", isolation: "remote" },
     { mode: "agent_orchestrator", isolation: "remote" },
   ]);

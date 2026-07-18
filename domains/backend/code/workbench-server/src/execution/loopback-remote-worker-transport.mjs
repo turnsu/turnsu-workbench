@@ -6,16 +6,24 @@ import {
 
 export class LoopbackRemoteWorkerTransport extends RemoteWorkerTransport {
   #available;
+  #supportedModes;
   #scenarioFactory;
   #sequence = 0;
   #executions = new Map();
 
-  constructor({ available = true, scenarioFactory = defaultScenario } = {}) {
+  constructor({
+    available = true,
+    supportedModes = ["deterministic_skill", "bounded_agent", "agent_orchestrator"],
+    scenarioFactory = defaultScenario,
+  } = {}) {
     super();
-    if (typeof available !== "boolean" || typeof scenarioFactory !== "function") {
+    if (typeof available !== "boolean" || typeof scenarioFactory !== "function"
+      || !Array.isArray(supportedModes) || supportedModes.length === 0
+      || supportedModes.some((mode) => typeof mode !== "string")) {
       throw new TypeError("loopback_remote_transport_options_invalid");
     }
     this.#available = available;
+    this.#supportedModes = Object.freeze([...new Set(supportedModes)]);
     this.#scenarioFactory = scenarioFactory;
     this.calls = {
       probe: [], dispatch: [], streamEvents: [], checkpoint: [], cancel: [], resume: [], dispose: [],
@@ -24,7 +32,7 @@ export class LoopbackRemoteWorkerTransport extends RemoteWorkerTransport {
 
   async probe(input = {}) {
     this.calls.probe.push(safeCall(input));
-    return { available: this.#available };
+    return { available: this.#available, supportedModes: [...this.#supportedModes] };
   }
 
   async dispatch({ request, lease } = {}) {

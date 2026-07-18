@@ -14,6 +14,7 @@ import {
   productMemoryMigration,
   ProductMigrationRunner,
   runnerTerminalTransitionsMigration,
+  modelRoutingMigration,
 } from "../../src/store/migrations/index.mjs";
 import { ProductMongoStore } from "../../src/store/index.mjs";
 
@@ -50,6 +51,7 @@ test("strict local-production readiness and metrics pass against authenticated M
       agentExecutionFabricMigration,
       productMemoryMigration,
       agentProposalsAndActiveBranchesMigration,
+      modelRoutingMigration,
     ],
   });
   await migration.run({

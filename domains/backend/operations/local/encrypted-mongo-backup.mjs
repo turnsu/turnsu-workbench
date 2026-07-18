@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 
 const MAGIC = Buffer.from("LOOLOOMI-BACKUP-V1\n", "ascii");
@@ -67,26 +67,43 @@ export async function decryptBackupStream({ source, destination, key } = {}) {
 
 export async function writeBackupManifest({
   archive,
+  objectArchive,
+  objectFiles,
+  artifactsVerified,
+  artifacts,
+  mongoSnapshot,
   database,
   migrationVersion,
   releaseVersion,
   createdAt = new Date().toISOString(),
 } = {}) {
-  validateManifestFields({ archive, database, migrationVersion, releaseVersion, createdAt });
-  const info = await stat(archive);
+  validateManifestFields({ archive, objectArchive, objectFiles, artifactsVerified, artifacts, mongoSnapshot, database, migrationVersion, releaseVersion, createdAt });
+  const [info, objectInfo] = await Promise.all([stat(archive), stat(objectArchive)]);
   if (!info.isFile() || info.size < MAGIC.length + IV_BYTES + TAG_BYTES + 1) {
     throw backupError("backup_archive_invalid");
   }
+  if (!objectInfo.isFile() || objectInfo.size < MAGIC.length + IV_BYTES + TAG_BYTES + 1) {
+    throw backupError("object_store_backup_archive_invalid");
+  }
   const manifest = Object.freeze({
-    schemaVersion: "looloomi-backup-manifest-v1",
+    schemaVersion: "looloomi-backup-manifest-v2",
     createdAt: new Date(createdAt).toISOString(),
     database,
     migrationVersion,
     releaseVersion,
+    mongoSnapshot: structuredClone(mongoSnapshot),
     archive: Object.freeze({
       filename: basename(archive),
       bytes: info.size,
       digest: await fileDigest(archive),
+    }),
+    objectStore: Object.freeze({
+      filename: basename(objectArchive),
+      bytes: objectInfo.size,
+      digest: await fileDigest(objectArchive),
+      files: structuredClone(objectFiles),
+      artifactsVerified,
+      artifacts: structuredClone(artifacts),
     }),
   });
   const path = backupManifestPath(archive);
@@ -102,12 +119,15 @@ export async function verifyBackupManifest({ archive, manifestPath = backupManif
   try { manifest = JSON.parse(await readFile(manifestPath, "utf8")); }
   catch { throw backupError("backup_manifest_invalid"); }
   validateManifest(manifest, archive);
-  const info = await stat(archive);
+  const objectArchive = join(dirname(archive), manifest.objectStore.filename);
+  const [info, objectInfo] = await Promise.all([stat(archive), stat(objectArchive)]);
   if (!info.isFile() || info.size !== manifest.archive.bytes
-    || await fileDigest(archive) !== manifest.archive.digest) {
+    || await fileDigest(archive) !== manifest.archive.digest
+    || !objectInfo.isFile() || objectInfo.size !== manifest.objectStore.bytes
+    || await fileDigest(objectArchive) !== manifest.objectStore.digest) {
     throw backupError("backup_manifest_mismatch");
   }
-  return Object.freeze(structuredClone(manifest));
+  return Object.freeze({ ...structuredClone(manifest), objectStoreArchive: objectArchive });
 }
 
 export function backupManifestPath(archive) {
@@ -168,8 +188,27 @@ function normalizeKey(key) {
   return value;
 }
 
-function validateManifestFields({ archive, database, migrationVersion, releaseVersion, createdAt }) {
+function validateManifestFields({
+  archive,
+  objectArchive,
+  objectFiles,
+  artifactsVerified,
+  artifacts,
+  mongoSnapshot,
+  database,
+  migrationVersion,
+  releaseVersion,
+  createdAt,
+}) {
   if (typeof archive !== "string" || archive.length === 0
+    || typeof objectArchive !== "string" || objectArchive.length === 0
+    || !Array.isArray(objectFiles)
+    || objectFiles.some((item) => !validObjectFile(item))
+    || new Set(objectFiles.map((item) => item.path)).size !== objectFiles.length
+    || !Number.isSafeInteger(artifactsVerified) || artifactsVerified < 0
+    || !Array.isArray(artifacts) || artifacts.some((item) => !validArtifact(item))
+    || new Set(artifacts.map((item) => item.artifactId)).size !== artifacts.length
+    || !validMongoSnapshot(mongoSnapshot)
     || !SAFE_ID.test(database || "") || !SAFE_ID.test(migrationVersion || "")
     || !SAFE_ID.test(releaseVersion || "") || Number.isNaN(Date.parse(createdAt))) {
     throw new TypeError("backup_manifest_input_invalid");
@@ -180,6 +219,11 @@ function validateManifest(manifest, archive) {
   try {
     validateManifestFields({
       archive,
+      objectArchive: join(dirname(archive), manifest?.objectStore?.filename ?? ""),
+      objectFiles: manifest?.objectStore?.files,
+      artifactsVerified: manifest?.objectStore?.artifactsVerified,
+      artifacts: manifest?.objectStore?.artifacts,
+      mongoSnapshot: manifest?.mongoSnapshot,
       database: manifest?.database,
       migrationVersion: manifest?.migrationVersion,
       releaseVersion: manifest?.releaseVersion,
@@ -188,13 +232,47 @@ function validateManifest(manifest, archive) {
   } catch {
     throw backupError("backup_manifest_invalid");
   }
-  if (manifest?.schemaVersion !== "looloomi-backup-manifest-v1"
+  if (manifest?.schemaVersion !== "looloomi-backup-manifest-v2"
     || manifest.archive?.filename !== basename(archive)
     || !Number.isSafeInteger(manifest.archive?.bytes) || manifest.archive.bytes < 1
     || !SHA256.test(manifest.archive?.digest || "")
+    || typeof manifest.objectStore?.filename !== "string" || basename(manifest.objectStore.filename) !== manifest.objectStore.filename
+    || !Number.isSafeInteger(manifest.objectStore?.bytes) || manifest.objectStore.bytes < 1
+    || !SHA256.test(manifest.objectStore?.digest || "")
     || new Date(manifest.createdAt).toISOString() !== manifest.createdAt) {
     throw backupError("backup_manifest_invalid");
   }
+}
+
+function validObjectFile(value) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    && typeof value.path === "string" && value.path.length > 0 && value.path.length <= 1024
+    && !value.path.startsWith("/") && !value.path.includes("\\")
+    && value.path.split("/").every((part) => part && part !== "." && part !== "..")
+    && Number.isSafeInteger(value.bytes) && value.bytes >= 0
+    && SHA256.test(value.digest || "");
+}
+
+function validArtifact(value) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    && SAFE_ID.test(value.artifactId || "") && SAFE_ID.test(value.workspaceId || "")
+    && SAFE_ID.test(value.objectId || "") && SHA256.test(value.contentHash || "")
+    && Number.isSafeInteger(value.sizeBytes) && value.sizeBytes >= 0;
+}
+
+function validMongoSnapshot(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)
+    || !Array.isArray(value._migrationLedger) || !value._indexCounts || typeof value._indexCounts !== "object"
+    || !Array.isArray(value._artifacts)) return false;
+  for (const [name, item] of Object.entries(value)) {
+    if (name.startsWith("_")) continue;
+    if (!SAFE_ID.test(name) || item?.readable !== true || !Number.isSafeInteger(item.count) || item.count < 0
+      || !Number.isSafeInteger(item.duplicateIds) || item.duplicateIds < 0
+      || !Number.isSafeInteger(value._indexCounts[name]) || value._indexCounts[name] < 1) return false;
+  }
+  return value._artifacts.every(validArtifact)
+    && value._migrationLedger.every((item) => SAFE_ID.test(item?.version || "")
+      && SHA256.test(item?.checksum || "") && item?.status === "applied");
 }
 
 async function fileDigest(path) {

@@ -58,11 +58,32 @@ test("backup manifest binds ciphertext digest to database, migration, and releas
   const root = await mkdtemp("/private/tmp/looloomi-backup-manifest-");
   t.after(() => rm(root, { recursive: true, force: true }));
   const archive = `${root}/workbench-20260717T010203Z.lbkp`;
-  await encryptBackupStream({ source: Readable.from("archive"), destination: archive, key: randomBytes(32) });
+  const objectArchive = `${archive}.objects`;
+  const key = randomBytes(32);
+  await encryptBackupStream({ source: Readable.from("archive"), destination: archive, key });
+  await encryptBackupStream({ source: Readable.from("objects"), destination: objectArchive, key });
   const written = await writeBackupManifest({
     archive,
+    objectArchive,
+    objectFiles: [{
+      path: "workspace/object.bin",
+      bytes: 7,
+      digest: `sha256:${"a".repeat(64)}`,
+    }],
+    artifactsVerified: 1,
+    artifacts: [],
+    mongoSnapshot: {
+      runs: { readable: true, count: 0, duplicateIds: 0 },
+      _indexCounts: { runs: 1 },
+      _migrationLedger: [{
+        version: "006-model-routing",
+        checksum: `sha256:${"b".repeat(64)}`,
+        status: "applied",
+      }],
+      _artifacts: [],
+    },
     database: "looloomi_workbench",
-    migrationVersion: "005-agent-proposals-and-active-branches",
+    migrationVersion: "006-model-routing",
     releaseVersion: "release-20260717",
     createdAt: "2026-07-17T01:02:03.000Z",
   });
@@ -70,6 +91,9 @@ test("backup manifest binds ciphertext digest to database, migration, and releas
   const verified = await verifyBackupManifest({ archive });
   assert.equal(verified.database, "looloomi_workbench");
   assert.equal(verified.archive.filename, "workbench-20260717T010203Z.lbkp");
+  assert.equal(verified.schemaVersion, "looloomi-backup-manifest-v2");
+  assert.equal(verified.objectStore.filename, "workbench-20260717T010203Z.lbkp.objects");
+  assert.equal(verified.objectStore.artifactsVerified, 1);
   assert.match(verified.archive.digest, /^sha256:[a-f0-9]{64}$/);
 
   const bytes = Buffer.from(await readFile(archive));

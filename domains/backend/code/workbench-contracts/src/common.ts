@@ -85,6 +85,11 @@ export const MemoryCandidateIdSchema = stableId("Memory candidate identifier");
 export const DurableMemoryIdSchema = stableId("Durable memory identifier");
 export const MemoryEventIdSchema = stableId("Memory event identifier");
 export const MemoryTombstoneIdSchema = stableId("Memory tombstone identifier");
+export const ModelProfileIdSchema = stableId("Model profile identifier");
+export const ModelProfileRevisionIdSchema = stableId(
+  "Immutable model profile revision identifier",
+);
+export const ArtifactIdSchema = stableId("Artifact identifier");
 
 export const VersionSchema = Type.String({ minLength: 1, maxLength: 64 });
 export const ContentHashSchema = Type.String({

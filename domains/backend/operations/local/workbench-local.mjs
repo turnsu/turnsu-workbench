@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmod, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,7 +16,12 @@ import {
   verifyBackupManifest,
   writeBackupManifest,
 } from "./encrypted-mongo-backup.mjs";
-import { LOCAL_SECRET_ACCOUNTS, readKeychainSecret, writeKeychainSecret } from "./keychain.mjs";
+import {
+  LOCAL_SECRET_ACCOUNTS,
+  modelCredentialAccount,
+  readKeychainSecret,
+  writeKeychainSecret,
+} from "./keychain.mjs";
 import {
   activateRelease,
   buildReleaseManifest,
@@ -36,6 +41,8 @@ import {
   readLocalConfig,
   writeLocalConfig,
 } from "./local-runtime.mjs";
+import { createObjectStoreBackup, restoreObjectStoreBackup } from "./object-store-backup.mjs";
+import { runProductProviderSmoke } from "./provider-smoke.mjs";
 import { runLocalWatchdog } from "./watchdog.mjs";
 
 assertSupportedNodeVersion();
@@ -47,11 +54,12 @@ const serverBin = join(repositoryRoot, "domains/backend/code/workbench-server/bi
 const migrationBin = join(repositoryRoot, "domains/backend/code/workbench-server/scripts/migrate-product-store.mjs");
 const bundledNode = join(repositoryRoot, ".tooling/node/bin/node");
 const MONGO_IMAGE = "mongo@sha256:340c1c56fb10e95cf79ff547f8664b96bc6ead9909bc355238cbf865a9695a6f";
-const LATEST_MIGRATION = "005-agent-proposals-and-active-branches";
-const FROZEN_FRONTEND_TREE = "d6aa607bab850e6f30a2c92c4823896806871937";
+const LATEST_MIGRATION = "006-model-routing";
+const FROZEN_FRONTEND_TREE = "c928dda4e262bff84186333068317413d8debce6";
 const CRITICAL_RESTORE_COLLECTIONS = Object.freeze([
   "runs", "execution_events", "execution_checkpoints", "agent_turns",
   "memory_deletion_tombstones", "audit_events",
+  "model_profiles", "model_profile_revisions", "model_routing_policies", "product_artifacts",
 ]);
 
 const args = process.argv.slice(2);
@@ -77,19 +85,90 @@ async function dispatch(name, argv) {
     case "set-model-key": {
       const secret = (await readStdin(16_384)).toString("utf8").trim();
       if (!secret) throw coded("model_key_required");
-      await writeKeychainSecret(LOCAL_SECRET_ACCOUNTS.modelApiKey, secret);
-      return { updated: true };
+      const credentialRef = valueAfter(argv, "--credential-ref") ?? "default";
+      await writeKeychainSecret(modelCredentialAccount(credentialRef), secret);
+      return { updated: true, credentialRef };
     }
-    case "configure":
+    case "configure": {
+      const profile = modelProfileImportFromArgs(argv);
+      const workspaceId = valueAfter(argv, "--workspace-id") ?? "workspace-local";
       return writeLocalConfig({
-        modelBaseUrl: requiredAfter(argv, "--model-base-url"),
-        model: requiredAfter(argv, "--model"),
+        modelCatalogImport: {
+          schemaVersion: "model-catalog-import-v1",
+          profiles: [profile],
+          routingPolicies: [{
+            workspaceId,
+            defaultProfileIdsByCapability: Object.fromEntries(
+              profile.capabilities.map((capability) => [capability, profile.profileId]),
+            ),
+            workflowFallbackAllowed: false,
+          }],
+        },
         agentImage: requiredAfter(argv, "--agent-image"),
         skillImage: requiredAfter(argv, "--skill-image"),
         port: integerAfter(argv, "--port", 8798),
         database: valueAfter(argv, "--database") ?? "looloomi_workbench",
         logLevel: valueAfter(argv, "--log-level") ?? "info",
       }, paths);
+    }
+    case "add-model": {
+      const config = await readLocalConfig(paths);
+      const profile = modelProfileImportFromArgs(argv);
+      return writeLocalConfig({
+        ...config,
+        modelCatalogImport: {
+          ...config.modelCatalogImport,
+          profiles: [
+            ...config.modelCatalogImport.profiles.filter((item) =>
+              item.profileId !== profile.profileId),
+            profile,
+          ],
+        },
+      }, paths);
+    }
+    case "set-default-model": {
+      const config = await readLocalConfig(paths);
+      const profileId = requiredAfter(argv, "--model-profile-id");
+      const workspaceId = valueAfter(argv, "--workspace-id") ?? "workspace-local";
+      const policy = config.modelCatalogImport.routingPolicies.find((item) => item.workspaceId === workspaceId);
+      if (!policy) throw coded("local_model_policy_unavailable");
+      return writeLocalConfig({
+        ...config,
+        modelCatalogImport: {
+          ...config.modelCatalogImport,
+          routingPolicies: config.modelCatalogImport.routingPolicies.map((item) => item.workspaceId === workspaceId ? {
+            ...item,
+            defaultProfileIdsByCapability: {
+              ...item.defaultProfileIdsByCapability,
+              chat: profileId,
+              tool_calling: profileId,
+              structured_output: profileId,
+            },
+          } : item),
+        },
+      }, paths);
+    }
+    case "set-capability-default": {
+      const config = await readLocalConfig(paths);
+      const workspaceId = valueAfter(argv, "--workspace-id") ?? "workspace-local";
+      const capability = requiredAfter(argv, "--capability");
+      const profileId = requiredAfter(argv, "--model-profile-id");
+      const policy = config.modelCatalogImport.routingPolicies.find((item) => item.workspaceId === workspaceId);
+      if (!policy) throw coded("local_model_policy_unavailable");
+      return writeLocalConfig({
+        ...config,
+        modelCatalogImport: {
+          ...config.modelCatalogImport,
+          routingPolicies: config.modelCatalogImport.routingPolicies.map((item) => item.workspaceId === workspaceId ? {
+            ...item,
+            defaultProfileIdsByCapability: {
+              ...item.defaultProfileIdsByCapability,
+              [capability]: profileId,
+            },
+          } : item),
+        },
+      }, paths);
+    }
     case "doctor": {
       const requireRunning = argv.includes("--require-running");
       const result = await doctor({ paths, requireRunning });
@@ -143,6 +222,11 @@ async function dispatch(name, argv) {
       return createBackup(paths);
     case "restore-drill":
       return restoreDrill(paths, requiredAfter(argv, "--backup"));
+    case "smoke-chat":
+      return smokeProvider(paths, argv, { kind: "chat", confirmBillable: false });
+    case "smoke-stability":
+      if (!argv.includes("--confirm-billable")) throw coded("stability_billable_confirmation_required");
+      return smokeProvider(paths, argv, { kind: "stability", confirmBillable: true });
     case "manifest":
       return createManifest({
         bundleRoot: requiredAfter(argv, "--bundle"),
@@ -188,14 +272,72 @@ async function dispatch(name, argv) {
     case "help":
     case undefined:
       return { commands: [
-        "init-secrets", "set-model-key", "configure", "install", "preflight", "start", "stop",
+        "init-secrets", "set-model-key", "configure", "add-model", "set-default-model", "set-capability-default",
+        "install", "preflight", "start", "stop",
         "restart", "status", "backup", "restore-drill", "upgrade", "rollback", "diagnostics",
         "doctor", "watchdog", "mongo-up", "mongo-down", "migrate", "serve", "stage-release", "manifest",
-        "activate", "install-launchagents", "scan-release-secrets",
+        "activate", "install-launchagents", "scan-release-secrets", "smoke-chat", "smoke-stability",
       ] };
     default:
       throw coded("local_command_unknown");
   }
+}
+
+async function smokeProvider(paths, argv, { kind, confirmBillable }) {
+  const bundleRoot = resolve(requiredAfter(argv, "--bundle"));
+  const profileId = requiredAfter(argv, "--model-profile-id");
+  const sourceCommit = requiredAfter(argv, "--source-commit");
+  const config = await readLocalConfig(paths);
+  const testDatabase = `looloomi_provider_${kind}_${randomUUID().replaceAll("-", "").slice(0, 12)}_test`;
+  const temporary = await mkdtemp(`/private/tmp/looloomi-${kind}-smoke-`);
+  const candidateNode = join(bundleRoot, ".tooling/node/bin/node");
+  const candidateMigration = join(bundleRoot, "domains/backend/code/workbench-server/scripts/migrate-product-store.mjs");
+  let evidence;
+  let operationFailed = false;
+  try {
+    const baseEnvironment = await buildDaemonEnvironment({ paths, baseEnv: minimalEnvironment() });
+    const env = {
+      ...baseEnvironment,
+      WORKBENCH_LOCAL_ROOT: paths.root,
+      WORKBENCH_MONGODB_DB: testDatabase,
+      WORKBENCH_OBJECT_STORE_ROOT: join(temporary, "objects"),
+      WORKBENCH_EXECUTION_ROOT: join(temporary, "executions"),
+      WORKBENCH_AGENT_SANDBOX_ROOT: join(temporary, "agent-sandbox"),
+      WORKBENCH_TEST_MODE: "0",
+    };
+    await runChecked(candidateNode, [candidateMigration, "--db", testDatabase, "--confirm-write"], {
+      cwd: bundleRoot,
+      env: { ...env, MONGODB_URI: env.WORKBENCH_MONGODB_URI },
+    });
+    evidence = await runProductProviderSmoke({
+      bundleRoot,
+      sourceCommit,
+      kind,
+      profileId,
+      confirmBillable,
+      env,
+    });
+  } catch (error) {
+    operationFailed = true;
+    throw error;
+  } finally {
+    const cleanup = await runProcess(
+      "docker",
+      ["exec", "looloomi-mongodb", "/opt/looloomi/mongo-drop-test.sh", testDatabase],
+    ).catch(() => ({ code: -1 }));
+    await rm(temporary, { recursive: true, force: true });
+    if (!operationFailed && cleanup.code !== 0) throw coded("provider_smoke_cleanup_failed");
+  }
+  const evidenceRoot = join(bundleRoot, "release-evidence");
+  await mkdir(evidenceRoot, { recursive: true, mode: 0o700 });
+  const evidencePath = join(evidenceRoot, `${kind === "chat" ? "chat" : "stability"}-provider-smoke.json`);
+  await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });
+  return {
+    status: "passed",
+    capability: evidence.capability,
+    profileRevisionId: evidence.profileRevisionId,
+    evidence: evidencePath,
+  };
 }
 
 async function verifyCandidateBundle(bundleRoot) {
@@ -210,13 +352,28 @@ async function doctor({ paths, requireRunning }) {
   let config = null;
   try { config = await readLocalConfig(paths); checks.push({ name: "config", ok: true }); }
   catch { checks.push({ name: "config", ok: false }); }
-  for (const account of Object.values(LOCAL_SECRET_ACCOUNTS)) {
+  for (const account of [
+    LOCAL_SECRET_ACCOUNTS.mongoUsername,
+    LOCAL_SECRET_ACCOUNTS.mongoPassword,
+    LOCAL_SECRET_ACCOUNTS.mongoReplicaKey,
+    LOCAL_SECRET_ACCOUNTS.backupKey,
+  ]) {
     try { await readKeychainSecret(account); checks.push({ name: `keychain_${account}`, ok: true }); }
     catch { checks.push({ name: `keychain_${account}`, ok: false }); }
   }
   const docker = await runProcess("docker", ["info", "--format", "{{json .ServerVersion}}"]);
   checks.push({ name: "docker", ok: docker.code === 0 });
   if (config) {
+    const requiredProfiles = new Set(config.modelCatalogImport.routingPolicies.flatMap((policy) =>
+      Object.values(policy.defaultProfileIdsByCapability)));
+    const credentialProfiles = config.modelCatalogImport.profiles.filter((item) => item.enabled);
+    for (const item of credentialProfiles) {
+      const credentialRef = item.credentialRef;
+      const account = modelCredentialAccount(credentialRef);
+      const required = requiredProfiles.has(item.profileId);
+      try { await readKeychainSecret(account); checks.push({ name: `keychain_model_${credentialRef}`, ok: true, required }); }
+      catch { checks.push({ name: `keychain_model_${credentialRef}`, ok: false, required }); }
+    }
     for (const [name, image] of [["agent_image", config.agentImage], ["skill_image", config.skillImage], ["mongo_image", MONGO_IMAGE]]) {
       const inspected = await runProcess("docker", ["image", "inspect", image, "--format", "{{.Id}}"]);
       checks.push({ name, ok: inspected.code === 0 });
@@ -226,7 +383,7 @@ async function doctor({ paths, requireRunning }) {
       checks.push({ name: "server_ready", ok: response.status === 200 });
     } catch { checks.push({ name: "server_ready", ok: !requireRunning }); }
   }
-  const ok = checks.every((item) => item.ok);
+  const ok = checks.every((item) => item.ok || item.required === false);
   return { status: ok ? "ready" : "not_ready", checks };
 }
 
@@ -291,7 +448,9 @@ async function createBackup(paths) {
   const config = await readLocalConfig(paths);
   const key = String(await readKeychainSecret(LOCAL_SECRET_ACCOUNTS.backupKey)).trim();
   const destination = join(paths.backups, backupFilename());
+  const objectDestination = `${destination}.objects`;
   const manifestPath = backupManifestPath(destination);
+  const before = await mongoSnapshotSummary(config.database);
   const child = spawn("docker", ["exec", "looloomi-mongodb", "/opt/looloomi/mongo-backup.sh", config.database], {
     stdio: ["ignore", "pipe", "pipe"],
     env: minimalEnvironment(),
@@ -302,8 +461,23 @@ async function createBackup(paths) {
     await encryptBackupStream({ source: child.stdout, destination, key });
     const code = await exit;
     if (code !== 0) throw coded("mongo_backup_failed");
+    const objectBackup = await createObjectStoreBackup({
+      root: paths.objectStore,
+      destination: objectDestination,
+      key,
+    });
+    const after = await mongoSnapshotSummary(config.database);
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      throw coded("backup_product_snapshot_changed");
+    }
+    assertArtifactObjectStoreEquivalent(after._artifacts, objectBackup.files);
     await writeBackupManifest({
       archive: destination,
+      objectArchive: objectDestination,
+      objectFiles: objectBackup.files,
+      artifactsVerified: objectBackup.artifactsVerified,
+      artifacts: after._artifacts,
+      mongoSnapshot: after,
       database: config.database,
       migrationVersion: LATEST_MIGRATION,
       releaseVersion: await currentReleaseVersion(paths),
@@ -311,6 +485,7 @@ async function createBackup(paths) {
   } catch (error) {
     child.kill("SIGKILL");
     await rm(destination, { force: true }).catch(() => {});
+    await rm(objectDestination, { force: true }).catch(() => {});
     await rm(manifestPath, { force: true }).catch(() => {});
     throw error;
   }
@@ -319,6 +494,7 @@ async function createBackup(paths) {
   for (const name of retention.remove) {
     const archive = join(paths.backups, name);
     await rm(archive, { force: true });
+    await rm(`${archive}.objects`, { force: true });
     await rm(backupManifestPath(archive), { force: true });
   }
   return { status: "completed", backup: destination, manifest: manifestPath, retained: retention.keep.length };
@@ -334,7 +510,7 @@ async function restoreDrill(paths, backupPath) {
   }
   const key = String(await readKeychainSecret(LOCAL_SECRET_ACCOUNTS.backupKey)).trim();
   const target = `looloomi_restore_${Date.now()}_test`;
-  const source = await mongoSnapshotSummary(config.database);
+  const objectTarget = join(paths.runtime, "restore-drills", target, "objects");
   const restore = spawn("docker", [
     "exec", "-i", "looloomi-mongodb", "/opt/looloomi/mongo-restore.sh", config.database, target,
   ], { stdio: ["pipe", "ignore", "pipe"], env: minimalEnvironment() });
@@ -342,14 +518,36 @@ async function restoreDrill(paths, backupPath) {
   const exit = waitForChild(restore);
   await decryptBackupStream({ source: backupPath, destination: restore.stdin, key });
   if (await exit !== 0) throw coded("mongo_restore_failed");
+  const objectStore = await restoreObjectStoreBackup({
+    source: manifest.objectStoreArchive,
+    destinationRoot: objectTarget,
+    key,
+    expectedFiles: manifest.objectStore.files,
+  });
   const verified = await runChecked("docker", [
     "exec", "looloomi-mongodb", "/opt/looloomi/mongo-verify-restore.sh", target,
   ]);
   let collections;
   try { collections = JSON.parse(verified.stdout.trim()); } catch { throw coded("mongo_restore_verification_failed"); }
-  assertRestoreEquivalent(source, collections);
+  assertRestoreEquivalent(manifest.mongoSnapshot, collections);
+  if (JSON.stringify(collections._artifacts) !== JSON.stringify(manifest.objectStore.artifacts)) {
+    throw coded("object_store_artifact_metadata_mismatch");
+  }
+  assertArtifactObjectStoreEquivalent(collections._artifacts, manifest.objectStore.files);
   await runChecked("docker", ["exec", "looloomi-mongodb", "/opt/looloomi/mongo-drop-test.sh", target]);
-  return { status: "verified", targetDatabase: target, cleaned: true, collections };
+  await rm(join(paths.runtime, "restore-drills", target), { recursive: true, force: true });
+  return { status: "verified", targetDatabase: target, cleaned: true, collections, objectStore };
+}
+
+function assertArtifactObjectStoreEquivalent(artifacts, files) {
+  if (!Array.isArray(artifacts) || !Array.isArray(files)) throw coded("object_store_artifact_metadata_mismatch");
+  const byPath = new Map(files.map((item) => [item.path, item]));
+  for (const artifact of artifacts) {
+    const object = byPath.get(`${artifact.workspaceId}/${artifact.objectId}.bin`);
+    if (!object || object.digest !== artifact.contentHash || object.bytes !== artifact.sizeBytes) {
+      throw coded("object_store_artifact_metadata_mismatch");
+    }
+  }
 }
 
 async function mongoSnapshotSummary(database) {
@@ -594,6 +792,31 @@ async function walkFiles(root, prefix = "") {
 function valueAfter(argv, flag) { const index = argv.indexOf(flag); return index >= 0 ? argv[index + 1] : undefined; }
 function requiredAfter(argv, flag) { const value = valueAfter(argv, flag); if (!value) throw coded("local_argument_required"); return value; }
 function integerAfter(argv, flag, fallback) { const value = valueAfter(argv, flag); if (value === undefined) return fallback; const parsed = Number(value); if (!Number.isInteger(parsed)) throw coded("local_argument_invalid"); return parsed; }
+function modelProfileImportFromArgs(argv) {
+  const provider = valueAfter(argv, "--provider") ?? "custom";
+  const id = valueAfter(argv, "--model-profile-id") ?? `${provider}-default`;
+  const endpoint = valueAfter(argv, "--model-base-url");
+  const protocol = valueAfter(argv, "--protocol");
+  const capabilities = String(valueAfter(argv, "--capabilities")
+    ?? (provider === "stability" ? "image_generation" : "chat,tool_calling,structured_output"))
+    .split(",").map((item) => item.trim()).filter(Boolean);
+  return {
+    profileId: id,
+    displayName: valueAfter(argv, "--label") ?? id,
+    scope: "global",
+    enabled: true,
+    provider,
+    ...(protocol ? { protocol } : {}),
+    providerModelId: requiredAfter(argv, "--model"),
+    capabilities,
+    parameterSchemaVersion: "model-parameters-v1",
+    defaults: {},
+    limits: {},
+    credentialRef: valueAfter(argv, "--credential-ref") ?? provider,
+    ...(endpoint ? { endpoint } : {}),
+    policyVersion: "1",
+  };
+}
 function safeCode(value) { return typeof value === "string" && /^[a-z0-9_:-]{1,128}$/.test(value) ? value : "local_operation_failed"; }
 function coded(code) { const error = new Error(code); error.code = code; error.productSafe = true; return error; }
 function xml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;"); }

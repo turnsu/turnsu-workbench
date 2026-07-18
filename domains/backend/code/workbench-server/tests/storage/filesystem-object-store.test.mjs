@@ -160,6 +160,85 @@ test("quarantine is explicit, promotion is irreversible here, and cancellation i
   );
 });
 
+test("promoted objects can be explicitly deleted for governed retention cleanup", async (t) => {
+  const store = await testStore(t);
+  const bytes = Buffer.from("retained artifact bytes");
+  await store.put({
+    workspaceId: "workspace-alpha",
+    objectId: "object-artifact-retention",
+    bytes,
+    mediaType: "image/png",
+  });
+  await store.promote({ workspaceId: "workspace-alpha", objectId: "object-artifact-retention" });
+
+  assert.deepEqual(
+    await store.deleteObject({
+      workspaceId: "workspace-alpha",
+      objectId: "object-artifact-retention",
+      expectedState: "promoted",
+    }),
+    { deleted: true, state: "promoted" },
+  );
+  assert.deepEqual(
+    await store.deleteObject({ workspaceId: "workspace-alpha", objectId: "object-artifact-retention" }),
+    { deleted: false },
+  );
+  await assert.rejects(
+    store.read({ workspaceId: "workspace-alpha", objectId: "object-artifact-retention" }),
+    (error) => error instanceof ObjectStoreError && error.code === "object_not_found",
+  );
+});
+
+test("normal object operations reject workspace directory symlinks", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "looloomi-object-store-root-"));
+  const outside = await mkdtemp(join(tmpdir(), "looloomi-object-store-outside-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  const store = await createFilesystemObjectStore({ rootDir: root, maxObjectBytes: 1024 });
+  await symlink(outside, join(root, "workspace-alpha"), "dir");
+
+  for (const operation of [
+    () => store.stat({ workspaceId: "workspace-alpha", objectId: "object-secret" }),
+    () => store.read({ workspaceId: "workspace-alpha", objectId: "object-secret" }),
+    () => store.list({ workspaceId: "workspace-alpha" }),
+    () => store.deleteObject({ workspaceId: "workspace-alpha", objectId: "object-secret" }),
+  ]) {
+    await assert.rejects(
+      operation(),
+      (error) => error instanceof ObjectStoreError && error.code === "object_store_path_invalid",
+    );
+  }
+});
+
+test("reads and promotion reject symlinked object byte files", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "looloomi-object-store-bytes-root-"));
+  const outside = await mkdtemp(join(tmpdir(), "looloomi-object-store-bytes-outside-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  const store = await createFilesystemObjectStore({ rootDir: root, maxObjectBytes: 1024 });
+  await store.put({
+    workspaceId: "workspace-alpha",
+    objectId: "object-symlink-bytes",
+    bytes: Buffer.from("owned bytes"),
+    mediaType: "application/octet-stream",
+  });
+  const bytesPath = join(root, "workspace-alpha", "object-symlink-bytes.bin");
+  const outsidePath = join(outside, "secret.bin");
+  await writeFile(outsidePath, "outside secret");
+  await rm(bytesPath);
+  await symlink(outsidePath, bytesPath);
+
+  for (const operation of [
+    () => store.read({ workspaceId: "workspace-alpha", objectId: "object-symlink-bytes" }),
+    () => store.promote({ workspaceId: "workspace-alpha", objectId: "object-symlink-bytes" }),
+  ]) {
+    await assert.rejects(
+      operation(),
+      (error) => error instanceof ObjectStoreError && error.code === "object_integrity_failed",
+    );
+  }
+});
+
 test("resumable upload stages out-of-order chunks and assembles them in index order", async (t) => {
   const store = await testStore(t);
   const chunks = [Buffer.from("secure "), Buffer.from("upload "), Buffer.from("bytes")];

@@ -30,6 +30,8 @@ function request(overrides = {}) {
       maxChildren: 0,
       maxInputBytes: 10000,
       maxOutputBytes: 10000,
+      maxImageCount: 0,
+      maxCostUsdMicros: 1_000_000,
     },
     capabilities: {
       toolAllowlist: [],
@@ -316,6 +318,11 @@ test("orchestrator children become independent product invocations without chang
       required: ["workflowStatus"],
       additionalProperties: false,
     },
+    metadata: {
+      modelProfileRevisionId: "model-revision-orchestrator-1",
+      modelCapability: "structured_output",
+      fallbackModelProfileRevisionIds: [],
+    },
   });
 
   const result = await value.execute(input);
@@ -326,6 +333,11 @@ test("orchestrator children become independent product invocations without chang
   assert.equal(children.length, 2);
   assert(children.every((invocation) => invocation.mode === "bounded_agent"));
   assert(children.every((invocation) => invocation.controller.controllerId === "run-alpha"));
+  assert(children.every((invocation) => (
+    invocation.request.metadata.modelProfileRevisionId === "model-revision-orchestrator-1"
+    && invocation.request.metadata.modelCapability === "structured_output"
+    && invocation.request.metadata.capability === undefined
+  )));
   assert.equal((persistence.events.get(input.invocationId) ?? []).filter((event) => event.type === "execution.child_recorded").length, 2);
 });
 

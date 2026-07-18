@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
 
-import { Check, WORKBENCH_V1_AGENT_ENDPOINTS } from "@looloomi/workbench-contracts";
+import {
+  Check,
+  WORKBENCH_V1_AGENT_ENDPOINTS,
+  WORKBENCH_V1_MODEL_ENDPOINTS,
+} from "@looloomi/workbench-contracts";
 
 import { createWorkbenchHttpHandler } from "../../src/http/workbench-http-handler.mjs";
 import { WorkbenchSessionStore } from "../../src/security/workbench-session-store.mjs";
@@ -64,6 +68,8 @@ const sessionValue = {
   workspaceId: "workspace-a",
   scope: { kind: "module", objectKind: "workflow", objectId: "workflow-a", branchId: "agent-branch-a", baseVersionId: "revision-a" },
   status: "active",
+  lastUsedModelProfileId: "deepseek-default",
+  modelPreferenceState: "preference_only",
   activeTurnId: null,
   createdAt: NOW,
   updatedAt: NOW,
@@ -75,7 +81,12 @@ const turnValue = {
   sessionId: sessionValue.sessionId,
   sequence: 1,
   status: "queued",
-  message: "Improve it",
+  modelRoutingState: "pinned",
+  kind: "agent_message",
+  requestedModelRevisionId: "model-revision-deepseek-1",
+  actualModelRevisionId: null,
+  artifactRefs: [],
+  input: { message: "Improve it" },
   result: null,
   queuedAt: NOW,
   startedAt: null,
@@ -87,11 +98,48 @@ test("formal Agent session and asynchronous turn routes dispatch contract-valid 
   const calls = [];
   const application = {
     async listAgentDefinitions() { return { data: [{ schemaVersion: "workbench-v1", definitionId: "main", kind: "main", label: "Main Agent", description: "Main workspace Agent.", objectKinds: [], canHandoffToMain: false }], page: { nextCursor: null, hasMore: false } }; },
+    async listModelProfiles() {
+      return {
+        data: [{
+          schemaVersion: "workbench-v1",
+          profileId: "deepseek-default",
+          displayName: "DeepSeek",
+          currentRevisionId: "model-revision-deepseek-1",
+          currentRevision: {
+            schemaVersion: "workbench-v1",
+            revisionId: "model-revision-deepseek-1",
+            profileId: "deepseek-default",
+            revisionNumber: 1,
+            modelDisplayName: "DeepSeek Chat",
+            providerDisplay: { key: "deepseek", label: "DeepSeek" },
+            capabilities: ["chat", "tool_calling", "structured_output"],
+            parameterSupport: {
+              kind: "chat", temperature: true, maxOutputTokens: true, tools: true, responseSchema: true,
+            },
+            limits: { kind: "chat", maxInputTokens: 128_000, maxOutputTokens: 8_192 },
+            createdAt: NOW,
+          },
+          enabled: true,
+          readiness: "ready",
+          readinessReason: null,
+          selectable: true,
+          defaultForCapabilities: ["chat", "tool_calling", "structured_output"],
+          scope: "global",
+          createdAt: NOW,
+          updatedAt: NOW,
+        }],
+        page: { nextCursor: null, hasMore: false },
+      };
+    },
     async createAgentSession(input) { calls.push(input); return sessionValue; },
+    async selectAgentSessionModel(input) {
+      calls.push(input);
+      return { ...sessionValue, lastUsedModelProfileId: input.request.data.modelProfileId };
+    },
     async getAgentSession() { return sessionValue; },
     async createAgentTurn(input) { calls.push(input); return turnValue; },
     async getAgentTurn() { return turnValue; },
-    async cancelAgentTurn() { return { ...turnValue, status: "cancelled", result: { response: "Turn cancelled.", proposalId: null, handoffId: null, invocationIds: [] }, finishedAt: NOW }; },
+    async cancelAgentTurn() { return { ...turnValue, status: "cancelled", result: null, finishedAt: NOW }; },
     async listAgentSessionEvents() { return { data: [], page: { nextCursor: null, hasMore: false } }; },
   };
   const { handler, session } = setup(application);
@@ -99,6 +147,10 @@ test("formal Agent session and asynchronous turn routes dispatch contract-valid 
   const definitions = await invoke(handler, { url: "/api/workbench/v1/agent-definitions", headers: { Cookie: `workbench_session=${session.token}` } });
   assert.equal(definitions.status, 200, definitions.body);
   assert.equal(Check(WORKBENCH_V1_AGENT_ENDPOINTS.listAgentDefinitions.responseBodySchema, JSON.parse(definitions.body)), true);
+
+  const profiles = await invoke(handler, { url: "/api/workbench/v1/model-profiles", headers: { Cookie: `workbench_session=${session.token}` } });
+  assert.equal(profiles.status, 200, profiles.body);
+  assert.equal(Check(WORKBENCH_V1_MODEL_ENDPOINTS.listModelProfiles.responseBodySchema, JSON.parse(profiles.body)), true);
 
   const createdSession = await invoke(handler, {
     method: "POST",
@@ -109,15 +161,31 @@ test("formal Agent session and asynchronous turn routes dispatch contract-valid 
   assert.equal(createdSession.status, 201, createdSession.body);
   assert.equal(Check(WORKBENCH_V1_AGENT_ENDPOINTS.createAgentSession.responseBodySchema, JSON.parse(createdSession.body)), true);
 
+  const selectedModel = await invoke(handler, {
+    method: "POST",
+    url: `/api/workbench/v1/agent-sessions/${sessionValue.sessionId}/model`,
+    headers: headers(session, "select-model-a"),
+    body: { schemaVersion: "workbench-api-v1", data: { modelProfileId: "claude-sonnet" } },
+  });
+  assert.equal(selectedModel.status, 200, selectedModel.body);
+  assert.equal(JSON.parse(selectedModel.body).data.lastUsedModelProfileId, "claude-sonnet");
+
   const createdTurn = await invoke(handler, {
     method: "POST",
     url: `/api/workbench/v1/agent-sessions/${sessionValue.sessionId}/turns`,
     headers: headers(session, "create-turn-a"),
-    body: { schemaVersion: "workbench-api-v1", data: { message: "Improve it" } },
+    body: {
+      schemaVersion: "workbench-api-v1",
+      data: {
+        kind: "agent_message",
+        modelProfileRevisionId: "model-revision-deepseek-1",
+        input: { message: "Improve it" },
+      },
+    },
   });
   assert.equal(createdTurn.status, 202, createdTurn.body);
   assert.equal(Check(WORKBENCH_V1_AGENT_ENDPOINTS.createAgentTurn.responseBodySchema, JSON.parse(createdTurn.body)), true);
-  assert.equal(calls[1].sessionId, sessionValue.sessionId);
+  assert.equal(calls.find((call) => call.turnId === undefined && call.request?.data?.kind)?.sessionId, sessionValue.sessionId);
 });
 
 test("Agent mutations require browser security and do not expose a generic Worker execution route", async () => {

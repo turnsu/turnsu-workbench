@@ -7,6 +7,7 @@ import {
   EdgeIdSchema,
   JsonValueSchema,
   LoopVersionIdSchema,
+  ModelProfileIdSchema,
   NodeIdSchema,
   ProposalIdSchema,
   ReleaseIdSchema,
@@ -138,7 +139,9 @@ export const SkillNodeSchema = strictObject({
   ...WorkflowNodeBaseProperties,
   kind: Type.Literal("Skill"),
   skillRef: PinnedSkillRefSchema,
-  configuration: strictObject({}),
+  configuration: strictObject({
+    modelProfileId: Type.Optional(ModelProfileIdSchema),
+  }),
 });
 
 export const MaterialNodeSchema = strictObject({
@@ -249,10 +252,32 @@ export const OutputDefinitionSchema = strictObject({
   expectedOutputs: Type.Array(ExpectedOutputSchema, { minItems: 1 }),
 });
 
-export const RunSettingsSchema = strictObject({
+const RunSettingsBaseProperties = {
   maxParallelism: Type.Literal(1),
   defaultTimeoutSeconds: Type.Integer({ minimum: 1, maximum: 86400 }),
+};
+
+export const CapabilitySpecificRunSettingsSchema = strictObject({
+  ...RunSettingsBaseProperties,
+  agentControllerModelProfileId: Type.Optional(ModelProfileIdSchema),
+  imageGenerationModelProfileId: Type.Optional(ModelProfileIdSchema),
+  workflowFallbackAllowed: Type.Boolean(),
 });
+
+export const LegacyUnpinnedRunSettingsSchema = strictObject({
+  ...RunSettingsBaseProperties,
+  modelRoutingState: Type.Literal("legacy_unpinned"),
+  modelProfileId: ModelProfileIdSchema,
+  fallbackModelProfileIds: Type.Optional(Type.Array(ModelProfileIdSchema, {
+    uniqueItems: true,
+    maxItems: 8,
+  })),
+});
+
+export const RunSettingsSchema = Type.Union([
+  CapabilitySpecificRunSettingsSchema,
+  LegacyUnpinnedRunSettingsSchema,
+]);
 
 export const TemplateReviewPolicySchema = strictObject({
   required: Type.Boolean(),

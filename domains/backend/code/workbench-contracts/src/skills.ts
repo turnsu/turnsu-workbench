@@ -8,6 +8,7 @@ import {
   VersionSchema,
   WorkbenchSchemaVersionSchema,
 } from "./common.js";
+import { ModelCapabilitySchema } from "./models.js";
 import { strictObject, stringEnum } from "./schema.js";
 
 export const PinnedSkillRefSchema = strictObject(
@@ -62,12 +63,41 @@ export const SetupCheckSchema = strictObject({
   message: Type.String({ minLength: 1, maxLength: 1000 }),
 });
 
-export const SkillExecutionRefSchema = strictObject({
+const SkillExecutionRefBaseProperties = {
   capabilityId: Type.String({ minLength: 1, maxLength: 128 }),
   taskIntent: Type.String({ minLength: 1, maxLength: 128 }),
   adapterVersion: VersionSchema,
+};
+
+export const NonModelSkillExecutionRefSchema = strictObject({
+  ...SkillExecutionRefBaseProperties,
   executionMode: stringEnum(["agent", "deterministic", "orchestrator"]),
 });
+
+export const ModelSkillExecutionRefSchema = strictObject({
+  ...SkillExecutionRefBaseProperties,
+  executionMode: Type.Literal("model"),
+  requiredModelCapability: ModelCapabilitySchema,
+});
+
+export const SkillExecutionRefSchema = Type.Union([
+  NonModelSkillExecutionRefSchema,
+  ModelSkillExecutionRefSchema,
+]);
+
+export const NonModelSkillExecutionSummarySchema = strictObject({
+  executionMode: stringEnum(["agent", "deterministic", "orchestrator"]),
+});
+
+export const ModelSkillExecutionSummarySchema = strictObject({
+  executionMode: Type.Literal("model"),
+  requiredModelCapability: ModelCapabilitySchema,
+});
+
+export const SkillExecutionSummarySchema = Type.Union([
+  NonModelSkillExecutionSummarySchema,
+  ModelSkillExecutionSummarySchema,
+]);
 
 export const SkillReadinessSchema = strictObject({
   status: stringEnum(["ready", "blocked", "unknown"]),
@@ -113,6 +143,7 @@ export const SkillCatalogItemSchema = strictObject(
     risk: SkillRiskSchema,
     dependencies: Type.Array(SkillDependencySchema),
     setupChecks: Type.Array(SetupCheckSchema),
+    execution: SkillExecutionSummarySchema,
     usageCount: Type.Integer({ minimum: 0 }),
     readiness: SkillReadinessSchema,
     createdAt: UtcTimestampSchema,

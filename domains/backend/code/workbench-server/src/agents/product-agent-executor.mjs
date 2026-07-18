@@ -7,6 +7,8 @@ const DEFAULT_LIMITS = Object.freeze({
   maxChildren: 0,
   maxInputBytes: 1_000_000,
   maxOutputBytes: 1_000_000,
+  maxImageCount: 0,
+  maxCostUsdMicros: 10_000_000,
 });
 
 const DEFAULT_CAPABILITIES = Object.freeze({
@@ -57,8 +59,17 @@ export function createProductAgentExecutor({
           response: safeWorkerSummary(worker),
         };
       }
+      if (worker.requestedModelRevisionId !== turn.requestedModelRevisionId
+        || worker.actualModelRevisionId !== turn.requestedModelRevisionId) {
+        throw new ProductAgentExecutorError("product_agent_model_route_unverified");
+      }
       const output = validateWorkerOutput(worker.output, definition.kind);
-      if (definition.kind === "main") return { response: output.response };
+      const routing = {
+        requestedModelRevisionId: worker.requestedModelRevisionId,
+        actualModelRevisionId: worker.actualModelRevisionId,
+        artifactRefs: safeArtifactRefs(worker.artifactRefs),
+      };
+      if (definition.kind === "main") return { response: output.response, ...routing };
       if (!proposalService || typeof proposalService.createFromAgent !== "function") {
         return {
           status: "blocked",
@@ -73,6 +84,7 @@ export function createProductAgentExecutor({
       return {
         response: output.response,
         proposalId: saved.proposalId,
+        ...routing,
         ...(output.handoff ? { handoff: output.handoff } : {}),
       };
     },
@@ -100,7 +112,7 @@ function buildWorkerRequest({ definition, session, turn, messages, capabilities,
       },
       turn: {
         turnId: turn.turnId,
-        message: turn.message,
+        message: turn.input.message,
       },
       transcript: boundedMessages(messages),
     },
@@ -117,6 +129,9 @@ function buildWorkerRequest({ definition, session, turn, messages, capabilities,
       definitionId: definition.definitionId,
       agentSessionId: session.sessionId,
       agentTurnId: turn.turnId,
+      modelProfileRevisionId: turn.requestedModelRevisionId,
+      modelCapability: turn.modelCapability ?? "tool_calling",
+      fallbackModelProfileRevisionIds: [],
       ...(moduleScope ? {
         objectKind: moduleScope.objectKind,
         objectId: moduleScope.objectId,
@@ -199,6 +214,22 @@ function safeWorkerSummary(worker) {
     sandbox_unavailable: "The required sandbox is unavailable.",
     remote_backend_unavailable: "The remote backend is unavailable.",
   }[worker?.status] ?? "Agent execution is blocked.";
+}
+
+function safeArtifactRefs(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const result = [];
+  for (const item of value) {
+    if (!isObject(item) || typeof item.artifactId !== "string"
+      || !["image/png", "image/jpeg", "image/webp"].includes(item.mediaType)) continue;
+    const key = `${item.artifactId}\u0000${item.mediaType}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ artifactId: item.artifactId, mediaType: item.mediaType });
+    if (result.length >= 256) break;
+  }
+  return result;
 }
 
 function isObject(value) {

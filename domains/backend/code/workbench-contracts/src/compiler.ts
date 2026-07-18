@@ -7,20 +7,22 @@ import {
   ExecutionPlanV1SchemaVersionSchema,
   ExecutionPlanV2SchemaVersionSchema,
   NodeIdSchema,
+  ModelProfileIdSchema,
+  ModelProfileRevisionIdSchema,
   ResourceIdSchema,
   UtcTimestampSchema,
   WorkflowIdSchema,
   WorkflowRevisionIdSchema,
   WorkbenchSchemaVersionSchema,
 } from "./common.js";
-import { strictObject } from "./schema.js";
+import { ModelCapabilitySchema } from "./models.js";
+import { strictObject, stringEnum } from "./schema.js";
 import { PinnedSkillRefSchema } from "./skills.js";
 import {
   EvidenceRequirementSchema,
   ExecutionCapabilitiesSchema,
   ExecutionIsolationSchema,
   ExecutionLimitsSchema,
-  ExecutionModeSchema,
 } from "./execution.js";
 import {
   InputBindingSchema,
@@ -59,19 +61,57 @@ export const ExecutionPlanV1Schema = strictObject(
   { $id: "ExecutionPlanV1" },
 );
 
-export const ExecutionPlanV2StepSchema = strictObject({
+const ExecutionPlanV2StepBaseProperties = {
   nodeId: NodeIdSchema,
   kind: WorkflowNodeKindSchema,
   skillRef: Type.Optional(PinnedSkillRefSchema),
   dependsOn: Type.Array(NodeIdSchema, { uniqueItems: true }),
   inputBindings: Type.Array(InputBindingSchema),
-  executionMode: ExecutionModeSchema,
   isolation: ExecutionIsolationSchema,
   limits: ExecutionLimitsSchema,
   capabilities: ExecutionCapabilitiesSchema,
   resultSchema: DataSchemaSchema,
   evidenceRequirements: Type.Array(EvidenceRequirementSchema, { maxItems: 64 }),
+};
+
+export const NonModelExecutionPlanV2StepSchema = strictObject({
+  ...ExecutionPlanV2StepBaseProperties,
+  executionMode: Type.Literal("deterministic_skill"),
 });
+
+export const PinnedModelExecutionPlanV2StepSchema = strictObject({
+  ...ExecutionPlanV2StepBaseProperties,
+  executionMode: stringEnum([
+    "model_call",
+    "bounded_agent",
+    "agent_orchestrator",
+  ]),
+  modelRoutingState: Type.Literal("pinned"),
+  modelProfileRevisionId: ModelProfileRevisionIdSchema,
+  modelCapability: ModelCapabilitySchema,
+  parameterSchema: DataSchemaSchema,
+  fallbackModelProfileRevisionIds: Type.Array(ModelProfileRevisionIdSchema, {
+    uniqueItems: true,
+    maxItems: 8,
+  }),
+});
+
+export const LegacyUnpinnedExecutionPlanV2StepSchema = strictObject({
+  ...ExecutionPlanV2StepBaseProperties,
+  executionMode: stringEnum(["bounded_agent", "agent_orchestrator"]),
+  modelRoutingState: Type.Literal("legacy_unpinned"),
+  legacyModelProfileId: Type.Optional(ModelProfileIdSchema),
+  legacyFallbackModelProfileIds: Type.Optional(Type.Array(ModelProfileIdSchema, {
+    uniqueItems: true,
+    maxItems: 8,
+  })),
+});
+
+export const ExecutionPlanV2StepSchema = Type.Union([
+  NonModelExecutionPlanV2StepSchema,
+  PinnedModelExecutionPlanV2StepSchema,
+  LegacyUnpinnedExecutionPlanV2StepSchema,
+]);
 
 export const ExecutionPlanV2Schema = strictObject(
   {
@@ -82,6 +122,11 @@ export const ExecutionPlanV2Schema = strictObject(
     generatedAt: UtcTimestampSchema,
     contentHash: ContentHashSchema,
     maxParallelism: Type.Integer({ minimum: 1, maximum: 64 }),
+    modelRoutingState: stringEnum([
+      "pinned",
+      "legacy_unpinned",
+      "not_applicable",
+    ]),
     pinnedSkills: Type.Array(PinnedSkillRefSchema),
     steps: Type.Array(ExecutionPlanV2StepSchema, { minItems: 1 }),
     reviewGates: Type.Array(ExecutionReviewGateSchema),

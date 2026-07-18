@@ -47,6 +47,16 @@ export class InMemoryAgentPersistence {
     return publicSession(session);
   }
 
+  async updateSessionModel(sessionId, modelProfileId, updatedAt) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return null;
+    session.lastUsedModelProfileId = modelProfileId;
+    session.modelPreferenceState = "preference_only";
+    delete session.modelProfileId;
+    session.updatedAt = updatedAt;
+    return publicSession(session);
+  }
+
   async getBranch(branchId) {
     return clone(this.branches.get(branchId) ?? null);
   }
@@ -99,7 +109,7 @@ export class InMemoryAgentPersistence {
     turn.status = "running";
     turn.startedAt = startedAt;
     turn.updatedAt = startedAt;
-    return publicTurn(turn);
+    return runnerTurn(turn);
   }
 
   async addInvocation(turnId, invocationId, updatedAt) {
@@ -112,13 +122,15 @@ export class InMemoryAgentPersistence {
     return clone(this.turns.get(turnId)?.invocationIds ?? []);
   }
 
-  async completeTurn(turnId, status, result, finishedAt) {
+  async completeTurn(turnId, status, result, finishedAt, routing = {}) {
     const turn = this.turns.get(turnId);
     if (!turn) return null;
     if (!["running", "cancellation_requested"].includes(turn.internalStatus ?? turn.status)) return publicTurn(turn);
     turn.status = status;
     turn.internalStatus = status;
     turn.result = clone(result);
+    turn.actualModelRevisionId = routing.actualModelRevisionId ?? null;
+    turn.artifactRefs = clone(routing.artifactRefs ?? []);
     turn.finishedAt = finishedAt;
     turn.updatedAt = finishedAt;
     const session = this.sessions.get(turn.sessionId);
@@ -132,7 +144,7 @@ export class InMemoryAgentPersistence {
     if (!turn || ["completed", "failed", "cancelled", "blocked"].includes(turn.status)) return publicTurn(turn ?? null);
     if (turn.status === "queued") {
       turn.status = "cancelled";
-      turn.result = { response: "Turn cancelled.", proposalId: null, handoffId: null, invocationIds: [] };
+      turn.result = null;
       turn.finishedAt = cancelledAt;
     } else {
       turn.internalStatus = "cancellation_requested";
@@ -146,6 +158,17 @@ export class InMemoryAgentPersistence {
     const turn = this.turns.get(turnId);
     if (!session || !turn || turn.sessionId !== sessionId || !canAccess(session, access)) return null;
     return publicTurn(turn);
+  }
+
+  async listTurns(sessionId, { after = 0, limit = 100 } = {}, access = {}) {
+    const session = this.sessions.get(sessionId);
+    if (!session || !canAccess(session, access)) return null;
+    const boundedLimit = Math.min(Math.max(Number(limit) || 100, 1), 1000);
+    return [...this.turns.values()]
+      .filter((turn) => turn.sessionId === sessionId && turn.sequence > after)
+      .sort((left, right) => left.sequence - right.sequence)
+      .slice(0, boundedLimit)
+      .map(publicTurn);
   }
 
   async listEvents(sessionId, after = 0, limit = 500, access = {}) {
@@ -189,7 +212,7 @@ export class InMemoryAgentPersistence {
         if (turn.internalStatus === "cancellation_requested") {
           turn.status = "cancelled";
           turn.internalStatus = "cancelled";
-          turn.result = { response: "Turn cancelled.", proposalId: null, handoffId: null, invocationIds: clone(turn.invocationIds) };
+          turn.result = null;
           turn.finishedAt = session.updatedAt;
         } else {
           turn.status = "queued";
@@ -206,6 +229,11 @@ export class InMemoryAgentPersistence {
 export function publicSession(session) {
   if (!session) return null;
   const value = clone(session);
+  if (!Object.hasOwn(value, "modelPreferenceState")) {
+    value.lastUsedModelProfileId = value.lastUsedModelProfileId ?? value.modelProfileId ?? null;
+    value.modelPreferenceState = "legacy_unpinned";
+  }
+  delete value.modelProfileId;
   delete value.turnSequence;
   delete value.messageSequence;
   delete value.eventSequence;
@@ -214,6 +242,32 @@ export function publicSession(session) {
 }
 
 export function publicTurn(turn) {
+  if (!turn) return null;
+  const value = clone(turn);
+  if (value.modelRoutingState !== "pinned") {
+    return {
+      schemaVersion: value.schemaVersion,
+      turnId: value.turnId,
+      sessionId: value.sessionId,
+      sequence: value.sequence,
+      status: value.status,
+      modelRoutingState: "legacy_unpinned",
+      message: value.message,
+      result: value.result ?? null,
+      queuedAt: value.queuedAt,
+      startedAt: value.startedAt ?? null,
+      finishedAt: value.finishedAt ?? null,
+      updatedAt: value.updatedAt,
+    };
+  }
+  delete value.invocationIds;
+  delete value.internalStatus;
+  delete value.modelCapability;
+  delete value._id;
+  return value;
+}
+
+function runnerTurn(turn) {
   if (!turn) return null;
   const value = clone(turn);
   delete value.invocationIds;

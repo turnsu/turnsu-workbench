@@ -157,7 +157,12 @@ export class AgentContainerSandbox {
         maxBytes: request.limits.maxOutputBytes,
         maxFiles: this.#limits.maxArtifactFiles,
       });
-      return sanitizeBackendResult(result);
+      const route = aggregateModelRoute(gatewaySessions.values());
+      return sanitizeBackendResult({
+        ...result,
+        requestedModelRevisionId: route.requestedModelRevisionId ?? null,
+        actualModelRevisionId: route.actualModelRevisionId ?? null,
+      });
     } finally {
       if (containerName) await cleanupContainer(this.#dockerControl, containerName, request.invocationId).catch(() => {});
       await Promise.allSettled([...gatewaySessions.values()].map((session) => session.close()));
@@ -361,7 +366,6 @@ async function executeAgentContainer({
           await send({ kind: "child_response", id: frame.id, ok: true, result: binding });
           if (isTerminalChildStatus(update.status)) {
             const session = gatewaySessions.get(binding.capabilityLeaseId);
-            gatewaySessions.delete(binding.capabilityLeaseId);
             await session?.close();
           }
         }, (error) => send({
@@ -462,6 +466,20 @@ function sanitizeBackendResult(value) {
   const result = structuredClone(value);
   for (const key of ["image", "imageDigest", "hostPath", "socketPath", "gatewaySocket", "containerName"]) delete result[key];
   return result;
+}
+
+function aggregateModelRoute(sessions) {
+  const requested = new Set();
+  const actual = new Set();
+  for (const session of sessions) {
+    const snapshot = session.snapshot?.() ?? {};
+    if (typeof snapshot.requestedModelRevisionId === "string") requested.add(snapshot.requestedModelRevisionId);
+    if (typeof snapshot.actualModelRevisionId === "string") actual.add(snapshot.actualModelRevisionId);
+  }
+  return {
+    requestedModelRevisionId: requested.size === 1 ? [...requested][0] : null,
+    actualModelRevisionId: actual.size === 1 ? [...actual][0] : null,
+  };
 }
 
 async function cleanupContainer(dockerControl, containerName, expectedInvocationId = null) {

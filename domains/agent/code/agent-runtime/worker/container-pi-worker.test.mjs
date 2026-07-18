@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { runContainerPiWorker } from "./container-pi-worker.mjs";
+import { workflowChildRef } from "./product-gateway-extension.mjs";
 
 const payload = (overrides = {}) => ({
   schemaVersion: "workbench-execution-fabric-v1",
@@ -148,4 +149,16 @@ test("container orchestrator streams AgwaB child lifecycle through the product p
   assert.equal(result.outerGraphChanged, false);
   assert.deepEqual(children.map((child) => child.status), ["running", "completed"]);
   assert(children.every((child) => child.capabilities.toolAllowlist.length === 0));
+});
+
+test("workflow Gateway keeps the exact pi-workflow session id as the child binding key", () => {
+  assert.equal(
+    workflowChildRef(["node", "pi", "--session-id", "pi-workflow.run-a.dynamic.decide-r0"]),
+    "pi-workflow.run-a.dynamic.decide-r0",
+  );
+  assert.equal(
+    workflowChildRef(["node", "pi", "--session-id", "piwf.0123456789abcdef.synthesize-r0"]),
+    "piwf.0123456789abcdef.synthesize-r0",
+  );
+  assert.equal(workflowChildRef(["node", "pi", "--session-id", "user-session"]), undefined);
 });

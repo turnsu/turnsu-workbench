@@ -22,7 +22,11 @@ exec mongosh --quiet \
       ["execution_checkpoints", "checkpointId"],
       ["agent_turns", "turnId"],
       ["memory_deletion_tombstones", "tombstoneId"],
-      ["audit_events", "auditEventId"]
+      ["audit_events", "auditEventId"],
+      ["model_profiles", "profileId"],
+      ["model_profile_revisions", "revisionId"],
+      ["model_routing_policies", "workspaceId"],
+      ["product_artifacts", "artifactId"]
     ];
     const result = {};
     const indexCounts = {};
@@ -41,6 +45,18 @@ exec mongosh --quiet \
     result._migrationLedger = db.getCollection("product_schema_migrations")
       .find({}, { _id: 0, version: 1, checksum: 1, status: 1 })
       .sort({ version: 1 }).toArray();
+    result._artifacts = db.getCollection("product_artifacts").aggregate([
+      { $match: { state: "ready" } },
+      { $project: {
+        _id: 0,
+        artifactId: 1,
+        workspaceId: 1,
+        objectId: 1,
+        contentHash: 1,
+        sizeBytes: "$byteLength"
+      } },
+      { $sort: { workspaceId: 1, artifactId: 1 } }
+    ]).toArray();
     result._indexCounts = indexCounts;
     print(JSON.stringify(result));
     quit(Object.entries(result).filter(([name]) => !name.startsWith("_"))

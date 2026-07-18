@@ -2,6 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  Check,
+  Errors,
+  ExecutionRequestSchema,
+  ImageGenerationResultSchema,
+} from "@looloomi/workbench-contracts";
+
+import {
   createWorkflowRunner,
   WorkflowRunnerError,
 } from "../../src/runner/index.mjs";
@@ -575,6 +582,7 @@ test("WorkflowRunner delegates Skill nodes through the Product Execution Broker"
   const run = await fixture.runner.startRun(startRequest("idem-broker"));
   await waitFor(async () => (await fixture.runner.getRun(run.runId)).run.status === "waiting_review");
   assert.equal(requests.length, 1);
+  assert.equal(fixture.invocationInputs.length, 0);
   assert.equal(requests[0].mode, "deterministic_skill");
   assert.equal(requests[0].controller.kind, "workflow_run");
   assert.equal(requests[0].controller.controllerId, run.runId);
@@ -585,6 +593,264 @@ test("WorkflowRunner delegates Skill nodes through the Product Execution Broker"
     adapterVersion: "1",
     executionMode: "deterministic",
   });
+});
+
+test("WorkflowRunner dispatches a pinned bounded Agent revision and publishes actual fallback", async () => {
+  const plan = makePlan();
+  plan.schemaVersion = "workbench-execution-plan-v2";
+  plan.planVersion = "2";
+  plan.modelRoutingState = "pinned";
+  const step = plan.steps.find((candidate) => candidate.kind === "Skill");
+  Object.assign(step, {
+    executionMode: "bounded_agent",
+    isolation: "container",
+    limits: {
+      timeoutMs: 30_000, maxSteps: 32, maxModelRequests: 16, maxChildren: 0,
+      maxInputBytes: 1_000_000, maxOutputBytes: 1_000_000,
+      maxImageCount: 0, maxCostUsdMicros: 500_000,
+    },
+    capabilities: {
+      toolAllowlist: [], connectionIds: [], network: false,
+      filesystem: "none", externalActions: false,
+    },
+    resultSchema: {
+      type: "object", properties: { brief: { type: "string", minLength: 1 } },
+      required: ["brief"], additionalProperties: false,
+    },
+    evidenceRequirements: [],
+    modelRoutingState: "pinned",
+    modelProfileRevisionId: "model-revision-controller-1",
+    modelCapability: "tool_calling",
+    parameterSchema: {
+      type: "object", properties: { topic: { type: "string", minLength: 1 } },
+      required: ["topic"], additionalProperties: false,
+    },
+    fallbackModelProfileRevisionIds: ["model-revision-controller-2"],
+  });
+  const requests = [];
+  const fixture = createFixture({
+    plan,
+    skillExecutionRef: {
+      capabilityId: "workflow-conformance", taskIntent: "echo",
+      adapterVersion: "1", executionMode: "agent",
+    },
+    executionBroker: {
+      async execute(request) {
+        requests.push(structuredClone(request));
+        return {
+          status: "completed",
+          output: { brief: "Broker fallback result" },
+          requestedModelRevisionId: "model-revision-controller-1",
+          actualModelRevisionId: "model-revision-controller-2",
+          artifactRefs: [],
+        };
+      },
+    },
+  });
+  const run = await fixture.runner.startRun(startRequest("idem-bounded-model"));
+  await waitFor(async () => (await fixture.runner.getRun(run.runId)).run.status === "waiting_review");
+  assert.equal(requests[0].mode, "bounded_agent");
+  assert.equal(requests[0].isolation, "container");
+  assert.equal(requests[0].metadata.modelProfileRevisionId, "model-revision-controller-1");
+  assert.deepEqual(requests[0].metadata.fallbackModelProfileRevisionIds, ["model-revision-controller-2"]);
+  const detail = await fixture.runner.getRun(run.runId);
+  const timeline = detail.readModel.nodeTimeline.find((entry) => entry.nodeId === "node-skill");
+  assert.equal(timeline.requestedModelRevisionId, "model-revision-controller-1");
+  assert.equal(timeline.actualModelRevisionId, "model-revision-controller-2");
+  assert.equal(timeline.fallbackUsed, true);
+  assert.deepEqual(timeline.artifactRefs, []);
+  assertProductSafe(detail);
+});
+
+test("WorkflowRunner builds a strict process model_call and publishes safe Artifact refs", async () => {
+  const revision = makeRevision();
+  const input = revision.graph.nodes.find((node) => node.kind === "Input");
+  const skill = revision.graph.nodes.find((node) => node.kind === "Skill");
+  const review = revision.graph.nodes.find((node) => node.kind === "ReviewGate");
+  const promptSchema = { type: "string", minLength: 1 };
+  const artifactRefsSchema = {
+    type: "array",
+    items: {
+      type: "object",
+      properties: {
+        artifactId: { type: "string", minLength: 1 },
+        mediaType: { type: "string", enum: ["image/png", "image/jpeg", "image/webp"] },
+      },
+      required: ["artifactId", "mediaType"],
+      additionalProperties: false,
+    },
+    minItems: 1,
+  };
+  input.configuration.fieldIds = ["prompt"];
+  input.outputPorts = [{ ...input.outputPorts[0], portId: "prompt", name: "prompt", schema: promptSchema }];
+  skill.inputPorts = [{ ...skill.inputPorts[0], portId: "prompt", name: "prompt", schema: promptSchema }];
+  skill.inputBindings = [{
+    targetPort: "prompt",
+    source: { kind: "nodeOutput", nodeId: input.nodeId, portId: "prompt" },
+  }];
+  skill.outputPorts = [{
+    ...skill.outputPorts[0], portId: "artifactRefs", name: "artifactRefs", schema: artifactRefsSchema,
+  }];
+  review.inputPorts = [{
+    ...review.inputPorts[0], portId: "candidate", name: "candidate", schema: artifactRefsSchema,
+  }];
+  review.inputBindings = [{
+    targetPort: "candidate",
+    source: { kind: "nodeOutput", nodeId: skill.nodeId, portId: "artifactRefs" },
+  }];
+  for (const edge of revision.graph.edges) {
+    if (edge.edgeId === "edge-input") {
+      edge.sourcePort = "prompt";
+      edge.targetPort = "prompt";
+    }
+    if (edge.edgeId === "edge-review") edge.sourcePort = "artifactRefs";
+  }
+
+  const imageInputSchema = {
+    type: "object",
+    properties: { prompt: promptSchema },
+    required: ["prompt"],
+    additionalProperties: false,
+  };
+  const imageResultSchema = structuredClone(ImageGenerationResultSchema);
+  delete imageResultSchema.$id;
+  const plan = makePlan();
+  plan.schemaVersion = "workbench-execution-plan-v2";
+  plan.planVersion = "2";
+  plan.modelRoutingState = "pinned";
+  plan.steps[0].inputBindings = [];
+  const step = plan.steps.find((candidate) => candidate.kind === "Skill");
+  step.inputBindings = structuredClone(skill.inputBindings);
+  Object.assign(step, {
+    executionMode: "model_call",
+    isolation: "process",
+    limits: {
+      timeoutMs: 30_000, maxSteps: 1, maxModelRequests: 1, maxChildren: 0,
+      maxInputBytes: 1_000_000, maxOutputBytes: 4_000_000,
+      maxImageCount: 1, maxCostUsdMicros: 500_000,
+    },
+    capabilities: {
+      toolAllowlist: [], connectionIds: [], network: false,
+      filesystem: "none", externalActions: false,
+    },
+    resultSchema: imageResultSchema,
+    evidenceRequirements: [{
+      requirementId: "image-output", kind: "artifact", required: true,
+      description: "Return one governed image Artifact.",
+    }],
+    modelRoutingState: "pinned",
+    modelProfileRevisionId: "model-revision-stability-1",
+    modelCapability: "image_generation",
+    parameterSchema: imageInputSchema,
+    fallbackModelProfileRevisionIds: [],
+  });
+  const artifactRefs = [{ artifactId: "artifact-image-1", mediaType: "image/png" }];
+  const modelOutput = {
+    kind: "image_generation",
+    artifactRefs,
+    seed: 42,
+    format: "png",
+    dimensions: { width: 1024, height: 1024 },
+    safetyStatus: "passed",
+    usage: {
+      inputTokens: 0, outputTokens: 0, totalTokens: 0,
+      imageCount: 1, costUsdMicros: 100_000,
+    },
+    requestedModelRevisionId: "model-revision-stability-1",
+    actualModelRevisionId: "model-revision-stability-1",
+  };
+  const requests = [];
+  const fixture = createFixture({
+    revision,
+    plan,
+    skillInputSchema: imageInputSchema,
+    skillOutputSchema: imageResultSchema,
+    skillExecutionRef: {
+      capabilityId: "image-generation", taskIntent: "generate_image",
+      adapterVersion: "1", executionMode: "model", requiredModelCapability: "image_generation",
+    },
+    executionBroker: {
+      async execute(request) {
+        requests.push(structuredClone(request));
+        return {
+          status: "completed",
+          output: modelOutput,
+          requestedModelRevisionId: "model-revision-stability-1",
+          actualModelRevisionId: "model-revision-stability-1",
+          artifactRefs,
+        };
+      },
+    },
+  });
+  const run = await fixture.runner.startRun({
+    workflowId: revision.workflowId,
+    workflowRevisionId: revision.revisionId,
+    inputs: { prompt: "Draw a blue circle." },
+    resourceRefs: [],
+    idempotencyKey: "idem-model-call",
+    requestId: "request-model-call",
+  });
+  await waitFor(async () => !["queued", "running"].includes((await fixture.runner.getRun(run.runId)).run.status));
+  assert.equal(requests.length, 1);
+  assert.equal(fixture.invocationInputs.length, 0);
+  assert.equal(
+    Check(ExecutionRequestSchema, requests[0]),
+    true,
+    JSON.stringify([...Errors(ExecutionRequestSchema, requests[0])]),
+  );
+  assert.equal(requests[0].mode, "model_call");
+  assert.equal(requests[0].isolation, "process");
+  assert.deepEqual(requests[0].capabilities, {
+    toolAllowlist: [], connectionIds: [], network: false,
+    filesystem: "none", externalActions: false,
+  });
+  assert.deepEqual(requests[0].input, { prompt: "Draw a blue circle." });
+  const detail = await fixture.runner.getRun(run.runId);
+  const timeline = detail.readModel.nodeTimeline.find((entry) => entry.nodeId === "node-skill");
+  assert.equal(timeline.requestedModelRevisionId, "model-revision-stability-1");
+  assert.equal(timeline.actualModelRevisionId, "model-revision-stability-1");
+  assert.equal(timeline.fallbackUsed, false);
+  assert.deepEqual(timeline.artifactRefs, artifactRefs);
+  assertProductSafe(detail);
+});
+
+test("WorkflowRunner keeps legacy_unpinned model plans readable but refuses execution", async () => {
+  const plan = makePlan();
+  plan.schemaVersion = "workbench-execution-plan-v2";
+  plan.planVersion = "2";
+  plan.modelRoutingState = "legacy_unpinned";
+  const step = plan.steps.find((candidate) => candidate.kind === "Skill");
+  Object.assign(step, {
+    executionMode: "bounded_agent",
+    isolation: "container",
+    limits: {
+      timeoutMs: 30_000, maxSteps: 32, maxModelRequests: 16, maxChildren: 0,
+      maxInputBytes: 1_000_000, maxOutputBytes: 1_000_000,
+      maxImageCount: 0, maxCostUsdMicros: 0,
+    },
+    capabilities: {
+      toolAllowlist: [], connectionIds: [], network: false,
+      filesystem: "none", externalActions: false,
+    },
+    resultSchema: {
+      type: "object", properties: { brief: { type: "string" } },
+      required: ["brief"], additionalProperties: false,
+    },
+    evidenceRequirements: [],
+    modelRoutingState: "legacy_unpinned",
+    legacyModelProfileId: "historical-profile",
+  });
+  let calls = 0;
+  const fixture = createFixture({
+    plan,
+    executionBroker: { async execute() { calls += 1; return {}; } },
+  });
+  const run = await fixture.runner.startRun(startRequest("idem-legacy-model"));
+  await waitFor(async () => (await fixture.runner.getRun(run.runId)).run.status === "failed");
+  const detail = await fixture.runner.getRun(run.runId);
+  assert.equal(calls, 0);
+  assert.equal(detail.readModel.failure.code, "workflow_model_route_legacy_unpinned");
+  assertProductSafe(detail);
 });
 
 function startRequest(idempotencyKey) {
@@ -607,6 +873,12 @@ function createFixture({
   skillOutputSchema = { type: "object", properties: { brief: { type: "string", minLength: 1 } }, required: ["brief"], additionalProperties: false },
   agentRuntimeOverrides = {},
   skillVersions = [],
+  skillExecutionRef = {
+    capabilityId: "workflow-conformance",
+    taskIntent: "echo",
+    adapterVersion: "1",
+    executionMode: "deterministic",
+  },
   scheduleOnStart = true,
   workerId,
   invocationDelayMs = 0,
@@ -658,12 +930,7 @@ function createFixture({
               inputSchema: skillInputSchema,
               outputSchema: skillOutputSchema,
             },
-            executionRef: {
-              capabilityId: "workflow-conformance",
-              taskIntent: "echo",
-              adapterVersion: "1",
-              executionMode: "deterministic",
-            },
+            executionRef: structuredClone(skillExecutionRef),
           },
         },
       };

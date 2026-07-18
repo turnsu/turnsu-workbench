@@ -8,6 +8,7 @@ import {
   EvidenceIdSchema,
   IdempotencyKeySchema,
   JsonObjectSchema,
+  ModelProfileRevisionIdSchema,
   NodeIdSchema,
   NodeRunIdSchema,
   RequestIdSchema,
@@ -22,6 +23,7 @@ import {
   WorkflowRevisionIdSchema,
   WorkbenchSchemaVersionSchema,
 } from "./common.js";
+import { ArtifactRefSchema } from "./artifacts.js";
 import { strictObject, stringEnum } from "./schema.js";
 
 export const WorkflowRunStatusSchema = stringEnum([
@@ -61,6 +63,16 @@ export const NodeRunSchema = strictObject(
     status: NodeRunStatusSchema,
     summary: Type.String({ maxLength: 2000 }),
     failure: Type.Optional(ProductFailureSchema),
+    requestedModelRevisionId: Type.Optional(ModelProfileRevisionIdSchema),
+    actualModelRevisionId: Type.Optional(Type.Union([
+      ModelProfileRevisionIdSchema,
+      Type.Null(),
+    ])),
+    artifactRefs: Type.Optional(Type.Array(ArtifactRefSchema, {
+      uniqueItems: true,
+      maxItems: 256,
+    })),
+    fallbackUsed: Type.Optional(Type.Boolean()),
     startedAt: Type.Union([UtcTimestampSchema, Type.Null()]),
     completedAt: Type.Union([UtcTimestampSchema, Type.Null()]),
     createdAt: UtcTimestampSchema,

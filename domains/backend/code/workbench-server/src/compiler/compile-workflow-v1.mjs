@@ -26,6 +26,12 @@ import {
 } from "./schema-compatibility.mjs";
 
 const STABLE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+const MODEL_EXECUTION_MODES = new Set([
+  "model_call",
+  "bounded_agent",
+  "agent_orchestrator",
+]);
+const CONTROLLER_REQUIRED_CAPABILITIES = Object.freeze(["chat", "tool_calling"]);
 const compareText = (left, right) => (left < right ? -1 : left > right ? 1 : 0);
 const compareId = compareText;
 
@@ -51,6 +57,9 @@ const nodeResultSchema = (node) => ({
 
 const executionModeFor = (node, resolvedSkill) => {
   if (node.kind !== "Skill") return "deterministic_skill";
+  if (resolvedSkill?.definition?.executionRef?.executionMode === "model") {
+    return "model_call";
+  }
   if (resolvedSkill?.definition?.executionRef?.executionMode === "orchestrator") {
     return "agent_orchestrator";
   }
@@ -60,23 +69,122 @@ const executionModeFor = (node, resolvedSkill) => {
   return "deterministic_skill";
 };
 
-const executionPolicyFor = (node, resolvedSkill) => {
-  const executionMode = executionModeFor(node, resolvedSkill);
-  const agentic = executionMode !== "deterministic_skill";
+const modelRequirementFor = (resolvedSkill) => {
+  const executionMode = executionModeFor({ kind: "Skill" }, resolvedSkill);
+  if (executionMode === "model_call") {
+    const modelCapability = resolvedSkill.definition.executionRef.requiredModelCapability;
+    return { modelCapability, requiredCapabilities: [modelCapability] };
+  }
+  if (["bounded_agent", "agent_orchestrator"].includes(executionMode)) {
+    return {
+      modelCapability: "tool_calling",
+      requiredCapabilities: [...CONTROLLER_REQUIRED_CAPABILITIES],
+    };
+  }
+  return null;
+};
+
+const selectedProfileIdFor = ({ node, modelCapability, runSettings, modelSelections }) => {
+  if (node.configuration?.modelProfileId) return node.configuration.modelProfileId;
+  if (runSettings?.modelRoutingState === "legacy_unpinned") {
+    return runSettings.modelProfileId;
+  }
+  const field = modelCapability === "image_generation"
+    ? "imageGenerationModelProfileId"
+    : "agentControllerModelProfileId";
+  return runSettings?.[field] ?? modelSelections?.[field] ?? null;
+};
+
+const normalizeResolvedModelRoute = ({
+  raw,
+  profileId,
+  requiredCapabilities,
+  parameterSchema,
+  fallbackAllowed,
+  modelCapability,
+}) => {
+  if (!raw || typeof raw !== "object" || typeof raw.then === "function") {
+    throw new TypeError("model_route_unresolved");
+  }
+  const revision = raw.revision ?? raw;
+  if (
+    typeof revision.revisionId !== "string"
+    || !Array.isArray(revision.capabilities)
+    || requiredCapabilities.some((capability) => !revision.capabilities.includes(capability))
+  ) {
+    throw new TypeError("model_capability_mismatch");
+  }
+  const resolvedProfileId = raw.profile?.profileId ?? raw.profileId ?? revision.profileId;
+  if (resolvedProfileId && resolvedProfileId !== profileId) {
+    throw new TypeError("model_profile_mismatch");
+  }
+  if (
+    modelCapability !== "image_generation"
+    && revision.capabilities.includes("image_generation")
+  ) {
+    throw new TypeError("image_model_controller_forbidden");
+  }
+  const fallbackRevisions = raw.fallbackRevisions ?? [];
+  if (!Array.isArray(fallbackRevisions)) {
+    throw new TypeError("model_fallback_invalid");
+  }
+  if ((!fallbackAllowed || modelCapability === "image_generation") && fallbackRevisions.length > 0) {
+    throw new TypeError("model_fallback_forbidden");
+  }
+  const seen = new Set([revision.revisionId]);
+  for (const fallback of fallbackRevisions) {
+    if (
+      !fallback
+      || typeof fallback.revisionId !== "string"
+      || seen.has(fallback.revisionId)
+      || !Array.isArray(fallback.capabilities)
+      || requiredCapabilities.some((capability) => !fallback.capabilities.includes(capability))
+      || (modelCapability !== "image_generation" && fallback.capabilities.includes("image_generation"))
+    ) {
+      throw new TypeError("model_fallback_incompatible");
+    }
+    seen.add(fallback.revisionId);
+  }
+  return {
+    modelProfileRevisionId: revision.revisionId,
+    modelCapability,
+    parameterSchema: clone(raw.parameterSchema ?? revision.parameterSchema ?? parameterSchema),
+    fallbackModelProfileRevisionIds: fallbackRevisions.map((fallback) => fallback.revisionId),
+    limits: clone(raw.executionLimits ?? revision.executionLimits ?? revision.limits ?? {}),
+    protocol: revision.protocol ?? null,
+  };
+};
+
+const executionLimitsFor = (node, executionMode, modelRoute) => {
+  const modelBacked = MODEL_EXECUTION_MODES.has(executionMode);
   const orchestrator = executionMode === "agent_orchestrator";
+  const imageGeneration = modelRoute?.modelCapability === "image_generation";
+  const routeLimits = modelRoute?.limits ?? {};
+  return {
+    timeoutMs: node.timeoutSeconds * 1000,
+    maxSteps: executionMode === "model_call" ? 1 : modelBacked ? (orchestrator ? 128 : 32) : 1,
+    maxModelRequests: executionMode === "model_call" ? 1 : modelBacked ? (orchestrator ? 64 : 16) : 0,
+    maxChildren: orchestrator ? 16 : 0,
+    maxInputBytes: routeLimits.maxInputBytes ?? 1_000_000,
+    maxOutputBytes: routeLimits.maxOutputBytes ?? 1_000_000,
+    maxImageCount: imageGeneration ? (routeLimits.maxImageCount ?? 1) : 0,
+    maxCostUsdMicros: modelBacked ? (routeLimits.maxCostUsdMicros ?? 10_000_000) : 0,
+  };
+};
+
+const executionPolicyFor = (node, resolvedSkill, modelRoute = null) => {
+  const executionMode = executionModeFor(node, resolvedSkill);
+  const modelBacked = MODEL_EXECUTION_MODES.has(executionMode);
+  const agentic = ["bounded_agent", "agent_orchestrator"].includes(executionMode);
   const dependencies = resolvedSkill?.definition?.dependencies ?? [];
   return {
     executionMode,
     isolation: agentic ? "container" : "process",
-    limits: {
-      timeoutMs: node.timeoutSeconds * 1000,
-      maxSteps: agentic ? (orchestrator ? 128 : 32) : 1,
-      maxModelRequests: agentic ? (orchestrator ? 64 : 16) : 0,
-      maxChildren: orchestrator ? 16 : 0,
-      maxInputBytes: 1_000_000,
-      maxOutputBytes: 1_000_000,
-    },
-    capabilities: {
+    limits: executionLimitsFor(node, executionMode, modelRoute),
+    capabilities: executionMode === "model_call" ? {
+      toolAllowlist: [], connectionIds: [], network: false,
+      filesystem: "none", externalActions: false,
+    } : {
       toolAllowlist: [],
       connectionIds: dependencies
         .filter((entry) => entry.kind === "connection" && entry.required)
@@ -86,13 +194,20 @@ const executionPolicyFor = (node, resolvedSkill) => {
       filesystem: "none",
       externalActions: resolvedSkill?.definition?.risk?.externalAction === true,
     },
-    resultSchema: nodeResultSchema(node),
+    resultSchema: clone(resolvedSkill?.definition?.outputSchema ?? nodeResultSchema(node)),
     evidenceRequirements: [{
       requirementId: `output:${node.nodeId}`,
       kind: "output",
       required: true,
       description: `Return a contract-valid result for ${node.title}.`,
     }],
+    ...(modelBacked ? {
+      modelRoutingState: "pinned",
+      modelProfileRevisionId: modelRoute.modelProfileRevisionId,
+      modelCapability: modelRoute.modelCapability,
+      parameterSchema: clone(modelRoute.parameterSchema),
+      fallbackModelProfileRevisionIds: clone(modelRoute.fallbackModelProfileRevisionIds),
+    } : {}),
   };
 };
 
@@ -979,6 +1094,95 @@ export function compileWorkflowV1(revision, options) {
     compareId(left.resourceId, right.resourceId),
   );
 
+  const modelRoutesByNodeId = new Map();
+  for (const nodeId of orderedSteps) {
+    const node = nodeById.get(nodeId);
+    if (node.kind !== "Skill") continue;
+    const resolvedSkill = resolvedSkills.find(
+      (entry) => skillKey(entry.definition) === skillKey(node.skillRef),
+    );
+    if (!resolvedSkill) continue;
+    const executionMode = executionModeFor(node, resolvedSkill);
+    if (!MODEL_EXECUTION_MODES.has(executionMode)) continue;
+    const requirement = modelRequirementFor(resolvedSkill);
+    const profileId = selectedProfileIdFor({
+      node,
+      modelCapability: requirement.modelCapability,
+      runSettings: revision.runSettings,
+      modelSelections: options.modelSelections,
+    });
+    if (!profileId) {
+      addBlocked({
+        code: "model_route_unresolved",
+        message: "No authorized model profile is selected for this Skill capability.",
+        nodeId,
+        field: `graph.nodes.${nodeId}.configuration.modelProfileId`,
+        recoveryAction: "Select a compatible model in the node, Run Settings, or workspace defaults.",
+      });
+      continue;
+    }
+    if (typeof options.modelResolver !== "function") {
+      addBlocked({
+        code: "model_route_unresolved",
+        message: "The model routing snapshot is unavailable during compilation.",
+        nodeId,
+        field: "runSettings",
+        recoveryAction: "Refresh model readiness and compile the Workflow again.",
+      });
+      continue;
+    }
+    const fallbackAllowed = revision.runSettings?.workflowFallbackAllowed === true
+      && options.modelSelections?.workflowFallbackAllowed !== false
+      && requirement.modelCapability !== "image_generation";
+    try {
+      const raw = options.modelResolver({
+        nodeId,
+        profileId,
+        modelCapability: requirement.modelCapability,
+        requiredCapabilities: clone(requirement.requiredCapabilities),
+        executionMode,
+        fallbackAllowed,
+      });
+      const modelRoute = normalizeResolvedModelRoute({
+        raw,
+        profileId,
+        requiredCapabilities: requirement.requiredCapabilities,
+        parameterSchema: resolvedSkill.definition.inputSchema,
+        fallbackAllowed,
+        modelCapability: requirement.modelCapability,
+      });
+      if (
+        modelRoute.protocol === "stability_image_v2"
+        && modelRoute.fallbackModelProfileRevisionIds.length > 0
+      ) {
+        throw new TypeError("model_fallback_forbidden");
+      }
+      modelRoutesByNodeId.set(nodeId, modelRoute);
+    } catch (error) {
+      const knownCode = [
+        "model_route_unresolved",
+        "model_profile_not_found",
+        "model_profile_forbidden",
+        "model_capability_mismatch",
+        "model_revision_unavailable",
+        "model_profile_mismatch",
+        "image_model_controller_forbidden",
+        "model_fallback_invalid",
+        "model_fallback_forbidden",
+        "model_fallback_incompatible",
+      ].includes(error?.code ?? error?.message)
+        ? (error.code ?? error.message)
+        : "model_route_unresolved";
+      addBlocked({
+        code: knownCode,
+        message: "The selected model route is unavailable or incompatible with this Skill.",
+        nodeId,
+        field: `graph.nodes.${nodeId}.configuration.modelProfileId`,
+        recoveryAction: "Select an authorized ready model that supports the required capability.",
+      });
+    }
+  }
+
   if (blockedDiagnostics.length > 0) {
     return finish(result, "blocked", [
       ...blockedDiagnostics,
@@ -1020,7 +1224,7 @@ export function compileWorkflowV1(revision, options) {
       ...(node.kind === "Skill" ? { skillRef: clone(node.skillRef) } : {}),
       dependsOn: [...predecessors.get(nodeId)].sort(compareId),
       inputBindings: node.inputBindings.map(clone).sort(compareCanonical),
-      ...executionPolicyFor(node, resolvedSkill),
+      ...executionPolicyFor(node, resolvedSkill, modelRoutesByNodeId.get(nodeId)),
     };
   });
   const reviewGates = result.reviewGates.map((nodeId) => {
@@ -1052,6 +1256,7 @@ export function compileWorkflowV1(revision, options) {
     generatedAt: options.compiledAt,
     contentHash,
     maxParallelism: 1,
+    modelRoutingState: modelRoutesByNodeId.size > 0 ? "pinned" : "not_applicable",
     pinnedSkills,
     steps,
     reviewGates,

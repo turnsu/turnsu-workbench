@@ -9,6 +9,7 @@ import {
   InstallationIdSchema,
   LoopImportIdSchema,
   LoopVersionIdSchema,
+  ModelProfileRevisionIdSchema,
   ObjectIdSchema,
   ResourceIdSchema,
   ProposalIdSchema,
@@ -496,6 +497,7 @@ export const LoopSkillUpdatePreviewResponseSchema = ResponseEnvelopeSchema(
 
 export const GenerateProposalDataSchema = strictObject({
   instruction: Type.String({ minLength: 1, maxLength: 8000 }),
+  modelProfileRevisionId: Type.Optional(ModelProfileRevisionIdSchema),
 });
 export const GenerateProposalRequestSchema = MutationRequestEnvelopeSchema(
   GenerateProposalDataSchema,

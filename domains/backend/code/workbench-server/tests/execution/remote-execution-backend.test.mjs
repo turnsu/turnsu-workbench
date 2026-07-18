@@ -33,6 +33,8 @@ function request(overrides = {}) {
       maxChildren: 0,
       maxInputBytes: 10000,
       maxOutputBytes: 10000,
+      maxImageCount: 0,
+      maxCostUsdMicros: 1_000_000,
     },
     capabilities: {
       toolAllowlist: [],
@@ -338,5 +340,35 @@ test("an explicitly registered but unavailable transport reports unavailable wit
   const { broker } = createBroker(transport);
   const result = await broker.execute(request());
   assert.equal(result.status, "remote_backend_unavailable");
+  assert.equal(transport.calls.dispatch.length, 0);
+});
+
+test("remote model_call is rejected unless the transport explicitly advertises the mode", async () => {
+  const transport = new LoopbackRemoteWorkerTransport();
+  const backend = createRemoteExecutionBackend({ transport });
+  await assert.rejects(() => backend.execute({
+    request: request({
+      mode: "model_call",
+      metadata: {
+        modelProfileRevisionId: "model-revision-image-1",
+        capability: "image_generation",
+      },
+    }),
+    lease: {
+      capabilityLeaseId: "lease-model-call",
+      invocationId: "remote-invocation-model-call",
+      attemptId: "attempt-remote-invocation-model-call",
+      workspaceId: "workspace-alpha",
+      fence: 1,
+      status: "active",
+      capabilities: {
+        toolAllowlist: [], connectionIds: [], network: false,
+        filesystem: "none", externalActions: false,
+      },
+      expiresAt: "2026-07-16T12:01:00.000Z",
+    },
+    emit: async () => {},
+    checkpoint: async () => {},
+  }), /does not advertise model_call support/);
   assert.equal(transport.calls.dispatch.length, 0);
 });

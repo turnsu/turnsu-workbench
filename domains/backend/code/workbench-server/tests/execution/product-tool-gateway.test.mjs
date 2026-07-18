@@ -19,10 +19,24 @@ const capabilities = {
   externalActions: false,
 };
 
-async function fixture({ maxModelRequests = 1, maxSteps = 3, clock = () => NOW, observer = null } = {}) {
+async function fixture({
+  maxModelRequests = 1,
+  maxSteps = 3,
+  clock = () => NOW,
+  observer = null,
+  metadata = {},
+  modelExecutor = null,
+} = {}) {
   const persistence = new InMemoryExecutionPersistence();
+  const pinnedMetadata = {
+    modelProfileRevisionId: "model-revision-default",
+    fallbackModelProfileRevisionIds: [],
+    modelCapability: "tool_calling",
+    ...metadata,
+  };
   const request = {
     limits: { maxModelRequests, maxSteps, maxOutputBytes: 10_000 },
+    metadata: pinnedMetadata,
   };
   await persistence.createInvocation({
     invocationId: "invocation-a",
@@ -48,7 +62,14 @@ async function fixture({ maxModelRequests = 1, maxSteps = 3, clock = () => NOW, 
   const gateway = new ProductToolGateway({
     persistence,
     clock,
-    modelExecutor: async (input) => { calls.push({ kind: "model", input }); return { text: "model result" }; },
+    modelExecutor: modelExecutor ?? (async (input) => {
+      calls.push({ kind: "model", input });
+      return {
+        text: "model result",
+        requestedModelRevisionId: input.modelProfileRevisionId,
+        actualModelRevisionId: input.modelProfileRevisionId,
+      };
+    }),
     toolExecutor: async (input) => { calls.push({ kind: "tool", input }); return { items: ["result"] }; },
     observer,
   });
@@ -69,10 +90,46 @@ test("Gateway holds Provider and Tool execution while enforcing lease and allowl
   const { gateway, binding, message, calls } = await fixture({ maxSteps: 8 });
   assert.deepEqual(await gateway.handle(message(), binding), { items: ["result"] });
   assert.equal(calls[0].input.connectionId, null);
-  assert.deepEqual(await gateway.handle(message({ operation: "model", toolId: undefined }), binding), { text: "model result" });
+  assert.deepEqual(await gateway.handle(message({ operation: "model", toolId: undefined }), binding), {
+    text: "model result",
+    requestedModelRevisionId: "model-revision-default",
+    actualModelRevisionId: "model-revision-default",
+  });
   await assert.rejects(gateway.handle(message({ toolId: "shell" }), binding), { code: "gateway_tool_forbidden" });
   await assert.rejects(gateway.handle(message({ connectionId: "connection-b" }), binding), { code: "gateway_connection_forbidden" });
   assert.equal(JSON.stringify(calls).includes("secret"), false);
+});
+
+test("Gateway routes only the product-pinned model selection and ignores container input spoofing", async () => {
+  const { gateway, binding, message, calls } = await fixture({
+    metadata: {
+      modelProfileRevisionId: "model-revision-claude-session",
+      fallbackModelProfileRevisionIds: ["model-revision-deepseek-backup"],
+      modelCapability: "tool_calling",
+    },
+  });
+  await gateway.handle(message({
+    operation: "model",
+    toolId: undefined,
+    input: { options: { modelProfileId: "forged-model" } },
+  }), binding);
+  assert.equal(calls[0].input.modelProfileRevisionId, "model-revision-claude-session");
+  assert.deepEqual(calls[0].input.fallbackModelProfileRevisionIds, ["model-revision-deepseek-backup"]);
+  assert.equal(calls[0].input.capability, "tool_calling");
+});
+
+test("Gateway rejects an unverified actual model revision", async () => {
+  const { gateway, binding, message } = await fixture({
+    modelExecutor: async () => ({
+      text: "untrusted result",
+      requestedModelRevisionId: "model-revision-default",
+      actualModelRevisionId: "model-revision-not-authorized",
+    }),
+  });
+  await assert.rejects(
+    gateway.handle(message({ operation: "model", toolId: undefined }), binding),
+    { code: "gateway_model_route_unverified", status: "failed" },
+  );
 });
 
 test("Gateway observer receives only bounded allow/reject decisions", async () => {
@@ -115,12 +172,20 @@ test("stdio Gateway session is process-bound and releases invocation usage on cl
   const { gateway, binding, message } = await fixture({ maxModelRequests: 1, maxSteps: 2 });
   const server = new StdioToolGatewayServer({ gateway });
   const session = await server.open(binding);
-  assert.deepEqual(await session.handle(message({ operation: "model", toolId: undefined })), { text: "model result" });
+  assert.equal((await session.handle(message({ operation: "model", toolId: undefined }))).text, "model result");
+  assert.deepEqual(session.snapshot(), {
+    requestedModelRevisionId: "model-revision-default",
+    actualModelRevisionId: "model-revision-default",
+  });
   await session.close();
+  assert.deepEqual(session.snapshot(), {
+    requestedModelRevisionId: "model-revision-default",
+    actualModelRevisionId: "model-revision-default",
+  });
   await assert.rejects(async () => session.handle(message()), { code: "gateway_session_closed" });
 
   const next = await server.open(binding);
-  assert.deepEqual(await next.handle(message({ operation: "model", toolId: undefined })), { text: "model result" });
+  assert.equal((await next.handle(message({ operation: "model", toolId: undefined }))).text, "model result");
   await next.close();
 });
 

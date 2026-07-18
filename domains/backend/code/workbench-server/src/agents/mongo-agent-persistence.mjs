@@ -91,6 +91,22 @@ export class MongoAgentPersistence {
     }));
   }
 
+  async updateSessionModel(sessionId, modelProfileId, updatedAt) {
+    const repositories = await this.#repos();
+    return publicSession(doc(await repositories.agentSessions.collection.findOneAndUpdate(
+      { sessionId, status: "active" },
+      {
+        $set: {
+          lastUsedModelProfileId: modelProfileId,
+          modelPreferenceState: "preference_only",
+          updatedAt,
+        },
+        $unset: { modelProfileId: "" },
+      },
+      { returnDocument: "after" },
+    )));
+  }
+
   async getBranch(branchId) {
     const repositories = await this.#repos();
     return repositories.agentBranches.get(branchId);
@@ -162,7 +178,7 @@ export class MongoAgentPersistence {
       );
       return null;
     }
-    return publicTurn(turn);
+    return internalRunnerTurn(turn);
   }
 
   async addInvocation(turnId, invocationId, updatedAt) {
@@ -178,11 +194,21 @@ export class MongoAgentPersistence {
     return (await repositories.agentTurns.collection.findOne({ turnId }))?.invocationIds ?? [];
   }
 
-  async completeTurn(turnId, status, result, finishedAt) {
+  async completeTurn(turnId, status, result, finishedAt, routing = {}) {
     const repositories = await this.#repos();
     const turn = doc(await repositories.agentTurns.collection.findOneAndUpdate(
       { turnId, status: "running", $or: [{ internalStatus: { $exists: false } }, { internalStatus: "cancellation_requested" }] },
-      { $set: { status, result: structuredClone(result), finishedAt, updatedAt: finishedAt }, $unset: { internalStatus: "" } },
+      {
+        $set: {
+          status,
+          result: structuredClone(result),
+          actualModelRevisionId: routing.actualModelRevisionId ?? null,
+          artifactRefs: structuredClone(routing.artifactRefs ?? []),
+          finishedAt,
+          updatedAt: finishedAt,
+        },
+        $unset: { internalStatus: "" },
+      },
       { returnDocument: "after" },
     ));
     if (!turn) return null;
@@ -197,11 +223,10 @@ export class MongoAgentPersistence {
     const repositories = await this.#repos();
     const turn = await repositories.agentTurns.collection.findOne({ turnId });
     if (!turn || ["completed", "failed", "cancelled", "blocked"].includes(turn.status)) return publicTurn(turn);
-    const queuedResult = { response: "Turn cancelled.", proposalId: null, handoffId: null, invocationIds: [] };
     return publicTurn(doc(await repositories.agentTurns.collection.findOneAndUpdate(
       { turnId, status: turn.status },
       turn.status === "queued"
-        ? { $set: { status: "cancelled", result: queuedResult, finishedAt: cancelledAt, updatedAt: cancelledAt } }
+        ? { $set: { status: "cancelled", result: null, finishedAt: cancelledAt, updatedAt: cancelledAt } }
         : { $set: { internalStatus: "cancellation_requested", updatedAt: cancelledAt } },
       { returnDocument: "after" },
     )));
@@ -212,6 +237,16 @@ export class MongoAgentPersistence {
     if (!session) return null;
     const repositories = await this.#repos();
     return publicTurn(await repositories.agentTurns.collection.findOne({ sessionId, turnId }));
+  }
+
+  async listTurns(sessionId, { after = 0, limit = 100 } = {}, access = {}) {
+    if (!await this.getSession(sessionId, access)) return null;
+    const repositories = await this.#repos();
+    const boundedLimit = Math.min(Math.max(Number(limit) || 100, 1), 1000);
+    return (await repositories.agentTurns.collection.find({
+      sessionId,
+      sequence: { $gt: Number(after) || 0 },
+    }).sort({ sequence: 1 }).limit(boundedLimit).toArray()).map(publicTurn);
   }
 
   async listEvents(sessionId, after = 0, limit = 500, access = {}) {
@@ -257,7 +292,7 @@ export class MongoAgentPersistence {
           {
             $set: {
               status: "cancelled",
-              result: { response: "Turn cancelled.", proposalId: null, handoffId: null, invocationIds: turn.invocationIds ?? [] },
+              result: null,
               finishedAt: session.updatedAt,
               updatedAt: session.updatedAt,
             },
@@ -278,4 +313,12 @@ export class MongoAgentPersistence {
     }
     return ids;
   }
+}
+
+function internalRunnerTurn(value) {
+  const result = clean(value);
+  if (!result) return result;
+  delete result.invocationIds;
+  delete result.internalStatus;
+  return result;
 }

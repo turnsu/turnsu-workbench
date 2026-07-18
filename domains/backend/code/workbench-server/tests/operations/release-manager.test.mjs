@@ -8,24 +8,32 @@ import {
   rollbackRelease,
   verifyReleaseManifest,
 } from "../../../../operations/local/release-manager.mjs";
+import {
+  computeCandidateDigest,
+  expectedProviderSmokeRequestDigest,
+  stabilityCoreBillingEvidence,
+} from "../../../../operations/local/release-evidence.mjs";
 
 const AGENT_IMAGE = `sha256:${"a".repeat(64)}`;
 const SKILL_IMAGE = `skill@sha256:${"c".repeat(64)}`;
 const MONGO_IMAGE = `mongo@sha256:${"b".repeat(64)}`;
-const FRONTEND_TREE = "d6aa607bab850e6f30a2c92c4823896806871937";
+const FRONTEND_TREE = "c928dda4e262bff84186333068317413d8debce6";
 const SOURCE_COMMIT = "d".repeat(40);
 
 async function writeReleaseEvidence(path, { dependencyVulnerabilities = 0 } = {}) {
   const evidence = `${path}/release-evidence`;
   await mkdir(evidence, { recursive: true });
+  const candidateDigest = await computeCandidateDigest(path);
+  const generatedAt = new Date().toISOString();
   await writeFile(`${evidence}/release-gates.json`, `${JSON.stringify({
     schemaVersion: "looloomi-release-gates-v1",
     sourceCommit: SOURCE_COMMIT,
-    generatedAt: "2026-07-17T00:00:00.000Z",
+    generatedAt,
     gates: Object.fromEntries([
       "contracts", "backend", "agent", "authenticated_mongo", "docker_isolation",
       "default_agent_composition", "backup_restore", "upgrade_rollback", "capacity",
-      "secret_scan", "dependency_audit", "image_scan",
+      "secret_scan", "dependency_audit", "license_audit", "image_scan",
+      "chat_provider_smoke", "stability_provider_smoke",
     ].map((name) => [name, "passed"])),
   })}\n`);
   const sbom = `${JSON.stringify({ bomFormat: "CycloneDX", specVersion: "1.6", components: [{ name: "fixture" }] })}\n`;
@@ -36,12 +44,23 @@ async function writeReleaseEvidence(path, { dependencyVulnerabilities = 0 } = {}
   } } })}\n`;
   await writeFile(`${evidence}/backend-npm-audit.json`, audit);
   await writeFile(`${evidence}/agent-npm-audit.json`, audit);
+  await writeFile(`${evidence}/license-audit.json`, `${JSON.stringify({
+    schemaVersion: "looloomi-license-audit-v1",
+    sourceCommit: SOURCE_COMMIT,
+    candidateDigest,
+    scanner: "fixture-license-scanner",
+    generatedAt,
+    packagesScanned: 2,
+    forbiddenLicenses: [],
+    unknownLicenses: 0,
+    policyDigest: `sha256:${"1".repeat(64)}`,
+  })}\n`);
   for (const [name, image] of [["agent", AGENT_IMAGE], ["skill", SKILL_IMAGE], ["mongo", MONGO_IMAGE]]) {
     await writeFile(`${evidence}/${name}-image-scan.json`, `${JSON.stringify({
       schemaVersion: "looloomi-image-scan-v1",
       image,
       scanner: "fixture-scanner",
-      databaseUpdatedAt: "2026-07-17T00:00:00.000Z",
+      databaseUpdatedAt: generatedAt,
       vulnerabilities: { critical: 0, high: 0 },
     })}\n`);
   }
@@ -54,6 +73,43 @@ async function writeReleaseEvidence(path, { dependencyVulnerabilities = 0 } = {}
     oversizedFilesSkipped: 0,
     findings: 0,
   })}\n`);
+  for (const [name, capability] of [["chat", "chat"], ["stability", "image_generation"]]) {
+    await writeFile(`${evidence}/${name}-provider-smoke.json`, `${JSON.stringify({
+      schemaVersion: "looloomi-provider-smoke-v1",
+      producer: "looloomi-provider-smoke-v1",
+      sourceCommit: SOURCE_COMMIT,
+      candidateDigest,
+      capability,
+      status: "passed",
+      executedAt: generatedAt,
+      profileRevisionId: `${name}-revision-1`,
+      protocol: capability === "chat" ? "openai_compatible_chat" : "stability_image_v2",
+      requestDigest: expectedProviderSmokeRequestDigest(capability, `${name}-revision-1`),
+      responseDigest: `sha256:${"3".repeat(64)}`,
+      attempts: 1,
+      fallback: false,
+      assertions: {
+        productPath: true,
+        requestedActualMatch: true,
+        rawProviderPayloadAbsent: true,
+        secretLeakScanPassed: true,
+        ...(capability === "image_generation" ? {
+          noPiSession: true,
+          authorizedRetrieval: true,
+          crossWorkspaceDenied: true,
+          artifactHashVerified: true,
+        } : {}),
+      },
+      ...(capability === "image_generation" ? {
+        billableConfirmed: true,
+        artifactId: "artifact-smoke-1",
+        artifactDigest: `sha256:${"4".repeat(64)}`,
+        artifactMediaType: "image/png",
+        artifactDimensions: { width: 1024, height: 1024 },
+        billing: stabilityCoreBillingEvidence(),
+      } : {}),
+    })}\n`);
+  }
 }
 
 async function bundle(root, version, content) {
@@ -71,10 +127,13 @@ async function bundle(root, version, content) {
       "release-evidence/agent-image-scan.json",
       "release-evidence/backend-npm-audit.json",
       "release-evidence/backend-sbom.cdx.json",
+      "release-evidence/chat-provider-smoke.json",
+      "release-evidence/license-audit.json",
       "release-evidence/mongo-image-scan.json",
       "release-evidence/release-gates.json",
       "release-evidence/secret-scan.json",
       "release-evidence/skill-image-scan.json",
+      "release-evidence/stability-provider-smoke.json",
     ],
     sourceCommit: SOURCE_COMMIT,
     agentImage: AGENT_IMAGE,
@@ -113,13 +172,39 @@ test("release verification detects modified content and rejects path traversal",
   t.after(() => rm(root, { recursive: true, force: true }));
   const path = await bundle(root, "2.0.0", "safe\n");
   const manifest = JSON.parse(await readFile(`${path}/release-manifest.json`, "utf8"));
-  assert.deepEqual(await verifyReleaseManifest({ root: path, manifest }), { ok: true, version: "2.0.0", files: 10 });
+  assert.deepEqual(await verifyReleaseManifest({ root: path, manifest }), { ok: true, version: "2.0.0", files: 13 });
   await writeFile(`${path}/app/server.mjs`, "tampered\n");
   await assert.rejects(verifyReleaseManifest({ root: path, manifest }), { code: "release_integrity_failed" });
   await assert.rejects(
     buildReleaseManifest({ root: path, version: "2.1.0", files: ["../secret"], sourceCommit: SOURCE_COMMIT, agentImage: AGENT_IMAGE, skillImage: SKILL_IMAGE, mongoImage: MONGO_IMAGE, frontendTreeHash: FRONTEND_TREE }),
     { code: "release_path_invalid" },
   );
+});
+
+test("release evidence requires source-bound provider smoke and license proof, not gate labels alone", async (t) => {
+  const root = await mkdtemp("/private/tmp/looloomi-release-provider-evidence-");
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const path = await bundle(root, "4.0.0", "safe\n");
+  const manifest = JSON.parse(await readFile(`${path}/release-manifest.json`, "utf8"));
+
+  await writeFile(`${path}/release-evidence/chat-provider-smoke.json`, `${JSON.stringify({
+    schemaVersion: "looloomi-provider-smoke-v1",
+    status: "passed",
+  })}\n`);
+  const files = manifest.files.map((entry) => entry.path);
+  const handwrittenManifest = await buildReleaseManifest({
+    root: path,
+    version: "4.0.1",
+    files,
+    sourceCommit: SOURCE_COMMIT,
+    agentImage: AGENT_IMAGE,
+    skillImage: SKILL_IMAGE,
+    mongoImage: MONGO_IMAGE,
+    frontendTreeHash: FRONTEND_TREE,
+  });
+  await assert.rejects(verifyReleaseManifest({ root: path, manifest: handwrittenManifest }), {
+    code: "release_chat_provider_smoke_failed",
+  });
 });
 
 test("release activation fails closed when supply-chain evidence is missing or reports a vulnerability", async (t) => {

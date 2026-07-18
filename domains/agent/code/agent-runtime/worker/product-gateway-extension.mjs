@@ -180,17 +180,14 @@ function parseToolMap(source) {
   }
 }
 
-function workflowChildRef(argv) {
+export function workflowChildRef(argv) {
   const index = argv.indexOf("--session-id");
   const sessionId = index >= 0 ? argv[index + 1] : undefined;
-  if (typeof sessionId !== "string") return undefined;
-  const parts = sessionId.split(".");
-  const value = sessionId.startsWith("pi-workflow.")
-    ? parts.slice(2).join(".")
-    : sessionId.startsWith("piwf.")
-      ? parts.at(-1)
-      : undefined;
-  return typeof value === "string" && value.length > 0 && value.length <= 128 ? value : undefined;
+  return typeof sessionId === "string"
+    && (sessionId.startsWith("pi-workflow.") || sessionId.startsWith("piwf."))
+    && sessionId.length <= 128
+    ? sessionId
+    : undefined;
 }
 
 function boundedInteger(value, minimum, maximum, fallback) {

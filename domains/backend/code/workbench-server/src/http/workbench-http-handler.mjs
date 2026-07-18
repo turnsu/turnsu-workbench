@@ -4,9 +4,11 @@ import {
   ErrorEnvelopeSchema,
   RunEventSchema,
   WORKBENCH_V1_AGENT_ENDPOINTS,
+  WORKBENCH_V1_ARTIFACT_ENDPOINTS,
   WORKBENCH_V1_ENDPOINTS,
   WORKBENCH_V1_LIFECYCLE_ENDPOINTS,
   WORKBENCH_V1_MEMORY_ENDPOINTS,
+  WORKBENCH_V1_MODEL_ENDPOINTS,
 } from "@looloomi/workbench-contracts";
 
 import { ProductStoreError } from "../store/index.mjs";
@@ -174,6 +176,14 @@ const errorStatus = {
   memory_candidate_invalid: 400,
   memory_query_invalid: 400,
   memory_scope_invalid: 400,
+  model_profile_not_found: 404,
+  model_profile_forbidden: 403,
+  model_capability_mismatch: 409,
+  model_revision_unavailable: 503,
+  model_route_unresolved: 503,
+  artifact_not_found: 404,
+  artifact_access_forbidden: 403,
+  artifact_read_failed: 503,
   team_library_unavailable: 503,
   release_not_available: 404,
   installation_not_found: 404,
@@ -256,8 +266,13 @@ const actionByOperation = Object.freeze({
   cancelRun: "cancelRun",
   retryRun: "retryRun",
   listAgentDefinitions: "listAgentDefinitions",
+  listModelProfiles: "listModelProfiles",
+  getArtifactMetadata: "getArtifactMetadata",
+  getArtifactContent: "getArtifactContent",
   createAgentSession: "createAgentSession",
+  selectAgentSessionModel: "selectAgentSessionModel",
   getAgentSession: "getAgentSession",
+  listAgentTurns: "listAgentTurns",
   createAgentTurn: "createAgentTurn",
   getAgentTurn: "getAgentTurn",
   cancelAgentTurn: "cancelAgentTurn",
@@ -339,6 +354,8 @@ const routeDefinitions = [
   ...activeLifecycleEndpoints,
   ...Object.values(WORKBENCH_V1_AGENT_ENDPOINTS),
   ...Object.values(WORKBENCH_V1_MEMORY_ENDPOINTS),
+  ...Object.values(WORKBENCH_V1_MODEL_ENDPOINTS),
+  ...Object.values(WORKBENCH_V1_ARTIFACT_ENDPOINTS),
 ].map((endpoint) => ({
   endpoint,
   pattern: new RegExp(`^${endpoint.path.replace(/\{(\w+)\}/g, "(?<$1>[^/]+)")}$`),
@@ -477,6 +494,9 @@ function responseEnvelope(endpoint, value, requestId) {
 
 function contractResponse(endpoint, value, requestId) {
   if (endpoint.responseMediaType && endpoint.responseMediaType !== "application/json") {
+    if (Buffer.isBuffer(value?.rawBody)) {
+      return { body: undefined, rawBody: value.rawBody, mediaType: endpoint.responseMediaType };
+    }
     const body = responseData(value);
     if (!Check(endpoint.responseBodySchema, body)) {
       throw new ProductStoreError("internal_response_invalid", "Product response failed its contract check.", {
@@ -667,9 +687,8 @@ export function createWorkbenchHttpHandler({
         return;
       }
       const response = contractResponse(route.endpoint, value, requestId);
-      if (response.rawBody) {
+      if (Buffer.isBuffer(response.rawBody)) {
         res.writeHead(route.endpoint.successStatus, {
-          "content-type": `${response.mediaType}; charset=utf-8`,
           ...responseHeaders,
         });
         res.end(response.rawBody);

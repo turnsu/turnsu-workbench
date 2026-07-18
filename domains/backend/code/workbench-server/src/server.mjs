@@ -45,13 +45,23 @@ import {
 } from "./memory/index.mjs";
 import {
   createDeterministicSkillBackend,
-  createConfiguredOpenAICompatibleModelExecutor,
+  createConfiguredModelService,
+  createModelCallBackend,
   createRemoteExecutionBackend,
   ExecutionBroker,
   MongoExecutionPersistence,
   ProductToolGateway,
   StdioToolGatewayServer,
 } from "./execution/index.mjs";
+import {
+  createArtifactService,
+  createProductArtifactMetadataRepositoryAdapter,
+} from "./artifacts/index.mjs";
+import {
+  ModelCatalog,
+  ModelCatalogImporter,
+  createKeychainCredentialResolver,
+} from "./models/index.mjs";
 import { createWorkflowRunner } from "./runner/index.mjs";
 import {
   AgentContainerSandbox,
@@ -228,6 +238,10 @@ export function createWorkbenchComposition({
   agentSandbox = null,
   toolGateway = null,
   gatewayModelExecutor = null,
+  modelService = null,
+  modelCatalog = null,
+  credentialResolver = null,
+  artifactService = null,
   gatewayToolExecutor = null,
   memoryService,
   metrics = null,
@@ -241,6 +255,7 @@ export function createWorkbenchComposition({
   clock = defaultClock,
   idFactory = defaultIdFactory,
   env = process.env,
+  objectStoreRoot = env.WORKBENCH_OBJECT_STORE_ROOT,
 } = {}) {
   const runtimeBundle = agentRuntime
     ? { agentRuntime, piRuntime: null, dispose: null }
@@ -251,8 +266,77 @@ export function createWorkbenchComposition({
       uploadedSkillRuntime: skillValidationService,
     });
   const executionPersistence = executionBroker ? null : new MongoExecutionPersistence({ store });
-  const configuredGatewayModelExecutor = gatewayModelExecutor
-    ?? createConfiguredOpenAICompatibleModelExecutor({ env });
+  const productCredentialResolver = credentialResolver ?? (
+    String(env.WORKBENCH_MODEL_KEYCHAIN_SERVICE || "").trim()
+      ? createKeychainCredentialResolver({ service: String(env.WORKBENCH_MODEL_KEYCHAIN_SERVICE).trim() })
+      : null
+  );
+  const productModelCatalog = modelCatalog ?? new ModelCatalog({
+    store,
+    clock: () => new Date(clock()),
+    idFactory,
+    readinessResolver: async ({ revision }) => {
+      if (!productCredentialResolver) return { state: "unavailable", reason: "credential_resolver_unavailable" };
+      try {
+        await productCredentialResolver.resolve(revision.credentialRef);
+        return { state: "ready" };
+      } catch {
+        return { state: "unavailable", reason: "credential_unavailable" };
+      }
+    },
+  });
+  const artifactObjectStore = !artifactService && executionPersistence
+    && typeof objectStoreRoot === "string" && objectStoreRoot.trim()
+    ? new FilesystemObjectStore({ rootDir: objectStoreRoot, now: clock })
+    : null;
+  const productArtifactService = artifactService ?? (artifactObjectStore ? createArtifactService({
+    metadataRepository: createProductArtifactMetadataRepositoryAdapter(store),
+    executionPersistence,
+    objectStore: artifactObjectStore,
+    clock,
+    idFactory,
+  }) : null);
+  const recordModelAttempt = executionPersistence?.appendEvent
+    ? async (event) => {
+      await executionPersistence.appendEvent(event.invocationId, (sequence) => ({
+        schemaVersion: "workbench-execution-fabric-v1",
+        eventId: idFactory("execution-event"),
+        invocationId: event.invocationId,
+        attemptId: event.attemptId,
+        sequence,
+        type: `model.attempt.${event.phase}`,
+        status: "running",
+        payload: {
+          modelProfileId: event.profileId,
+          requestedModelRevisionId: event.requestedModelRevisionId,
+          actualModelRevisionId: event.actualModelRevisionId,
+          capability: event.capability,
+          provider: event.provider,
+          protocol: event.protocol,
+          fallback: event.fallback === true,
+          ...(event.code ? { code: event.code } : {}),
+          ...(Number.isFinite(event.durationMs) ? { durationMs: event.durationMs } : {}),
+          ...(event.usage ? { usage: structuredClone(event.usage) } : {}),
+        },
+        occurredAt: clock(),
+      }));
+      metrics?.increment("workbench_model_attempts_total", {
+        outcome: event.phase,
+        fallback: event.fallback === true ? "true" : "false",
+        capability: event.capability,
+        provider: event.provider,
+      });
+    }
+    : null;
+  const configuredGatewayModelExecutor = modelService
+    ?? gatewayModelExecutor
+    ?? createConfiguredModelService({
+      env,
+      catalog: productModelCatalog,
+      credentialResolver: productCredentialResolver,
+      artifactService: productArtifactService,
+      observer: recordModelAttempt,
+    });
   const productExecutionBroker = executionBroker ?? new ExecutionBroker({
     persistence: executionPersistence,
     clock,
@@ -264,6 +348,13 @@ export function createWorkbenchComposition({
       isolation: "process",
       backend: createDeterministicSkillBackend({ agentRuntime: runtimeBundle.agentRuntime }),
     });
+    if (configuredGatewayModelExecutor) {
+      productExecutionBroker.registerBackend({
+        mode: "model_call",
+        isolation: "process",
+        backend: createModelCallBackend({ modelService: configuredGatewayModelExecutor }),
+      });
+    }
   }
   const productToolGateway = toolGateway ?? (executionPersistence ? new ProductToolGateway({
     persistence: executionPersistence,
@@ -299,7 +390,7 @@ export function createWorkbenchComposition({
   }
   if (remoteTransport) {
     const remoteBackend = createRemoteExecutionBackend({ transport: remoteTransport });
-    for (const mode of ["deterministic_skill", "bounded_agent", "agent_orchestrator"]) {
+    for (const mode of ["deterministic_skill", "model_call", "bounded_agent", "agent_orchestrator"]) {
       const explicitlyRegistered = executionBackends.some((item) => item.mode === mode && item.isolation === "remote");
       if (!explicitlyRegistered) {
         productExecutionBroker.registerBackend({ mode, isolation: "remote", backend: remoteBackend });
@@ -326,6 +417,28 @@ export function createWorkbenchComposition({
     executor: productAgentExecutor,
     clock,
     idFactory,
+    resolveModelSelection: async ({
+      workspaceId,
+      kind,
+      modelProfileRevisionId,
+      requiredCapabilities,
+    }) => {
+      const resolved = await productModelCatalog.resolveRevision({
+        revisionId: modelProfileRevisionId,
+        workspaceId,
+        capabilities: requiredCapabilities,
+        requireReady: true,
+      });
+      return {
+        revisionId: resolved.revision.revisionId,
+        profileId: resolved.profile.profileId,
+        capability: kind === "model_task"
+          ? "image_generation"
+          : requiredCapabilities.includes("structured_output")
+            ? "structured_output"
+            : "tool_calling",
+      };
+    },
     resolveBaseVersion: async ({ objectKind, objectId, workspaceId }) => {
       if (objectKind === "workflow") {
         return (await store.getWorkflow(objectId, { workspaceId })).workflow.currentRevisionId;
@@ -350,12 +463,21 @@ export function createWorkbenchComposition({
     }),
     canonicalResolver: new CanonicalMemoryResolver({ store }),
   });
+  const artifactReady = artifactObjectStore?.initialize?.() ?? Promise.resolve();
+  const modelCatalogReady = importModelCatalogFromEnvironment({
+    env,
+    catalog: productModelCatalog,
+    workspaceId: env.WORKBENCH_DEFAULT_WORKSPACE_ID || "workspace-local",
+  });
   const application = createWorkbenchApplication({
     store,
     agentRuntime: runtimeBundle.agentRuntime,
     executionBroker: productExecutionBroker,
     agentTurnRunner: productAgentTurnRunner,
     memoryService: productMemoryService,
+    artifactService: productArtifactService,
+    modelCatalog: productModelCatalog,
+    modelService: configuredGatewayModelExecutor,
     runner: productRunner,
     skillUploadService,
     skillValidationService,
@@ -370,13 +492,22 @@ export function createWorkbenchComposition({
     executionBroker: productExecutionBroker,
     toolGateway: productToolGateway,
     gatewayModelExecutor: configuredGatewayModelExecutor,
-    providerProbe: configuredGatewayModelExecutor?.probe ?? null,
+    modelService: configuredGatewayModelExecutor,
+    providerProbe: configuredGatewayModelExecutor?.probe
+      ? () => configuredGatewayModelExecutor.probe({
+        workspaceId: env.WORKBENCH_DEFAULT_WORKSPACE_ID || "workspace-local",
+      })
+      : null,
     agentSandbox: productAgentSandbox,
     remoteTransport,
     agentTurnRunner: productAgentTurnRunner,
     agentExecutor: productAgentExecutor,
     agentProposalService: productAgentProposalService,
     memoryService: productMemoryService,
+    artifactService: productArtifactService,
+    modelCatalog: productModelCatalog,
+    artifactReady,
+    modelCatalogReady,
     piRuntime: runtimeBundle.piRuntime,
     disposeRuntime: runtimeBundle.dispose,
     runner: productRunner,
@@ -396,6 +527,10 @@ export function createWorkbenchServer({
   agentSandbox,
   toolGateway,
   gatewayModelExecutor,
+  modelService,
+  modelCatalog,
+  credentialResolver,
+  artifactService,
   gatewayToolExecutor,
   memoryService,
   runner,
@@ -461,6 +596,10 @@ export function createWorkbenchServer({
       agentSandbox,
       toolGateway,
       gatewayModelExecutor,
+      modelService,
+      modelCatalog,
+      credentialResolver,
+      artifactService,
       gatewayToolExecutor,
       memoryService,
       metrics: operationsMetrics,
@@ -472,6 +611,7 @@ export function createWorkbenchServer({
       clock,
       idFactory,
       env,
+      objectStoreRoot,
     });
   const catalogReady = bootstrapCatalog
     ? bootstrapWorkbenchCatalog({
@@ -495,8 +635,22 @@ export function createWorkbenchServer({
     ? Promise.resolve().then(() => startupRecovery())
     : Promise.resolve();
   const startupState = { ready: false, error: null };
-  const ready = Promise.all([storeReady, catalogReady, identityReady, upload.ready, validation.ready, validation.recovery, recoveryReady, resources.ready])
+  const ready = Promise.all([
+    storeReady,
+    catalogReady,
+    identityReady,
+    upload.ready,
+    validation.ready,
+    validation.recovery,
+    recoveryReady,
+    resources.ready,
+    composition.artifactReady ?? Promise.resolve(),
+    composition.modelCatalogReady ?? Promise.resolve(),
+  ])
     .then(async () => {
+      if (typeof composition.artifactService?.reconcile === "function") {
+        await composition.artifactService.reconcile();
+      }
       if (typeof composition.agentSandbox?.scavenge === "function") {
         await composition.agentSandbox.scavenge();
       }
@@ -513,6 +667,9 @@ export function createWorkbenchServer({
       throw error;
     });
   const productionMode = String(env.WORKBENCH_LOCAL_PRODUCTION || "") === "1";
+  const modelRoutingRequirements = parseModelRoutingRequirements(
+    env.WORKBENCH_MODEL_ROUTING_REQUIREMENTS_JSON,
+  );
   const productReadiness = readiness ?? createProductReadiness({
     store: productStore,
     startupState,
@@ -521,6 +678,9 @@ export function createWorkbenchServer({
     requireAgent: productionMode,
     requireProvider: productionMode,
     requireMigrations: productionMode,
+    modelCatalog: composition.modelCatalog ?? modelCatalog,
+    modelRoutingRequirements,
+    requireModelRouting: productionMode,
   });
   const operations = createOperationsHttpHandler({
     readiness: productReadiness,
@@ -605,6 +765,49 @@ function createRequestObserver({ logger, metrics }) {
       component: "http",
     });
   };
+}
+
+const MODEL_ROUTING_CAPABILITIES = new Set([
+  "chat",
+  "tool_calling",
+  "structured_output",
+  "image_generation",
+]);
+
+function parseModelRoutingRequirements(source) {
+  if (typeof source !== "string" || !source.trim()) return [];
+  try {
+    const value = JSON.parse(source);
+    if (!Array.isArray(value) || value.length === 0) return [];
+    return value.map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)
+        || typeof item.workspaceId !== "string" || !item.workspaceId.trim()
+        || !Array.isArray(item.capabilities) || item.capabilities.length === 0
+        || item.capabilities.some((capability) => !MODEL_ROUTING_CAPABILITIES.has(capability))) {
+        throw new TypeError("workbench_model_routing_requirements_invalid");
+      }
+      return {
+        workspaceId: item.workspaceId.trim(),
+        capabilities: [...new Set(item.capabilities)],
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+function importModelCatalogFromEnvironment({ env, catalog, workspaceId }) {
+  const source = String(env.WORKBENCH_MODEL_CATALOG_IMPORT_JSON || "").trim();
+  if (!source) return Promise.resolve({ profiles: [], policies: [] });
+  let configuration;
+  try { configuration = JSON.parse(source); }
+  catch { return Promise.reject(new TypeError("workbench_model_catalog_import_json_invalid")); }
+  const importer = new ModelCatalogImporter({ catalog });
+  return importer.importConfiguration(configuration, {
+    workspaceId,
+    allowLoopbackEndpoints: String(env.WORKBENCH_MODEL_ALLOW_LOOPBACK_ENDPOINTS || "") === "1"
+      && String(env.WORKBENCH_LOCAL_PRODUCTION || "") !== "1",
+  });
 }
 
 function resolveSkillUploadService({ store, skillUploadService, objectStoreRoot, clock, idFactory }) {

@@ -15,16 +15,64 @@ const DEFAULT_EXECUTION_CAPABILITIES = Object.freeze({
   externalActions: false,
 });
 
+const ZERO_MODEL_CALL_CAPABILITIES = DEFAULT_EXECUTION_CAPABILITIES;
+
+function defaultExecutionLimits(node, mode) {
+  const agentic = ["bounded_agent", "agent_orchestrator"].includes(mode);
+  return {
+    timeoutMs: node.timeoutSeconds * 1000,
+    maxSteps: mode === "model_call" ? 1 : agentic ? 32 : 1,
+    maxModelRequests: mode === "model_call" ? 1 : agentic ? 16 : 0,
+    maxChildren: mode === "agent_orchestrator" ? 16 : 0,
+    maxInputBytes: 1_000_000,
+    maxOutputBytes: 1_000_000,
+    maxImageCount: 0,
+    maxCostUsdMicros: 0,
+  };
+}
+
+function modelMetadataForStep(step) {
+  if (step.modelRoutingState === "pinned") {
+    return {
+      modelProfileRevisionId: step.modelProfileRevisionId,
+      modelCapability: step.modelCapability,
+      fallbackModelProfileRevisionIds: structuredClone(
+        step.fallbackModelProfileRevisionIds ?? [],
+      ),
+    };
+  }
+  if (step.modelRoutingState === "legacy_unpinned") {
+    return {
+      modelRoutingState: "legacy_unpinned",
+      ...(step.legacyModelProfileId ? { legacyModelProfileId: step.legacyModelProfileId } : {}),
+      ...(step.legacyFallbackModelProfileIds ? {
+        legacyFallbackModelProfileIds: structuredClone(step.legacyFallbackModelProfileIds),
+      } : {}),
+    };
+  }
+  return {};
+}
+
 function executionRequestFor({ run, node, step, skill, attempt, input, lease }) {
   const mode = step.executionMode ?? (
     skill.executionRef?.executionMode === "orchestrator"
       ? "agent_orchestrator"
       : skill.executionRef?.executionMode === "agent"
         ? "bounded_agent"
+        : skill.executionRef?.executionMode === "model"
+          ? "model_call"
         : "deterministic_skill"
   );
-  const agentic = mode !== "deterministic_skill";
-  return {
+  if (step.modelRoutingState === "legacy_unpinned") {
+    throw new WorkflowRunnerError(
+      "workflow_model_route_legacy_unpinned",
+      "This historical Workflow model route is read-only and must be recompiled before execution.",
+      { nodeId: node.nodeId },
+    );
+  }
+  const agentic = ["bounded_agent", "agent_orchestrator"].includes(mode);
+  const modelCall = mode === "model_call";
+  const request = {
     schemaVersion: "workbench-execution-fabric-v1",
     invocationId: attempt.invocationId,
     attemptId: attempt.nodeRunId,
@@ -38,15 +86,10 @@ function executionRequestFor({ run, node, step, skill, attempt, input, lease }) 
     isolation: step.isolation ?? (agentic ? "container" : "process"),
     goal: String(node.description || node.title || `Execute ${node.nodeId}`).slice(0, 8000),
     input: structuredClone(input),
-    limits: structuredClone(step.limits ?? {
-      timeoutMs: node.timeoutSeconds * 1000,
-      maxSteps: agentic ? 32 : 1,
-      maxModelRequests: agentic ? 16 : 0,
-      maxChildren: mode === "agent_orchestrator" ? 16 : 0,
-      maxInputBytes: 1_000_000,
-      maxOutputBytes: 1_000_000,
-    }),
-    capabilities: structuredClone(step.capabilities ?? DEFAULT_EXECUTION_CAPABILITIES),
+    limits: structuredClone(step.limits ?? defaultExecutionLimits(node, mode)),
+    capabilities: structuredClone(
+      modelCall ? ZERO_MODEL_CALL_CAPABILITIES : step.capabilities ?? DEFAULT_EXECUTION_CAPABILITIES,
+    ),
     resultSchema: structuredClone(step.resultSchema ?? skill.definition.outputSchema),
     evidenceRequirements: structuredClone(step.evidenceRequirements ?? [{
       requirementId: `output:${node.nodeId}`,
@@ -57,7 +100,39 @@ function executionRequestFor({ run, node, step, skill, attempt, input, lease }) 
     metadata: {
       executionRef: structuredClone(skill.executionRef),
       outerNodeId: node.nodeId,
+      ...modelMetadataForStep(step),
     },
+  };
+  if (modelCall) {
+    if (step.modelRoutingState !== "pinned") {
+      throw new WorkflowRunnerError("workflow_model_route_unpinned", "The model-backed step has no pinned revision.", {
+        nodeId: node.nodeId,
+      });
+    }
+    request.isolation = "process";
+    request.modelProfileRevisionId = step.modelProfileRevisionId;
+    request.modelCapability = step.modelCapability;
+    request.fallbackModelProfileRevisionIds = structuredClone(
+      step.fallbackModelProfileRevisionIds ?? [],
+    );
+  }
+  return request;
+}
+
+function executionResultModelProjection(result, step) {
+  if (step.modelRoutingState !== "pinned") return {};
+  const requestedModelRevisionId = result?.requestedModelRevisionId
+    ?? step.modelProfileRevisionId;
+  const actualModelRevisionId = result?.actualModelRevisionId ?? null;
+  const artifactRefs = Array.isArray(result?.artifactRefs)
+    ? structuredClone(result.artifactRefs)
+    : [];
+  return {
+    requestedModelRevisionId,
+    actualModelRevisionId,
+    artifactRefs,
+    fallbackUsed: actualModelRevisionId !== null
+      && actualModelRevisionId !== requestedModelRevisionId,
   };
 }
 
@@ -717,7 +792,7 @@ export class WorkflowRunner {
       ...(await this.#bindings(run, execution.revision, step, node)),
       ...(inputOverrides ? structuredClone(inputOverrides) : {}),
     };
-    const created = await this.#createAttempt(run, node, input, { lease, beforeAttempt });
+    const created = await this.#createAttempt(run, node, input, { step, lease, beforeAttempt });
     const attempt = created.attempt;
     this.#hub.publish(created.event);
     const controller = new AbortController();
@@ -726,6 +801,7 @@ export class WorkflowRunner {
       await this.#fault("post-attempt-invocation-persistence", { runId: run.runId, nodeId: node.nodeId, attempt, lease });
       await this.#fencedTransition(run.runId, lease, async () => {});
     }
+    let modelProjection = {};
     try {
       if (node.kind === "ReviewGate") {
         const waiting = await this.#fencedTransition(run.runId, lease, async (options) => {
@@ -766,18 +842,29 @@ export class WorkflowRunner {
         const skill = this.#pinnedSkill(execution, node);
         validatePortInput(node, input);
         validateSchema(skill.definition.inputSchema, input, "skill_input_invalid");
+        if (step.modelRoutingState === "pinned") {
+          validateSchema(step.parameterSchema, input, "model_input_invalid");
+        }
         if (this.#executionBroker) {
           const result = await this.#executionBroker.execute(
             executionRequestFor({ run, node, step, skill, attempt, input, lease }),
             { signal: controller.signal },
           );
+          modelProjection = executionResultModelProjection(result, step);
           if (result.status !== "completed") {
             throw new WorkflowRunnerError(`execution_${result.status}`, result.summary, {
               invocationId: attempt.invocationId,
               status: result.status,
+              ...modelProjection,
             });
           }
           output = result.output;
+        } else if (step.executionMode === "model_call") {
+          throw new WorkflowRunnerError(
+            "workflow_model_execution_broker_required",
+            "The Product Execution Broker is required for a model-backed Workflow step.",
+            { nodeId: node.nodeId },
+          );
         } else {
           output = await this.#agentRuntime.invokeSkillNode({
             invocationId: attempt.invocationId,
@@ -801,6 +888,7 @@ export class WorkflowRunner {
         await this.#patchAttempt(run.runId, node.nodeId, attempt.attempt, {
           status: "completed", summary: `${node.title} completed.`, executionOutput: output,
           invocationStatus: attempt.invocationId ? "completed" : undefined,
+          ...modelProjection,
           completedAt: now, updatedAt: now,
         }, options);
         await this.#syncNodeRuns(run.runId, options);
@@ -826,6 +914,7 @@ export class WorkflowRunner {
         await this.#patchAttempt(run.runId, node.nodeId, attempt.attempt, {
           status: "failed", summary: `${node.title} failed.`, failure,
           invocationStatus: attempt.invocationId ? "failed" : undefined,
+          ...modelProjection,
           completedAt: now, updatedAt: now,
         }, options);
         await this.#syncNodeRuns(run.runId, options);
@@ -1017,7 +1106,7 @@ export class WorkflowRunner {
     );
   }
 
-  async #createAttempt(run, node, executionInput, { lease, beforeAttempt = null } = {}) {
+  async #createAttempt(run, node, executionInput, { step, lease, beforeAttempt = null } = {}) {
     return this.#fencedTransition(run.runId, lease, async (options) => {
       const previous = await this.#latestAttempt(run.runId, node.nodeId, options);
       const now = this.#now();
@@ -1039,6 +1128,12 @@ export class WorkflowRunner {
           invocationId: this.#idFactory("invocation"),
           invocationStatus: "started",
           invocationStartedAt: now,
+        } : {}),
+        ...(step?.modelRoutingState === "pinned" ? {
+          requestedModelRevisionId: step.modelProfileRevisionId,
+          actualModelRevisionId: null,
+          artifactRefs: [],
+          fallbackUsed: false,
         } : {}),
         workerId: this.#workerId,
         fence: lease.fence,

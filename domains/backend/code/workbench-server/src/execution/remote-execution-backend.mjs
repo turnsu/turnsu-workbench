@@ -6,6 +6,7 @@ import {
 
 export const REMOTE_EXECUTION_MODES = Object.freeze([
   "deterministic_skill",
+  "model_call",
   "bounded_agent",
   "agent_orchestrator",
 ]);
@@ -54,6 +55,9 @@ export function createRemoteExecutionBackend({ transport, maxResumeAttempts = 2 
       throwIfAborted(signal);
       const probe = await translateUnavailable(() => transport.probe({ signal }));
       if (probe?.available !== true) throw remoteBackendUnavailable();
+      if (!Array.isArray(probe.supportedModes) || !probe.supportedModes.includes(request.mode)) {
+        throw remoteBackendUnavailable(`The remote backend does not advertise ${request.mode} support.`);
+      }
 
       const dispatched = await translateUnavailable(() => transport.dispatch({
         request: remoteRequestEnvelope(request),
@@ -188,7 +192,8 @@ function remoteRequestEnvelope(request) {
   const safeMetadataKeys = new Set([
     "executionRef", "outerNodeId", "definitionId", "agentSessionId", "agentTurnId",
     "objectKind", "objectId", "branchId", "proposalKind", "parentInvocationId",
-    "externalChildRef",
+    "externalChildRef", "modelProfileRevisionId", "capability",
+    "fallbackModelProfileRevisionIds",
   ]);
   return {
     schemaVersion: request.schemaVersion,
@@ -202,6 +207,11 @@ function remoteRequestEnvelope(request) {
     input: structuredClone(request.input),
     limits: structuredClone(request.limits),
     capabilities: structuredClone(request.capabilities),
+    ...(request.mode === "model_call" ? {
+      modelProfileRevisionId: request.modelProfileRevisionId,
+      modelCapability: request.modelCapability,
+      fallbackModelProfileRevisionIds: structuredClone(request.fallbackModelProfileRevisionIds ?? []),
+    } : {}),
     resultSchema: structuredClone(request.resultSchema),
     evidenceRequirements: structuredClone(request.evidenceRequirements),
     metadata: Object.fromEntries(Object.entries(request.metadata ?? {})

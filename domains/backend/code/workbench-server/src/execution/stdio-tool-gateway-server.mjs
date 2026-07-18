@@ -9,6 +9,11 @@ export class StdioToolGatewayServer {
       throw new TypeError("stdio_tool_gateway_binding_invalid");
     }
     let closed = false;
+    let finalSnapshot = null;
+    const snapshot = () => finalSnapshot ?? this.gateway.snapshot?.(binding) ?? {
+      requestedModelRevisionId: null,
+      actualModelRevisionId: null,
+    };
     return Object.freeze({
       binding: Object.freeze(structuredClone(binding)),
       handle: (message) => {
@@ -20,8 +25,10 @@ export class StdioToolGatewayServer {
         }
         return this.gateway.handle(message, binding);
       },
+      snapshot,
       close: async () => {
         if (closed) return;
+        finalSnapshot = structuredClone(snapshot());
         closed = true;
         this.gateway?.release?.(binding);
       },

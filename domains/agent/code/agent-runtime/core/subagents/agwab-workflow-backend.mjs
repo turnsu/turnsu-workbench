@@ -1,4 +1,7 @@
+import { createHash } from "node:crypto";
+
 const TERMINAL_WORKFLOW = new Set(["completed", "failed", "interrupted", "blocked"]);
+const MAX_SUBAGENT_SESSION_ID_LENGTH = 64;
 
 export function createAgwaWorkflowBackend({
   api = null,
@@ -53,7 +56,8 @@ export function createAgwaWorkflowBackend({
         if (monitorError && monitorError.code !== "agwab_child_monitor_stopped") throw monitorError;
         await observe(finalRun);
         const status = normalizeWorkflowStatus(finalRun.status, finalRun.degradation);
-        const children = (finalRun.tasks ?? []).slice(0, request.limits.maxChildren).map((task) => productChild(task, request));
+        const children = (finalRun.tasks ?? []).slice(0, request.limits.maxChildren)
+          .map((task) => productChild(task, request, finalRun.runId));
         const output = projectFinalOutput(finalRun, request.resultSchema);
         const nextLoopProposal = request.metadata?.allowReusableProposal === true ? {
           kind: "loop_revision_proposal",
@@ -118,15 +122,16 @@ async function startOrRecoverRun({ runtime, request, cwd, provider }) {
   return current;
 }
 
-function productChild(task, request) {
+function productChild(task, request, runId) {
   const status = normalizeTaskStatus(task.status);
   const usage = task.usage ?? {};
+  const taskRef = String(task.taskId || task.specId || "agwab-task").slice(0, 128);
   return {
-    childRef: String(task.taskId || task.specId || "agwab-task").slice(0, 128),
+    childRef: productChildRef(task, runId, taskRef),
     goal: String(task.displayName || task.specId || "AgwaB workflow task").slice(0, 8000),
     status,
     output: {
-      taskRef: String(task.specId || task.taskId || "task").slice(0, 128),
+      taskRef,
       status: task.status,
       summary: safeString(task.lastMessage)?.slice(0, 2000) ?? "Task finished.",
     },
@@ -144,7 +149,8 @@ function productChild(task, request) {
 
 async function observeWorkflowChildren({ snapshot, request, reportChild, observed }) {
   if (typeof reportChild !== "function") return;
-  const children = (snapshot?.tasks ?? []).slice(0, request.limits.maxChildren).map((task) => productChild(task, request));
+  const children = (snapshot?.tasks ?? []).slice(0, request.limits.maxChildren)
+    .map((task) => productChild(task, request, snapshot?.runId));
   for (const child of children) {
     const signature = JSON.stringify([child.status, child.output.status, child.output.summary, child.usage]);
     if (observed.get(child.childRef) === signature) continue;
@@ -152,12 +158,25 @@ async function observeWorkflowChildren({ snapshot, request, reportChild, observe
       ...child,
       checkpoint: {
         agwaRunId: String(snapshot.runId).slice(0, 128),
-        taskRef: child.childRef,
+        taskRef: child.output.taskRef,
         status: child.status,
       },
     });
     observed.set(child.childRef, signature);
   }
+}
+
+function productChildRef(task, runId, taskRef) {
+  const persisted = safeString(task.backendHandle?.sessionId) ?? safeString(task.backendFiles?.sessionId);
+  if (persisted) return persisted.slice(0, 128);
+  if (task.artifactGraph?.enabled !== true || !safeString(runId)) return taskRef;
+  const sanitized = `pi-workflow.${runId}.${taskRef}`.replace(/[^A-Za-z0-9._-]/g, "-");
+  if (sanitized.length <= MAX_SUBAGENT_SESSION_ID_LENGTH) return sanitized;
+  const digest = createHash("sha256").update(sanitized).digest("hex").slice(0, 16);
+  const suffix = sanitized.split(".").at(-1) || "session";
+  const prefix = `piwf.${digest}`;
+  const maxSuffixLength = MAX_SUBAGENT_SESSION_ID_LENGTH - prefix.length - 1;
+  return `${prefix}.${suffix.slice(-Math.max(1, maxSuffixLength))}`;
 }
 
 async function monitorWorkflowChildren({ runtime, cwd, runId, request, reportChild, observed, signal, pollIntervalMs }) {

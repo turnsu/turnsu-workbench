@@ -82,7 +82,7 @@ test("provider failures and unadvertised tool calls return fixed product-safe er
     fetchImpl: async () => new Response("provider-secret-response", { status: 401 }),
   });
   await assert.rejects(denied(modelInput()), (error) => (
-    error.code === "provider_authentication_failed"
+    error.code === "provider_auth_failed"
       && error.productSafe === true
       && !error.message.includes("provider-secret-response")
       && !error.message.includes("secret-never-returned")
@@ -96,5 +96,5 @@ test("provider failures and unadvertised tool calls return fixed product-safe er
       choices: [{ message: { tool_calls: [{ id: "call-2", type: "function", function: { name: "shell", arguments: "{}" } }] } }],
     }), { status: 200 }),
   });
-  await assert.rejects(escalation(modelInput()), { code: "provider_tool_call_invalid", status: "failed" });
+  await assert.rejects(escalation(modelInput()), { code: "provider_response_invalid", status: "failed" });
 });

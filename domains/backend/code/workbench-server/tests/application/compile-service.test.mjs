@@ -81,6 +81,116 @@ test("compile prefetches SkillDefinition and runtime probe, then persists only s
   assert.equal(persisted.workflow.summary.status, "ready");
 });
 
+test("application compile freezes the async Catalog route into the immutable plan", async () => {
+  const revision = makeRevision();
+  const resolver = makeResolver();
+  const definitionFor = (skillId, version) => {
+    const definition = structuredClone(resolver.resolveSkill({ skillId, version }).definition);
+    definition.executionRef.executionMode = "agent";
+    return definition;
+  };
+  const definition = definitionFor("skill-research-b", "1.0.0");
+  const persisted = { plans: [] };
+  const store = withIdempotency({
+    async connect() {},
+    repositories: {
+      workflowRevisions: { async get() { return structuredClone(revision); } },
+      skills: { async get(skillId, version) { return definitionFor(skillId, version); } },
+      compileResults: { async insert(value) { return value; } },
+      executionPlans: {
+        async insert(_planId, value) { persisted.plans.push(structuredClone(value)); return value; },
+      },
+      workflows: { async updateCompileSummary() {} },
+    },
+  });
+  const seen = [];
+  const application = createWorkbenchApplication({
+    store,
+    agentRuntime: { async probeSkill() { return { status: "ready", ready: true, code: "ready" }; } },
+    modelCatalog: {
+      async getWorkspacePolicy() {
+        return {
+          defaultProfileIdsByCapability: { structured_output: "model-profile-controller" },
+          workflowFallbackAllowed: false,
+        };
+      },
+      async resolveCurrentProfile(input) {
+        seen.push(structuredClone(input));
+        return {
+          profile: { profileId: input.profileId },
+          revision: {
+            revisionId: "model-revision-controller-1",
+            capabilities: ["chat", "tool_calling", "structured_output"],
+            protocol: "openai_compatible_chat",
+            limits: { kind: "chat", maxInputTokens: 128_000, maxOutputTokens: 8_192 },
+          },
+          readiness: { state: "ready" },
+        };
+      },
+    },
+    clock: () => "2026-07-10T10:00:00.000Z",
+    idFactory: (kind) => `${kind}-model-route`,
+  });
+  const result = await application.compileWorkflow({
+    workflowId: revision.workflowId,
+    idempotencyKey: "compile-model-route-1",
+    request: { data: { workflowRevisionId: revision.revisionId } },
+  });
+
+  assert.equal(result.status, "ready", JSON.stringify(result.warnings));
+  assert.equal(seen.length, 1);
+  assert.deepEqual(seen[0].capabilities, ["chat", "tool_calling", "structured_output"]);
+  const step = result.executionPlan.steps.find((item) => item.kind === "Skill");
+  assert.equal(step.executionMode, "bounded_agent");
+  assert.equal(step.modelProfileRevisionId, "model-revision-controller-1");
+  assert.deepEqual(step.parameterSchema, definition.inputSchema);
+  assert.equal(persisted.plans[0].steps.find((item) => item.kind === "Skill").modelProfileRevisionId,
+    "model-revision-controller-1");
+});
+
+test("application compile records an unavailable Catalog revision as blocked", async () => {
+  const revision = makeRevision();
+  const resolver = makeResolver();
+  const definitionFor = (skillId, version) => {
+    const definition = structuredClone(resolver.resolveSkill({ skillId, version }).definition);
+    definition.executionRef.executionMode = "agent";
+    return definition;
+  };
+  const store = withIdempotency({
+    async connect() {},
+    repositories: {
+      workflowRevisions: { async get() { return structuredClone(revision); } },
+      skills: { async get(skillId, version) { return definitionFor(skillId, version); } },
+      compileResults: { async insert(value) { return value; } },
+      executionPlans: { async insert() { throw new Error("blocked_plan_must_not_persist"); } },
+      workflows: { async updateCompileSummary(_workflowId, summary) { store.status = summary.status; } },
+    },
+  });
+  const application = createWorkbenchApplication({
+    store,
+    agentRuntime: { async probeSkill() { return { status: "ready", ready: true, code: "ready" }; } },
+    modelCatalog: {
+      async getWorkspacePolicy() {
+        return { defaultProfileIdsByCapability: { structured_output: "model-profile-controller" } };
+      },
+      async resolveCurrentProfile() {
+        const error = new Error("credential missing");
+        error.code = "model_revision_unavailable";
+        throw error;
+      },
+    },
+    clock: () => "2026-07-10T10:00:00.000Z",
+  });
+  const result = await application.compileWorkflow({
+    workflowId: revision.workflowId,
+    idempotencyKey: "compile-model-route-blocked",
+    request: { data: { workflowRevisionId: revision.revisionId } },
+  });
+  assert.equal(result.status, "blocked");
+  assert.equal(store.status, "blocked");
+  assert.ok(result.warnings.some((entry) => entry.code === "model_revision_unavailable"));
+});
+
 test("compile blocks a Skill when the runtime probe is unavailable even when stored readiness says ready", async () => {
   const revision = makeRevision();
   const resolver = makeResolver();

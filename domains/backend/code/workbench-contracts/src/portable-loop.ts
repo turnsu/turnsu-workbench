@@ -253,6 +253,7 @@ export const PortableWorkflowGraphSchema = strictObject(
 export const PortableExecutionSettingsSchema = strictObject({
   maxParallelism: Type.Literal(1),
   defaultTimeoutSeconds: Type.Integer({ minimum: 1, maximum: 86400 }),
+  workflowFallbackAllowed: Type.Boolean(),
 });
 
 export const PortableLoopPackageV1Schema = strictObject(

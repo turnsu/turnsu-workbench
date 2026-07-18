@@ -8,6 +8,54 @@ import { applyBuilderOperations } from "../../src/proposals/apply-builder-operat
 import { makeRevision } from "../compiler/fixtures.mjs";
 
 const NOW = "2026-07-13T08:00:00.000Z";
+const BUILDER_MODEL_PROFILE_ID = "model-profile-builder";
+const BUILDER_MODEL_REVISION_ID = "model-revision-builder-1";
+
+function createBuilderApplication({ store, generate, requests = [], clock = () => NOW, idFactory } = {}) {
+  const modelCatalog = {
+    async getWorkspacePolicy() {
+      return { defaultProfileIdsByCapability: { structured_output: BUILDER_MODEL_PROFILE_ID } };
+    },
+    async resolveCurrentProfile({ profileId }) {
+      assert.equal(profileId, BUILDER_MODEL_PROFILE_ID);
+      return {
+        profile: { profileId: BUILDER_MODEL_PROFILE_ID },
+        revision: { revisionId: BUILDER_MODEL_REVISION_ID },
+        readiness: { state: "ready" },
+      };
+    },
+    async resolveRevision({ revisionId }) {
+      assert.equal(revisionId, BUILDER_MODEL_REVISION_ID);
+      return {
+        profile: { profileId: BUILDER_MODEL_PROFILE_ID },
+        revision: { revisionId: BUILDER_MODEL_REVISION_ID },
+        readiness: { state: "ready" },
+      };
+    },
+  };
+  return createWorkbenchApplication({
+    store,
+    modelCatalog,
+    executionBroker: {
+      async execute(request) {
+        requests.push(structuredClone(request));
+        const output = await generate({
+          instruction: request.input.instruction,
+          revision: structuredClone(request.input.revision),
+        });
+        return {
+          status: "completed",
+          output,
+          requestedModelRevisionId: BUILDER_MODEL_REVISION_ID,
+          actualModelRevisionId: BUILDER_MODEL_REVISION_ID,
+          artifactRefs: [],
+        };
+      },
+    },
+    clock,
+    idFactory: idFactory ?? ((kind) => `${kind}-builder-test`),
+  });
+}
 
 function proposalStore(baseRevision, { beforeMutation = null } = {}) {
   const proposals = new Map();
@@ -127,7 +175,10 @@ test("typed Builder operations produce a new revision draft without mutating the
         stopRules: ["Pause when an owner is unclear."],
       },
     },
-    { op: "updateWorkflowSettings", runSettings: { maxParallelism: 1, defaultTimeoutSeconds: 180 } },
+    {
+      op: "updateWorkflowSettings",
+      runSettings: { maxParallelism: 1, defaultTimeoutSeconds: 180, workflowFallbackAllowed: false },
+    },
   ]);
   assert.deepEqual(base, original);
   assert.equal(next.definition.goal, "Produce reviewed action items.");
@@ -138,10 +189,9 @@ test("proposal generation binds a typed model result to the current revision and
   const revision = makeRevision();
   const store = proposalStore(revision);
   const calls = [];
-  const application = createWorkbenchApplication({
+  const application = createBuilderApplication({
     store,
-    agentRuntime: {
-      async generateBuilderProposal(input) {
+    generate: async (input) => {
         calls.push(structuredClone(input));
         return {
           summary: "Tighten the completion rule.",
@@ -161,7 +211,6 @@ test("proposal generation binds a typed model result to the current revision and
           permissionImpact: [],
           providerPayload: "must-not-persist",
         };
-      },
     },
     clock: () => NOW,
     idFactory: (kind) => `${kind}-proposal-1`,
@@ -205,15 +254,10 @@ test("production Builder proposal uses an independent bounded container Worker",
     diagnostics: [],
     permissionImpact: [],
   };
-  const application = createWorkbenchApplication({
+  const application = createBuilderApplication({
     store,
-    agentRuntime: { async generateBuilderProposal() { throw new Error("shared_session_must_not_run"); } },
-    executionBroker: {
-      async execute(request) {
-        requests.push(structuredClone(request));
-        return { status: "completed", output: candidate };
-      },
-    },
+    generate: async () => candidate,
+    requests,
     clock: () => NOW,
     idFactory: (kind) => `${kind}-bounded-builder`,
   });
@@ -235,10 +279,9 @@ test("production Builder proposal uses an independent bounded container Worker",
 test("proposal apply requires the same base revision and saves one immutable revision transaction", async () => {
   const revision = makeRevision();
   const store = proposalStore(revision);
-  const application = createWorkbenchApplication({
+  const application = createBuilderApplication({
     store,
-    agentRuntime: {
-      async generateBuilderProposal() {
+    generate: async () => {
         return {
           summary: "Update the goal.",
           operations: [{
@@ -251,7 +294,6 @@ test("proposal apply requires the same base revision and saves one immutable rev
           diagnostics: [],
           permissionImpact: [],
         };
-      },
     },
     clock: () => NOW,
     idFactory: (kind) => `${kind}-proposal-2`,
@@ -295,13 +337,9 @@ test("proposal generation rechecks the current revision inside its mutation boun
       currentStore.advanceWorkflowRevision("revision-concurrent-2");
     },
   });
-  const application = createWorkbenchApplication({
+  const application = createBuilderApplication({
     store,
-    agentRuntime: {
-      async generateBuilderProposal() {
-        throw new Error("model_must_not_run_for_stale_revision");
-      },
-    },
+    generate: async () => { throw new Error("model_must_not_run_for_stale_revision"); },
   });
 
   await assert.rejects(
@@ -319,10 +357,9 @@ test("proposal generation rechecks the current revision inside its mutation boun
 test("proposal apply automatically rebases non-overlapping changes onto the current revision", async () => {
   const base = makeRevision();
   const store = proposalStore(base);
-  const application = createWorkbenchApplication({
+  const application = createBuilderApplication({
     store,
-    agentRuntime: {
-      async generateBuilderProposal() {
+    generate: async () => {
         return {
           summary: "Update the goal.",
           operations: [{
@@ -334,7 +371,6 @@ test("proposal apply automatically rebases non-overlapping changes onto the curr
           }],
           diagnostics: [], permissionImpact: [],
         };
-      },
     },
     clock: () => NOW,
     idFactory: (kind) => `${kind}-rebase`,
@@ -372,16 +408,14 @@ test("same-path proposal conflict is persisted and never modifies the canonical 
     goal: "Base", context: "", constraints: [], doneWhen: ["Done"], verify: [], expectedResult: "Result", stopRules: [],
   };
   const store = proposalStore(base);
-  const application = createWorkbenchApplication({
+  const application = createBuilderApplication({
     store,
-    agentRuntime: {
-      async generateBuilderProposal() {
+    generate: async () => {
         return {
           summary: "Update the goal.",
           operations: [{ op: "updateDefinition", definition: { ...base.definition, goal: "Agent goal" } }],
           diagnostics: [], permissionImpact: [],
         };
-      },
     },
     clock: () => NOW,
     idFactory: (kind) => `${kind}-conflict`,
@@ -417,10 +451,9 @@ test("same-path proposal conflict is persisted and never modifies the canonical 
 test("invalid model operations are rejected without persisting proposal data", async () => {
   const revision = makeRevision();
   const store = proposalStore(revision);
-  const application = createWorkbenchApplication({
+  const application = createBuilderApplication({
     store,
-    agentRuntime: {
-      async generateBuilderProposal() {
+    generate: async () => {
         return {
           summary: "Remove a missing step.",
           operations: [{ op: "removeNode", nodeId: "node-missing" }],
@@ -428,7 +461,6 @@ test("invalid model operations are rejected without persisting proposal data", a
           permissionImpact: [],
           providerPayload: { secret: "must-not-persist" },
         };
-      },
     },
   });
 
@@ -448,17 +480,18 @@ test("invalid model operations are rejected without persisting proposal data", a
 test("proposal dismiss is revision-bound, idempotent, and audited without saving a revision", async () => {
   const revision = makeRevision();
   const store = proposalStore(revision);
-  const application = createWorkbenchApplication({
+  const application = createBuilderApplication({
     store,
-    agentRuntime: {
-      async generateBuilderProposal() {
+    generate: async () => {
         return {
           summary: "Update the run timeout.",
-          operations: [{ op: "updateWorkflowSettings", runSettings: { maxParallelism: 1, defaultTimeoutSeconds: 180 } }],
+          operations: [{
+            op: "updateWorkflowSettings",
+            runSettings: { maxParallelism: 1, defaultTimeoutSeconds: 180, workflowFallbackAllowed: false },
+          }],
           diagnostics: [],
           permissionImpact: [],
         };
-      },
     },
     clock: () => NOW,
     idFactory: (kind) => `${kind}-proposal-dismiss`,

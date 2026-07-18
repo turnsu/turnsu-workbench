@@ -155,6 +155,45 @@ test("pi-workflow adapter streams task diffs before the parent run completes", a
   assert(updates.every((update) => update.checkpoint.agwaRunId === "workflow-run-live"));
 });
 
+test("pi-workflow adapter uses the exact bounded subagent session as the product child identity", async () => {
+  const updates = [];
+  const sessionId = "piwf.0123456789abcdef.synthesize-r0";
+  const completed = {
+    runId: "workflow-run-with-a-long-identity-that-requires-bounding",
+    status: "completed",
+    taskSummary: { pending: 0, running: 0, blocked: 0, completed: 1, failed: 0, skipped: 0, interrupted: 0, total: 1 },
+    tasks: [{
+      taskId: "dynamic.synthesize-r0",
+      specId: "dynamic.synthesize-r0",
+      displayName: "Synthesize",
+      status: "completed",
+      lastMessage: "done",
+      artifactGraph: { enabled: true },
+      backendFiles: { sessionId },
+    }],
+  };
+  const backend = createAgwaWorkflowBackend({
+    cwd: "/sandbox",
+    providerProbe: async () => ({ ready: true }),
+    api: {
+      async runDynamicTask() { return completed; },
+      async waitForRun() { return completed; },
+      async stopRun() {},
+      async refreshRun() { return completed; },
+      async resumeRun() { return { run: completed }; },
+    },
+  });
+
+  await backend.execute({
+    request: request({ limits: { timeoutMs: 5000, maxSteps: 4, maxModelRequests: 2, maxChildren: 1 } }),
+    reportChild(update) { updates.push(update); },
+  });
+
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].childRef, sessionId);
+  assert.equal(updates[0].checkpoint.taskRef, "dynamic.synthesize-r0");
+});
+
 test("pi-workflow parent cancellation cascades to the active AgwaB run", async () => {
   let resolveWait;
   let stopped = 0;

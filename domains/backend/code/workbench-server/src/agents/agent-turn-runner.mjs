@@ -19,6 +19,7 @@ export class AgentTurnRunner {
   #clock;
   #idFactory;
   #resolveBaseVersion;
+  #resolveModelSelection;
   #scheduled = new Map();
   #rescheduleRequested = new Set();
   #active = new Map();
@@ -30,6 +31,7 @@ export class AgentTurnRunner {
     clock = () => new Date().toISOString(),
     idFactory,
     resolveBaseVersion,
+    resolveModelSelection,
   } = {}) {
     if (!persistence || typeof persistence.createSession !== "function") {
       throw new TypeError("agent_persistence_required");
@@ -37,12 +39,16 @@ export class AgentTurnRunner {
     if (typeof idFactory !== "function" || typeof resolveBaseVersion !== "function") {
       throw new TypeError("agent_id_factory_and_version_resolver_required");
     }
+    if (typeof resolveModelSelection !== "function") {
+      throw new TypeError("agent_model_selection_resolver_required");
+    }
     this.#persistence = persistence;
     this.#executionBroker = executionBroker;
     this.#executor = executor;
     this.#clock = clock;
     this.#idFactory = idFactory;
     this.#resolveBaseVersion = resolveBaseVersion;
+    this.#resolveModelSelection = resolveModelSelection;
   }
 
   async recover() {
@@ -51,7 +57,16 @@ export class AgentTurnRunner {
     return sessionIds;
   }
 
-  async createSession({ definitionId, objectKind, objectId, branchId = null, userId, workspaceId }) {
+  async createSession({
+    definitionId,
+    objectKind,
+    objectId,
+    branchId = null,
+    lastUsedModelProfileId = null,
+    modelProfileId = null,
+    userId,
+    workspaceId,
+  }) {
     const definition = getBuiltinAgentDefinition(definitionId);
     if (!definition) throw new AgentTurnRunnerError("agent_definition_not_found", "Agent definition not found.");
     if (!userId || !workspaceId) throw new AgentTurnRunnerError("agent_session_scope_invalid");
@@ -61,7 +76,9 @@ export class AgentTurnRunner {
       const existing = await this.#persistence.findSession({
         userId, workspaceId, definitionId, scope: { kind: "main" },
       });
-      if (existing?.status === "active") return existing;
+      if (existing?.status === "active") {
+        return this.#applyModelSelection(existing, lastUsedModelProfileId ?? modelProfileId);
+      }
       const now = this.#clock();
       return this.#persistence.createSession({
         schemaVersion: SCHEMA_VERSION,
@@ -71,6 +88,8 @@ export class AgentTurnRunner {
         workspaceId,
         scope: { kind: "main" },
         status: "active",
+        lastUsedModelProfileId: lastUsedModelProfileId ?? modelProfileId ?? null,
+        modelPreferenceState: "preference_only",
         activeTurnId: null,
         createdAt: now,
         updatedAt: now,
@@ -96,7 +115,9 @@ export class AgentTurnRunner {
         definitionId,
         scope: { kind: "module", objectKind, objectId, branchId },
       });
-      if (resumed?.status === "active") return resumed;
+      if (resumed?.status === "active") {
+        return this.#applyModelSelection(resumed, lastUsedModelProfileId ?? modelProfileId);
+      }
       const now = this.#clock();
       return this.#persistence.createSession({
         schemaVersion: SCHEMA_VERSION,
@@ -106,6 +127,8 @@ export class AgentTurnRunner {
         workspaceId,
         scope: { kind: "module", objectKind, objectId, branchId, baseVersionId: branch.baseVersionId },
         status: "active",
+        lastUsedModelProfileId: lastUsedModelProfileId ?? modelProfileId ?? null,
+        modelPreferenceState: "preference_only",
         activeTurnId: null,
         createdAt: now,
         updatedAt: now,
@@ -117,7 +140,9 @@ export class AgentTurnRunner {
       definitionId,
       scope: { kind: "module", objectKind, objectId },
     });
-    if (existing?.status === "active") return existing;
+    if (existing?.status === "active") {
+      return this.#applyModelSelection(existing, lastUsedModelProfileId ?? modelProfileId);
+    }
 
     const baseVersionId = await this.#resolveBaseVersion({ objectKind, objectId, userId, workspaceId });
     if (!baseVersionId) throw new AgentTurnRunnerError("agent_object_not_found", "Agent object not found.");
@@ -143,6 +168,8 @@ export class AgentTurnRunner {
       workspaceId,
       scope: { kind: "module", objectKind, objectId, branchId: newBranchId, baseVersionId },
       status: "active",
+      lastUsedModelProfileId: lastUsedModelProfileId ?? modelProfileId ?? null,
+      modelPreferenceState: "preference_only",
       activeTurnId: null,
       createdAt: now,
       updatedAt: now,
@@ -158,11 +185,47 @@ export class AgentTurnRunner {
     return this.#persistence.getSession(sessionId, access);
   }
 
-  async enqueueTurn({ sessionId, message, userId, workspaceId }) {
+  async selectModel({ sessionId, lastUsedModelProfileId = null, modelProfileId = null, userId, workspaceId }) {
     const session = await this.#requireSession(sessionId, { userId, workspaceId });
     if (session.status !== "active") throw new AgentTurnRunnerError("agent_session_closed");
-    if (typeof message !== "string" || message.trim().length === 0) {
-      throw new AgentTurnRunnerError("agent_turn_message_invalid");
+    return this.#applyModelSelection(session, lastUsedModelProfileId ?? modelProfileId);
+  }
+
+  async enqueueTurn({
+    sessionId,
+    kind,
+    modelProfileRevisionId,
+    input,
+    userId,
+    workspaceId,
+  }) {
+    const session = await this.#requireSession(sessionId, { userId, workspaceId });
+    if (session.status !== "active") throw new AgentTurnRunnerError("agent_session_closed");
+    const definition = getBuiltinAgentDefinition(session.definitionId);
+    const normalizedInput = normalizeTurnInput(kind, input);
+    const requiredCapabilities = kind === "model_task"
+      ? ["image_generation"]
+      : definition?.kind === "module"
+        ? ["chat", "tool_calling", "structured_output"]
+        : ["chat", "tool_calling"];
+    const selection = await this.#resolveModelSelection({
+      workspaceId,
+      userId,
+      session: structuredClone(session),
+      kind,
+      modelProfileRevisionId,
+      requiredCapabilities: [...requiredCapabilities],
+    });
+    const requestedModelRevisionId = exactResolvedRevision(selection, modelProfileRevisionId);
+    const modelCapability = kind === "model_task"
+      ? "image_generation"
+      : selection?.capability ?? "tool_calling";
+    if (!requiredCapabilities.includes(modelCapability)) {
+      throw new AgentTurnRunnerError("agent_model_capability_invalid");
+    }
+    const selectedProfileId = selection?.profileId ?? selection?.profile?.profileId;
+    if (typeof selectedProfileId === "string" && selectedProfileId.length > 0) {
+      await this.#applyModelSelection(session, selectedProfileId);
     }
     const now = this.#clock();
     const turnId = this.#idFactory("agent-turn");
@@ -170,8 +233,14 @@ export class AgentTurnRunner {
       schemaVersion: SCHEMA_VERSION,
       turnId,
       sessionId,
+      kind,
       status: "queued",
-      message: message.trim(),
+      modelRoutingState: "pinned",
+      requestedModelRevisionId,
+      actualModelRevisionId: null,
+      artifactRefs: [],
+      input: normalizedInput,
+      modelCapability,
       result: null,
       queuedAt: now,
       startedAt: null,
@@ -185,7 +254,7 @@ export class AgentTurnRunner {
       turnId,
       role: "user",
       kind: "turn",
-      content: turn.message,
+      content: turnMessageContent(turn),
       createdAt: now,
     });
     await this.#appendEvent(sessionId, turnId, "turn.queued", "queued", "Agent turn queued.");
@@ -217,6 +286,13 @@ export class AgentTurnRunner {
 
   getTurn(sessionId, turnId, access) {
     return this.#persistence.getTurn(sessionId, turnId, access);
+  }
+
+  listTurns(sessionId, query, access) {
+    if (typeof this.#persistence.listTurns !== "function") {
+      throw new AgentTurnRunnerError("agent_turn_history_unavailable");
+    }
+    return this.#persistence.listTurns(sessionId, query, access);
   }
 
   listEvents(sessionId, after, limit, access) {
@@ -288,6 +364,21 @@ export class AgentTurnRunner {
       this.#active.set(sessionId, active);
       await this.#appendEvent(sessionId, turn.turnId, "turn.started", "running", "Agent turn started.");
       try {
+        if (turn.kind === "model_task") {
+          const result = await this.#executeModelTask(session, turn, controller.signal);
+          const status = controller.signal.aborted
+            ? "cancelled"
+            : modelTaskTurnStatus(result?.status);
+          await this.#finish(turn, status, status === "completed"
+            ? {
+                result: result.output,
+                requestedModelRevisionId: result.requestedModelRevisionId,
+                actualModelRevisionId: result.actualModelRevisionId,
+                artifactRefs: result.artifactRefs,
+              }
+            : {});
+          continue;
+        }
         if (typeof this.#executor?.execute !== "function") {
           await this.#finish(turn, "blocked", { response: "Agent execution backend is unavailable." });
           continue;
@@ -333,17 +424,94 @@ export class AgentTurnRunner {
     }));
   }
 
+  async #executeModelTask(session, turn, signal) {
+    const { task: _task, ...typedInput } = turn.input;
+    const [result] = await this.#runWorkers(session, turn, [{
+      mode: "model_call",
+      isolation: "process",
+      goal: "Generate a governed image artifact from the pinned model revision.",
+      input: typedInput,
+      modelProfileRevisionId: turn.requestedModelRevisionId,
+      modelCapability: "image_generation",
+      fallbackModelProfileRevisionIds: [],
+      limits: {
+        timeoutMs: 120_000,
+        maxSteps: 1,
+        maxModelRequests: 1,
+        maxChildren: 0,
+        maxInputBytes: 1_000_000,
+        maxOutputBytes: 100_000_000,
+        maxImageCount: 1,
+        maxCostUsdMicros: 10_000_000,
+      },
+      capabilities: emptyModelCallCapabilities(),
+      resultSchema: imageGenerationResultSchema(),
+      evidenceRequirements: [{
+        requirementId: "model-output-artifact",
+        kind: "artifact",
+        required: true,
+        description: "The generated image must be committed as a governed Artifact.",
+      }],
+      metadata: {
+        agentSessionId: session.sessionId,
+        agentTurnId: turn.turnId,
+        modelProfileRevisionId: turn.requestedModelRevisionId,
+        modelCapability: "image_generation",
+        fallbackModelProfileRevisionIds: [],
+      },
+    }], signal);
+    return result;
+  }
+
   async #finish(turn, status, rawResult) {
     const invocationIds = await this.#persistence.getTurnInvocations(turn.turnId);
+    const requestedModelRevisionId = turn.requestedModelRevisionId;
+    const actualModelRevisionId = rawResult?.actualModelRevisionId ?? null;
+    const artifactRefs = safeArtifactRefs(rawResult?.artifactRefs, turn.kind === "model_task" ? 16 : 256);
+    const modelTaskResult = turn.kind === "model_task"
+      ? safeImageModelResult(rawResult?.result, {
+          requestedModelRevisionId,
+          actualModelRevisionId,
+          artifactRefs,
+        })
+      : null;
+    if (status === "completed" && (actualModelRevisionId !== requestedModelRevisionId
+      || rawResult?.requestedModelRevisionId !== requestedModelRevisionId
+      || (turn.kind === "model_task" && !modelTaskResult))) {
+      status = "failed";
+    }
     let handoffId = null;
-    if (rawResult?.handoff) handoffId = await this.#createHandoff(turn.sessionId, rawResult.handoff);
-    const result = {
-      response: String(rawResult?.response || safeTurnFailure(status)).slice(0, 20_000),
-      proposalId: rawResult?.proposalId ?? null,
-      handoffId,
-      invocationIds,
-    };
-    const completed = await this.#persistence.completeTurn(turn.turnId, status, result, this.#clock());
+    if (status === "completed" && rawResult?.handoff) {
+      handoffId = await this.#createHandoff(turn.sessionId, rawResult.handoff);
+    }
+    const result = status !== "completed"
+      ? null
+      : turn.kind === "model_task"
+        ? {
+            kind: "model_task",
+            result: modelTaskResult,
+            invocationIds,
+            requestedModelRevisionId,
+            actualModelRevisionId,
+            artifactRefs,
+          }
+        : {
+            kind: "agent_message",
+            response: String(rawResult?.response || safeTurnFailure(status)).slice(0, 20_000),
+            proposalId: rawResult?.proposalId ?? null,
+            handoffId,
+            invocationIds,
+            requestedModelRevisionId,
+            actualModelRevisionId,
+            artifactRefs,
+          };
+    const completed = await this.#persistence.completeTurn(
+      turn.turnId,
+      status,
+      result,
+      this.#clock(),
+      { actualModelRevisionId, artifactRefs },
+    );
     if (!completed) return null;
     await this.#persistence.appendMessage({
       schemaVersion: SCHEMA_VERSION,
@@ -352,10 +520,20 @@ export class AgentTurnRunner {
       turnId: turn.turnId,
       role: "assistant",
       kind: "result",
-      content: result.response,
+      content: result?.kind === "agent_message"
+        ? result.response
+        : status === "completed"
+          ? "Image generation completed."
+          : safeTurnFailure(status),
       createdAt: completed.finishedAt,
     });
-    await this.#appendEvent(turn.sessionId, turn.turnId, `turn.${status}`, status, result.response.slice(0, 4000));
+    await this.#appendEvent(
+      turn.sessionId,
+      turn.turnId,
+      `turn.${status}`,
+      status,
+      (result?.kind === "agent_message" ? result.response : safeTurnFailure(status)).slice(0, 4000),
+    );
     return completed;
   }
 
@@ -400,11 +578,19 @@ export class AgentTurnRunner {
     if (!session) throw new AgentTurnRunnerError("agent_session_not_found", "Agent session not found.");
     return session;
   }
+
+  async #applyModelSelection(session, modelProfileId) {
+    if (!modelProfileId || session.lastUsedModelProfileId === modelProfileId) return session;
+    if (typeof this.#persistence.updateSessionModel !== "function") {
+      throw new AgentTurnRunnerError("agent_model_selection_unavailable");
+    }
+    return this.#persistence.updateSessionModel(session.sessionId, modelProfileId, this.#clock());
+  }
 }
 
 function normalizeWorkerRequest(request, { invocationId, attemptId, workspaceId, turnId }) {
   const mode = request?.mode ?? "bounded_agent";
-  return {
+  const normalized = {
     schemaVersion: "workbench-execution-fabric-v1",
     invocationId,
     attemptId,
@@ -421,6 +607,8 @@ function normalizeWorkerRequest(request, { invocationId, attemptId, workspaceId,
       maxChildren: mode === "agent_orchestrator" ? 8 : 0,
       maxInputBytes: 1_000_000,
       maxOutputBytes: 1_000_000,
+      maxImageCount: 0,
+      maxCostUsdMicros: 0,
     },
     capabilities: request?.capabilities ?? {
       toolAllowlist: [],
@@ -433,6 +621,176 @@ function normalizeWorkerRequest(request, { invocationId, attemptId, workspaceId,
     evidenceRequirements: request?.evidenceRequirements ?? [],
     metadata: request?.metadata ?? {},
   };
+  if (mode === "model_call") {
+    normalized.modelProfileRevisionId = request.modelProfileRevisionId;
+    normalized.modelCapability = request.modelCapability;
+    normalized.fallbackModelProfileRevisionIds = request.fallbackModelProfileRevisionIds ?? [];
+  }
+  return normalized;
+}
+
+function normalizeTurnInput(kind, input) {
+  if (kind === "agent_message") {
+    if (!input || typeof input.message !== "string" || !input.message.trim()) {
+      throw new AgentTurnRunnerError("agent_turn_message_invalid");
+    }
+    return { message: input.message.trim() };
+  }
+  if (kind === "model_task") {
+    if (!input || input.task !== "image_generation"
+      || typeof input.prompt !== "string" || !input.prompt.trim()) {
+      throw new AgentTurnRunnerError("agent_model_task_invalid");
+    }
+    return {
+      ...structuredClone(input),
+      prompt: input.prompt.trim(),
+    };
+  }
+  throw new AgentTurnRunnerError("agent_turn_kind_invalid");
+}
+
+function exactResolvedRevision(selection, requestedModelRevisionId) {
+  if (typeof requestedModelRevisionId !== "string" || !requestedModelRevisionId.trim()) {
+    throw new AgentTurnRunnerError("agent_turn_model_revision_required");
+  }
+  const resolved = typeof selection === "string"
+    ? selection
+    : selection?.revisionId
+      ?? selection?.modelProfileRevisionId
+      ?? selection?.revision?.revisionId;
+  if (resolved !== requestedModelRevisionId) {
+    throw new AgentTurnRunnerError("agent_model_revision_not_exact");
+  }
+  return resolved;
+}
+
+function turnMessageContent(turn) {
+  return turn.kind === "agent_message"
+    ? turn.input.message
+    : `Image generation task: ${turn.input.prompt}`.slice(0, 20_000);
+}
+
+function modelTaskTurnStatus(status) {
+  if (status === "completed") return "completed";
+  if (status === "cancelled") return "cancelled";
+  if ([
+    "blocked",
+    "permission_denied",
+    "sandbox_unavailable",
+    "remote_backend_unavailable",
+  ].includes(status)) return "blocked";
+  return "failed";
+}
+
+function emptyModelCallCapabilities() {
+  return {
+    toolAllowlist: [],
+    connectionIds: [],
+    network: false,
+    filesystem: "none",
+    externalActions: false,
+  };
+}
+
+function imageGenerationResultSchema() {
+  return {
+    type: "object",
+    properties: {
+      kind: { const: "image_generation" },
+      artifactRefs: {
+        type: "array",
+        minItems: 1,
+        maxItems: 16,
+        items: {
+          type: "object",
+          properties: {
+            artifactId: { type: "string" },
+            mediaType: { enum: ["image/png", "image/jpeg", "image/webp"] },
+          },
+          required: ["artifactId", "mediaType"],
+          additionalProperties: false,
+        },
+      },
+      seed: { type: ["integer", "null"] },
+      format: { enum: ["png", "jpeg", "webp"] },
+      dimensions: {
+        type: "object",
+        properties: { width: { type: "integer" }, height: { type: "integer" } },
+        required: ["width", "height"],
+        additionalProperties: false,
+      },
+      safetyStatus: { enum: ["passed", "filtered", "flagged"] },
+      usage: { type: "object" },
+      requestedModelRevisionId: { type: "string" },
+      actualModelRevisionId: { type: "string" },
+    },
+    required: [
+      "kind",
+      "artifactRefs",
+      "seed",
+      "format",
+      "dimensions",
+      "safetyStatus",
+      "usage",
+      "requestedModelRevisionId",
+      "actualModelRevisionId",
+    ],
+    additionalProperties: false,
+  };
+}
+
+function safeArtifactRefs(value, maxItems) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const result = [];
+  for (const item of value) {
+    if (!item || typeof item.artifactId !== "string"
+      || !["image/png", "image/jpeg", "image/webp"].includes(item.mediaType)) continue;
+    const key = `${item.artifactId}\u0000${item.mediaType}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ artifactId: item.artifactId, mediaType: item.mediaType });
+    if (result.length >= maxItems) break;
+  }
+  return result;
+}
+
+function safeImageModelResult(value, routing) {
+  if (!value || value.kind !== "image_generation"
+    || !["png", "jpeg", "webp"].includes(value.format)
+    || !value.dimensions || !Number.isInteger(value.dimensions.width)
+    || !Number.isInteger(value.dimensions.height)
+    || value.dimensions.width < 1 || value.dimensions.width > 32_768
+    || value.dimensions.height < 1 || value.dimensions.height > 32_768
+    || !["passed", "filtered", "flagged"].includes(value.safetyStatus)
+    || !value.usage || typeof value.usage !== "object"
+    || routing.artifactRefs.length === 0) return null;
+  return {
+    kind: "image_generation",
+    artifactRefs: structuredClone(routing.artifactRefs),
+    seed: Number.isInteger(value.seed) && value.seed >= 0 && value.seed <= 4_294_967_294
+      ? value.seed
+      : null,
+    format: value.format,
+    dimensions: {
+      width: value.dimensions.width,
+      height: value.dimensions.height,
+    },
+    safetyStatus: value.safetyStatus,
+    usage: {
+      inputTokens: nonNegativeInteger(value.usage.inputTokens),
+      outputTokens: nonNegativeInteger(value.usage.outputTokens),
+      totalTokens: nonNegativeInteger(value.usage.totalTokens),
+      imageCount: nonNegativeInteger(value.usage.imageCount, 16),
+      costUsdMicros: nonNegativeInteger(value.usage.costUsdMicros, 1_000_000_000_000),
+    },
+    requestedModelRevisionId: routing.requestedModelRevisionId,
+    actualModelRevisionId: routing.actualModelRevisionId,
+  };
+}
+
+function nonNegativeInteger(value, max = Number.MAX_SAFE_INTEGER) {
+  return Number.isInteger(value) && value >= 0 ? Math.min(value, max) : 0;
 }
 
 function stringList(value) {

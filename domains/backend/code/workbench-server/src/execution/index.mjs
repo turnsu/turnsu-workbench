@@ -12,6 +12,14 @@ export {
   createOpenAICompatibleModelExecutor,
   ModelProviderError,
 } from "./openai-compatible-model-executor.mjs";
+export { createAnthropicModelExecutor } from "./anthropic-model-executor.mjs";
+export { createGeminiModelExecutor } from "./gemini-model-executor.mjs";
+export {
+  configurationFromEnvironment,
+  createConfiguredModelService,
+  createModelService,
+} from "./model-service.mjs";
+export { createModelCallBackend } from "./model-call-backend.mjs";
 export { StdioToolGatewayServer } from "./stdio-tool-gateway-server.mjs";
 export { AGENT_GATEWAY_CONTAINER_SOCKET, UnixToolGatewayServer } from "./unix-tool-gateway-server.mjs";
 export {

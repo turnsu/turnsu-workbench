@@ -322,6 +322,7 @@ export interface WorkbenchEndpointMetadata {
   successStatus: 200 | 201 | 202;
   responseMediaType:
     | "application/json"
+    | "application/octet-stream"
     | "text/event-stream"
     | "application/vnd.looloomi.loop-package+json";
   pathParamsSchema: TSchema;

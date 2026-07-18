@@ -21,6 +21,7 @@ export class ProductToolGateway {
   #clock;
   #observer;
   #usage = new Map();
+  #modelControllers = new Map();
 
   constructor({
     persistence,
@@ -75,13 +76,44 @@ export class ProductToolGateway {
       if (usage.modelRequests >= limits.maxModelRequests) throw denied("gateway_model_budget_exceeded");
       if (!this.#modelExecutor) throw blocked("provider_unavailable");
       usage.modelRequests += 1;
-      result = await this.#modelExecutor({
-        input: structuredClone(message.input),
-        invocationId: message.invocationId,
-        attemptId: message.attemptId,
-        workspaceId: invocation.workspaceId,
-        signal: message.signal,
-      });
+      const modelController = new AbortController();
+      this.#trackModelController(message, modelController);
+      try {
+        result = await this.#modelExecutor({
+          typedInput: structuredClone(message.input),
+          modelProfileRevisionId: invocation.request?.metadata?.modelProfileRevisionId ?? null,
+          fallbackModelProfileRevisionIds: structuredClone(
+            invocation.request?.metadata?.fallbackModelProfileRevisionIds ?? [],
+          ),
+          capability: invocation.request?.metadata?.modelCapability ?? "structured_output",
+          invocationId: message.invocationId,
+          attemptId: message.attemptId,
+          workspaceId: invocation.workspaceId,
+          capabilityLeaseId: lease.capabilityLeaseId,
+          fence: lease.fence,
+          limits: structuredClone(limits),
+          signal: modelController.signal,
+        });
+        const requestedModelRevisionId = invocation.request?.metadata?.modelProfileRevisionId;
+        const allowedActualRevisions = new Set([
+          requestedModelRevisionId,
+          ...(invocation.request?.metadata?.fallbackModelProfileRevisionIds ?? []),
+        ]);
+        if (typeof requestedModelRevisionId !== "string"
+          || result?.requestedModelRevisionId !== requestedModelRevisionId
+          || typeof result?.actualModelRevisionId !== "string"
+          || !allowedActualRevisions.has(result.actualModelRevisionId)) {
+          throw new ProductToolGatewayError(
+            "gateway_model_route_unverified",
+            "The model route could not be verified.",
+            { status: "failed" },
+          );
+        }
+        usage.requestedModelRevisionIds.add(result.requestedModelRevisionId);
+        usage.actualModelRevisionIds.add(result.actualModelRevisionId);
+      } finally {
+        this.#untrackModelController(message, modelController);
+      }
     } else {
       assertToolAllowed(message, effectiveCapabilities);
       if (!this.#toolExecutor) throw blocked("tool_backend_unavailable");
@@ -103,8 +135,43 @@ export class ProductToolGateway {
     return structuredClone(result);
   }
 
-  release({ invocationId, attemptId }) {
-    this.#usage.delete(`${invocationId}:${attemptId}`);
+  release({ invocationId, attemptId }, { reason } = {}) {
+    const key = `${invocationId}:${attemptId}`;
+    for (const controller of this.#modelControllers.get(key) ?? []) {
+      controller.abort(reason ?? blocked("gateway_session_closed"));
+    }
+    this.#modelControllers.delete(key);
+    this.#usage.delete(key);
+  }
+
+  snapshot({ invocationId, attemptId }) {
+    const usage = this.#usage.get(`${invocationId}:${attemptId}`);
+    if (!usage) return {
+      requestedModelRevisionId: null,
+      actualModelRevisionId: null,
+    };
+    return {
+      requestedModelRevisionId: usage.requestedModelRevisionIds.size === 1
+        ? [...usage.requestedModelRevisionIds][0]
+        : null,
+      actualModelRevisionId: usage.actualModelRevisionIds.size === 1
+        ? [...usage.actualModelRevisionIds][0]
+        : null,
+    };
+  }
+
+  #trackModelController(message, controller) {
+    const key = `${message.invocationId}:${message.attemptId}`;
+    const controllers = this.#modelControllers.get(key) ?? new Set();
+    controllers.add(controller);
+    this.#modelControllers.set(key, controllers);
+  }
+
+  #untrackModelController(message, controller) {
+    const key = `${message.invocationId}:${message.attemptId}`;
+    const controllers = this.#modelControllers.get(key);
+    controllers?.delete(controller);
+    if (controllers?.size === 0) this.#modelControllers.delete(key);
   }
 
   async #authorize(message, binding) {
@@ -129,7 +196,12 @@ export class ProductToolGateway {
     const key = `${invocationId}:${attemptId}`;
     let usage = this.#usage.get(key);
     if (!usage) {
-      usage = { steps: 0, modelRequests: 0 };
+      usage = {
+        steps: 0,
+        modelRequests: 0,
+        requestedModelRevisionIds: new Set(),
+        actualModelRevisionIds: new Set(),
+      };
       this.#usage.set(key, usage);
     }
     return usage;

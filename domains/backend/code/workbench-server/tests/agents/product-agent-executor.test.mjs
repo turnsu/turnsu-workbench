@@ -11,6 +11,8 @@ const mainSession = {
   workspaceId: "workspace-alpha",
   scope: { kind: "main" },
   status: "active",
+  lastUsedModelProfileId: "deepseek-default",
+  modelPreferenceState: "preference_only",
   activeTurnId: "agent-turn-main",
   createdAt: "2026-07-17T00:00:00.000Z",
   updatedAt: "2026-07-17T00:00:00.000Z",
@@ -37,7 +39,13 @@ function turn(session, overrides = {}) {
     sessionId: session.sessionId,
     sequence: 1,
     status: "running",
-    message: "Help with this object.",
+    kind: "agent_message",
+    modelRoutingState: "pinned",
+    requestedModelRevisionId: "model-revision-chat-1",
+    actualModelRevisionId: null,
+    artifactRefs: [],
+    modelCapability: "tool_calling",
+    input: { message: "Help with this object." },
     result: null,
     queuedAt: "2026-07-17T00:00:00.000Z",
     startedAt: "2026-07-17T00:00:00.000Z",
@@ -59,6 +67,9 @@ test("Main Agent turns always dispatch through one bounded container worker", as
       return [{
         status: "completed",
         output: { response: "I coordinated the work." },
+        requestedModelRevisionId: "model-revision-chat-1",
+        actualModelRevisionId: "model-revision-chat-1",
+        artifactRefs: [],
         summary: "Agent completed.",
       }];
     },
@@ -70,9 +81,17 @@ test("Main Agent turns always dispatch through one bounded container worker", as
   assert.equal(requests[0].metadata.definitionId, "main");
   assert.equal(requests[0].metadata.agentSessionId, mainSession.sessionId);
   assert.equal(requests[0].metadata.agentTurnId, mainSession.activeTurnId);
+  assert.equal(requests[0].metadata.modelProfileRevisionId, "model-revision-chat-1");
+  assert.equal(requests[0].metadata.modelCapability, "tool_calling");
+  assert.deepEqual(requests[0].metadata.fallbackModelProfileRevisionIds, []);
   assert.equal(requests[0].capabilities.network, false);
   assert.equal(requests[0].capabilities.externalActions, false);
-  assert.deepEqual(result, { response: "I coordinated the work." });
+  assert.deepEqual(result, {
+    response: "I coordinated the work.",
+    requestedModelRevisionId: "model-revision-chat-1",
+    actualModelRevisionId: "model-revision-chat-1",
+    artifactRefs: [],
+  });
 });
 
 test("Module Agent output is persisted as a proposal and never mutates the canonical object", async () => {
@@ -98,6 +117,9 @@ test("Module Agent output is persisted as a proposal and never mutates the canon
     async runWorkers() {
       return [{
         status: "completed",
+        requestedModelRevisionId: "model-revision-chat-1",
+        actualModelRevisionId: "model-revision-chat-1",
+        artifactRefs: [],
         output: {
           response: "I prepared a proposal.",
           proposal: workerProposal,
@@ -135,4 +157,22 @@ test("unavailable product execution is reported as a blocked Turn instead of a m
     status: "blocked",
     response: "The required sandbox is unavailable.",
   });
+});
+
+test("interactive Agent execution rejects an unexpected cross-revision fallback", async () => {
+  const executor = createProductAgentExecutor();
+  await assert.rejects(() => executor.execute({
+    session: mainSession,
+    turn: turn(mainSession),
+    messages: [],
+    async runWorkers() {
+      return [{
+        status: "completed",
+        requestedModelRevisionId: "model-revision-chat-1",
+        actualModelRevisionId: "model-revision-chat-fallback",
+        artifactRefs: [],
+        output: { response: "unexpected fallback" },
+      }];
+    },
+  }), { code: "product_agent_model_route_unverified" });
 });

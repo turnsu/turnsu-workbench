@@ -8,6 +8,8 @@ import {
   AgentTurnIdSchema,
   InvocationIdSchema,
   MergeConflictIdSchema,
+  ModelProfileIdSchema,
+  ModelProfileRevisionIdSchema,
   ProposalIdSchema,
   JsonValueSchema,
   UtcTimestampSchema,
@@ -15,10 +17,16 @@ import {
   WorkspaceIdSchema,
   WorkbenchSchemaVersionSchema,
 } from "./common.js";
+import { ArtifactRefSchema } from "./artifacts.js";
+import {
+  ImageGenerationInputSchema,
+  ImageGenerationResultSchema,
+} from "./models.js";
 import { strictObject, stringEnum } from "./schema.js";
 
 export const AgentDefinitionKindSchema = stringEnum(["main", "module"]);
 export const AgentObjectKindSchema = stringEnum(["skill_draft", "workflow"]);
+export const AgentTurnKindSchema = stringEnum(["agent_message", "model_task"]);
 
 export const AgentDefinitionSchema = strictObject(
   {
@@ -53,6 +61,8 @@ export const AgentSessionSchema = strictObject(
     workspaceId: WorkspaceIdSchema,
     scope: AgentSessionScopeSchema,
     status: stringEnum(["active", "closed"]),
+    lastUsedModelProfileId: Type.Union([ModelProfileIdSchema, Type.Null()]),
+    modelPreferenceState: stringEnum(["preference_only", "legacy_unpinned"]),
     activeTurnId: Type.Union([AgentTurnIdSchema, Type.Null()]),
     createdAt: UtcTimestampSchema,
     updatedAt: UtcTimestampSchema,
@@ -69,27 +79,103 @@ export const AgentTurnStatusSchema = stringEnum([
   "blocked",
 ]);
 
-export const AgentTurnResultSchema = strictObject({
+export const AgentMessageTurnInputSchema = strictObject({
+  message: Type.String({ minLength: 1, maxLength: 20_000 }),
+});
+
+export const ImageGenerationModelTaskInputSchema = strictObject({
+  task: Type.Literal("image_generation"),
+  ...ImageGenerationInputSchema.properties,
+});
+
+export const AgentTurnInputSchema = Type.Union([
+  AgentMessageTurnInputSchema,
+  ImageGenerationModelTaskInputSchema,
+]);
+
+export const AgentMessageTurnResultSchema = strictObject({
+  kind: Type.Literal("agent_message"),
+  response: Type.String({ minLength: 1, maxLength: 20_000 }),
+  proposalId: Type.Union([ProposalIdSchema, Type.Null()]),
+  handoffId: Type.Union([Type.String({ minLength: 1, maxLength: 128 }), Type.Null()]),
+  invocationIds: Type.Array(InvocationIdSchema, { uniqueItems: true, maxItems: 256 }),
+  requestedModelRevisionId: ModelProfileRevisionIdSchema,
+  actualModelRevisionId: ModelProfileRevisionIdSchema,
+  artifactRefs: Type.Array(ArtifactRefSchema, { uniqueItems: true, maxItems: 256 }),
+});
+
+export const ModelTaskTurnResultSchema = strictObject({
+  kind: Type.Literal("model_task"),
+  result: ImageGenerationResultSchema,
+  invocationIds: Type.Array(InvocationIdSchema, { uniqueItems: true, maxItems: 256 }),
+  requestedModelRevisionId: ModelProfileRevisionIdSchema,
+  actualModelRevisionId: ModelProfileRevisionIdSchema,
+  artifactRefs: Type.Array(ArtifactRefSchema, {
+    minItems: 1,
+    uniqueItems: true,
+    maxItems: 16,
+  }),
+});
+
+export const AgentTurnResultSchema = Type.Union([
+  AgentMessageTurnResultSchema,
+  ModelTaskTurnResultSchema,
+]);
+
+const AgentTurnBaseProperties = {
+  schemaVersion: WorkbenchSchemaVersionSchema,
+  turnId: AgentTurnIdSchema,
+  sessionId: AgentSessionIdSchema,
+  sequence: Type.Integer({ minimum: 1 }),
+  status: AgentTurnStatusSchema,
+  modelRoutingState: Type.Literal("pinned"),
+  requestedModelRevisionId: ModelProfileRevisionIdSchema,
+  actualModelRevisionId: Type.Union([ModelProfileRevisionIdSchema, Type.Null()]),
+  artifactRefs: Type.Array(ArtifactRefSchema, { uniqueItems: true, maxItems: 256 }),
+  queuedAt: UtcTimestampSchema,
+  startedAt: Type.Union([UtcTimestampSchema, Type.Null()]),
+  finishedAt: Type.Union([UtcTimestampSchema, Type.Null()]),
+  updatedAt: UtcTimestampSchema,
+};
+
+export const AgentMessageTurnSchema = strictObject({
+  ...AgentTurnBaseProperties,
+  kind: Type.Literal("agent_message"),
+  input: AgentMessageTurnInputSchema,
+  result: Type.Union([AgentMessageTurnResultSchema, Type.Null()]),
+});
+
+export const ModelTaskTurnSchema = strictObject({
+  ...AgentTurnBaseProperties,
+  kind: Type.Literal("model_task"),
+  input: ImageGenerationModelTaskInputSchema,
+  result: Type.Union([ModelTaskTurnResultSchema, Type.Null()]),
+});
+
+export const LegacyAgentTurnResultSchema = strictObject({
   response: Type.String({ minLength: 1, maxLength: 20_000 }),
   proposalId: Type.Union([ProposalIdSchema, Type.Null()]),
   handoffId: Type.Union([Type.String({ minLength: 1, maxLength: 128 }), Type.Null()]),
   invocationIds: Type.Array(InvocationIdSchema, { uniqueItems: true, maxItems: 256 }),
 });
 
-export const AgentTurnSchema = strictObject(
-  {
-    schemaVersion: WorkbenchSchemaVersionSchema,
-    turnId: AgentTurnIdSchema,
-    sessionId: AgentSessionIdSchema,
-    sequence: Type.Integer({ minimum: 1 }),
-    status: AgentTurnStatusSchema,
-    message: Type.String({ minLength: 1, maxLength: 20_000 }),
-    result: Type.Union([AgentTurnResultSchema, Type.Null()]),
-    queuedAt: UtcTimestampSchema,
-    startedAt: Type.Union([UtcTimestampSchema, Type.Null()]),
-    finishedAt: Type.Union([UtcTimestampSchema, Type.Null()]),
-    updatedAt: UtcTimestampSchema,
-  },
+export const LegacyUnpinnedAgentTurnSchema = strictObject({
+  schemaVersion: WorkbenchSchemaVersionSchema,
+  turnId: AgentTurnIdSchema,
+  sessionId: AgentSessionIdSchema,
+  sequence: Type.Integer({ minimum: 1 }),
+  status: AgentTurnStatusSchema,
+  modelRoutingState: Type.Literal("legacy_unpinned"),
+  message: Type.String({ minLength: 1, maxLength: 20_000 }),
+  result: Type.Union([LegacyAgentTurnResultSchema, Type.Null()]),
+  queuedAt: UtcTimestampSchema,
+  startedAt: Type.Union([UtcTimestampSchema, Type.Null()]),
+  finishedAt: Type.Union([UtcTimestampSchema, Type.Null()]),
+  updatedAt: UtcTimestampSchema,
+});
+
+export const AgentTurnSchema = Type.Union(
+  [AgentMessageTurnSchema, ModelTaskTurnSchema, LegacyUnpinnedAgentTurnSchema],
   { $id: "AgentTurn" },
 );
 

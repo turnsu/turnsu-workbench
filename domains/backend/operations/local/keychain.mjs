@@ -9,6 +9,13 @@ export const LOCAL_SECRET_ACCOUNTS = Object.freeze({
   modelApiKey: "model-api-key",
 });
 
+const MODEL_CREDENTIAL_REF = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+export function modelCredentialAccount(credentialRef) {
+  if (!MODEL_CREDENTIAL_REF.test(credentialRef || "")) throw new TypeError("model_credential_ref_invalid");
+  return `model-credential:${credentialRef}`;
+}
+
 export async function readKeychainSecret(account, { spawnProcess = spawn } = {}) {
   validateAccount(account);
   const result = await runSecurity([
@@ -60,7 +67,10 @@ function runSecurity(args, spawnProcess) {
 }
 
 function validateAccount(account) {
-  if (!Object.values(LOCAL_SECRET_ACCOUNTS).includes(account)) throw new TypeError("keychain_account_invalid");
+  if (!Object.values(LOCAL_SECRET_ACCOUNTS).includes(account)
+    && !/^model-credential:[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(account || "")) {
+    throw new TypeError("keychain_account_invalid");
+  }
 }
 
 function keychainError(code) {

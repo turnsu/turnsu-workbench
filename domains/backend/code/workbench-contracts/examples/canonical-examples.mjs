@@ -308,6 +308,76 @@ export const outputDefinitionExample = {
 export const runSettingsExample = {
   maxParallelism: 1,
   defaultTimeoutSeconds: 300,
+  workflowFallbackAllowed: false,
+};
+
+export const publicModelProfileRevisionSummaryExample = {
+  schemaVersion: WORKBENCH_SCHEMA_VERSION,
+  revisionId: "model-revision-deepseek-chat-3",
+  profileId: "model-profile-deepseek-chat",
+  revisionNumber: 3,
+  modelDisplayName: "DeepSeek Chat",
+  providerDisplay: {
+    key: "deepseek",
+    label: "DeepSeek",
+  },
+  capabilities: ["chat", "tool_calling", "structured_output"],
+  parameterSupport: {
+    kind: "chat",
+    temperature: true,
+    maxOutputTokens: true,
+    tools: true,
+    responseSchema: true,
+  },
+  limits: {
+    kind: "chat",
+    maxInputTokens: 64_000,
+    maxOutputTokens: 8_000,
+  },
+  createdAt: NOW,
+};
+
+export const modelProfileSummaryExample = {
+  schemaVersion: WORKBENCH_SCHEMA_VERSION,
+  profileId: publicModelProfileRevisionSummaryExample.profileId,
+  displayName: "DeepSeek Chat",
+  currentRevisionId: publicModelProfileRevisionSummaryExample.revisionId,
+  currentRevision: publicModelProfileRevisionSummaryExample,
+  scope: "global",
+  enabled: true,
+  readiness: "ready",
+  readinessReason: null,
+  selectable: true,
+  defaultForCapabilities: ["chat"],
+  createdAt: NOW,
+  updatedAt: NOW,
+};
+
+export const artifactRefExample = {
+  artifactId: "artifact-image-1",
+  mediaType: "image/png",
+};
+
+export const artifactMetadataExample = {
+  schemaVersion: WORKBENCH_SCHEMA_VERSION,
+  artifactId: artifactRefExample.artifactId,
+  workspaceId: "workspace-local",
+  state: "ready",
+  mediaType: artifactRefExample.mediaType,
+  byteLength: 1024,
+  contentHash: "sha256:1122334455667788",
+  dimensions: { width: 1024, height: 1024 },
+  source: {
+    kind: "agent_turn",
+    sessionId: "agent-session-main-1",
+    turnId: "agent-turn-image-1",
+    invocationId: "invocation-image-1",
+    attemptId: "attempt-image-1",
+  },
+  requestedModelRevisionId: "model-revision-stability-image-1",
+  actualModelRevisionId: "model-revision-stability-image-1",
+  createdAt: NOW,
+  expiresAt: null,
 };
 
 export const workflowTemplateExample = {
@@ -635,9 +705,14 @@ const page = {
   hasMore: false,
 };
 
-export const skillCatalogItemExample = Object.fromEntries(
-  Object.entries(skillDefinitionExample).filter(([key]) => key !== "executionRef"),
-);
+export const skillCatalogItemExample = {
+  ...Object.fromEntries(
+    Object.entries(skillDefinitionExample).filter(([key]) => key !== "executionRef"),
+  ),
+  execution: {
+    executionMode: skillDefinitionExample.executionRef.executionMode,
+  },
+};
 
 export const skillListResponseExample = {
   schemaVersion: API_SCHEMA_VERSION,
@@ -1174,6 +1249,8 @@ export const mutationRequestExamples = {
 };
 
 export const publicContractExamples = [
+  { name: "model profile summary", schema: "ModelProfileSummarySchema", value: modelProfileSummaryExample },
+  { name: "Artifact metadata", schema: "ArtifactMetadataSchema", value: artifactMetadataExample },
   { name: "Skill catalog item", schema: "SkillCatalogItemSchema", value: skillCatalogItemExample },
   { name: "input workflow node", schema: "WorkflowNodeSchema", value: inputNodeExample },
   { name: "skill workflow node", schema: "WorkflowNodeSchema", value: skillNodeExample },
