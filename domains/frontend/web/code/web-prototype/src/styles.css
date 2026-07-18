@@ -2450,6 +2450,83 @@ p {
   color: var(--danger);
 }
 
+/* Product-owned model routing surfaces */
+.modelPicker { display: grid; gap: 6px; min-width: 0; color: var(--text); font-size: 12px; }
+.modelPickerLabel { font-weight: 650; }
+.modelPicker select,
+.imageComposerFields select,
+.imageComposerFields input { width: 100%; min-height: 36px; padding: 0 30px 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
+.modelPicker select:focus-visible,
+.imageComposerFields select:focus-visible,
+.imageComposerFields input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.modelPicker > small { color: var(--muted); line-height: 1.4; }
+.modelPicker .modelPickerHistory { color: var(--warning-text, #8a5600); }
+.modelComposer { display: grid; gap: 12px; }
+.modelComposerActions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.modelComposerActions > small { color: var(--muted); font-size: 11px; }
+.imageComposerFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.imageComposerFields label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; }
+
+.mainAgentPage { min-height: calc(100vh - 80px); }
+.mainAgentHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 28px 30px 22px; border-bottom: 1px solid var(--line); }
+.mainAgentHeader h1 { margin: 5px 0 7px; font-size: 24px; }
+.mainAgentHeader > div > p:last-child { max-width: 700px; margin: 0; color: var(--muted); }
+.mainAgentHeader .objectKicker { display: flex; align-items: center; gap: 6px; }
+.mainAgentLayout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 640px; }
+.mainAgentConversation { min-width: 0; padding: 24px 30px 36px; }
+.mainAgentComposerPanel { display: grid; align-content: start; gap: 18px; padding: 24px 22px; border-left: 1px solid var(--line); background: var(--surface-subtle, var(--surface)); }
+.agentEmptyState { display: grid; justify-items: center; gap: 8px; max-width: 480px; margin: 100px auto; text-align: center; }
+.agentEmptyState h2 { margin: 6px 0 0; font-size: 18px; }
+.agentEmptyState p { margin: 0; color: var(--muted); line-height: 1.5; }
+.agentTurnList { display: grid; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.agentTurn { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.agentTurnRequest { display: flex; align-items: flex-start; gap: 9px; padding: 12px 14px; background: var(--surface-selected); }
+.agentTurnRequest > span { display: grid; place-items: center; width: 24px; height: 24px; color: var(--accent); }
+.agentTurnRequest p,
+.agentTurnResult p { margin: 2px 0; line-height: 1.5; white-space: pre-wrap; }
+.agentTurnResult { display: grid; gap: 12px; padding: 16px 18px; }
+.agentTurnModel { display: flex; flex-wrap: wrap; gap: 10px 22px; margin: 0; padding: 9px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
+.agentTurnModel > div { display: flex; gap: 5px; }
+.agentTurnModel dd { margin: 0; color: var(--text); }
+.agentTurnError,
+.agentComposerError { color: var(--danger, #b42318); }
+.artifactImage { display: grid; gap: 7px; margin: 0; }
+.artifactImage img { display: block; width: min(100%, 720px); height: auto; border-radius: 6px; background: var(--surface-selected); object-fit: contain; }
+.artifactImage figcaption { color: var(--muted); font-size: 10px; }
+.artifactImagePlaceholder { display: grid; place-items: center; min-height: 140px; border: 1px dashed var(--line); border-radius: 6px; color: var(--muted); }
+.modelSettingsPanel { display: grid; gap: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 7px; }
+.modelSettingsPanel > header h3 { margin: 0; font-size: 14px; }
+.modelSettingsPanel > header h3 { display: flex; align-items: center; gap: 6px; }
+.modelSettingsPanel > header p { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.modelSettingsGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.modelFallbackField { display: flex; align-items: flex-start; gap: 9px; color: var(--text); font-size: 12px; }
+.modelFallbackField small { display: block; margin-top: 3px; color: var(--muted); }
+.resolvedModelRows { display: grid; gap: 8px; }
+.resolvedModelRows > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 12px; }
+.resolvedModelRows small { color: var(--muted); }
+.runInvocationModels { display: grid; gap: 8px; }
+.runInvocationModels > li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 11px; }
+.creatorAgentPanel { margin: 0 0 18px; }
+.creatorAgentHistory { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.creatorAgentHistory > li { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+.creatorAgentHistory strong,
+.creatorAgentHistory small { display: block; }
+.creatorAgentHistory strong { font-size: 12px; }
+.creatorAgentHistory small { margin-top: 3px; color: var(--muted); font-size: 11px; }
+
+@media (max-width: 900px) {
+  .mainAgentLayout { grid-template-columns: minmax(0, 1fr); }
+  .mainAgentComposerPanel { border-top: 1px solid var(--line); border-left: 0; }
+}
+
+@media (max-width: 560px) {
+  .mainAgentHeader,
+  .mainAgentConversation { padding-right: 16px; padding-left: 16px; }
+  .mainAgentComposerPanel { padding: 18px 16px; }
+  .imageComposerFields,
+  .modelSettingsGrid { grid-template-columns: minmax(0, 1fr); }
+}
+
 .compactPropertyGrid {
   margin: 0;
 }

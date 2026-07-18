@@ -38,6 +38,8 @@ const createLoop = read("src/components/loops/CreateLoopView.jsx");
 const loopOverview = read("src/components/loops/LoopOverviewView.jsx");
 const editorHook = read("src/state/editor/useWorkflowEditor.js");
 const builder = read("src/components/templates/TemplatesBuilderView.jsx");
+const mainAgent = read("src/components/agents/MainAgentView.jsx");
+const modelPicker = read("src/components/models/ModelPicker.jsx");
 const canvas = read("src/components/canvas/LoopCanvas.jsx");
 const vite = read("vite.config.mjs");
 const i18n = read("src/i18n.js");
@@ -74,6 +76,14 @@ const requiredFiles = [
   "src/components/library/TeamLibraryLoopView.jsx",
   "src/components/library/TeamLibrarySkillView.jsx",
   "src/components/shell/GlobalNav.jsx",
+  "src/components/agents/MainAgentView.jsx",
+  "src/components/agents/SkillCreatorAgentPanel.jsx",
+  "src/components/models/ModelPicker.jsx",
+  "src/components/models/ChatComposer.jsx",
+  "src/components/models/ImageComposer.jsx",
+  "src/components/models/ArtifactImage.jsx",
+  "src/state/models/modelCatalog.js",
+  "src/state/agents/useMainAgent.js",
   "src/components/connections/ConnectionRebindingSheet.jsx",
   "src/components/connections/useConnectionRebindingAction.js",
   "src/components/connections/useTeamConnectionActions.js",
@@ -213,7 +223,7 @@ assertCheck(!builder.includes("loopops.templates.list") && !builder.includes("te
 assertCheck(builder.includes("mobileCanvasMode"), "Canvas mode must expose the dedicated mobile layout class");
 assertCheck(builder.includes("mobilePaletteOpen"), "mobile Canvas must own a temporary resource drawer state");
 assertCheck(!builder.includes("ScopedChatPanel"), "Builder must not retain a local assistant fallback");
-assertCheck(builder.includes("workspace.sendChat()"), "Builder assistant must request a server proposal");
+assertCheck(builder.includes("workspace.sendChat(workspace.composer, builderModelRevisionId)"), "Builder assistant must submit its selected immutable model revision");
 assertCheck(builder.includes("loopops.templates.builder-patch-receipt"), "Builder must show a reviewable proposal receipt");
 assertCheck(builder.includes("workspace.applyBuilderPatch"), "Builder proposal must require explicit apply");
 assertCheck(workspace.includes("server.mutations.generateLoopProposal"), "Builder must generate proposals through Product API state");
@@ -242,9 +252,27 @@ const directFlowgram = sourceFiles.filter((file) => fs.readFileSync(file, "utf8"
   .filter((file) => !file.endsWith(path.join("src", "components", "canvas", "flowgramAdapter.js")));
 assertCheck(directFlowgram.length === 0, `FlowGram imports escaped the adapter: ${directFlowgram.join(", ")}`);
 
-for (const pattern of [/\bprovider\b/i, /\bartifact path\b/i, /\bbearer token\b/i]) {
+const visibleSourceOutsideApprovedModelPicker = visibleFiles
+  .filter((file) => !file.includes(`${path.sep}components${path.sep}models${path.sep}`))
+  .map((file) => fs.readFileSync(file, "utf8"))
+  .join("\n");
+assertCheck(!/\bprovider\b/i.test(visibleSourceOutsideApprovedModelPicker), "provider internals leaked outside the approved model picker");
+for (const pattern of [/\bartifact path\b/i, /\bbearer token\b/i]) {
   assertCheck(!pattern.test(visibleSource), `internal term leaked into visible UI: ${pattern}`);
 }
+
+assertCheck(app.includes("MainAgentView"), "Main Agent must have a Product route");
+assertCheck(mainAgent.includes('kind: "agent_message"') === false, "typed Agent Turn payloads must stay in Agent state, not the visual component");
+assertCheck(mainAgent.includes("ImageComposer") && mainAgent.includes("ChatComposer"), "Main Agent must expose typed Chat and Image composers");
+assertCheck(mainAgent.includes("imageParameterSupport"), "Main Agent image fields must follow the selected model's public parameter support");
+assertCheck(read("src/state/agents/useMainAgent.js").includes("selectModel.mutateAsync"), "Agent model selection must update the server-owned Session preference");
+assertCheck(mainAgent.includes('requiredCapabilities={["chat", "tool_calling"]}') && mainAgent.includes('requiredCapabilities={["image_generation"]}'), "Main Agent pickers must be capability-specific");
+assertCheck(modelPicker.includes('data-selection-kind={selectionKind}'), "ModelPicker must preserve profile versus immutable revision selection semantics");
+assertCheck(api.includes("artifactContentUrl") && !mainAgent.includes("data:"), "generated images must render through authorized Artifact URLs, not data URLs");
+assertCheck(createLoop.includes("builderModelRevisionId") && builder.includes("builderModelRevisionId"), "Loop Creator and Builder must pin the selected proposal model revision");
+assertCheck(createLoop.includes("builderModelReady") && builder.includes("builderModelReady"), "disabled or historical model revisions must not submit proposals");
+assertCheck(builder.includes("WorkflowModelSettings") && builder.includes("NodeModelOverride"), "Builder must expose capability defaults and model-backed Skill overrides");
+assertCheck(skillLifecycleView.includes("SkillCreatorAgentPanel"), "Skill Creator must submit proposal Turns through the shared model selection path");
 for (const value of [...i18n.matchAll(/:\s*"([^"]*)"/g)].map((match) => match[1])) {
   for (const pattern of [/\bcontract\b/i, /\bledger\b/i, /\bpatch receipt\b/i, /\bmock run\b/i, /\bscoped\b/i, /契约/, /克隆/, /回执/]) {
     assertCheck(!pattern.test(value), `internal copy remains: ${value}`);

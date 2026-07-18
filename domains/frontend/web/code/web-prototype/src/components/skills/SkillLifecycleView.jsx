@@ -15,6 +15,7 @@ import { RetireSkillDialog } from "./RetireSkillDialog.jsx";
 import { SkillPackageEditor } from "./SkillPackageEditor.jsx";
 import { UpdateSkillDialog } from "./UpdateSkillDialog.jsx";
 import { productDescription, productTitle } from "../../utils/productCopy.js";
+import { SkillCreatorAgentPanel } from "../agents/SkillCreatorAgentPanel.jsx";
 
 const routeTabs = [
   { page: "skill-overview", label: "skillLifecycle.tabs.overview" },
@@ -289,6 +290,7 @@ function SkillEditor({ workspace, draft }) {
           <ReadableFields fields={schemaFields(draft.outputSchema)} empty={t("skillLifecycle.noCreatedInfo")} requiredLabel={t("skillLifecycle.always")} optionalLabel={t("skillLifecycle.mayCreate")} />
         </div>
       </Section>
+      <SkillCreatorAgentPanel workspace={workspace} draft={draft} />
       <div className="stickyActionBar">
         <span>{dirty ? t("skillLifecycle.saveBeforeTesting") : t("skillLifecycle.readyForTesting")}</span>
         <Button variant="primary" type="submit" icon={<Pencil size={15} />} disabled={!dirty || !valid || saving} data-testid="loopops.skill.editor.save">

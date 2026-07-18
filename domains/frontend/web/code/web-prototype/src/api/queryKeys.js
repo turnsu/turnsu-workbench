@@ -31,4 +31,22 @@ export const workbenchKeys = Object.freeze({
   runs: (workflowId, query = {}) => ["workbench", "runs", workflowId, query],
   run: (runId) => ["workbench", "run", runId],
   runComparison: (runId, otherRunId) => ["workbench", "run-comparison", runId, otherRunId],
+  modelProfiles: ({ capabilities = [], context = "", selectedRevisionId = "", readiness = "" } = {}) => [
+    "workbench",
+    "model-profiles",
+    {
+      capabilities: [...capabilities].sort(),
+      context,
+      selectedRevisionId,
+      readiness,
+    },
+  ],
+  agentDefinitions: ["workbench", "agent-definitions"],
+  agentSession: (sessionId) => ["workbench", "agent-session", sessionId],
+  agentTurns: (sessionId, query = {}) => ["workbench", "agent-turns", sessionId, query],
+  agentTurn: (sessionId, turnId) => ["workbench", "agent-turn", sessionId, turnId],
+  agentEvents: (sessionId, query = {}) => ["workbench", "agent-events", sessionId, query],
+  runInvocations: (runId) => ["workbench", "run-invocations", runId],
+  runExecutionEvents: (runId, query = {}) => ["workbench", "run-execution-events", runId, query],
+  artifact: (artifactId) => ["workbench", "artifact", artifactId],
 });

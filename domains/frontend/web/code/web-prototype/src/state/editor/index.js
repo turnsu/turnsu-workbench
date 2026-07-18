@@ -4,6 +4,7 @@ export {
   createEditorState,
   editorReducer,
   revisionToEditorDraft,
+  normalizeRunSettings,
 } from "./editorState.js";
 
 export {

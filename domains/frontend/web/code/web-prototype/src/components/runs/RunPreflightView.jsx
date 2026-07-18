@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { ArrowLeft, CheckCircle2, Database, GitBranch, Play, ShieldCheck } from "lucide-react";
 
 import { Button } from "../shared/Button.jsx";
@@ -9,6 +10,32 @@ function skillVersions(nodes = []) {
   return nodes
     .filter((node) => node.type === "Skill")
     .map((node) => ({ id: node.id, title: node.title, version: node.skillVersion || node.canonical?.skillRef?.version || "-" }));
+}
+
+function resolvedModels(editorState, revision, nodes) {
+  const plan = editorState?.compile?.result?.executionPlan
+    || revision?.compile?.executionPlan
+    || revision?.executionPlan;
+  return (plan?.steps || []).flatMap((step) => {
+    const revisionId = step.modelProfileRevisionId
+      || step.requestedModelRevisionId
+      || step.modelRoute?.requestedModelRevisionId;
+    if (!revisionId) return [];
+    const node = nodes.find((candidate) => (candidate.id || candidate.nodeId) === step.nodeId);
+    const capability = step.modelCapability || step.capability || step.modelRoute?.capability || "chat";
+    const runSettingKey = capability === "image_generation"
+      ? "imageGenerationModelProfileId"
+      : "agentControllerModelProfileId";
+    const source = node?.canonical?.configuration?.modelProfileId
+      ? "node"
+      : revision?.runSettings?.[runSettingKey] ? "run" : "workspace";
+    return [{
+      nodeId: step.nodeId,
+      capability,
+      revisionId,
+      source,
+    }];
+  });
 }
 
 export function RunPreflightView({ workspace }) {
@@ -27,8 +54,17 @@ export function RunPreflightView({ workspace }) {
   const missing = fields.filter((field) => field.required && !String(workspace.runInputs[field.fieldId] || "").trim());
   const dirty = Boolean(workspace.editorState?.dirty);
   const ready = loop?.readiness === "Ready";
-  const canStart = Boolean(loop && ready && !dirty && !missing.length && workspace.canRunWorkflow);
+  const planReady = workspace.editorState?.compile?.status === "ready"
+    && Boolean(workspace.editorState?.compile?.result?.executionPlan);
+  const canStart = Boolean(loop && ready && planReady && !dirty && !missing.length && workspace.canRunWorkflow);
   const savedVersion = loop?.canonicalRevision?.revisionNumber || loop?.canonicalRevision?.revision || 1;
+  const modelRoutes = resolvedModels(workspace.editorState, revision, nodes);
+
+  useEffect(() => {
+    if (!loop || dirty || !workspace.canRunWorkflow || workspace.editorState?.compile?.status === "compiling") return;
+    const hasResolvedPlan = Boolean(workspace.editorState?.compile?.result?.executionPlan);
+    if (!hasResolvedPlan) workspace.compileSelectedWorkflow();
+  }, [loop?.id, workspace.editorState?.baseRevision?.revisionId, workspace.canRunWorkflow]);
 
   if (workspace.surfaceState?.workflow?.loading || workspace.surfaceState?.workflow?.error) {
     return (
@@ -99,6 +135,20 @@ export function RunPreflightView({ workspace }) {
             </div>
           </section>
 
+          {modelRoutes.length ? (
+            <section className="preflightSection" data-testid="loopops.preflight.models">
+              <div className="preflightSectionTitle"><ShieldCheck size={16} /><div><h3>{t("model.resolvedRoutes")}</h3><p>{t("model.resolvedRoutesHint")}</p></div></div>
+              <div className="resolvedModelRows">
+                {modelRoutes.map((route) => (
+                  <div key={`${route.nodeId}:${route.capability}`}>
+                    <span>{productNodeTitle(nodes.find((node) => node.id === route.nodeId) || { title: route.nodeId }, workspace.locale)}<small>{route.capability} · {t("model.inheritedFrom", { source: t(`model.source.${route.source}`) })}</small></span>
+                    <strong>{route.revisionId}</strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           <section className="preflightSection">
             <div className="preflightSectionTitle"><ShieldCheck size={16} /><div><h3>{t("runPreflight.reviewAndActions")}</h3><p>{t("runPreflight.reviewAndActionsCaption")}</p></div></div>
             <dl className="preflightFacts">
@@ -114,7 +164,7 @@ export function RunPreflightView({ workspace }) {
           <ul className="preflightChecklist">
             <li className={dirty ? "blocked" : "ready"}><CheckCircle2 size={15} /><span>{dirty ? t("runPreflight.saveNeeded") : t("runPreflight.saved")}</span></li>
             <li className={missing.length ? "blocked" : "ready"}><CheckCircle2 size={15} /><span>{missing.length ? t("runPreflight.missingInputs", { count: missing.length }) : t("runPreflight.inputsReady")}</span></li>
-            <li className={ready ? "ready" : "blocked"}><CheckCircle2 size={15} /><span>{ready ? t("runPreflight.versionPinned") : t("runPreflight.setupNeeded")}</span></li>
+            <li className={ready && planReady ? "ready" : "blocked"}><CheckCircle2 size={15} /><span>{ready && planReady ? t("runPreflight.versionPinned") : t("runPreflight.setupNeeded")}</span></li>
             <li className="ready"><CheckCircle2 size={15} /><span>{t("runPreflight.reviewVisible", { count: reviewSteps.length })}</span></li>
           </ul>
           {!canStart ? <div className="preflightBlocked" role="status" data-testid="loopops.preflight.blocked"><p>{dirty ? t("runPreflight.saveBeforeRun") : missing.length ? t("runPreflight.fillRequired") : t("runPreflight.finishSetup")}</p><Button variant="secondary" onClick={ready && !dirty ? recover : () => workspace.editLoop(loop.id, "definition")}>{dirty || !ready ? t("actions.openBuilder") : t("runPreflight.fillInputs")}</Button></div> : null}

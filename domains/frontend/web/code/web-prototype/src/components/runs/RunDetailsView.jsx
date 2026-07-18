@@ -4,6 +4,8 @@ import { AlertTriangle, ArrowLeft, Clock3, FileCheck2, RotateCcw, X } from "luci
 import { Button } from "../shared/Button.jsx";
 import { ObjectQueryState } from "../shared/ObjectQueryState.jsx";
 import { StatusPill } from "../shared/StatusPill.jsx";
+import { useRunInvocationsQuery } from "../../api/queries.js";
+import { ArtifactImage } from "../models/ArtifactImage.jsx";
 
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 
@@ -41,6 +43,16 @@ export function RunDetailsView({ workspace }) {
     ? workspace.serverState?.mutations?.startRun?.isPending === true
     : workspace.serverState?.mutations?.retryRun?.isPending === true;
   const [reviewNote, setReviewNote] = useState("");
+  const invocationsQuery = useRunInvocationsQuery(run?.id, Boolean(run?.id));
+  const invocations = invocationsQuery.data?.data || [];
+  const modelInvocations = invocations.filter((invocation) => (
+    invocation.mode === "model_call"
+    || invocation.requestedModelRevisionId
+    || invocation.actualModelRevisionId
+  ));
+  const runArtifacts = [...new Map(modelInvocations
+    .flatMap((invocation) => invocation.artifactRefs || [])
+    .map((artifact) => [artifact.artifactId || artifact, artifact])).values()];
 
   useEffect(() => setReviewNote(""), [run?.id, run?.reviewPacket?.nodeId]);
 
@@ -146,6 +158,13 @@ export function RunDetailsView({ workspace }) {
             </section>
           ) : null}
 
+          {runArtifacts.length ? (
+            <section className="finalAnswer" data-testid="loopops.runs.artifacts">
+              <p className="sectionEyebrow"><FileCheck2 size={14} /> {t("agent.image.generatedAlt")}</p>
+              {runArtifacts.map((artifact) => <ArtifactImage key={artifact.artifactId || artifact} artifactId={artifact.artifactId || artifact} alt={t("agent.image.generatedAlt")} />)}
+            </section>
+          ) : null}
+
           <div className="buttonRow">
             <Button variant="secondary" onClick={workspace.createDraftFromActiveRun} data-testid="loopops.runs.create-draft">
               {t("actions.continueFromRun")}
@@ -203,6 +222,24 @@ export function RunDetailsView({ workspace }) {
             <h3>{t("workflows.runLedger")}</h3>
             <div className="timeline">{history.map((entry) => <button type="button" key={entry.id} onClick={() => workspace.setActiveRunId(entry.id)}><span>{entry.startedAt}</span><strong>{statusLabel(entry.status, t)}</strong></button>)}</div>
           </section>
+          {modelInvocations.length ? (
+            <section data-testid="loopops.runs.model-history">
+              <h3>{t("model.resolvedRoutes")}</h3>
+              <ul className="cleanList runInvocationModels">
+                {modelInvocations.map((invocation) => {
+                  const requested = invocation.requestedModelRevisionId || invocation.modelProfileRevisionId;
+                  const actual = invocation.actualModelRevisionId || requested;
+                  const fallback = Boolean(requested && actual && requested !== actual);
+                  return (
+                    <li key={invocation.invocationId}>
+                      <span><strong>{invocation.capability || invocation.mode}</strong><small>{t("model.requested")}: {requested || "—"}</small></span>
+                      <span>{t("model.actual")}: {actual || "—"}{fallback ? ` · ${t("model.fallbackUsed")}` : ""}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ) : null}
         </aside>
       </div>
     </div>

@@ -79,6 +79,7 @@ function revisionDetails(revision) {
 }
 
 export function skillDefinitionToView(skill) {
+  const execution = skill.execution || skill.executionRef || {};
   return {
     id: skill.skillId,
     version: skill.version,
@@ -99,6 +100,8 @@ export function skillDefinitionToView(skill) {
     evidence: skill.risk?.summary || "No additional setup information.",
     usageCount: skill.usageCount || 0,
     readinessDiagnostics: skill.readiness?.diagnostics || [],
+    executionMode: execution.executionMode || "deterministic",
+    requiredModelCapability: execution.requiredModelCapability || null,
     canonical: skill,
   };
 }
@@ -109,6 +112,7 @@ export function skillAssetSummaryToView(summary) {
   const draft = skill?.lifecycle === "draft" ? sourceDraft : null;
   const version = summary?.latestVersion;
   const definition = version || draft;
+  const execution = definition?.execution || definition?.executionRef || {};
   if (!skill || !definition) return null;
   const retired = skill.lifecycle === "deprecated";
   const ready = Boolean(version && skill.lifecycle === "ready");
@@ -134,6 +138,8 @@ export function skillAssetSummaryToView(summary) {
       : "Finish preparing this Skill before using it in a workflow.",
     usageCount: 0,
     readinessDiagnostics: version?.validation?.diagnostics || [],
+    executionMode: execution.executionMode || "deterministic",
+    requiredModelCapability: execution.requiredModelCapability || null,
     canAddToWorkflow: ready,
     canEdit: skill.allowedActions?.includes("edit") === true,
     canPublish: skill.allowedActions?.includes("publish") === true,

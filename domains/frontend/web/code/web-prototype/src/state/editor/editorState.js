@@ -26,6 +26,19 @@ export function cloneEditorValue(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+export function normalizeRunSettings(settings = {}) {
+  const controllerProfileId = settings.agentControllerModelProfileId || settings.modelProfileId || "";
+  const imageProfileId = settings.imageGenerationModelProfileId || "";
+  return {
+    maxParallelism: settings.maxParallelism ?? 1,
+    defaultTimeoutSeconds: settings.defaultTimeoutSeconds ?? 300,
+    ...(controllerProfileId ? { agentControllerModelProfileId: controllerProfileId } : {}),
+    ...(imageProfileId ? { imageGenerationModelProfileId: imageProfileId } : {}),
+    workflowFallbackAllowed: settings.workflowFallbackAllowed === true
+      || (Array.isArray(settings.fallbackModelProfileIds) && settings.fallbackModelProfileIds.length > 0),
+  };
+}
+
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (!value || typeof value !== "object") return value;
@@ -44,7 +57,9 @@ function sameDraft(left, right) {
 export function revisionToEditorDraft(revision) {
   if (!revision || typeof revision !== "object") return null;
   return EDITABLE_REVISION_FIELDS.reduce((draft, field) => {
-    draft[field] = cloneEditorValue(revision[field]);
+    draft[field] = field === "runSettings"
+      ? normalizeRunSettings(revision[field])
+      : cloneEditorValue(revision[field]);
     return draft;
   }, {});
 }
@@ -93,7 +108,10 @@ export function createEditorState(revision, { etag = null, selectedNodeId = null
 }
 
 function replaceDraft(state, draft) {
-  const nextDraft = cloneEditorValue(draft);
+  const nextDraft = {
+    ...cloneEditorValue(draft),
+    runSettings: normalizeRunSettings(draft?.runSettings),
+  };
   const contentChanged = !sameDraft(state.draft, nextDraft);
   const baseDraft = revisionToEditorDraft(state.baseRevision);
   return {

@@ -1,4 +1,4 @@
-const topLevelPages = new Set(["loops", "skills", "library"]);
+const topLevelPages = new Set(["loops", "skills", "library", "agent"]);
 
 function decode(value = "") {
   try {
@@ -10,6 +10,7 @@ function decode(value = "") {
 
 export function parseWorkbenchPath(pathname = "/loops") {
   const segments = String(pathname || "/loops").split("/").filter(Boolean).map(decode);
+  if (segments[0] === "agent") return { page: "agent" };
   if (segments[0] === "skills") {
     if (!segments[1]) return { page: "skills" };
     const skillId = segments[1];
@@ -41,6 +42,7 @@ export function parseWorkbenchPath(pathname = "/loops") {
 export function workbenchPathFor(route = {}) {
   const page = topLevelPages.has(route.page) ? route.page : route.page || "loops";
   if (page === "skills") return "/skills";
+  if (page === "agent") return "/agent";
   if (page === "skill-overview" && route.skillId) return `/skills/${encodeURIComponent(route.skillId)}`;
   if (page === "skill-editor" && route.skillId) return `/skills/${encodeURIComponent(route.skillId)}/edit`;
   if (page === "skill-instructions" && route.skillId) return `/skills/${encodeURIComponent(route.skillId)}/instructions`;

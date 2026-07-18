@@ -245,6 +245,132 @@ export function useActiveSessionQuery(enabled = true) {
   });
 }
 
+export function useModelProfilesQuery(filters = {}, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.modelProfiles(filters),
+    queryFn: () => workbenchApi.listModelProfiles(filters),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function useAgentDefinitionsQuery(enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.agentDefinitions,
+    queryFn: () => workbenchApi.listAgentDefinitions(),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useAgentSessionQuery(sessionId, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.agentSession(sessionId),
+    queryFn: () => workbenchApi.getAgentSession(sessionId),
+    enabled: enabled && Boolean(sessionId),
+    refetchInterval(query) {
+      return query.state.data?.data?.activeTurnId ? 1_000 : false;
+    },
+  });
+}
+
+export function useAgentTurnsQuery(sessionId, query = {}, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.agentTurns(sessionId, query),
+    queryFn: () => workbenchApi.listAgentTurns(sessionId, query),
+    enabled: enabled && Boolean(sessionId),
+    refetchInterval(result) {
+      const active = result.state.data?.data?.some((turn) => !["completed", "failed", "cancelled", "blocked"].includes(turn.status));
+      return active ? 1_500 : false;
+    },
+  });
+}
+
+export function useAgentTurnQuery(sessionId, turnId, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.agentTurn(sessionId, turnId),
+    queryFn: () => workbenchApi.getAgentTurn(sessionId, turnId),
+    enabled: enabled && Boolean(sessionId && turnId),
+    refetchInterval(query) {
+      const status = query.state.data?.data?.status;
+      return status && !["completed", "failed", "cancelled", "blocked"].includes(status) ? 750 : false;
+    },
+  });
+}
+
+export function useAgentEventsQuery(sessionId, query = {}, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.agentEvents(sessionId, query),
+    queryFn: () => workbenchApi.listAgentSessionEvents(sessionId, query),
+    enabled: enabled && Boolean(sessionId),
+    refetchInterval: 2_000,
+  });
+}
+
+export function useRunInvocationsQuery(runId, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.runInvocations(runId),
+    queryFn: () => workbenchApi.listRunInvocations(runId),
+    enabled: enabled && Boolean(runId),
+    refetchInterval(query) {
+      const active = query.state.data?.data?.some((item) => !["completed", "failed", "cancelled", "blocked"].includes(item.status));
+      return active ? 1_000 : false;
+    },
+  });
+}
+
+export function useRunExecutionEventsQuery(runId, query = {}, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.runExecutionEvents(runId, query),
+    queryFn: () => workbenchApi.listRunExecutionEvents(runId, query),
+    enabled: enabled && Boolean(runId),
+    refetchInterval: 1_500,
+  });
+}
+
+export function useArtifactQuery(artifactId, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.artifact(artifactId),
+    queryFn: () => workbenchApi.getArtifact(artifactId),
+    enabled: enabled && Boolean(artifactId),
+    staleTime: Infinity,
+  });
+}
+
+export function useAgentMutations() {
+  const queryClient = useQueryClient();
+  const createSession = useMutation({
+    mutationFn: ({ data, idempotencyKey }) => workbenchApi.createAgentSession(data, { idempotencyKey }),
+  });
+  const selectModel = useMutation({
+    mutationFn: ({ sessionId, modelProfileId, idempotencyKey }) => (
+      workbenchApi.selectAgentSessionModel(sessionId, { modelProfileId }, { idempotencyKey })
+    ),
+    onSuccess(result, variables) {
+      queryClient.setQueryData(workbenchKeys.agentSession(variables.sessionId), result);
+    },
+  });
+  const createTurn = useMutation({
+    mutationFn: ({ sessionId, data, idempotencyKey }) => workbenchApi.createAgentTurn(sessionId, data, { idempotencyKey }),
+    onSuccess(result, variables) {
+      queryClient.setQueryData(workbenchKeys.agentTurn(variables.sessionId, result.data.turnId), result);
+      queryClient.invalidateQueries({ queryKey: ["workbench", "agent-turns", variables.sessionId] });
+      queryClient.invalidateQueries({ queryKey: workbenchKeys.agentSession(variables.sessionId) });
+    },
+  });
+  const cancelTurn = useMutation({
+    mutationFn: ({ sessionId, turnId, data, idempotencyKey }) => (
+      workbenchApi.cancelAgentTurn(sessionId, turnId, data, { idempotencyKey })
+    ),
+    onSuccess(result, variables) {
+      queryClient.setQueryData(workbenchKeys.agentTurn(variables.sessionId, variables.turnId), result);
+      queryClient.invalidateQueries({ queryKey: ["workbench", "agent-turns", variables.sessionId] });
+      queryClient.invalidateQueries({ queryKey: workbenchKeys.agentSession(variables.sessionId) });
+    },
+  });
+  return { createSession, selectModel, createTurn, cancelTurn };
+}
+
 export function useSkillsQuery(enabled = true) {
   return useQuery({
     queryKey: workbenchKeys.skills(),

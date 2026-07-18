@@ -15,6 +15,7 @@ import { SkillLifecycleView } from "./components/skills/SkillLifecycleView.jsx";
 import { CreateSkillDialog } from "./components/skills/CreateSkillDialog.jsx";
 import { TemplatesBuilderView } from "./components/templates/TemplatesBuilderView.jsx";
 import { CreateResourceDialog } from "./components/resources/CreateResourceDialog.jsx";
+import { MainAgentView } from "./components/agents/MainAgentView.jsx";
 import { EmptyState } from "./components/shared/EmptyState.jsx";
 import { ObjectQueryState } from "./components/shared/ObjectQueryState.jsx";
 import { useWorkbenchWorkspace } from "./state/useWorkbenchWorkspace.js";
@@ -43,6 +44,8 @@ function CurrentSurface({ workspace }) {
       return withQueryState(workspace, "loops", workspace.t("page.loops.title"), <LoopsBoardView workspace={workspace} />, "loopops.loops.query-state");
     case "runs":
       return <RunDetailsView workspace={workspace} />;
+    case "agent":
+      return <MainAgentView workspace={workspace} />;
     case "loop-overview":
       return <LoopOverviewView workspace={workspace} />;
     case "run-preflight":

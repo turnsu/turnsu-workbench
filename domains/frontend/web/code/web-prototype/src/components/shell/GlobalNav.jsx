@@ -7,6 +7,7 @@ import {
   GitBranch,
   Library,
   Plus,
+  Sparkles,
   Upload,
   UserRound,
 } from "lucide-react";
@@ -84,11 +85,13 @@ export function GlobalNav({ workspace }) {
     return [...loopIssues, ...skillIssues, ...updateIssues];
   }, [t, workspace]);
 
-  const primaryPage = ["skills", "skill-overview", "skill-editor", "skill-instructions", "skill-files", "skill-tests", "skill-versions"].includes(workspace.activePage)
-    ? "skills"
-    : ["library", "library-loop-detail", "library-skill-detail"].includes(workspace.activePage)
-      ? "library"
-      : "loops";
+  const primaryPage = workspace.activePage === "agent"
+    ? ""
+    : ["skills", "skill-overview", "skill-editor", "skill-instructions", "skill-files", "skill-tests", "skill-versions"].includes(workspace.activePage)
+      ? "skills"
+      : ["library", "library-loop-detail", "library-skill-detail"].includes(workspace.activePage)
+        ? "library"
+        : "loops";
 
   const runAndClose = (action) => {
     setOpenMenu("");
@@ -119,6 +122,10 @@ export function GlobalNav({ workspace }) {
       </nav>
 
       <div className="globalNavActions">
+        <button type="button" className={`globalIconAction ${workspace.activePage === "agent" ? "active" : ""}`} aria-label={t("agent.main.title")} onClick={() => workspace.setActivePage("agent")} data-testid="loopops.nav.agent">
+          <Sparkles size={18} />
+        </button>
+        <span className="globalInboxLabel" aria-hidden="true">{t("agent.main.shortTitle")}</span>
         <button className="hiddenTestButton" onClick={() => workspace.setTheme("light")} data-testid="loopops.theme.light" tabIndex={-1} aria-hidden="true">{t("actions.themeLight")}</button>
         <button className="hiddenTestButton" onClick={() => workspace.setTheme("dark")} data-testid="loopops.theme.dark" tabIndex={-1} aria-hidden="true">{t("actions.themeDark")}</button>
         <button className="hiddenTestButton" onClick={() => workspace.setLocale("en")} data-testid="loopops.locale.en" tabIndex={-1} aria-hidden="true">EN</button>

@@ -246,11 +246,94 @@ export function createWorkbenchApiClient({
     };
   }
 
+  async function requestArtifactContent(path) {
+    let response;
+    try {
+      response = await fetchImpl(`${basePath}${path}`, {
+        method: "GET",
+        headers: { Accept: "image/png, image/jpeg, image/webp" },
+        credentials: "same-origin",
+      });
+    } catch (error) {
+      throw new WorkbenchApiError({
+        code: "workbench_unreachable",
+        message: "The local Workbench service could not be reached.",
+        details: { reason: error?.message || "network_error" },
+        retryable: true,
+      });
+    }
+    if (!response.ok) {
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch {
+        // An authorization intermediary may return an empty body.
+      }
+      throw new WorkbenchApiError({
+        ...(payload && typeof payload === "object" ? payload : {}),
+        status: response.status,
+      });
+    }
+    const mediaType = String(response.headers.get("content-type") || "").split(";", 1)[0];
+    if (!["image/png", "image/jpeg", "image/webp"].includes(mediaType)) {
+      throw new WorkbenchApiError({
+        code: "artifact_response_invalid",
+        message: "The generated image has an unsupported format.",
+        status: response.status,
+      });
+    }
+    return {
+      blob: await response.blob(),
+      mediaType,
+      byteLength: Number(response.headers.get("content-length") || 0),
+      etag: response.headers.get("etag"),
+    };
+  }
+
   const client = {
     async bootstrap() {
       return refreshSession();
     },
     getActiveSession() { return request("/session"); },
+    listModelProfiles({ capabilities = [], context, selectedRevisionId, readiness, cursor, limit } = {}) {
+      return request("/model-profiles", {
+        query: {
+          capabilities: capabilities.length ? capabilities.join(",") : undefined,
+          context,
+          selectedRevisionId,
+          readiness,
+          cursor,
+          limit,
+        },
+      });
+    },
+    listAgentDefinitions() { return request("/agent-definitions"); },
+    createAgentSession(data, options = {}) {
+      return request("/agent-sessions", { method: "POST", data, ...options });
+    },
+    getAgentSession(sessionId) { return request(`/agent-sessions/${encoded(sessionId)}`); },
+    selectAgentSessionModel(sessionId, data, options = {}) {
+      return request(`/agent-sessions/${encoded(sessionId)}/model`, { method: "POST", data, ...options });
+    },
+    listAgentTurns(sessionId, query) {
+      return request(`/agent-sessions/${encoded(sessionId)}/turns`, { query });
+    },
+    createAgentTurn(sessionId, data, options = {}) {
+      return request(`/agent-sessions/${encoded(sessionId)}/turns`, { method: "POST", data, ...options });
+    },
+    getAgentTurn(sessionId, turnId) {
+      return request(`/agent-sessions/${encoded(sessionId)}/turns/${encoded(turnId)}`);
+    },
+    cancelAgentTurn(sessionId, turnId, data = {}, options = {}) {
+      return request(`/agent-sessions/${encoded(sessionId)}/turns/${encoded(turnId)}/cancel`, {
+        method: "POST",
+        data,
+        ...options,
+      });
+    },
+    listAgentSessionEvents(sessionId, query) {
+      return request(`/agent-sessions/${encoded(sessionId)}/events`, { query });
+    },
     listSkills(query) { return request("/skills", { query }); },
     listSkillAssets(query) { return request("/skill-assets", { query }); },
     getSkill(skillId) { return request(`/skills/${encoded(skillId)}`); },
@@ -473,6 +556,17 @@ export function createWorkbenchApiClient({
       return request(`/workflows/${encoded(workflowId)}/runs`, { query });
     },
     getRun(runId) { return request(`/runs/${encoded(runId)}`); },
+    listRunInvocations(runId) { return request(`/runs/${encoded(runId)}/invocations`); },
+    listRunExecutionEvents(runId, query) {
+      return request(`/runs/${encoded(runId)}/execution-events`, { query });
+    },
+    getArtifact(artifactId) { return request(`/artifacts/${encoded(artifactId)}`); },
+    getArtifactContent(artifactId) {
+      return requestArtifactContent(`/artifacts/${encoded(artifactId)}/content`);
+    },
+    artifactContentUrl(artifactId) {
+      return `${basePath}/artifacts/${encoded(artifactId)}/content`;
+    },
     getRunComparison(runId, otherRunId) {
       return request(`/runs/${encoded(runId)}/comparison/${encoded(otherRunId)}`);
     },

@@ -392,7 +392,7 @@ export function useWorkbenchWorkspace() {
     }
   }
 
-  async function createWorkflowProposal(details, retryKey) {
+  async function createWorkflowProposal(details, modelProfileRevisionId = "", retryKey) {
     const data = workflowCreationPayload(details);
     if (!data) return null;
     const createIdempotencyKey = mutationKey(retryKey?.createKey);
@@ -411,12 +411,12 @@ export function useWorkbenchWorkspace() {
         data.definition.context ? `Context: ${data.definition.context}` : "",
         data.definition.constraints.length ? `Constraints: ${data.definition.constraints.join("; ")}` : "",
       ].filter(Boolean).join("\n");
-      setCreationProposalContext({ workflowId: workflow.workflowId, title: workflow.name, etag: created.etag, instruction });
+      setCreationProposalContext({ workflowId: workflow.workflowId, title: workflow.name, etag: created.etag, instruction, modelProfileRevisionId });
       const proposal = await server.mutations.generateLoopProposal.mutateAsync({
         workflowId: workflow.workflowId,
         ifMatch: created.etag,
         idempotencyKey: proposalIdempotencyKey,
-        data: { instruction },
+        data: { instruction, ...(modelProfileRevisionId ? { modelProfileRevisionId } : {}) },
       });
       setBuilderProposal(proposal.data);
       return { created, proposal: proposal.data };
@@ -435,7 +435,10 @@ export function useWorkbenchWorkspace() {
         workflowId: creationProposalContext.workflowId,
         ifMatch: creationProposalContext.etag,
         idempotencyKey,
-        data: { instruction: creationProposalContext.instruction },
+        data: {
+          instruction: creationProposalContext.instruction,
+          ...(creationProposalContext.modelProfileRevisionId ? { modelProfileRevisionId: creationProposalContext.modelProfileRevisionId } : {}),
+        },
       });
       setBuilderProposal(proposal.data);
       return proposal.data;
@@ -758,7 +761,7 @@ export function useWorkbenchWorkspace() {
     }
   }
 
-  async function generateBuilderProposal(instruction = composer, retryKey) {
+  async function generateBuilderProposal(instruction = composer, modelProfileRevisionId = "", retryKey) {
     const value = String(instruction || "").trim();
     if (!editor.state || selectedLoop?.type !== "LoopWorkflow" || !value) return null;
     if (editor.state.dirty) {
@@ -772,7 +775,7 @@ export function useWorkbenchWorkspace() {
         workflowId: editor.state.workflowId,
         ifMatch: editor.state.serverEtag,
         idempotencyKey,
-        data: { instruction: value },
+        data: { instruction: value, ...(modelProfileRevisionId ? { modelProfileRevisionId } : {}) },
       });
       setBuilderProposal(result.data);
       setComposer("");
@@ -1362,6 +1365,24 @@ export function useWorkbenchWorkspace() {
     }));
   }
 
+  function updateRunSetting(field, value) {
+    if (selectedLoop?.type === "LoopTemplate" || !editor.state) return;
+    editor.replaceDraft((draft) => {
+      const runSettings = { ...(draft.runSettings || {}) };
+      if (value === "" || value === undefined || value === null) delete runSettings[field];
+      else runSettings[field] = value;
+      return { ...draft, runSettings };
+    });
+  }
+
+  function updateSelectedNodeModel(modelProfileId) {
+    if (selectedLoop?.type === "LoopTemplate" || !editor.state || !selectedNode) return;
+    const configuration = { ...(selectedNode.canonical?.configuration || {}) };
+    if (modelProfileId) configuration.modelProfileId = modelProfileId;
+    else delete configuration.modelProfileId;
+    editor.replaceDraft((draft) => updateDraftNode(draft, selectedNode.id, { configuration }));
+  }
+
   return {
     ...ui,
     t,
@@ -1551,6 +1572,8 @@ export function useWorkbenchWorkspace() {
     },
     updateSelectedNodeField,
     updateLoopDefinition,
+    updateRunSetting,
+    updateSelectedNodeModel,
     updateNodePosition(nodeId, position) {
       if (selectedLoop?.type !== "LoopTemplate") editor.replaceDraft((draft) => moveDraftNode(draft, nodeId, position));
     },
@@ -1579,7 +1602,7 @@ export function useWorkbenchWorkspace() {
     downloadUnsavedWorkflowDraft,
     reloadLatestWorkflow,
     canSaveWorkflow: Boolean(editor.state?.dirty && editor.state.serverEtag),
-    canRunWorkflow: Boolean(selectedLoop?.type === "LoopWorkflow" && !editor.state?.dirty),
+    canRunWorkflow: Boolean(selectedLoop?.type === "LoopWorkflow" && !editor.state?.dirty && !readOnlyWorkspace),
     editorState: editor.state,
     builderAssistantAvailable: true,
     builderAssistantBusy: server.mutations.generateLoopProposal.isPending || server.mutations.applyLoopProposal.isPending || server.mutations.dismissLoopProposal.isPending,

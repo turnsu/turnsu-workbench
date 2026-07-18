@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 
 import { Button } from "../shared/Button.jsx";
+import { ModelPicker } from "../models/ModelPicker.jsx";
+import { defaultModelSelection, useModelCatalog } from "../../state/models/index.js";
 
 const MODES = [
   { id: "goal", icon: Target },
@@ -47,11 +49,18 @@ export function CreateLoopView({ workspace }) {
   const [mode, setMode] = useState(workspace.createLoopInitialMode || "goal");
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
+  const [builderModelRevisionId, setBuilderModelRevisionId] = useState("");
+  const builderModels = useModelCatalog({
+    capabilities: ["chat", "tool_calling", "structured_output"],
+    context: "builder",
+    selectedRevisionId: builderModelRevisionId,
+  });
   const ownedLoops = useMemo(() => workspace.loops.filter((loop) => loop.type === "LoopWorkflow"), [workspace.loops]);
   const templates = useMemo(() => workspace.loops.filter((loop) => loop.type === "LoopTemplate"), [workspace.loops]);
   const startingPoints = workspace.teamLibrary.filter((release) => release.assetKind === "loop" && release.startingPoint);
   const generatedName = form.name.trim() || form.goal.trim().split(/[.!?。！？\n]/)[0].slice(0, 72);
   const valid = mode === "blank" ? Boolean(form.name.trim()) : Boolean(form.goal.trim());
+  const builderModelReady = builderModels.options.some((option) => option.value === builderModelRevisionId && !option.disabled);
 
   useEffect(() => {
     const prefill = workspace.createLoopPrefill;
@@ -59,6 +68,12 @@ export function CreateLoopView({ workspace }) {
     const goal = String(prefill.goal || "").trim();
     setForm((current) => ({ ...current, ...prefill, goal, name: String(prefill.name || goal).trim().slice(0, 72) }));
   }, [workspace.createLoopPrefill]);
+
+  useEffect(() => {
+    if (!builderModelRevisionId && builderModels.profiles.length) {
+      setBuilderModelRevisionId(defaultModelSelection(builderModels.profiles, "structured_output", "revision"));
+    }
+  }, [builderModelRevisionId, builderModels.profiles]);
 
   function update(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -79,10 +94,10 @@ export function CreateLoopView({ workspace }) {
 
   async function create(event) {
     event.preventDefault();
-    if (!valid || busy) return;
+    if (!valid || busy || workspace.readOnlyWorkspace || (mode === "goal" && !builderModelReady)) return;
     setBusy(true);
     try {
-      if (mode === "goal") await workspace.createWorkflowProposal(details());
+      if (mode === "goal") await workspace.createWorkflowProposal(details(), builderModelRevisionId);
       else await workspace.createWorkflow(details());
     } finally {
       setBusy(false);
@@ -187,6 +202,19 @@ export function CreateLoopView({ workspace }) {
                 <div><ListOrdered size={17} /><strong>{t("loopCreate.aiSteps")}</strong><span>{t("loopCreate.aiStepsCopy")}</span></div>
               </section>
 
+              <ModelPicker
+                options={builderModels.options}
+                requiredCapabilities={["chat", "tool_calling", "structured_output"]}
+                value={builderModelRevisionId}
+                onChange={setBuilderModelRevisionId}
+                label={t("model.builder")}
+                hint={t("model.turnPinHint")}
+                loading={builderModels.isLoading}
+                unavailableLabel={t("model.unavailable")}
+                historicalLabel={t("model.historical")}
+                testId="loopops.create-loop.model"
+              />
+
               {workspace.creationProposalContext && workspace.pendingPatch ? (
                 <section className="createLoopProposalReview" data-testid="loopops.create-loop.proposal-review" aria-live="polite">
                   <div><p className="objectKicker">{t("loopCreate.proposalKicker")}</p><h3>{t("loopCreate.proposalTitle", { title: workspace.creationProposalContext.title })}</h3><p>{workspace.pendingPatch.summary}</p></div>
@@ -222,7 +250,7 @@ export function CreateLoopView({ workspace }) {
           <div className="createFooterActions">
             <Button variant="secondary" type="button" onClick={() => workspace.setActivePage("loops")}>{t("actions.cancel")}</Button>
             {mode === "goal" ? <Button type="button" variant="secondary" disabled={!valid || busy || workspace.readOnlyWorkspace} onClick={() => workspace.createWorkflow(details())} data-testid="loopops.create-loop.save-empty">{t("loopCreate.saveEmptyDraft")}</Button> : null}
-            {(mode === "goal" || mode === "blank") ? <Button type="submit" variant="primary" disabled={!valid || busy || workspace.readOnlyWorkspace} data-testid="loopops.create-loop.submit">{busy || workspace.builderAssistantBusy ? t("loopCreate.preparingProposal") : t(mode === "goal" ? "loopCreate.reviewProposal" : "loopCreate.continue")}</Button> : null}
+            {(mode === "goal" || mode === "blank") ? <Button type="submit" variant="primary" disabled={!valid || busy || workspace.readOnlyWorkspace || (mode === "goal" && !builderModelReady)} data-testid="loopops.create-loop.submit">{busy || workspace.builderAssistantBusy ? t("loopCreate.preparingProposal") : t(mode === "goal" ? "loopCreate.reviewProposal" : "loopCreate.continue")}</Button> : null}
           </div>
         </footer>
       </form>

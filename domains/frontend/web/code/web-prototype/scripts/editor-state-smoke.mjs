@@ -6,6 +6,7 @@ import {
   createEditorDraftPayload,
   createEditorState,
   editorReducer,
+  normalizeRunSettings,
   parseEditorDraftPayload,
   persistEditorDraft,
   recoverLegacyOwnedWorkflowDraft,
@@ -67,6 +68,22 @@ assert.equal(initial.serverEtag, '"workflow-1:3"');
 assert.equal(initial.compile.status, "ready");
 assert.equal(initial.draft.definition.goal, "Review the incoming work");
 assert.deepEqual(initial.compile.diagnostics, revision.compile.diagnostics);
+assert.deepEqual(initial.draft.runSettings, {
+  maxParallelism: 1,
+  defaultTimeoutSeconds: 300,
+  workflowFallbackAllowed: false,
+});
+assert.deepEqual(normalizeRunSettings({
+  maxParallelism: 1,
+  defaultTimeoutSeconds: 300,
+  modelProfileId: "profile-legacy",
+  fallbackModelProfileIds: ["profile-fallback"],
+}), {
+  maxParallelism: 1,
+  defaultTimeoutSeconds: 300,
+  agentControllerModelProfileId: "profile-legacy",
+  workflowFallbackAllowed: true,
+});
 
 const selected = editorReducer(initial, {
   type: EDITOR_ACTIONS.SELECT_NODE,

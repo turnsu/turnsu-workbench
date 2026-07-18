@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -22,6 +22,9 @@ import { Button, SegmentedControl, TextArea, TextInput } from "../../design-syst
 import { LoopCanvas } from "../canvas/LoopCanvas.jsx";
 import { StatusPill } from "../shared/StatusPill.jsx";
 import { productNodePurpose, productNodeTitle, productTitle } from "../../utils/productCopy.js";
+import { ModelPicker } from "../models/ModelPicker.jsx";
+import { NodeModelOverride, WorkflowModelSettings } from "../models/WorkflowModelSettings.jsx";
+import { defaultModelSelection, useModelCatalog } from "../../state/models/index.js";
 
 function listValue(value = []) {
   return Array.isArray(value) ? value.join(", ") : value;
@@ -138,6 +141,13 @@ export function TemplatesBuilderView({ workspace }) {
   const [resourcePreview, setResourcePreview] = useState(null);
   const [mobilePaletteOpen, setMobilePaletteOpen] = useState(false);
   const [confirmConflictReload, setConfirmConflictReload] = useState(false);
+  const [builderModelRevisionId, setBuilderModelRevisionId] = useState("");
+  const builderModels = useModelCatalog({
+    capabilities: ["chat", "tool_calling", "structured_output"],
+    context: "builder",
+    selectedRevisionId: builderModelRevisionId,
+  });
+  const builderModelReady = builderModels.options.some((option) => option.value === builderModelRevisionId && !option.disabled);
   const loop = workspace.selectedLoop;
   const t = workspace.t;
   const nodes = loop?.workflow?.nodes || [];
@@ -148,6 +158,29 @@ export function TemplatesBuilderView({ workspace }) {
   }));
   const edges = loop?.workflow?.edges || [];
   const selectedNode = workspace.selectedNode;
+  const selectedSkill = selectedNode?.type === "Skill"
+    ? [...workspace.skills, ...workspace.managedSkills].find((skill) => skill.id === selectedNode.skillId)
+    : null;
+  const selectedSkillExecution = selectedSkill?.canonical?.execution
+    || selectedSkill?.canonical?.executionRef
+    || selectedSkill?.canonical?.definition?.execution
+    || selectedSkill?.canonical?.definition?.executionRef
+    || selectedSkill?.canonical?.version?.execution
+    || selectedSkill?.canonical?.version?.executionRef
+    || selectedSkill?.canonical?.draft?.execution
+    || selectedSkill?.canonical?.draft?.executionRef;
+  const selectedNodeModelCapability = selectedSkill?.requiredModelCapability
+    || selectedSkillExecution?.requiredModelCapability
+    || selectedSkillExecution?.requiredCapability
+    || selectedSkillExecution?.capability
+    || selectedNode?.canonical?.configuration?.requiredModelCapability
+    || "chat";
+  const selectedNodeIsModelBacked = selectedNode?.type === "Skill" && (
+    selectedSkill?.executionMode === "model"
+    || selectedSkillExecution?.executionMode === "model"
+    || selectedSkillExecution?.mode === "model"
+    || Boolean(selectedNode?.canonical?.configuration?.modelProfileId)
+  );
   const selectedNodeIndex = selectedNode ? nodes.findIndex((node) => node.id === selectedNode.id) : -1;
   const revisionTargetOptions = nodes
     .filter((node) => node.type === "Skill")
@@ -209,6 +242,12 @@ export function TemplatesBuilderView({ workspace }) {
       }),
     [resourceNeedle, visibleSkills.length, visibleMaterials.length, workspace.resourcePalette],
   );
+
+  useEffect(() => {
+    if (!builderModelRevisionId && builderModels.profiles.length) {
+      setBuilderModelRevisionId(defaultModelSelection(builderModels.profiles, "structured_output", "revision"));
+    }
+  }, [builderModelRevisionId, builderModels.profiles]);
 
   function handleDragStart(event, payload) {
     setDropMessage("");
@@ -582,6 +621,12 @@ export function TemplatesBuilderView({ workspace }) {
                 <TextArea label={t("builder.definitionVerify")} value={listValue(workspace.editorState?.draft?.definition?.verify)} onChange={(value) => workspace.updateLoopDefinition("verify", splitList(value))} disabled={isTemplate} rows={2} width="100%" />
                 <TextArea label={t("builder.definitionResult")} value={workspace.editorState?.draft?.definition?.expectedResult || ""} onChange={(value) => workspace.updateLoopDefinition("expectedResult", value)} disabled={isTemplate} rows={2} width="100%" />
                 <TextArea label={t("builder.definitionStopRules")} value={listValue(workspace.editorState?.draft?.definition?.stopRules)} onChange={(value) => workspace.updateLoopDefinition("stopRules", splitList(value))} disabled={isTemplate} rows={2} width="100%" />
+                <WorkflowModelSettings
+                  settings={workspace.editorState?.draft?.runSettings || {}}
+                  onChange={workspace.updateRunSetting}
+                  t={t}
+                  disabled={isTemplate}
+                />
               </section>
             ) : builderTab === "outline" ? (
               <section className="builderOutline" data-testid="loopops.builder.outline">
@@ -660,7 +705,24 @@ export function TemplatesBuilderView({ workspace }) {
                     <strong>{t("builder.assistantPromptTitle")}</strong>
                     <p>{t("builder.assistantPromptCopy")}</p>
                   </div>
-                  <form className="assistantComposer" onSubmit={(event) => { event.preventDefault(); workspace.sendChat(); }}>
+                  <form className="assistantComposer" onSubmit={(event) => {
+                    event.preventDefault();
+                    if (builderModelReady && workspace.composer.trim() && !isTemplate && !isDirty && !workspace.builderAssistantBusy) {
+                      workspace.sendChat(workspace.composer, builderModelRevisionId);
+                    }
+                  }}>
+                    <ModelPicker
+                      options={builderModels.options}
+                      requiredCapabilities={["chat", "tool_calling", "structured_output"]}
+                      value={builderModelRevisionId}
+                      onChange={setBuilderModelRevisionId}
+                      label={t("model.builder")}
+                      hint={t("model.turnPinHint")}
+                      loading={builderModels.isLoading}
+                      unavailableLabel={t("model.unavailable")}
+                      historicalLabel={t("model.historical")}
+                      testId="loopops.builder.assistant.model"
+                    />
                     <TextArea
                       label={t("builder.assistantPromptLabel")}
                       value={workspace.composer}
@@ -680,7 +742,7 @@ export function TemplatesBuilderView({ workspace }) {
                         variant="primary"
                         type="submit"
                         size="sm"
-                        disabled={isTemplate || isDirty || workspace.builderAssistantBusy || !workspace.composer.trim()}
+                        disabled={isTemplate || isDirty || workspace.builderAssistantBusy || !workspace.composer.trim() || !builderModelReady}
                         data-testid="loopops.builder.assistant.send"
                       >
                         {workspace.builderAssistantBusy ? t("builder.preparingProposal") : t("builder.reviewProposal")}
@@ -690,7 +752,7 @@ export function TemplatesBuilderView({ workspace }) {
                   {workspace.builderProposalError ? (
                     <div className="assistantError" role="alert">
                       <span>{workspace.builderProposalError}</span>
-                      <Button variant="secondary" size="sm" onClick={() => workspace.sendChat()} disabled={!workspace.composer.trim() || workspace.builderAssistantBusy}>
+                      <Button variant="secondary" size="sm" onClick={() => workspace.sendChat(workspace.composer, builderModelRevisionId)} disabled={!workspace.composer.trim() || workspace.builderAssistantBusy || !builderModelReady}>
                         {t("actions.retry")}
                       </Button>
                     </div>
@@ -818,6 +880,20 @@ export function TemplatesBuilderView({ workspace }) {
                   aria-label={t("builder.selectedPurposeAria")}
                 />
               </section>
+
+              {selectedNodeIsModelBacked ? (
+                <section className="inspectorSection">
+                  <h3>{t("model.runSettings")}</h3>
+                  <NodeModelOverride
+                    capability={selectedNodeModelCapability}
+                    value={selectedNode.canonical?.configuration?.modelProfileId || ""}
+                    onChange={workspace.updateSelectedNodeModel}
+                    t={t}
+                    disabled={isTemplate}
+                    testId="loopops.builder.inspector.model"
+                  />
+                </section>
+              ) : null}
 
               <section className="inspectorSection">
                 <h3>{t("builder.contract")}</h3>

@@ -4,6 +4,7 @@ import { normalizeWorkbenchRoute, parseWorkbenchPath, workbenchPathFor } from ".
 
 assert.deepEqual(parseWorkbenchPath("/loops"), { page: "loops" });
 assert.deepEqual(parseWorkbenchPath("/loops/new"), { page: "create-loop" });
+assert.deepEqual(parseWorkbenchPath("/agent"), { page: "agent" });
 assert.deepEqual(parseWorkbenchPath("/skills"), { page: "skills" });
 assert.deepEqual(parseWorkbenchPath("/skills/skill-1"), { page: "skill-overview", skillId: "skill-1" });
 assert.deepEqual(parseWorkbenchPath("/skills/skill-1/edit"), { page: "skill-editor", skillId: "skill-1" });
@@ -23,6 +24,7 @@ assert.deepEqual(parseWorkbenchPath("/loops/loop-1/updates/skill-version-2"), { 
 assert.deepEqual(parseWorkbenchPath("/loops/loop-1/runs/run-2"), { page: "runs", loopId: "loop-1", runId: "run-2" });
 assert.equal(workbenchPathFor({ page: "loop-overview", loopId: "loop with spaces" }), "/loops/loop%20with%20spaces");
 assert.equal(workbenchPathFor({ page: "create-loop" }), "/loops/new");
+assert.equal(workbenchPathFor({ page: "agent" }), "/agent");
 assert.deepEqual(normalizeWorkbenchRoute({ page: "runs", loopId: "loop-1", runId: "run-2" }), { page: "runs", loopId: "loop-1", runId: "run-2" });
 assert.equal(workbenchPathFor({ page: "builder" }), "/builder");
 assert.equal(workbenchPathFor({ page: "skill-overview", skillId: "skill with spaces" }), "/skills/skill%20with%20spaces");
