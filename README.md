@@ -67,11 +67,28 @@ Those documents are archived under [wiki/history/](wiki/history/) and [domains/f
 
 ## Web Prototype
 
-Start the same-origin Product server (Mongo replica set and Web build are prepared by the
-script), then open `http://127.0.0.1:8798/`:
+For repository development, copy `.env.example`, replace every `replace_with_*` value,
+create the three Mongo secret files described there, and use absolute runtime paths. The
+script starts the authenticated Mongo replica set, builds the Web application, and starts
+the same-origin Product server at `http://127.0.0.1:8798/`:
 
 ```bash
+cp .env.example .env
 ./scripts/start-workbench-server.sh
+```
+
+The supported single-machine production path uses the fail-closed `workbench-local`
+commands instead. Initialize Keychain-backed secrets and a validated local configuration
+before starting it:
+
+```bash
+.tooling/node/bin/node domains/backend/operations/local/workbench-local.mjs init-secrets
+.tooling/node/bin/node domains/backend/operations/local/workbench-local.mjs configure \
+  --agent-image looloomi-agent-worker@sha256:<digest> \
+  --skill-image looloomi-skill-runner@sha256:<digest> \
+  --provider deepseek \
+  --model <model-id>
+.tooling/node/bin/node domains/backend/operations/local/workbench-local.mjs start
 ```
 
 Run Web-only static and state gates with:

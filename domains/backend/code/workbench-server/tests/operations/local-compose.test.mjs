@@ -15,6 +15,28 @@ test("single-machine Mongo compose pins image, enables auth, and materializes no
   assert.doesNotMatch(compose, /image:\s+mongo:7\s*$/m);
 });
 
+test("development startup requires an authenticated URI and reuses the credentialed Mongo healthcheck", async () => {
+  const root = new URL("../../../../../../", import.meta.url);
+  const [script, environment] = await Promise.all([
+    readFile(new URL("scripts/start-workbench-server.sh", root), "utf8"),
+    readFile(new URL(".env.example", root), "utf8"),
+  ]);
+  assert.match(script, /workbench_mongodb_uri_missing/);
+  assert.match(script, /--env-file-if-exists=.*\.env/);
+  assert.match(script, /\/opt\/looloomi\/mongo-healthcheck\.sh/);
+  assert.doesNotMatch(script, /MONGODB_URI:-mongodb:\/\/127\.0\.0\.1:27017/);
+  for (const variable of [
+    "WORKBENCH_MONGO_DATA_DIR",
+    "WORKBENCH_MONGO_CONFIG_DIR",
+    "WORKBENCH_SECRETS_DIR",
+    "WORKBENCH_REGISTRATION_OPEN",
+    "WORKBENCH_BOOTSTRAP_ADMIN_TOKEN",
+    "WORKBENCH_SKILL_IMPORT_ROOTS",
+  ]) {
+    assert.match(environment, new RegExp(`^${variable}=`, "m"));
+  }
+});
+
 test("container restore boundary only permits isolated _test targets", async () => {
   const restore = await readFile(new URL("../../../../operations/local/mongo-container/mongo-restore.sh", import.meta.url), "utf8");
   const verify = await readFile(new URL("../../../../operations/local/mongo-container/mongo-verify-restore.sh", import.meta.url), "utf8");
