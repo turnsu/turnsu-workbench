@@ -84,6 +84,40 @@ test("first-version retrieval never invokes the reserved embedding adapter", asy
   assert.equal(calls, 0);
 });
 
+test("retrieval uses memory identity as the final stable ranking tie-break", async () => {
+  const { service, persistence } = fixture();
+  for (const suffix of ["b", "a"]) {
+    persistence.memories.set(`memory-${suffix}`, {
+      schemaVersion: "workbench-v1",
+      memoryId: `memory-${suffix}`,
+      candidateId: `candidate-${suffix}`,
+      workspaceId: "workspace-a",
+      scope: { kind: "workspace" },
+      subject: { kind: "workflow", subjectId: "workflow-a" },
+      statement: "Stable ranking tie.",
+      tags: ["ranking"],
+      source: { kind: "agent", sourceId: `turn-${suffix}`, versionId: null, verified: false },
+      evidence: evidence(),
+      confidence: 0.8,
+      sensitivity: "low",
+      expiresAt: null,
+      status: "active",
+      promotionMode: "manual",
+      policyVersion: "product-memory-v1",
+      createdBy: "user-a",
+      approvedBy: "user-a",
+      createdAt: BASE_TIME,
+      updatedAt: BASE_TIME,
+    });
+  }
+
+  const results = await service.query({
+    query: { scopes: ["workspace"], tags: [], limit: 10 },
+    context: context(),
+  });
+  assert.deepEqual(results.map(({ memory }) => memory.memoryId), ["memory-a", "memory-b"]);
+});
+
 test("Agent and Worker cannot forge canonical verification to auto-promote", async () => {
   const { service, persistence } = fixture();
   for (const actorKind of ["agent", "worker"]) {
@@ -243,9 +277,17 @@ test("TTL filtering and physical deletion preserve only a content-free tombstone
   const durable = [...persistence.memories.values()][0];
   const tombstone = await service.deleteMemory({ memoryId: durable.memoryId, reason: "User requested deletion.", context: context() });
   assert.equal(await persistence.getMemory(durable.memoryId, "workspace-a"), null);
+  assert.equal(await persistence.getCandidate(durable.candidateId, "workspace-a"), null);
   assert.match(tombstone.memoryIdHash, /^sha256:[a-f0-9]{64}$/);
   assert.equal(JSON.stringify(tombstone).includes("concise run summaries"), false);
   assert.equal(Object.hasOwn(tombstone, "memoryId"), false);
+  const events = await persistence.listEvents({ workspaceId: "workspace-a" });
+  assert.deepEqual(events.map(({ type }) => type), [
+    "candidate.submitted",
+    "candidate.approved",
+    "memory.deleted",
+  ]);
+  assert.equal(JSON.stringify(events).includes("concise run summaries"), false);
 });
 
 test("Context Capsule contains bounded summaries and evidence references, not transcripts", async () => {

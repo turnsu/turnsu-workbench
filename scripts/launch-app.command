@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
-# Deterministic launcher: rebuild the current app bundle, start the local agent daemon,
-# then open the latest bundle. This avoids stale .app bundles showing old UI.
+# Legacy-only deterministic launcher. The current product uses the Web
+# Workbench and Product API; this file is retained only for an explicit native
+# compatibility override.
 set -euo pipefail
+
+if [[ "${LOOLOOMI_ENABLE_LEGACY_NATIVE_CLIENT:-0}" != "1" ]]; then
+  echo "旧 Swift 客户端已退出当前产品入口；请启动 Product Workbench（端口 8798）并使用 Web 前端。" >&2
+  exit 64
+fi
 
 SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SOURCE" ]]; do
@@ -30,11 +36,7 @@ else
   fi
 fi
 
-if command -v node >/dev/null 2>&1; then
-  echo "启动本地 Agent daemon…"; "$ROOT_DIR/scripts/start-agent-daemon.sh" || true
-else
-  echo "提示：未找到 Node，daemon 与实时功能不可用（界面仍可打开）。"
-fi
+echo "不启动 legacy Agent daemon；当前生产控制链仅由 Product Workbench 提供。"
 
 if [[ "${LOOLOOMI_NO_OPEN:-0}" == "1" ]]; then
   echo "LOOLOOMI_NO_OPEN=1：已构建到 $APP_DIR，跳过关闭旧进程与 open。"
@@ -54,4 +56,4 @@ sleep 1
 
 echo "打开应用：$APP_DIR"
 open "$APP_DIR"
-echo "完成。可关闭此终端窗口；daemon 在后台独立运行。停止 daemon：scripts/stop-agent-daemon.sh"
+echo "完成。可关闭此终端窗口；没有启动后台 Agent daemon。"

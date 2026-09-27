@@ -4,18 +4,19 @@ import { Sparkles } from "lucide-react";
 import { defaultModelSelection, useModelCatalog } from "../../state/models/index.js";
 import { useAgentSessionController } from "../../state/agents/index.js";
 import { ChatComposer } from "../models/ChatComposer.jsx";
-import { ModelPicker } from "../models/ModelPicker.jsx";
+import { ModelSwitch } from "../models/ModelSwitch.jsx";
 import { StatusPill } from "../shared/StatusPill.jsx";
 
 export function SkillCreatorAgentPanel({ workspace, draft }) {
   const t = workspace.t;
-  const [modelRevisionId, setModelRevisionId] = useState("");
+  const [modelProfileId, setModelProfileId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const catalog = useModelCatalog({
     capabilities: ["chat", "tool_calling", "structured_output"],
     context: "builder",
-    selectedRevisionId: modelRevisionId,
+    selectionKind: "profile",
+    selectedProfileId: modelProfileId,
   });
   const creator = useAgentSessionController({
     workspaceId: workspace.serverState?.workspace?.workspaceId,
@@ -28,16 +29,16 @@ export function SkillCreatorAgentPanel({ workspace, draft }) {
   });
 
   useEffect(() => {
-    if (!modelRevisionId && catalog.profiles.length) {
-      setModelRevisionId(defaultModelSelection(catalog.profiles, "structured_output", "revision"));
+    if (!modelProfileId && catalog.profiles.length) {
+      setModelProfileId(defaultModelSelection(catalog.profiles, "structured_output", "profile"));
     }
-  }, [modelRevisionId, catalog.profiles]);
-  const selectedModel = catalog.options.find((option) => option.value === modelRevisionId);
+  }, [modelProfileId, catalog.profiles]);
+  const selectedModel = catalog.options.find((option) => option.value === modelProfileId);
 
   async function submit() {
     setError("");
     try {
-      await creator.sendMessage(message, modelRevisionId, selectedModel?.profileId);
+      await creator.sendMessage(message, modelProfileId);
       setMessage("");
     } catch (nextError) {
       setError(nextError?.message || t("error.unknown"));
@@ -57,23 +58,25 @@ export function SkillCreatorAgentPanel({ workspace, draft }) {
           ))}
         </ol>
       ) : null}
-      <ModelPicker
+      <ModelSwitch
         options={catalog.options}
+        selectionKind="profile"
         requiredCapabilities={["chat", "tool_calling", "structured_output"]}
-        value={modelRevisionId}
-        onChange={setModelRevisionId}
+        value={modelProfileId}
+        onChange={setModelProfileId}
         label={t("model.builder")}
         hint={t("model.turnPinHint")}
         loading={catalog.isLoading}
         unavailableLabel={t("model.unavailable")}
         historicalLabel={t("model.historical")}
+        groupLabels={{ text: t("model.groupText"), image: t("model.groupImage") }}
         testId="loopops.skill.creator-agent.model"
       />
       <ChatComposer
         value={message}
         onChange={setMessage}
         onSubmit={submit}
-        disabled={!selectedModel || selectedModel.disabled || Boolean(creator.activeTurn) || creator.loading || workspace.readOnlyWorkspace}
+        disabled={!selectedModel || selectedModel.disabled || creator.loading || workspace.readOnlyWorkspace}
         busy={creator.busy}
         label={t("skillCreator.requestLabel")}
         placeholder={t("skillCreator.requestPlaceholder")}

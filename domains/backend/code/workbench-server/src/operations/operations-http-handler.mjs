@@ -1,4 +1,4 @@
-import { collectMongoOperationalMetrics } from "./metrics-registry.mjs";
+import { collectProductOperationalMetrics } from "./metrics-registry.mjs";
 
 const OPERATIONS_PATHS = new Set(["/healthz", "/readyz", "/metrics"]);
 
@@ -31,7 +31,7 @@ export function createOperationsHttpHandler({ readiness, metrics, store, logger,
       observe(req, res, pathname, startedAt);
       return true;
     }
-    if (store) await collectMongoOperationalMetrics({ store, registry: metrics }).catch(() => {});
+    if (store) await collectProductOperationalMetrics({ store, registry: metrics }).catch(() => {});
     const body = metrics.renderPrometheus();
     res.writeHead(200, {
       "content-type": "text/plain; version=0.0.4; charset=utf-8",

@@ -45,6 +45,7 @@ test("real Agent image runs Pi through the product stdio Gateway with no contain
     persistence,
     clock: () => new Date().toISOString(),
     idFactory: (() => { let sequence = 0; return (kind) => `${kind}-${++sequence}`; })(),
+    capacityAuthorizer: { async authorize() { return true; } },
   });
   broker.registerBackend({
     mode: "bounded_agent",
@@ -134,6 +135,7 @@ test("real pi-workflow streams dynamic children into the product timeline before
     persistence,
     clock: () => new Date().toISOString(),
     idFactory: (() => { let sequence = 1000; return (kind) => `${kind}-${++sequence}`; })(),
+    capacityAuthorizer: { async authorize() { return true; } },
   });
   broker.registerBackend({
     mode: "agent_orchestrator",
@@ -145,6 +147,8 @@ test("real pi-workflow streams dynamic children into the product timeline before
     invocationId: "invocation-real-agwab-image",
     attemptId: "attempt-real-agwab-image",
     workspaceId: "workspace-agent-image",
+    actor: { userId: "user-agent-image" },
+    lineage: { productCommandId: "product-command-real-agwab" },
     controller: { kind: "workflow_run", controllerId: "run-real-agwab", fence: 1 },
     mode: "agent_orchestrator",
     isolation: "container",
@@ -163,10 +167,20 @@ test("real pi-workflow streams dynamic children into the product timeline before
       modelProfileRevisionId: "model-revision-agwab-image-1",
       fallbackModelProfileRevisionIds: [],
       modelCapability: "structured_output",
+      admittedChildConcurrency: 2,
     },
   };
 
-  const result = await broker.execute(request);
+  const result = await broker.execute(request, {
+    childCapacityPool: {
+      leases: [1, 2].map((slot) => ({
+        admissionId: `admission-real-agwab-${slot}`,
+        capacityLeaseId: `capacity-lease-real-agwab-${slot}`,
+        fence: 1,
+      })),
+      async release() {},
+    },
+  });
   const invocations = await persistence.listInvocations({ controllerId: "run-real-agwab" });
   const children = invocations.filter((item) => item.parentInvocationId === request.invocationId);
   const parentEvents = persistence.events.get(request.invocationId) ?? [];

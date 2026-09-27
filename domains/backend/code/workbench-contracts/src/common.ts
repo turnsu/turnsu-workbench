@@ -42,6 +42,14 @@ const stableId = (title: string) =>
 export const StableIdSchema = stableId("Stable identifier");
 export const RequestIdSchema = stableId("Request identifier");
 export const WorkspaceIdSchema = stableId("Workspace identifier");
+export const ScopeIdSchema = stableId("Scope identifier");
+export const ProjectIdSchema = stableId("Project identifier");
+export const WorkItemIdSchema = stableId("Work Item identifier");
+export const WorkThreadIdSchema = stableId("Work Thread identifier");
+export const HandoffCapsuleIdSchema = stableId("Handoff Capsule identifier");
+export const WorkItemDecisionIdSchema = stableId("Work Item Decision identifier");
+export const WorkItemAccessGrantIdSchema = stableId("Work Item access grant identifier");
+export const WorkThreadEntryIdSchema = stableId("Work Thread Entry identifier");
 export const SkillIdSchema = stableId("Skill identifier");
 export const TemplateIdSchema = stableId("Template identifier");
 export const WorkflowIdSchema = stableId("Workflow identifier");
@@ -57,6 +65,12 @@ export const EventIdSchema = stableId("Run event identifier");
 export const UserIdSchema = stableId("User identifier");
 export const SessionIdSchema = stableId("Session identifier");
 export const MembershipIdSchema = stableId("Workspace membership identifier");
+export const InvitationIdSchema = stableId("Workspace invitation identifier");
+export const NativeAuthorizationIdSchema = stableId("Native authorization identifier");
+export const ClientSessionIdSchema = stableId("Native client session identifier");
+export const DeviceIdSchema = stableId("Registered device identifier");
+export const NativeAccessTokenIdSchema = stableId("Native access token identifier");
+export const NativeRefreshTokenIdSchema = stableId("Native refresh token identifier");
 export const SkillDraftIdSchema = stableId("Skill draft identifier");
 export const SkillVersionIdSchema = stableId("Skill version identifier");
 export const LoopVersionIdSchema = stableId("Loop version identifier");
@@ -75,11 +89,28 @@ export const EvidenceIdSchema = stableId("Evidence identifier");
 export const InvocationIdSchema = stableId("Execution invocation identifier");
 export const ExecutionAttemptIdSchema = stableId("Execution attempt identifier");
 export const CapabilityLeaseIdSchema = stableId("Capability lease identifier");
+export const ProductCommandIdSchema = stableId("Product command identifier");
+export const PolicyGrantIdSchema = stableId("Policy grant identifier");
+export const PolicyRevisionIdSchema = stableId("Policy revision identifier");
+export const AuthorizationDecisionIdSchema = stableId(
+  "Authorization decision identifier",
+);
+export const SecretBindingIdSchema = stableId("Secret binding identifier");
+export const AutomationIdSchema = stableId("Automation identifier");
+export const AutomationGrantIdSchema = stableId(
+  "Automation grant identifier",
+);
+export const AutomationOccurrenceIdSchema = stableId(
+  "Automation occurrence identifier",
+);
+export const AdmissionIdSchema = stableId("Execution admission identifier");
+export const CapacityLeaseIdSchema = stableId("Capacity lease identifier");
 export const AgentDefinitionIdSchema = stableId("Agent definition identifier");
 export const AgentSessionIdSchema = stableId("Agent session identifier");
 export const AgentTurnIdSchema = stableId("Agent turn identifier");
 export const AgentMessageIdSchema = stableId("Agent message identifier");
 export const AgentBranchIdSchema = stableId("Agent branch identifier");
+export const WorkItemContinuationIdSchema = stableId("Personal Work Item continuation identifier");
 export const MergeConflictIdSchema = stableId("Merge conflict identifier");
 export const MemoryCandidateIdSchema = stableId("Memory candidate identifier");
 export const DurableMemoryIdSchema = stableId("Durable memory identifier");
@@ -90,6 +121,14 @@ export const ModelProfileRevisionIdSchema = stableId(
   "Immutable model profile revision identifier",
 );
 export const ArtifactIdSchema = stableId("Artifact identifier");
+export const AttachmentIdSchema = stableId("Input attachment identifier");
+export const DerivedRepresentationIdSchema = stableId(
+  "Derived attachment representation identifier",
+);
+export const InstallationUpdateDraftIdSchema = stableId(
+  "Installation update draft identifier",
+);
+export const InboxItemIdSchema = stableId("Inbox item identifier");
 
 export const VersionSchema = Type.String({ minLength: 1, maxLength: 64 });
 export const ContentHashSchema = Type.String({
@@ -186,6 +225,7 @@ export const ResourceRefSchema = strictObject(
     resourceId: ResourceIdSchema,
     version: VersionSchema,
     label: Type.String({ minLength: 1, maxLength: 200 }),
+    contentHash: Type.Optional(ContentHashSchema),
   },
   { $id: "ResourceRef" },
 );

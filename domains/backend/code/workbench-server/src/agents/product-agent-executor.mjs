@@ -1,10 +1,14 @@
 import { getBuiltinAgentDefinition } from "./agent-definitions.mjs";
+import { AGENT_MATERIAL_TOOL_ID, AGENT_MATERIAL_TOOL_GUIDANCE } from "../tools/agent-material-tool.mjs";
 
 const DEFAULT_LIMITS = Object.freeze({
   timeoutMs: 120_000,
   maxSteps: 32,
   maxModelRequests: 16,
   maxChildren: 0,
+  maxDepth: 0,
+  maxSpawnedChildren: 0,
+  maxToolResultChars: 320_000,
   maxInputBytes: 1_000_000,
   maxOutputBytes: 1_000_000,
   maxImageCount: 0,
@@ -33,25 +37,30 @@ export function createProductAgentExecutor({
   proposalService = null,
   resolveCapabilities = () => DEFAULT_CAPABILITIES,
   resolveLimits = () => DEFAULT_LIMITS,
+  materialToolsAvailable = false,
 } = {}) {
   if (typeof resolveCapabilities !== "function" || typeof resolveLimits !== "function") {
     throw new TypeError("product_agent_policy_resolver_invalid");
   }
   return Object.freeze({
-    async execute({ session, turn, messages, runWorkers }) {
+    handlesTextAttachments: materialToolsAvailable === true,
+    async execute({ session, turn, messages, runWorkers, signal }) {
       const definition = getBuiltinAgentDefinition(session?.definitionId);
       if (!definition || typeof runWorkers !== "function") {
         throw new ProductAgentExecutorError("product_agent_context_invalid");
       }
+      const capabilities = normalizeCapabilities(resolveCapabilities({ definition, session, turn }));
+      if (definition.kind === "main" && materialToolsAvailable) capabilities.toolAllowlist.push(AGENT_MATERIAL_TOOL_ID);
       const request = buildWorkerRequest({
         definition,
         session,
         turn,
         messages,
-        capabilities: resolveCapabilities({ definition, session, turn }),
+        capabilities,
         limits: resolveLimits({ definition, session, turn }),
       });
       const results = await runWorkers([request]);
+      assertNotAborted(signal);
       const worker = results?.[0];
       if (!worker || worker.status !== "completed") {
         return {
@@ -68,27 +77,40 @@ export function createProductAgentExecutor({
         requestedModelRevisionId: worker.requestedModelRevisionId,
         actualModelRevisionId: worker.actualModelRevisionId,
         artifactRefs: safeArtifactRefs(worker.artifactRefs),
+        usage: safeExecutionUsage(worker.usage),
       };
       if (definition.kind === "main") return { response: output.response, ...routing };
-      if (!proposalService || typeof proposalService.createFromAgent !== "function") {
+      if (!proposalService || typeof proposalService.prepareFromAgent !== "function") {
         return {
           status: "blocked",
           response: "Agent proposal storage is unavailable.",
         };
       }
-      const saved = await proposalService.createFromAgent({
+      assertNotAborted(signal);
+      const prepared = await proposalService.prepareFromAgent({
         session: structuredClone(session),
         turn: structuredClone(turn),
         proposal: output.proposal,
       });
+      assertNotAborted(signal);
       return {
         response: output.response,
-        proposalId: saved.proposalId,
+        proposalId: prepared.proposalId,
+        proposal: prepared,
         ...routing,
         ...(output.handoff ? { handoff: output.handoff } : {}),
       };
     },
   });
+}
+
+function assertNotAborted(signal) {
+  if (!signal?.aborted) return;
+  throw new ProductAgentExecutorError(
+    "agent_turn_cancelled",
+    "The Agent turn was cancelled before its proposal could be committed.",
+    { status: "blocked" },
+  );
 }
 
 function buildWorkerRequest({ definition, session, turn, messages, capabilities, limits }) {
@@ -113,8 +135,10 @@ function buildWorkerRequest({ definition, session, turn, messages, capabilities,
       turn: {
         turnId: turn.turnId,
         message: turn.input.message,
+        ...(turn.input.attachments?.length ? { attachedFileCount: turn.input.attachments.length } : {}),
       },
       transcript: boundedMessages(messages),
+      ...(capabilities.toolAllowlist.includes(AGENT_MATERIAL_TOOL_ID) ? { materialReading: AGENT_MATERIAL_TOOL_GUIDANCE } : {}),
     },
     limits: normalizeLimits(limits),
     capabilities: normalizeCapabilities(capabilities),
@@ -127,17 +151,35 @@ function buildWorkerRequest({ definition, session, turn, messages, capabilities,
     }] : [],
     metadata: {
       definitionId: definition.definitionId,
+      ...(definition.kind === "main" ? { responseFormat: "text" } : {}),
       agentSessionId: session.sessionId,
       agentTurnId: turn.turnId,
       modelProfileRevisionId: turn.requestedModelRevisionId,
       modelCapability: turn.modelCapability ?? "tool_calling",
       fallbackModelProfileRevisionIds: [],
+      ...(toolApprovalResume(turn.toolApprovalResume)),
       ...(moduleScope ? {
         objectKind: moduleScope.objectKind,
         objectId: moduleScope.objectId,
         branchId: moduleScope.branchId,
         proposalKind: moduleScope.objectKind,
       } : {}),
+    },
+  };
+}
+
+function toolApprovalResume(value) {
+  if (!isObject(value)
+    || typeof value.approvalId !== "string" || !value.approvalId
+    || typeof value.toolId !== "string" || !value.toolId
+    || typeof value.inputDigest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(value.inputDigest)) {
+    return {};
+  }
+  return {
+    toolApprovalResume: {
+      approvalId: value.approvalId,
+      toolId: value.toolId,
+      inputDigest: value.inputDigest,
     },
   };
 }
@@ -185,11 +227,17 @@ function validateWorkerOutput(output, kind) {
 }
 
 function boundedMessages(messages) {
-  return (Array.isArray(messages) ? messages : []).slice(-100).map((message) => ({
+  const normalized = (Array.isArray(messages) ? messages : []).map((message) => ({
     role: ["user", "assistant", "system"].includes(message?.role) ? message.role : "user",
     kind: typeof message?.kind === "string" ? message.kind.slice(0, 64) : "turn",
     content: String(message?.content ?? "").slice(0, 20_000),
   }));
+  // The persisted Work Item continuation context is the only synthetic
+  // message kind. Reserve it even after a long personal Session so the
+  // receiving member never silently loses the safe Handoff boundary.
+  const handoff = normalized.filter((message) => message.kind === "work_item_handoff").slice(-1);
+  const remaining = normalized.filter((message) => message.kind !== "work_item_handoff");
+  return [...handoff, ...remaining.slice(-(100 - handoff.length))];
 }
 
 function normalizeLimits(value) {
@@ -230,6 +278,27 @@ function safeArtifactRefs(value) {
     if (result.length >= 256) break;
   }
   return result;
+}
+
+function safeExecutionUsage(value) {
+  const usage = isObject(value) ? value : {};
+  return {
+    steps: boundedInteger(usage.steps),
+    modelRequests: boundedInteger(usage.modelRequests),
+    inputBytes: boundedInteger(usage.inputBytes),
+    outputBytes: boundedInteger(usage.outputBytes),
+    imageCount: boundedInteger(usage.imageCount, 16),
+    costUsdMicros: boundedInteger(usage.costUsdMicros, 1_000_000_000_000),
+    ...(Object.hasOwn(usage, "inputTokens") ? { inputTokens: boundedInteger(usage.inputTokens, 10_000_000_000) } : {}),
+    ...(Object.hasOwn(usage, "outputTokens") ? { outputTokens: boundedInteger(usage.outputTokens, 10_000_000_000) } : {}),
+    ...(Object.hasOwn(usage, "totalTokens") ? { totalTokens: boundedInteger(usage.totalTokens, 20_000_000_000) } : {}),
+  };
+}
+
+function boundedInteger(value, maximum = Number.MAX_SAFE_INTEGER) {
+  return Number.isSafeInteger(value) && value >= 0
+    ? Math.min(value, maximum)
+    : 0;
 }
 
 function isObject(value) {

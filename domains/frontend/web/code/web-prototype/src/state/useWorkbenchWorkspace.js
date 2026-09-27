@@ -1,11 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 
+import {
+  canCancelRun,
+  canRepeatOrRetryRun,
+  isTerminalRunStatus,
+} from "../api/client.js";
 import { translate } from "../i18n.js";
+import { loadWorkflowConflictSnapshot, useSkillTestRunQuery } from "../api/queries.js";
 import { EDITOR_ACTIONS, revisionToEditorDraft, useWorkflowEditor } from "./editor/index.js";
 import {
   addPaletteNodeToDraft,
   addMaterialToDraft,
   addSkillToDraft,
+  bindDraftNodeInput,
   connectDraftNodes,
   deleteDraftNode,
   moveDraftNode,
@@ -25,7 +32,6 @@ import {
 import { useWorkbenchServerState } from "./server/useWorkbenchServerState.js";
 import { useWorkspaceUi } from "./ui/useWorkspaceUi.js";
 
-const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
 const idFactory = (kind) => `${kind}-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
 const mutationKey = (candidate) => typeof candidate === "string" && candidate
   ? candidate
@@ -56,29 +62,47 @@ function previewFromEditor(state, nodes, t) {
   };
 }
 
-export function useWorkbenchWorkspace() {
-  const ui = useWorkspaceUi();
+function stagedProposalFromLocation() {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("proposal") || "";
+}
+
+function replaceStagedProposalLocation(proposalId = "") {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (proposalId) url.searchParams.set("proposal", proposalId);
+  else url.searchParams.delete("proposal");
+  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+export function useWorkbenchWorkspace({
+  preferenceScope = "anonymous",
+  feature = "loops",
+  navigationKey = "",
+} = {}) {
+  const ui = useWorkspaceUi({ preferenceScope });
   const [selectedWorkflowId, setSelectedWorkflowId] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [builderSelection, setBuilderSelection] = useState({ kind: "template", id: "" });
-  const [builderInitialTab, setBuilderInitialTab] = useState("canvas");
-  const [createLoopInitialMode, setCreateLoopInitialMode] = useState("goal");
+  const [builderInitialTab, setBuilderInitialTab] = useState("definition");
+  const [createLoopInitialMode, setCreateLoopInitialMode] = useState("choose");
   const [createLoopPrefill, setCreateLoopPrefill] = useState(null);
   const [selectedSkillId, setSelectedSkillId] = useState("");
   const [selectedManagedSkillId, setSelectedManagedSkillId] = useState("");
   const [selectedResourceId, setSelectedResourceId] = useState("");
   const [activeRunId, setActiveRunId] = useState("");
-  const [comparisonRunId, setComparisonRunId] = useState("");
   const [selectedLoopIds, setSelectedLoopIds] = useState([]);
   const [templateNodeId, setTemplateNodeId] = useState("");
   const [connectionStartNodeId, setConnectionStartNodeId] = useState("");
   const [runInputs, setRunInputs] = useState({});
+  const [runMaterialBindings, setRunMaterialBindings] = useState({});
   const [savedAt, setSavedAt] = useState("");
-  const [composer, setComposer] = useState("");
-  const [loopImportDialogOpen, setLoopImportDialogOpen] = useState(false);
   const [createSkillDialogOpen, setCreateSkillDialogOpen] = useState(false);
   const [createSkillDialogMode, setCreateSkillDialogMode] = useState("create");
+  const [pendingSkillSmokeTest, setPendingSkillSmokeTest] = useState(null);
   const [createResourceDialogOpen, setCreateResourceDialogOpen] = useState(false);
+  const [createResourceIntent, setCreateResourceIntent] = useState("builder");
+  const [lastCreatedResourceId, setLastCreatedResourceId] = useState("");
   const [skillUpdateDialog, setSkillUpdateDialog] = useState(null);
   const [retireSkillDialog, setRetireSkillDialog] = useState(null);
   const [pendingSkillPackage, setPendingSkillPackage] = useState(null);
@@ -87,24 +111,81 @@ export function useWorkbenchWorkspace() {
   const [builderProposal, setBuilderProposal] = useState(null);
   const [builderProposalError, setBuilderProposalError] = useState("");
   const [creationProposalContext, setCreationProposalContext] = useState(null);
+  const [creationProposalDraft, setCreationProposalDraft] = useState(null);
+  const [restoredProposalId, setRestoredProposalId] = useState("");
+  const [stagedProposalRestoreFailedId, setStagedProposalRestoreFailedId] = useState("");
   const requestedManagedSkillId = ui.route.skillId || selectedManagedSkillId;
   const server = useWorkbenchServerState({
+    feature,
+    activePage: ui.activePage,
     selectedWorkflowId: ui.route.loopId || selectedWorkflowId,
     selectedManagedSkillId: requestedManagedSkillId,
     activeRunId: ui.route.runId || activeRunId,
-    comparisonRunId,
-    targetSkillVersionId: ui.route.skillVersionId || "",
   });
   const editor = useWorkflowEditor(server.revision, server.workflowEtag);
   const runStream = useRunStream(activeRunId);
 
   const t = (key, replacements) => translate(ui.locale, key, replacements);
+
+  async function restoreStagedCreationProposal(proposalId) {
+    setBuilderProposalError("");
+    setStagedProposalRestoreFailedId("");
+    try {
+      const result = await server.mutations.loadStagedLoopProposal.mutateAsync({ proposalId });
+      const proposal = result.data;
+      setBuilderProposal(proposal);
+      setCreationProposalDraft(proposal.draft);
+      setCreationProposalContext({
+        title: proposal.draft.name,
+        proposalId,
+        instruction: "",
+        modelProfileId: "",
+        details: {
+          name: proposal.draft.name,
+          definition: proposal.draft.definition,
+        },
+      });
+      return proposal;
+    } catch (error) {
+      setStagedProposalRestoreFailedId(proposalId);
+      setBuilderProposalError(messageForError(error));
+      ui.pushToast(messageForError(error));
+      return null;
+    }
+  }
+
+  useEffect(() => {
+    if (ui.activePage !== "create-loop" || builderProposal) return;
+    const proposalId = stagedProposalFromLocation();
+    if (!proposalId || restoredProposalId === proposalId) return;
+    setRestoredProposalId(proposalId);
+    void restoreStagedCreationProposal(proposalId);
+  }, [builderProposal, navigationKey, restoredProposalId, ui.activePage]);
+
+  useEffect(() => {
+    if (stagedProposalFromLocation()) return;
+    setRestoredProposalId("");
+    setStagedProposalRestoreFailedId("");
+  }, [navigationKey, ui.activePage, ui.route.loopId]);
+
+  useEffect(() => {
+    if (ui.activePage !== "create-loop" || stagedProposalFromLocation()) return;
+    const requestedMode = new URLSearchParams(globalThis.location?.search || "").get("mode");
+    if (!requestedMode) return;
+    const normalized = {
+      document: "goal",
+      goal: "goal",
+      blank: "blank",
+    }[requestedMode];
+    if (normalized) setCreateLoopInitialMode(normalized);
+  }, [navigationKey, ui.activePage]);
   const skills = useMemo(() => server.skills.map(skillDefinitionToView), [server.skills]);
   const managedSkills = useMemo(() => server.skillAssets
     .map(skillAssetSummaryToView)
     .filter(Boolean), [server.skillAssets]);
   const templates = useMemo(() => server.templates.map(workflowTemplateToView), [server.templates]);
   const resources = server.resources;
+  const connections = server.connections;
   const selectedDraftRevision = editableRevision(server.revision, editor.state?.draft);
   const workflows = useMemo(() => server.workflows.map((workflow) => {
     const revision = workflow.workflowId === selectedWorkflowId ? selectedDraftRevision : null;
@@ -123,15 +204,14 @@ export function useWorkbenchWorkspace() {
     const latestReleaseIds = latestTeamReleaseIds(server.teamLibrary);
     return server.teamLibrary.map((release) => {
       const workflow = server.workflows.find((item) => item.workflowId === release.assetId);
-      const compatibilitySkill = server.skills.find((item) => item.skillId === release.assetId);
-      const skillAsset = server.skillAssets.find((item) => item.skill?.skillId === release.assetId);
-      const skill = skillAsset?.latestVersion || skillAsset?.draft || compatibilitySkill;
+      const skillDetails = release.skillSummary || null;
+      const skill = skillDetails;
       const installation = server.installations.find((item) => (
         item.assetKind === release.assetKind && item.upstreamAssetId === release.assetId && item.state !== "removed"
       )) || null;
       return {
         ...release,
-        title: workflow?.name || skill?.name || release.assetId,
+        title: workflow?.name || skill?.name || (release.assetKind === "skill" ? "团队技能" : "团队工作流"),
         description: workflow?.description || skill?.description || release.releaseNotes || "",
         versionLabel: release.version || skill?.version || release.versionId,
         installation,
@@ -141,7 +221,7 @@ export function useWorkbenchWorkspace() {
           && latestReleaseIds.get(`${release.assetKind}:${release.assetId}`) === release.releaseId
           && installation.pinnedVersionId !== release.versionId
         ),
-        skillDetails: skill ? skillDefinitionToView({ ...skill, status: "ready" }) : null,
+        skillDetails,
       };
     });
   }, [server.teamLibrary, server.installations, server.workflows, server.skills, server.skillAssets]);
@@ -167,12 +247,12 @@ export function useWorkbenchWorkspace() {
   useEffect(() => {
     const fields = editor.state?.draft?.inputForm?.fields || [];
     setRunInputs((current) => Object.fromEntries(fields.map((field) => [field.fieldId, current[field.fieldId] ?? ""])));
+    setRunMaterialBindings({});
   }, [editor.state?.baseRevision?.revisionId]);
 
   useEffect(() => {
     setBuilderProposal(null);
     setBuilderProposalError("");
-    setComposer("");
   }, [editor.state?.workflowId, editor.state?.baseRevision?.revisionId]);
 
   useEffect(() => {
@@ -193,7 +273,6 @@ export function useWorkbenchWorkspace() {
     }
     if (route.runId && route.runId !== activeRunId) {
       setActiveRunId(route.runId);
-      setComparisonRunId("");
     }
   }, [ui.route, server.workflows, activeRunId]);
 
@@ -218,9 +297,16 @@ export function useWorkbenchWorkspace() {
   const skillLifecycleKey = selectedSkillDraft
     ? `${selectedSkillDraft.skillId}:${selectedSkillDraft.skillDraftId}:${selectedSkillDraft.revision}`
     : "";
-  const selectedSkillLifecycle = skillLifecycleByDraft[skillLifecycleKey] || {
+  const savedSkillLifecycle = skillLifecycleByDraft[skillLifecycleKey] || {
     testRun: null,
     validation: null,
+  };
+  const skillTestQuery = useSkillTestRunQuery(selectedSkillDraft?.skillId, savedSkillLifecycle.testRun?.testRunId);
+  const selectedSkillLifecycle = {
+    ...savedSkillLifecycle,
+    testRun: skillTestQuery.data?.data || savedSkillLifecycle.testRun,
+    refreshError: skillTestQuery.isError,
+    refresh: skillTestQuery.refetch,
   };
   const selectedNodeId = selectedLoop?.type === "LoopTemplate"
     ? templateNodeId || selectedLoop.workflow?.nodes?.[0]?.id || ""
@@ -264,7 +350,7 @@ export function useWorkbenchWorkspace() {
       () => pendingSkillAdd.nodeId,
     ));
     editor.selectNode(pendingSkillAdd.nodeId);
-    setBuilderInitialTab("canvas");
+    setBuilderInitialTab("outline");
     navigateToPage("builder", { loopId: pendingSkillAdd.loopId, replace: true });
     ui.pushToast(t("toast.addedToWorkflow", {
       nodeTitle: pendingSkillAdd.skill.name,
@@ -308,33 +394,6 @@ export function useWorkbenchWorkspace() {
     }
   }
 
-  async function useTemplate(templateId, afterCreate, retryKey) {
-    const template = server.templates.find((item) => item.templateId === templateId);
-    if (!template) return null;
-    const idempotencyKey = mutationKey(retryKey);
-    try {
-      const result = await server.mutations.useTemplate.mutateAsync({
-        templateId,
-        data: { templateVersion: template.templateVersion, name: t("workflow.copyName", { title: template.name }) },
-        idempotencyKey,
-      });
-      const { workflow, revision } = result.data;
-      setSelectedWorkflowId(workflow.workflowId);
-      setBuilderSelection({ kind: "workflow", id: workflow.workflowId });
-      editor.loadRevision(revision, result.etag);
-      if (afterCreate) {
-        const nextDraft = afterCreate(revisionToEditorDraft(revision));
-        editor.replaceDraftValue(nextDraft);
-      }
-      navigateToPage("builder", { loopId: workflow.workflowId });
-      ui.pushToast(t("toast.templateUsed", { title: template.name }));
-      return result;
-    } catch (error) {
-      ui.pushToast(messageForError(error), t("actions.retry"), () => useTemplate(templateId, afterCreate, idempotencyKey));
-      return null;
-    }
-  }
-
   function workflowCreationPayload(details) {
     const name = String(details?.name || "").trim();
     const goal = String(details?.goal || "").trim();
@@ -358,6 +417,8 @@ export function useWorkbenchWorkspace() {
 
   async function createWorkflow(details = null, retryKey) {
     if (!details) {
+      setCreateLoopInitialMode("choose");
+      setCreateLoopPrefill(null);
       navigateToPage("create-loop");
       return null;
     }
@@ -379,7 +440,7 @@ export function useWorkbenchWorkspace() {
           () => queued.nodeId,
         ));
         editor.selectNode(queued.nodeId);
-        setBuilderInitialTab("canvas");
+        setBuilderInitialTab("outline");
         setPendingSkillAdd(null);
         ui.pushToast(t("toast.addedToWorkflow", { nodeTitle: queued.skill.name, loopTitle: workflow.name }));
       }
@@ -392,178 +453,66 @@ export function useWorkbenchWorkspace() {
     }
   }
 
-  async function createWorkflowProposal(details, modelProfileRevisionId = "", retryKey) {
+  async function createWorkflowProposal(details, modelProfileId = "", retryKey) {
     const data = workflowCreationPayload(details);
     if (!data) return null;
-    const createIdempotencyKey = mutationKey(retryKey?.createKey);
     const proposalIdempotencyKey = mutationKey(retryKey?.proposalKey);
     setBuilderProposalError("");
+    const instruction = [
+      "Design a runnable Loop draft from this document. Propose meaningful nodes, dependencies, inputs, outputs, and parameters without creating a stored Loop.",
+      data.definition.goal,
+      data.definition.expectedResult ? `Expected result: ${data.definition.expectedResult}` : "",
+      data.definition.context ? `Context: ${data.definition.context}` : "",
+      data.definition.constraints.length ? `Constraints: ${data.definition.constraints.join("; ")}` : "",
+    ].filter(Boolean).join("\n");
+    setCreationProposalContext({
+      title: data.name,
+      instruction,
+      modelProfileId,
+      details: data,
+    });
     try {
-      const created = await server.mutations.createLoop.mutateAsync({ data, idempotencyKey: createIdempotencyKey });
-      const { workflow, revision } = created.data;
-      setSelectedWorkflowId(workflow.workflowId);
-      setBuilderSelection({ kind: "workflow", id: workflow.workflowId });
-      editor.loadRevision(revision, created.etag);
-      const instruction = [
-        "For this new empty workflow, propose a definition-only change. Use exactly one updateDefinition operation, preserve all seven definition fields, and do not add graph nodes yet.",
-        data.definition.goal,
-        data.definition.expectedResult ? `Expected result: ${data.definition.expectedResult}` : "",
-        data.definition.context ? `Context: ${data.definition.context}` : "",
-        data.definition.constraints.length ? `Constraints: ${data.definition.constraints.join("; ")}` : "",
-      ].filter(Boolean).join("\n");
-      setCreationProposalContext({ workflowId: workflow.workflowId, title: workflow.name, etag: created.etag, instruction, modelProfileRevisionId });
-      const proposal = await server.mutations.generateLoopProposal.mutateAsync({
-        workflowId: workflow.workflowId,
-        ifMatch: created.etag,
+      const proposal = await server.mutations.generateStagedLoopProposal.mutateAsync({
         idempotencyKey: proposalIdempotencyKey,
-        data: { instruction, ...(modelProfileRevisionId ? { modelProfileRevisionId } : {}) },
+        data: {
+          name: data.name,
+          sourceText: instruction,
+          definition: data.definition,
+          ...(modelProfileId ? { modelProfileId } : {}),
+        },
       });
       setBuilderProposal(proposal.data);
-      return { created, proposal: proposal.data };
+      setCreationProposalDraft(proposal.data.draft);
+      setCreationProposalContext((current) => ({ ...current, proposalId: proposal.data.proposalId }));
+      replaceStagedProposalLocation(proposal.data.proposalId);
+      return { proposal: proposal.data };
     } catch (error) {
       setBuilderProposalError(messageForError(error));
-      return { failed: true, createKey: createIdempotencyKey, proposalKey: proposalIdempotencyKey };
+      return { failed: true, proposalKey: proposalIdempotencyKey };
     }
   }
 
   async function retryCreationProposal(retryKey) {
-    if (!creationProposalContext?.workflowId || !creationProposalContext?.instruction) return null;
+    if (!creationProposalContext?.instruction || !creationProposalContext?.details) return null;
     const idempotencyKey = mutationKey(retryKey);
     setBuilderProposalError("");
     try {
-      const proposal = await server.mutations.generateLoopProposal.mutateAsync({
-        workflowId: creationProposalContext.workflowId,
-        ifMatch: creationProposalContext.etag,
+      const proposal = await server.mutations.generateStagedLoopProposal.mutateAsync({
         idempotencyKey,
         data: {
-          instruction: creationProposalContext.instruction,
-          ...(creationProposalContext.modelProfileRevisionId ? { modelProfileRevisionId: creationProposalContext.modelProfileRevisionId } : {}),
+          name: creationProposalContext.details.name,
+          sourceText: creationProposalContext.instruction,
+          definition: creationProposalContext.details.definition,
+          ...(creationProposalContext.modelProfileId ? { modelProfileId: creationProposalContext.modelProfileId } : {}),
         },
       });
       setBuilderProposal(proposal.data);
+      setCreationProposalDraft(proposal.data.draft);
+      setCreationProposalContext((current) => ({ ...current, proposalId: proposal.data.proposalId }));
+      replaceStagedProposalLocation(proposal.data.proposalId);
       return proposal.data;
     } catch (error) {
       setBuilderProposalError(messageForError(error));
-      return null;
-    }
-  }
-
-  async function duplicateWorkflow(workflowId, retryKey) {
-    const source = workflows.find((workflow) => workflow.id === workflowId && workflow.type === "LoopWorkflow") || null;
-    if (!source) return null;
-    if (editor.state?.workflowId === source.id && editor.state.dirty) {
-      ui.pushToast(t("error.save_before_compile"));
-      return null;
-    }
-    const idempotencyKey = mutationKey(retryKey);
-    try {
-      const result = await server.mutations.duplicateLoop.mutateAsync({
-        workflowId: source.id,
-        data: { name: t("workflow.copyName", { title: source.title }) },
-        idempotencyKey,
-      });
-      const { workflow, revision } = result.data;
-      setSelectedWorkflowId(workflow.workflowId);
-      setBuilderSelection({ kind: "workflow", id: workflow.workflowId });
-      editor.loadRevision(revision, result.etag);
-      navigateToPage("builder", { loopId: workflow.workflowId });
-      ui.pushToast(t("toast.workflowCopied", { title: workflow.name }));
-      return result;
-    } catch (error) {
-      ui.pushToast(messageForError(error), t("actions.retry"), () => duplicateWorkflow(workflowId, idempotencyKey));
-      return null;
-    }
-  }
-
-  async function duplicateSelectedWorkflow(retryKey) {
-    return duplicateWorkflow(selectedLoop?.id, retryKey);
-  }
-
-  async function inspectPortableLoop(file, onProgress, retryKey) {
-    const idempotencyKey = mutationKey(retryKey);
-    try {
-      return await server.mutations.inspectLoopPackage.mutateAsync({
-        data: { file },
-        idempotencyKey,
-        onProgress,
-      });
-    } catch (error) {
-      return { failed: true, error, idempotencyKey };
-    }
-  }
-
-  async function loadPortableLoopOptions(portableLoop) {
-    try {
-      return await server.mutations.loadLoopImportOptions.mutateAsync({ portableLoop });
-    } catch (error) {
-      return { failed: true, error };
-    }
-  }
-
-  async function refreshPortableLoopImport(importId) {
-    try {
-      const result = await server.mutations.refreshLoopImport.mutateAsync(importId);
-      return { upload: null, loopImport: result.data, etag: result.etag };
-    } catch (error) {
-      return { failed: true, error };
-    }
-  }
-
-  async function commitPortableLoopImport(loopImport, mappings, retryKey) {
-    const idempotencyKey = mutationKey(retryKey);
-    try {
-      const result = await server.mutations.commitLoopImport.mutateAsync({
-        importId: loopImport.loopImport.importId,
-        ifMatch: loopImport.etag,
-        idempotencyKey,
-        data: mappings,
-      });
-      const { workflow, revision } = result.data;
-      setLoopImportDialogOpen(false);
-      setSelectedWorkflowId(workflow.workflowId);
-      setBuilderSelection({ kind: "workflow", id: workflow.workflowId });
-      editor.loadRevision(revision, result.etag);
-      setBuilderInitialTab("definition");
-      navigateToPage("builder", { loopId: workflow.workflowId });
-      ui.pushToast(t("toast.loopImported", { title: workflow.name }));
-      return result;
-    } catch (error) {
-      return { failed: true, error, idempotencyKey };
-    }
-  }
-
-  async function exportSelectedLoop(retryKey) {
-    const loop = selectedWorkflow;
-    const revisionId = loop?.currentRevisionId;
-    if (!loop || !revisionId) {
-      ui.pushToast(t("loopTransfer.exportUnavailable"));
-      return null;
-    }
-    try {
-      const result = await server.mutations.exportLoop.mutateAsync({
-        workflowId: loop.id,
-        revisionId,
-        retryKey,
-      });
-      if (!result.bytes) {
-        ui.pushToast(t("loopTransfer.exportUnchanged"));
-        return result;
-      }
-      const blob = new Blob([result.bytes], { type: result.mediaType });
-      const url = globalThis.URL?.createObjectURL?.(blob);
-      if (!url) throw new Error("download_unavailable");
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = result.filename;
-      link.hidden = true;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      globalThis.setTimeout?.(() => globalThis.URL.revokeObjectURL(url), 0);
-      ui.pushToast(t("toast.loopExported", { title: loop.title }));
-      return result;
-    } catch (error) {
-      ui.pushToast(messageForError(error), error?.status === 403 ? t("permissions.copyRequest") : t("actions.retry"), error?.status === 403 ? requestWorkspaceAccess : () => exportSelectedLoop(retryKey));
       return null;
     }
   }
@@ -586,23 +535,24 @@ export function useWorkbenchWorkspace() {
     const nodeId = idFactory("node");
     const add = (draft) => addSkillToDraft(draft, skill, position, () => nodeId);
     if (templateId) {
-      useTemplate(templateId, add).then((result) => {
-        if (result) editor.selectNode(nodeId);
-      });
+      setPendingSkillAdd({ skill, loopId: "", position, nodeId });
+      setCreateLoopInitialMode("goal");
+      setCreateLoopPrefill({ goal: t("loopCreate.addSkillGoal", { skill: skill.name }) });
+      navigateToPage("create-loop");
       return;
     }
     if (loopId !== selectedWorkflowId || !editor.state) {
       setSelectedWorkflowId(loopId);
       setBuilderSelection({ kind: "workflow", id: loopId });
       setPendingSkillAdd({ skill, loopId, position, nodeId });
-      setBuilderInitialTab("canvas");
+      setBuilderInitialTab("outline");
       navigateToPage("builder", { loopId });
       return;
     }
     editor.replaceDraft(add);
     editor.selectNode(nodeId);
     navigateToPage("builder", { loopId: selectedWorkflowId });
-    ui.pushToast(t("toast.addedToWorkflow", { nodeTitle: skill.name, loopTitle: selectedWorkflow?.title || "" }));
+    if (ui.activePage !== "builder") ui.pushToast(t("toast.addedToWorkflow", { nodeTitle: skill.name, loopTitle: selectedWorkflow?.title || "" }));
   }
 
   function addSkillToLoop(skillId, loopId = selectedWorkflowId, position = null) {
@@ -624,9 +574,7 @@ export function useWorkbenchWorkspace() {
     const nodeId = idFactory("node");
     const add = (draft) => addPaletteNodeToDraft(draft, resource, position, () => nodeId);
     if (selectedLoop?.type === "LoopTemplate") {
-      useTemplate(selectedLoop.id, add).then((result) => {
-        if (result) editor.selectNode(nodeId);
-      });
+      ui.pushToast(t("feature.createWorkflowUnavailable"));
       return;
     }
     if (!editor.state) return;
@@ -640,29 +588,36 @@ export function useWorkbenchWorkspace() {
     const nodeId = idFactory("node");
     const add = (draft) => addMaterialToDraft(draft, resource, position, () => nodeId);
     if (selectedLoop?.type === "LoopTemplate") {
-      useTemplate(selectedLoop.id, (draft) => add(draft)).then((result) => {
-        if (result) editor.selectNode(nodeId);
-      });
+      ui.pushToast(t("feature.createWorkflowUnavailable"));
       return;
     }
     if (!editor.state) return;
     editor.replaceDraft(add);
     editor.selectNode(nodeId);
-    ui.pushToast(t("toast.addedMaterial", { title: resource.label }));
+    if (ui.activePage !== "builder") ui.pushToast(t("toast.addedMaterial", { title: resource.label }));
   }
 
   async function createTextResource(data, retryKey) {
     const idempotencyKey = mutationKey(retryKey);
-    try {
-      const result = await server.mutations.createResource.mutateAsync({ data, idempotencyKey });
-      setSelectedResourceId(result.data.resourceId);
-      addResourceToLoop(result.data);
-      setCreateResourceDialogOpen(false);
-      return result.data;
-    } catch (error) {
-      ui.pushToast(messageForError(error), t("actions.retry"), () => createTextResource(data, idempotencyKey));
-      return null;
-    }
+    const result = await server.mutations.createResource.mutateAsync({ data, idempotencyKey });
+    return result.data;
+  }
+
+  async function createResourceFromAttachment(data, retryKey) {
+    const idempotencyKey = mutationKey(retryKey);
+    const result = await server.mutations.createResourceFromAttachment.mutateAsync({
+      data,
+      idempotencyKey,
+    });
+    return result.data;
+  }
+
+  function completeResourceCreation(resource) {
+    if (!resource?.resourceId) return;
+    setSelectedResourceId(resource.resourceId);
+    setLastCreatedResourceId(resource.resourceId);
+    if (createResourceIntent === "builder") addResourceToLoop(resource);
+    setCreateResourceDialogOpen(false);
   }
 
   async function saveWorkspace(retryKey) {
@@ -689,10 +644,12 @@ export function useWorkbenchWorkspace() {
       });
       editor.saveSucceeded(result.data.revision, result.etag);
       setSavedAt(result.data.revision.updatedAt);
-      ui.pushToast(t("toast.workflowSaved"));
+      if (ui.activePage !== "builder") ui.pushToast(t("toast.workflowSaved"));
+      return result;
     } catch (error) {
       editor.saveFailed(error);
       ui.pushToast(messageForError(error), t("actions.retry"), () => saveWorkspace(idempotencyKey));
+      return null;
     }
   }
 
@@ -728,8 +685,9 @@ export function useWorkbenchWorkspace() {
   async function reloadLatestWorkflow() {
     if (!editor.state?.workflowId) return false;
     try {
-      const result = await server.reloadWorkflow();
-      if (!result?.data?.data?.currentRevisionId) throw new Error("workflow_reload_failed");
+      const snapshot = await loadWorkflowConflictSnapshot(editor.state.workflowId);
+      editor.loadRevision(snapshot.revision, snapshot.etag);
+      await server.reloadWorkflow();
       ui.pushToast(t("toast.latestWorkflowLoaded"));
       return true;
     } catch (error) {
@@ -761,50 +719,28 @@ export function useWorkbenchWorkspace() {
     }
   }
 
-  async function generateBuilderProposal(instruction = composer, modelProfileRevisionId = "", retryKey) {
-    const value = String(instruction || "").trim();
-    if (!editor.state || selectedLoop?.type !== "LoopWorkflow" || !value) return null;
-    if (editor.state.dirty) {
-      setBuilderProposalError(t("builder.assistantSaveFirst"));
-      return null;
-    }
-    const idempotencyKey = mutationKey(retryKey);
-    setBuilderProposalError("");
-    try {
-      const result = await server.mutations.generateLoopProposal.mutateAsync({
-        workflowId: editor.state.workflowId,
-        ifMatch: editor.state.serverEtag,
-        idempotencyKey,
-        data: { instruction: value, ...(modelProfileRevisionId ? { modelProfileRevisionId } : {}) },
-      });
-      setBuilderProposal(result.data);
-      setComposer("");
-      return result.data;
-    } catch (error) {
-      setBuilderProposalError(messageForError(error));
-      return null;
-    }
-  }
-
   async function applyBuilderProposal(retryKey) {
-    if (!builderProposal || !editor.state?.serverEtag) return null;
+    if (builderProposal?.kind !== "staged_loop_draft") return null;
     const idempotencyKey = mutationKey(retryKey);
     setBuilderProposalError("");
+    if (!creationProposalDraft) return null;
     try {
-      const result = await server.mutations.applyLoopProposal.mutateAsync({
-        workflowId: editor.state.workflowId,
+      const result = await server.mutations.commitStagedLoopProposal.mutateAsync({
         proposalId: builderProposal.proposalId,
-        ifMatch: editor.state.serverEtag,
         idempotencyKey,
-        data: { baseRevisionId: builderProposal.baseRevisionId },
+        data: { draft: creationProposalDraft },
       });
-      editor.loadRevision(result.revision, result.etag);
+      const { workflow, revision } = result.data;
+      setSelectedWorkflowId(workflow.workflowId);
+      setBuilderSelection({ kind: "workflow", id: workflow.workflowId });
+      editor.loadRevision(revision, result.etag);
       setBuilderProposal(null);
+      setCreationProposalDraft(null);
+      setCreationProposalContext(null);
+      setRestoredProposalId("");
+      replaceStagedProposalLocation();
+      navigateToPage("builder", { loopId: workflow.workflowId });
       ui.pushToast(t("toast.builderChangesApplied"));
-      if (creationProposalContext?.workflowId === result.workflow.workflowId) {
-        setCreationProposalContext(null);
-        navigateToPage("builder", { loopId: result.workflow.workflowId });
-      }
       return result;
     } catch (error) {
       setBuilderProposalError(messageForError(error));
@@ -813,23 +749,19 @@ export function useWorkbenchWorkspace() {
   }
 
   async function dismissBuilderProposal(retryKey) {
-    if (!builderProposal || !editor.state?.serverEtag) return null;
+    if (builderProposal?.kind !== "staged_loop_draft") return null;
     const idempotencyKey = mutationKey(retryKey);
     setBuilderProposalError("");
     try {
-      const result = await server.mutations.dismissLoopProposal.mutateAsync({
-        workflowId: editor.state.workflowId,
+      const result = await server.mutations.dismissStagedLoopProposal.mutateAsync({
         proposalId: builderProposal.proposalId,
-        ifMatch: editor.state.serverEtag,
         idempotencyKey,
-        data: { baseRevisionId: builderProposal.baseRevisionId },
       });
       setBuilderProposal(null);
-      if (creationProposalContext?.workflowId === editor.state.workflowId) {
-        const workflowId = creationProposalContext.workflowId;
-        setCreationProposalContext(null);
-        navigateToPage("builder", { loopId: workflowId });
-      }
+      setCreationProposalDraft(null);
+      setCreationProposalContext(null);
+      setRestoredProposalId("");
+      replaceStagedProposalLocation();
       return result.data;
     } catch (error) {
       setBuilderProposalError(messageForError(error));
@@ -839,78 +771,57 @@ export function useWorkbenchWorkspace() {
 
   async function publishSelectedLoop(details, retryKey) {
     if (!editor.state || editor.state.dirty) { ui.pushToast(t("error.save_before_compile")); return null; }
-    const compile = await compileSelectedWorkflow(mutationKey());
-    if (compile?.status !== "ready") return null;
+    // Publication must retain the exact plan that passed its test run.
+    // Recompiling here would replace that plan and invalidate the evidence.
+    const idempotencyKey = mutationKey(retryKey);
     try {
       const result = await server.mutations.publishLoop.mutateAsync({
         workflowId: editor.state.workflowId,
         ifMatch: editor.state.serverEtag,
-        idempotencyKey: mutationKey(retryKey),
+        idempotencyKey,
         data: details,
       });
       ui.pushToast(t("toast.loopPublished"));
       navigateToPage("library-loop-detail", { loopId: editor.state.workflowId });
       return result;
     } catch (error) {
-      ui.pushToast(messageForError(error), t("actions.retry"), () => publishSelectedLoop(details, retryKey));
+      ui.pushToast(messageForError(error), t("actions.retry"), () => publishSelectedLoop(details, idempotencyKey));
       return null;
     }
   }
 
-  async function runLoop(loopId = selectedWorkflowId, retryOperation) {
-    if (loopId !== selectedWorkflowId) {
-      selectLoop(loopId);
-      navigateToPage("run-preflight", { loopId });
-      ui.pushToast(t("toast.openedForRun"));
-      return;
-    }
-    const missing = (editor.state?.draft?.inputForm?.fields || []).filter((field) => field.required && !String(runInputs[field.fieldId] ?? "").trim());
-    if (missing.length) {
-      ui.pushToast(t("error.run_inputs_missing", { count: missing.length }));
-      return;
-    }
+  async function runLoopInAgent(loopId = selectedWorkflowId, retryOperation, savedRevisionId = "", options = {}) {
+    const openAgentSession = (sessionId) => {
+      ui.navigateToPath("/?session=" + encodeURIComponent(sessionId));
+    };
+    const selectedRevisionId = savedRevisionId || (loopId === editor.state?.workflowId
+      ? editor.state?.baseRevision?.revisionId
+      : "");
     const operation = retryOperation?.compileKey && retryOperation?.runKey
       ? retryOperation
       : { compileKey: mutationKey(), runKey: mutationKey() };
-    const compile = await compileSelectedWorkflow(operation.compileKey);
-    if (compile?.status !== "ready") return;
     try {
-      const result = await server.mutations.startRun.mutateAsync({
-        workflowId: editor.state.workflowId,
+      const result = await server.mutations.startLoopAgentTask.mutateAsync({
+        workflowId: loopId,
         idempotencyKey: operation.runKey,
         data: {
-          workflowRevisionId: editor.state.baseRevision.revisionId,
-          inputs: runInputs,
-          resourceRefs: editor.state.draft.resourceRefs,
+          ...(selectedRevisionId ? { workflowRevisionId: selectedRevisionId } : {}),
+          inputs: loopId === editor.state?.workflowId ? runInputs : {},
+          resourceRefs: loopId === editor.state?.workflowId
+            ? editor.state?.draft?.resourceRefs || []
+            : [],
+          materialBindings: loopId === editor.state?.workflowId
+            ? Object.values(runMaterialBindings).filter(Boolean)
+            : [],
         },
       });
-      setActiveRunId(result.data.runId);
-      navigateToPage("runs", { loopId: editor.state.workflowId, runId: result.data.runId });
-      ui.pushToast(t("toast.runStarted"));
-    } catch (error) {
-      ui.pushToast(messageForError(error), t("actions.retry"), () => runLoop(loopId, operation));
-    }
-  }
-
-  async function createDraftFromActiveRun(retryKey) {
-    if (!activeRun?.id) return null;
-    const sourceTitle = selectedWorkflow?.title || t("runs.detailTitle");
-    const idempotencyKey = mutationKey(retryKey);
-    try {
-      const result = await server.mutations.createLoopDraftFromRun.mutateAsync({
-        runId: activeRun.id,
-        data: { name: t("workflow.fromRunName", { title: sourceTitle }) },
-        idempotencyKey,
-      });
-      const { workflow, revision } = result.data;
-      setSelectedWorkflowId(workflow.workflowId);
-      setBuilderSelection({ kind: "workflow", id: workflow.workflowId });
-      editor.loadRevision(revision, result.etag);
-      navigateToPage("builder", { loopId: workflow.workflowId });
-      ui.pushToast(t("toast.workflowFromRunCreated", { title: workflow.name }));
+      const sessionId = result.data.session.sessionId;
+      setActiveRunId(result.data.run.runId);
+      if (!options.stayInBuilder) openAgentSession(sessionId);
+      if (!options.stayInBuilder) ui.pushToast(t("toast.runStarted"));
       return result;
     } catch (error) {
-      ui.pushToast(messageForError(error), t("actions.retry"), () => createDraftFromActiveRun(idempotencyKey));
+      ui.pushToast(messageForError(error), t("actions.retry"), () => runLoopInAgent(loopId, operation, savedRevisionId, options));
       return null;
     }
   }
@@ -937,7 +848,7 @@ export function useWorkbenchWorkspace() {
   }
 
   async function cancelActiveRun(retryKey) {
-    if (!activeRun || terminalStatuses.has(activeRun.status)) return;
+    if (!activeRun || !canCancelRun(activeRun.status)) return;
     const idempotencyKey = mutationKey(retryKey);
     try {
       await server.mutations.cancelRun.mutateAsync({
@@ -952,7 +863,7 @@ export function useWorkbenchWorkspace() {
   }
 
   async function retryActiveRun(retryKey) {
-    if (!activeRun || !terminalStatuses.has(activeRun.status)) return;
+    if (!activeRun || !canRepeatOrRetryRun(activeRun.status)) return;
     const idempotencyKey = mutationKey(retryKey);
     try {
       const result = activeRun.status === "completed"
@@ -973,7 +884,6 @@ export function useWorkbenchWorkspace() {
       const retryRunId = result.data?.runId;
       if (retryRunId) {
         setActiveRunId(retryRunId);
-        setComparisonRunId("");
         navigateToPage("runs", { loopId: activeRun.loopId, runId: retryRunId });
       }
       ui.pushToast(t(activeRun.status === "completed" ? "toast.runRepeated" : "toast.runRetried"));
@@ -996,61 +906,19 @@ export function useWorkbenchWorkspace() {
     }
   }
 
-  async function useTeamReleaseAsStartingPoint(releaseId, name, retryKey) {
+  async function useTeamLoop(releaseId, retryKey) {
     const idempotencyKey = mutationKey(retryKey);
     try {
-      const result = await server.mutations.useTeamReleaseAsStartingPoint.mutateAsync({
-        releaseId,
-        idempotencyKey,
-        data: { name },
-      });
+      const result = await server.mutations.createLoopFromRelease.mutateAsync({ releaseId, idempotencyKey });
       const { workflow, revision } = result.data;
       setSelectedWorkflowId(workflow.workflowId);
       setBuilderSelection({ kind: "workflow", id: workflow.workflowId });
       editor.loadRevision(revision, result.etag);
       navigateToPage("builder", { loopId: workflow.workflowId });
-      ui.pushToast(t("toast.teamStartingPointCreated", { title: workflow.name }));
+      ui.pushToast(t("library.personalCopyCreated"));
       return result;
     } catch (error) {
-      ui.pushToast(messageForError(error), t("actions.retry"), () => useTeamReleaseAsStartingPoint(releaseId, name, idempotencyKey));
-      return null;
-    }
-  }
-
-  async function forkTeamLoopRelease(releaseId, name, retryKey) {
-    const idempotencyKey = mutationKey(retryKey);
-    try {
-      const result = await server.mutations.forkTeamLoopRelease.mutateAsync({
-        releaseId,
-        idempotencyKey,
-        data: { name },
-      });
-      const { workflow, revision } = result.data;
-      setSelectedWorkflowId(workflow.workflowId);
-      setBuilderSelection({ kind: "workflow", id: workflow.workflowId });
-      editor.loadRevision(revision, result.etag);
-      navigateToPage("builder", { loopId: workflow.workflowId });
-      ui.pushToast(t("toast.teamForkCreated", { title: workflow.name }));
-      return result;
-    } catch (error) {
-      ui.pushToast(messageForError(error), t("actions.retry"), () => forkTeamLoopRelease(releaseId, name, idempotencyKey));
-      return null;
-    }
-  }
-
-  async function adoptTeamRelease(release, retryKey) {
-    if (!release?.installation?.installationId) return null;
-    const idempotencyKey = mutationKey(retryKey);
-    try {
-      await server.mutations.adoptInstallationRelease.mutateAsync({
-        installationId: release.installation.installationId,
-        releaseId: release.releaseId,
-        idempotencyKey,
-      });
-      ui.pushToast(t("toast.teamReleaseUpdated", { title: release.title }));
-      return true;
-    } catch (error) {
-      ui.pushToast(messageForError(error), t("actions.retry"), () => adoptTeamRelease(release, idempotencyKey));
+      ui.pushToast(messageForError(error), t("actions.retry"), () => useTeamLoop(releaseId, idempotencyKey));
       return null;
     }
   }
@@ -1072,6 +940,23 @@ export function useWorkbenchWorkspace() {
     }
   }
 
+  async function scaffoldSkillDraftPackage(details, retryKey) {
+    const idempotencyKey = mutationKey(retryKey);
+    try {
+      return await server.mutations.scaffoldSkillDraftPackage.mutateAsync({
+        data: details,
+        idempotencyKey,
+      });
+    } catch (error) {
+      ui.pushToast(
+        messageForError(error),
+        t("actions.retry"),
+        () => scaffoldSkillDraftPackage(details, idempotencyKey),
+      );
+      throw error;
+    }
+  }
+
   async function importSkillRepository(details, retryKey, onProgress) {
     const idempotencyKey = mutationKey(retryKey);
     try {
@@ -1089,7 +974,43 @@ export function useWorkbenchWorkspace() {
     }
   }
 
-  async function createSkillDraftFromPackage({ permissionAcknowledged = false } = {}, retryKey) {
+  async function scanServerSkills(rootPath) {
+    try {
+      const result = await server.mutations.scanServerSkills.mutateAsync({
+        data: { rootPath },
+      });
+      return result.data;
+    } catch (error) {
+      ui.pushToast(messageForError(error));
+      return { failed: true, error, candidates: [] };
+    }
+  }
+
+  async function importServerSkills(rootPath, directories, retryKey) {
+    const idempotencyKey = mutationKey(retryKey);
+    try {
+      const result = await server.mutations.importServerSkills.mutateAsync({
+        data: {
+          rootPath,
+          directories,
+          attachBuiltInToolPolicy: true,
+        },
+        idempotencyKey,
+      });
+      const imported = result.data.items.filter((item) => item.status === "imported").length;
+      ui.pushToast(t("toast.serverSkillsImported", { count: imported }));
+      return result.data;
+    } catch (error) {
+      ui.pushToast(
+        messageForError(error),
+        t("actions.retry"),
+        () => importServerSkills(rootPath, directories, idempotencyKey),
+      );
+      return { failed: true, error, items: [] };
+    }
+  }
+
+  async function createSkillDraftFromPackage({ permissionAcknowledged = false, smokeTest = null } = {}, retryKey) {
     if (!pendingSkillPackage) return null;
     const idempotencyKey = mutationKey(retryKey || pendingSkillPackage.idempotencyKey);
     try {
@@ -1102,14 +1023,19 @@ export function useWorkbenchWorkspace() {
       setPendingSkillPackage(null);
       setCreateSkillDialogOpen(false);
       setSelectedManagedSkillId(skillId);
-      navigateToPage("skill-overview", { skillId });
+      if (smokeTest?.input || smokeTest?.purpose || smokeTest?.materialBindings?.length) {
+        setPendingSkillSmokeTest({ skillId, ...smokeTest });
+        navigateToPage("skill-tests", { skillId });
+      } else {
+        navigateToPage("skill-overview", { skillId });
+      }
       ui.pushToast(t("toast.skillDraftCreated", { title: result.created.draft.name }));
       return result;
     } catch (error) {
       ui.pushToast(
         messageForError(error),
         t("actions.retry"),
-        () => createSkillDraftFromPackage({ permissionAcknowledged }, idempotencyKey),
+        () => createSkillDraftFromPackage({ permissionAcknowledged, smokeTest }, idempotencyKey),
       );
       return null;
     }
@@ -1190,7 +1116,10 @@ export function useWorkbenchWorkspace() {
         ...current,
         [skillLifecycleKey]: { testRun: result.data, validation: null },
       }));
-      ui.pushToast(result.data.status === "passed" ? t("toast.skillTestPassed") : t("toast.skillTestNeedsAttention"));
+      setPendingSkillSmokeTest((current) => current?.skillId === selectedSkillDraft.skillId ? null : current);
+      ui.pushToast(["queued", "running"].includes(result.data.status)
+        ? t("toast.skillTestStarted")
+        : result.data.status === "passed" ? t("toast.skillTestPassed") : t("toast.skillTestNeedsAttention"));
       return result.data;
     } catch (error) {
       ui.pushToast(messageForError(error), t("actions.retry"), () => runSelectedSkillTest(testCase, idempotencyKey));
@@ -1281,45 +1210,6 @@ export function useWorkbenchWorkspace() {
     }
   }
 
-  async function applyLoopSkillUpdate(
-    preview = server.loopSkillUpdatePreview,
-    connectionBindings = [],
-    retryKey,
-    { propagateConnectionError = false } = {},
-  ) {
-    if (!preview || !server.loopSkillUpdatePreviewEtag) return null;
-    const idempotencyKey = mutationKey(retryKey);
-    try {
-      const result = await server.mutations.updateLoopSkill.mutateAsync({
-        workflowId: preview.workflowId,
-        ifMatch: server.loopSkillUpdatePreviewEtag,
-        idempotencyKey,
-        data: {
-          skillId: preview.skillId,
-          fromVersion: preview.currentVersion.version,
-          toVersion: preview.targetVersion.version,
-          connectionBindings,
-        },
-      });
-      setSelectedWorkflowId(preview.workflowId);
-      setBuilderSelection({ kind: "workflow", id: preview.workflowId });
-      editor.loadRevision(result.data.revision, result.etag);
-      navigateToPage("builder", { loopId: preview.workflowId });
-      ui.pushToast(t("toast.workflowSkillUpdated", { title: result.data.workflow.name }));
-      return result;
-    } catch (error) {
-      if (propagateConnectionError && ["connection_rebind_required", "connection_not_ready", "connection_binding_invalid"].includes(error?.code)) {
-        throw error;
-      }
-      if (error?.code === "workflow_revision_conflict") {
-        ui.pushToast(messageForError(error), t("actions.reloadReview"), server.reloadLoopSkillUpdatePreview);
-        return null;
-      }
-      ui.pushToast(messageForError(error), t("actions.retry"), () => applyLoopSkillUpdate(preview, connectionBindings, idempotencyKey));
-      return null;
-    }
-  }
-
   function updateSelectedNodeField(field, value) {
     if (selectedLoop?.type === "LoopTemplate" || !editor.state || !selectedNode) return;
     const canonical = selectedNode.canonical;
@@ -1403,8 +1293,13 @@ export function useWorkbenchWorkspace() {
     loops,
     teamLibrary,
     skills,
+    skillRuntimes: server.skillRuntimes,
+    skillRuntimesState: server.skillRuntimesState,
+    registeredToolPackages: server.registeredToolPackages,
+    registeredToolPackagesState: server.registeredToolPackagesState,
     knowledge: resources,
     resources,
+    connections,
     runs: runViews,
     resourcePalette,
     selectedLoop,
@@ -1433,14 +1328,18 @@ export function useWorkbenchWorkspace() {
     },
     activeRun,
     activeRunId,
-    comparisonRunId,
-    activeRunComparison: server.runComparison,
-    setActiveRunId(runId) { setActiveRunId(runId); setComparisonRunId(""); },
-    compareActiveRunWith(runId) { if (runId && runId !== activeRunId) setComparisonRunId(runId); },
-    clearRunComparison() { setComparisonRunId(""); },
+    setActiveRunId,
     runStream,
     runInputs,
     setRunInput(fieldId, value) { setRunInputs((current) => ({ ...current, [fieldId]: value })); },
+    runMaterialBindings,
+    setRunMaterialBinding(nodeId, materialKey, binding) {
+      const key = `${nodeId}:${materialKey}`;
+      setRunMaterialBindings((current) => ({
+        ...current,
+        [key]: binding ? { nodeId, binding } : null,
+      }));
+    },
     selectedLoopIds,
     toggleLoopSelection(loopId) {
       setSelectedLoopIds((items) => items.includes(loopId) ? items.filter((id) => id !== loopId) : [...items, loopId]);
@@ -1452,8 +1351,8 @@ export function useWorkbenchWorkspace() {
     builderInitialTab,
     createLoopInitialMode,
     createLoopPrefill,
-    openCreateLoop(mode = "goal", prefill = null) {
-      setCreateLoopInitialMode(["goal", "blank", "starting", "upload", "duplicate"].includes(mode) ? mode : "goal");
+    openCreateLoop(mode = "choose", prefill = null) {
+      setCreateLoopInitialMode(["choose", "goal", "blank"].includes(mode) ? mode : "choose");
       setCreateLoopPrefill(prefill && typeof prefill === "object" ? prefill : null);
       navigateToPage("create-loop");
     },
@@ -1467,65 +1366,111 @@ export function useWorkbenchWorkspace() {
       setBuilderInitialTab(["definition", "outline", "canvas"].includes(tab) ? tab : "definition");
       navigateToPage("builder", { loopId });
     },
+    runLoopInAgent,
+    async saveAndRunWorkflow(options = {}) {
+      if (readOnlyWorkspace || selectedLoop?.type !== "LoopWorkflow" || !editor.state) return null;
+      const workflowId = editor.state.workflowId;
+      let revisionId = editor.state.baseRevision.revisionId;
+      if (editor.state.dirty) {
+        const saved = await saveWorkspace();
+        if (!saved) return null;
+        revisionId = saved.data.revision.revisionId;
+      }
+      return runLoopInAgent(workflowId, undefined, revisionId, options);
+    },
+    // Compatibility only for historical routes. M5 primary surfaces must use
+    // runLoopInAgent so the Product-owned Agent task handoff remains explicit.
     prepareRun(loopId = selectedWorkflowId) {
-      selectLoop(loopId);
-      navigateToPage("run-preflight", { loopId });
+      runLoopInAgent(loopId);
     },
     openRun(runId) {
       if (!runId) return;
       setActiveRunId(runId);
-      setComparisonRunId("");
       navigateToPage("runs", { loopId: selectedWorkflowId, runId });
     },
     openPublishReview(loopId = selectedWorkflowId) {
       selectLoop(loopId);
       navigateToPage("loop-publish", { loopId });
     },
-    openLoopSkillUpdate(loopId, skillVersionId) {
-      if (!loopId || !skillVersionId) return;
-      selectLoop(loopId);
-      navigateToPage("loop-update", { loopId, skillVersionId });
-    },
     openLibraryLoop(loopId) { navigateToPage("library-loop-detail", { loopId }); },
     openLibrarySkill(skillId) { navigateToPage("library-skill-detail", { skillId }); },
-    cloneLoop: useTemplate,
-    duplicateWorkflow,
-    duplicateSelectedWorkflow,
     createWorkflow,
     createWorkflowProposal,
     retryCreationProposal,
     creationProposalContext,
+    creationProposalDraft,
+    stagedProposalRestoreFailedId,
+    retryStagedProposalRestore() {
+      if (!stagedProposalRestoreFailedId) return null;
+      return restoreStagedCreationProposal(stagedProposalRestoreFailedId);
+    },
+    clearStaleCreationProposal() {
+      setBuilderProposal(null);
+      setCreationProposalDraft(null);
+      setCreationProposalContext(null);
+      setBuilderProposalError("");
+      setStagedProposalRestoreFailedId("");
+      setRestoredProposalId("");
+      setCreateLoopInitialMode("goal");
+      replaceStagedProposalLocation();
+    },
+    updateCreationProposalDraft(patch) {
+      setCreationProposalDraft((current) => current ? { ...current, ...patch } : current);
+    },
     openCreationDraft() {
-      if (!creationProposalContext?.workflowId) return;
-      const workflowId = creationProposalContext.workflowId;
+      if (!creationProposalContext?.details) return;
+      const details = creationProposalContext.details;
       setCreationProposalContext(null);
       setBuilderProposal(null);
-      navigateToPage("builder", { loopId: workflowId });
+      setCreationProposalDraft(null);
+      setRestoredProposalId("");
+      replaceStagedProposalLocation();
+      createWorkflow({
+        name: details.name,
+        goal: details.definition.goal,
+        expectedResult: details.definition.expectedResult,
+        context: details.definition.context,
+        constraints: details.definition.constraints,
+        doneWhen: details.definition.doneWhen,
+        verify: details.definition.verify,
+        stopRules: details.definition.stopRules,
+      });
     },
     pendingSkillForNewWorkflow: pendingSkillAdd && !pendingSkillAdd.loopId ? pendingSkillAdd.skill : null,
-    loopImportDialogOpen,
-    openLoopImportDialog() { if (!readOnlyWorkspace) setLoopImportDialogOpen(true); },
-    closeLoopImportDialog() { setLoopImportDialogOpen(false); },
-    inspectPortableLoop,
-    loadPortableLoopOptions,
-    refreshPortableLoopImport,
-    commitPortableLoopImport,
-    exportSelectedLoop,
     publishSelectedLoop,
-    createSkillDialogOpen,
+    createSkillDialogOpen: createSkillDialogOpen || ui.activePage === "create-skill",
     createSkillDialogMode,
     openCreateSkillDialog(mode = "create") {
-      setCreateSkillDialogMode(["create", "files", "repository"].includes(mode) ? mode : "create");
-      setCreateSkillDialogOpen(true);
+      const normalizedMode = mode === "create" ? "define" : mode;
+      const safeMode = ["define", "files", "repository", "server"].includes(normalizedMode)
+        ? normalizedMode
+        : "define";
+      setCreateSkillDialogMode(safeMode === "define" ? "create" : safeMode);
+      ui.navigateToPath(`/skills/new?mode=${encodeURIComponent(safeMode)}`);
     },
-    closeCreateSkillDialog() { setCreateSkillDialogOpen(false); setPendingSkillPackage(null); },
+    closeCreateSkillDialog() {
+      setCreateSkillDialogOpen(false);
+      setPendingSkillPackage(null);
+      if (ui.activePage === "create-skill") ui.navigateToPath("/skills");
+    },
     createResourceDialogOpen,
-    openCreateResourceDialog() { setCreateResourceDialogOpen(true); },
+    createResourceIntent,
+    lastCreatedResourceId,
+    openCreateResourceDialog() {
+      setCreateResourceIntent("builder");
+      setCreateResourceDialogOpen(true);
+    },
     closeCreateResourceDialog() { setCreateResourceDialogOpen(false); },
     createTextResource,
+    createResourceFromAttachment,
+    completeResourceCreation,
     pendingSkillPackage,
+    pendingSkillSmokeTest,
     inspectSkillPackage,
+    scaffoldSkillDraftPackage,
     importSkillRepository,
+    scanServerSkills,
+    importServerSkills,
     createSkillDraftFromPackage,
     saveSelectedSkillDraft,
     saveSelectedSkillPackage,
@@ -1546,17 +1491,12 @@ export function useWorkbenchWorkspace() {
     closeRetireSkillDialog() { setRetireSkillDialog(null); },
     createSkillUpdateDraft,
     retireSkill,
-    loopSkillUpdatePreview: server.loopSkillUpdatePreview,
-    loopSkillUpdatePreviewEtag: server.loopSkillUpdatePreviewEtag,
-    applyLoopSkillUpdate,
     installTeamRelease,
-    adoptTeamRelease,
-    useTeamReleaseAsStartingPoint,
-    forkTeamLoopRelease,
+    useTeamLoop,
     handleLoopPrimary(loopId) {
       const loop = loops.find((item) => item.id === loopId);
-      if (loop?.type === "LoopTemplate") useTemplate(loopId);
-      else if (loop?.readiness === "Ready") { selectLoop(loopId); navigateToPage("run-preflight", { loopId }); }
+      if (loop?.type === "LoopTemplate") { selectLoop(loopId); navigateToPage("builder"); }
+      else if (loop?.readiness === "Ready") runLoopInAgent(loopId);
       else { selectLoop(loopId); navigateToPage("builder", { loopId }); }
     },
     addSkillToLoop,
@@ -1571,6 +1511,34 @@ export function useWorkbenchWorkspace() {
       editor.replaceDraft((draft) => deleteDraftNode(draft, nodeId));
     },
     updateSelectedNodeField,
+    updateWorkflowStep(nodeId, patch) {
+      if (selectedLoop?.type === "LoopTemplate" || readOnlyWorkspace || !editor.state) return;
+      editor.replaceDraft((draft) => updateDraftNode(draft, nodeId, patch));
+    },
+    undoWorkflow() {
+      if (!readOnlyWorkspace && selectedLoop?.type !== "LoopTemplate") editor.dispatch({ type: EDITOR_ACTIONS.UNDO });
+    },
+    redoWorkflow() {
+      if (!readOnlyWorkspace && selectedLoop?.type !== "LoopTemplate") editor.dispatch({ type: EDITOR_ACTIONS.REDO });
+    },
+    arrangeWorkflowNodes(positions) {
+      if (readOnlyWorkspace || selectedLoop?.type === "LoopTemplate" || !editor.state) return;
+      editor.replaceDraft((draft) => ({ ...draft, graph: { ...draft.graph,
+        nodes: draft.graph.nodes.map((node) => positions[node.nodeId] ? { ...node, position: positions[node.nodeId] } : node),
+      } }));
+    },
+    bindWorkflowInput(nodeId, portId, source) {
+      if (selectedLoop?.type === "LoopTemplate" || readOnlyWorkspace || !editor.state) return;
+      try {
+        editor.replaceDraftValue(bindDraftNodeInput(editor.state.draft, nodeId, portId, source, idFactory));
+      } catch (error) { ui.pushToast(messageForError(error)); }
+    },
+    updateWorkflowInputLabel(fieldId, label) {
+      if (selectedLoop?.type === "LoopTemplate" || readOnlyWorkspace || !editor.state) return;
+      editor.replaceDraft((draft) => ({ ...draft, inputForm: { ...draft.inputForm,
+        fields: draft.inputForm.fields.map((field) => field.fieldId === fieldId ? { ...field, label } : field),
+      } }));
+    },
     updateLoopDefinition,
     updateRunSetting,
     updateSelectedNodeModel,
@@ -1592,9 +1560,7 @@ export function useWorkbenchWorkspace() {
       setConnectionStartNodeId("");
     },
     compileSelectedWorkflow,
-    runLoop,
-    createDraftFromActiveRun,
-    runSelectedLoops() { runLoop(selectedWorkflowId); },
+    runSelectedLoops() { runLoopInAgent(selectedWorkflowId); },
     submitReviewDecision,
     cancelActiveRun,
     retryActiveRun,
@@ -1604,23 +1570,21 @@ export function useWorkbenchWorkspace() {
     canSaveWorkflow: Boolean(editor.state?.dirty && editor.state.serverEtag),
     canRunWorkflow: Boolean(selectedLoop?.type === "LoopWorkflow" && !editor.state?.dirty && !readOnlyWorkspace),
     editorState: editor.state,
-    builderAssistantAvailable: true,
-    builderAssistantBusy: server.mutations.generateLoopProposal.isPending || server.mutations.applyLoopProposal.isPending || server.mutations.dismissLoopProposal.isPending,
+    builderAssistantAvailable: false,
+    builderAssistantBusy: server.mutations.generateStagedLoopProposal.isPending
+      || server.mutations.commitStagedLoopProposal.isPending
+      || server.mutations.dismissStagedLoopProposal.isPending,
     builderProposalError,
-    chatScope: "builder",
-    setChatScope() {},
-    chatMessages: [],
-    composer,
-    setComposer,
-    sendChat: generateBuilderProposal,
     pendingPatch: builderProposal,
     dismissBuilderPatch: dismissBuilderProposal,
     applyBuilderPatch: applyBuilderProposal,
     createKnowledge() { ui.pushToast(t("feature.resourcesUnavailable")); },
     attachKnowledge() { addResourceToLoop(); },
     selectedKnowledge: resources.find((item) => item.resourceId === selectedResourceId) || null,
-    workflowCreationAvailable: true,
-    skillCreationAvailable: true,
-    runTerminal: activeRun ? terminalStatuses.has(activeRun.status) : false,
+    creationReadiness: server.featureReadiness,
+    creationReadinessState: server.featureReadinessState,
+    workflowCreationAvailable: server.featureReadiness?.actions?.blankLoop?.draftable?.status === "ready",
+    skillCreationAvailable: server.featureReadiness?.actions?.promptSkill?.draftable?.status === "ready",
+    runTerminal: activeRun ? isTerminalRunStatus(activeRun.status) : false,
   };
 }

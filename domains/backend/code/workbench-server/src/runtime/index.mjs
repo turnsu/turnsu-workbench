@@ -22,6 +22,16 @@ export {
   InProcessAgentAdapter,
   createInProcessAgentAdapter,
 } from "./in-process-agent-adapter.mjs";
+export { createLegacyAgentRuntimeBundle } from "./legacy-pi-runtime-bundle.mjs";
+export { createProductAgentSessionPort } from "./product-session-port.mjs";
+export {
+  createProductExecutionGrant,
+  productToolEffectMap,
+} from "./product-execution-grant.mjs";
+export {
+  createProductGatewayToolPipeline,
+  pinnedProductToolSecurity,
+} from "./product-tool-pipeline.mjs";
 export {
   buildDockerSkillArguments,
   createDockerSkillExecutor,

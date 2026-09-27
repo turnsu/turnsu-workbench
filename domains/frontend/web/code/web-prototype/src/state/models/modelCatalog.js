@@ -1,4 +1,14 @@
-const CAPABILITIES = new Set(["chat", "tool_calling", "structured_output", "image_generation"]);
+const CAPABILITIES = new Set([
+  "chat",
+  "tool_calling",
+  "structured_output",
+  "image_generation",
+  "image_input",
+  "realtime_audio_input",
+  "realtime_audio_output",
+  "realtime_turn_detection",
+  "realtime_barge_in",
+]);
 
 export function normalizeModelFilters({ capabilities = [], context = "", selectedRevisionId = "", readiness = "" } = {}) {
   return {
@@ -59,6 +69,7 @@ export function modelPickerOptions(profiles = [], {
         revisionNumber: revision?.revisionNumber || null,
         capabilities: revision?.capabilities || [],
         readiness,
+        readinessReason: profile.readinessReason || "",
         disabled: !isSelectable(profile),
         historical: false,
         profile,
@@ -81,6 +92,7 @@ export function modelPickerOptions(profiles = [], {
       revisionNumber: revision?.revisionNumber || null,
       capabilities: revision?.capabilities || [],
       readiness: "disabled",
+      readinessReason: owner?.readinessReason || "",
       disabled: true,
       historical: true,
       profile: owner || null,

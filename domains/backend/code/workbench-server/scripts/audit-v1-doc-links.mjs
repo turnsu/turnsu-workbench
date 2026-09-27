@@ -1,22 +1,22 @@
-import { readFile, readdir, stat } from "node:fs/promises";
-import { dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { readFile, stat } from "node:fs/promises";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(packageDirectory, "../../../..");
 const explicitDocuments = [
-  "wiki/architecture/CURRENT_SYSTEM_ARCHITECTURE.md",
-  "DESIGN.md",
+  "README.md",
   "PRODUCT.md",
+  "DESIGN.md",
+  "wiki/prd/2026-08-04-looloomi-team-intelligence-workspace-master-prd.md",
+  "wiki/prd/2026-08-04-cross-review-master-prd-vs-blueprint.md",
+  "wiki/architecture/CURRENT_SYSTEM_ARCHITECTURE.md",
+  "wiki/architecture/README.md",
+  "wiki/prd/README.md",
+  "wiki/history/README.md",
+  "domains/backend/documents/operations/SINGLE_MACHINE_RUNBOOK.md",
 ];
-const documentDirectories = [
-  "wiki/design/skill-loop-cloud-workbench-v1",
-];
-
-const documents = [
-  ...explicitDocuments.map((path) => resolve(repositoryRoot, path)),
-  ...await collectMarkdownDocuments(documentDirectories.map((path) => resolve(repositoryRoot, path))),
-];
+const documents = explicitDocuments.map((path) => resolve(repositoryRoot, path));
 const missing = [];
 let localLinkCount = 0;
 
@@ -47,19 +47,4 @@ if (missing.length > 0) {
   process.stdout.write(`v1_document_link_audit=pass\n`);
   process.stdout.write(`v1_document_count=${documents.length}\n`);
   process.stdout.write(`v1_local_link_count=${localLinkCount}\n`);
-}
-
-async function collectMarkdownDocuments(roots) {
-  const found = [];
-  const pending = [...roots];
-  while (pending.length > 0) {
-    const directory = pending.pop();
-    const entries = await readdir(directory, { withFileTypes: true });
-    for (const entry of entries) {
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) pending.push(path);
-      else if (entry.isFile() && extname(entry.name) === ".md") found.push(path);
-    }
-  }
-  return found;
 }

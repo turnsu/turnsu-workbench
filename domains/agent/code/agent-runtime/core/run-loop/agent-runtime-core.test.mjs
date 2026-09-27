@@ -12,7 +12,7 @@ const core = createAgentRuntimeCore({
   capabilityCatalog,
   router: { inferTools, cmcToolSelectionDiagnostic },
   gateEngine: {},
-  piKernel: {},
+  runtimeKernel: {},
   finalOutput: {},
   artifacts: {},
 });
@@ -101,7 +101,7 @@ function toolsFor(request) {
   const skillCore = createAgentRuntimeCore({
     router: { inferTools, cmcToolSelectionDiagnostic },
     gateEngine: {},
-    piKernel: {
+    runtimeKernel: {
       invokeSkill: async (skillID, input, options) => {
         calls.push({ skillID, input, options });
         return {
@@ -131,7 +131,7 @@ function toolsFor(request) {
 {
   const calls = [];
   const proposalCore = createAgentRuntimeCore({
-    router: {}, gateEngine: {}, piKernel: {}, finalOutput: {}, artifacts: {}, providerExecutor: {},
+    router: {}, gateEngine: {}, runtimeKernel: {}, finalOutput: {}, artifacts: {}, providerExecutor: {},
     builderProposalGenerator: {
       async generate(input) {
         calls.push(structuredClone(input));
@@ -144,7 +144,7 @@ function toolsFor(request) {
   assert.deepEqual(calls, [request]);
 
   const unavailableCore = createAgentRuntimeCore({
-    router: {}, gateEngine: {}, piKernel: {}, finalOutput: {}, artifacts: {}, providerExecutor: {},
+    router: {}, gateEngine: {}, runtimeKernel: {}, finalOutput: {}, artifacts: {}, providerExecutor: {},
   });
   await assert.rejects(
     () => unavailableCore.generateBuilderProposal(request),

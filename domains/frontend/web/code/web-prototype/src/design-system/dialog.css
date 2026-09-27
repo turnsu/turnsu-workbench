@@ -1,0 +1,74 @@
+/* Shared Dialog primitives load with the component on every route. */
+.dialogLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--text) 28%, transparent);
+}
+
+.dialogPanel {
+  width: min(620px, 100%);
+  max-height: min(760px, calc(100dvh - 48px));
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 20px 56px color-mix(in srgb, var(--text) 18%, transparent);
+}
+
+.dialogPanel > h2 {
+  margin: 0 0 16px;
+  font-size: 20px;
+}
+
+.dialogPanel > .buttonRow {
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+
+.dialogPanel > .buttonRow {
+  display: flex;
+  gap: 8px;
+  position: sticky;
+  bottom: -22px;
+  margin-inline: -22px;
+  margin-bottom: -22px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.dialogPanel summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+
+@media (max-width: 680px) {
+  .dialogLayer {
+    align-items: end;
+    padding: 0;
+  }
+
+  .dialogPanel {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+    padding: 18px 14px max(18px, env(safe-area-inset-bottom));
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 8px 8px 0 0;
+  }
+
+
+  .dialogPanel > .buttonRow {
+    flex-direction: column;
+    align-items: stretch;
+    bottom: calc(-1 * max(18px, env(safe-area-inset-bottom)));
+    margin-inline: -14px;
+    margin-bottom: calc(-1 * max(18px, env(safe-area-inset-bottom)));
+    padding: 12px 14px max(18px, env(safe-area-inset-bottom));
+  }
+  .dialogPanel > .buttonRow > * { width: 100%; min-height: 44px; }
+}

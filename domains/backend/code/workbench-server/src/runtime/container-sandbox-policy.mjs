@@ -2,6 +2,7 @@ export const DIGEST_PINNED_CONTAINER_IMAGE = /^(?:[A-Za-z0-9][A-Za-z0-9._/+:~-]*
 const SAFE_CONTAINER_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,191}$/;
 
 export function buildContainerIsolationArguments({
+  operation = "run",
   containerName,
   labels = [],
   limits,
@@ -10,7 +11,8 @@ export function buildContainerIsolationArguments({
   interactive = false,
   user = "65534:65534",
 } = {}) {
-  if (!SAFE_CONTAINER_NAME.test(containerName || "")
+  if (!["run", "create"].includes(operation)
+    || !SAFE_CONTAINER_NAME.test(containerName || "")
     || !Array.isArray(labels)
     || labels.some((label) => typeof label !== "string" || !label.includes("="))
     || !positiveInteger(limits?.pids)
@@ -24,7 +26,7 @@ export function buildContainerIsolationArguments({
     throw new TypeError("container_sandbox_policy_invalid");
   }
   return [
-    "run",
+    ...(operation === "run" ? ["run"] : ["container", "create"]),
     "--pull", "never",
     "--name", containerName,
     ...labels.flatMap((label) => ["--label", label]),

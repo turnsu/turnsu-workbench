@@ -1,0 +1,1467 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>M5 关键帧设计总览</title>
+  <style>
+    /* ============ v2 设计 token ============ */
+    :root {
+      color-scheme: light;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --bg: #f7f6f3;
+      --surface: #ffffff;
+      --surface-soft: #faf9f7;
+      --ink: #1b1917;
+      --ink-2: #44403c;
+      --muted: #78716c;
+      --faint: #a8a29e;
+      --line: #eceae6;
+      --line-strong: #ddd9d3;
+      --accent: #4f46e5;
+      --accent-strong: #4338ca;
+      --accent-soft: #eef0ff;
+      --accent-line: #c7d2fe;
+      --good: #047857;
+      --good-soft: #d1fae5;
+      --warn: #b45309;
+      --warn-soft: #fffbeb;
+      --warn-line: #fde68a;
+      --danger: #b91c1c;
+      --danger-soft: #fef2f2;
+      --purple: #7c3aed;
+      --purple-soft: #f5f3ff;
+      --r8: 8px; --r10: 10px; --r12: 12px; --r16: 16px;
+      --sh-sm: 0 1px 2px rgb(28 25 23 / .06);
+      --sh-md: 0 4px 12px -2px rgb(28 25 23 / .10);
+      --sh-lg: 0 12px 32px -8px rgb(28 25 23 / .16);
+      --ring: 0 0 0 4px rgb(79 70 229 / .12);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: #e9e7e2; }
+    button, input, textarea { font: inherit; }
+
+    /* ============ 板头 ============ */
+    .boardHeader {
+      position: sticky; top: 0; z-index: 10;
+      padding: 18px 28px;
+      border-bottom: 1px solid var(--line-strong);
+      background: rgb(255 255 255 / .94);
+      backdrop-filter: blur(12px);
+    }
+    .boardHeader h1 { margin: 0 0 4px; font-size: 20px; }
+    .boardHeader p { margin: 0; color: var(--muted); font-size: 12.5px; }
+    .boardHeader .pendingTag {
+      display: inline-block; margin-left: 8px; padding: 2px 8px;
+      border-radius: 999px; background: var(--warn-soft); color: var(--warn);
+      border: 1px solid var(--warn-line); font-size: 11px; font-weight: 650;
+      vertical-align: 2px;
+    }
+    .board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; padding: 24px; max-width: 1560px; margin: 0 auto; }
+    .frameCard { min-width: 0; overflow: hidden; border: 1px solid #d5d1ca; border-radius: var(--r16); background: var(--surface); box-shadow: var(--sh-lg); }
+    .frameCard.full { grid-column: 1 / -1; }
+    .frameMeta { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface-soft); font-size: 12px; }
+    .frameMeta strong { font-size: 13px; }
+    .frameMeta .keyId { color: var(--faint); font-size: 11px; }
+    .frameNote { padding: 9px 14px; border-top: 1px solid var(--line); background: #fbfaf8; color: var(--muted); font-size: 11.5px; line-height: 1.55; }
+    .frameNote b { color: var(--ink-2); font-weight: 650; }
+    .viewport { min-height: 420px; background: var(--bg); position: relative; }
+
+    /* ============ 应用骨架 ============ */
+    .shell { display: grid; grid-template-rows: 54px minmax(0, 1fr); min-height: 460px; background: var(--bg); }
+    .topbar { display: flex; align-items: center; gap: 18px; padding: 0 18px; border-bottom: 1px solid var(--line); background: var(--surface); font-size: 12.5px; }
+    .brand { display: flex; align-items: center; gap: 7px; font-size: 14.5px; font-weight: 750; }
+    .brandMark { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--ink); color: #fff; font-size: 10px; font-weight: 800; }
+    .nav { display: flex; align-items: stretch; gap: 2px; height: 100%; }
+    .nav span { display: grid; place-items: center; padding: 0 11px; border-bottom: 2px solid transparent; color: var(--ink-2); }
+    .nav .active { color: var(--accent); border-color: var(--accent); font-weight: 650; }
+    .spacer { flex: 1; }
+    .topActions { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+    .iconBtn { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; border: 1px solid transparent; color: var(--muted); font-size: 13px; background: transparent; }
+    .iconBtn:hover { background: var(--surface-soft); }
+    .badgeDot { position: absolute; top: 5px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); border: 1.5px solid #fff; }
+    .avatar { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 10.5px; font-weight: 700; }
+
+    /* ============ 三级按钮体系（P0） ============ */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 0 13px; border-radius: var(--r8); font-size: 12.5px; font-weight: 600; border: 1px solid transparent; cursor: default; white-space: nowrap; }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: var(--sh-sm); }
+    .btn-primary:hover { background: var(--accent-strong); }
+    .btn-primary.disabled { background: #e7e5e4; border-color: #e7e5e4; color: var(--faint); box-shadow: none; }
+    .btn-secondary { background: var(--surface); border-color: var(--line-strong); color: var(--ink-2); box-shadow: var(--sh-sm); }
+    .btn-secondary:hover { background: var(--surface-soft); }
+    .btn-tertiary { background: transparent; color: var(--accent); padding: 0 8px; }
+    .btn-tertiary:hover { background: var(--accent-soft); }
+    .btn-danger-ghost { background: transparent; color: var(--danger); }
+    .btn-danger-ghost:hover { background: var(--danger-soft); }
+    .btn.small { min-height: 30px; padding: 0 10px; font-size: 12px; }
+
+    /* ============ 表单控件（P0） ============ */
+    .field { display: grid; gap: 5px; font-size: 12px; }
+    .field > b { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+    .field .help { color: var(--muted); font-size: 11.5px; }
+    .input, .textarea { width: 100%; min-height: 38px; padding: 8px 11px; border: 1px solid var(--line-strong); border-radius: var(--r8); background: var(--surface); color: var(--ink); font-size: 12.5px; box-shadow: var(--sh-sm); }
+    .input::placeholder, .textarea::placeholder { color: var(--faint); }
+    .input.focused { border-color: var(--accent); box-shadow: var(--ring); }
+    .textarea { min-height: 96px; resize: none; line-height: 1.5; }
+    .textarea.code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; background: var(--surface-soft); min-height: 120px; }
+    .stepper { display: inline-flex; align-items: stretch; border: 1px solid var(--line-strong); border-radius: var(--r8); overflow: hidden; background: var(--surface); box-shadow: var(--sh-sm); }
+    .stepper span { display: grid; place-items: center; min-width: 44px; padding: 8px 6px; font-size: 12.5px; }
+    .stepper i { display: grid; place-items: center; width: 28px; color: var(--muted); font-style: normal; border-left: 1px solid var(--line); }
+    .segmented { display: inline-flex; padding: 2px; gap: 2px; border-radius: var(--r8); background: #f0efec; border: 1px solid var(--line); }
+    .segmented span { padding: 4px 12px; border-radius: 6px; font-size: 12px; color: var(--muted); font-weight: 550; }
+    .segmented .on { background: var(--surface); color: var(--ink); font-weight: 650; box-shadow: var(--sh-sm); }
+    .dropdown { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 11px; border: 1px solid var(--line-strong); border-radius: var(--r8); background: var(--surface); font-size: 12.5px; color: var(--ink-2); box-shadow: var(--sh-sm); }
+    .search { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 11px; border: 1px solid var(--line-strong); border-radius: var(--r8); background: var(--surface); color: var(--faint); font-size: 12.5px; box-shadow: var(--sh-sm); }
+    .search kbd, .kbd { padding: 1px 5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; background: var(--surface-soft); color: var(--muted); font-size: 10.5px; font-family: inherit; }
+
+    /* ============ 状态 pill / chips ============ */
+    .pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+    .pill.grey { background: #f5f4f2; color: var(--ink-2); }
+    .pill.blue { background: var(--accent-soft); color: var(--accent-strong); }
+    .pill.green { background: var(--good-soft); color: var(--good); }
+    .pill.amber { background: var(--warn-soft); color: var(--warn); }
+    .pill.red { background: var(--danger-soft); color: var(--danger); }
+    .pill.purple { background: var(--purple-soft); color: var(--purple); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+    /* ============ 页面级模式 ============ */
+    .page { padding: 22px 28px; }
+    .page-narrow { max-width: 760px; margin: 0 auto; padding: 30px 24px; }
+    .pageTitleRow { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
+    .pageTitleRow h2 { margin: 0 0 4px; font-size: 20px; letter-spacing: -.01em; }
+    .pageTitleRow p { margin: 0; color: var(--muted); font-size: 12.5px; }
+    .crumb { font-size: 11.5px; color: var(--faint); margin-bottom: 10px; }
+    .crumb b { color: var(--muted); font-weight: 550; }
+    .objectHead { display: grid; gap: 10px; margin-bottom: 4px; }
+    .objectHead .nameRow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .objectHead .nameRow h2 { margin: 0; font-size: 19px; letter-spacing: -.01em; }
+    .objectHead .sub { color: var(--muted); font-size: 12.5px; }
+    .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 14px 0 18px; }
+    .tabs span { padding: 8px 12px; font-size: 12.5px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .tabs .active { color: var(--accent); border-color: var(--accent); font-weight: 650; }
+    .sectionTitle { display: flex; align-items: center; justify-content: space-between; margin: 22px 0 4px; font-size: 14px; font-weight: 650; }
+    .sectionDesc { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+
+    /* 空态 / Banner / Toast（P0 状态语言） */
+    .emptyState { display: grid; justify-items: center; align-content: center; gap: 7px; padding: 26px 16px; text-align: center; }
+    .emptyState .ico { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-size: 16px; margin-bottom: 3px; }
+    .emptyState b { font-size: 13.5px; }
+    .emptyState p { margin: 0; color: var(--muted); font-size: 12px; max-width: 40ch; }
+    .banner { display: flex; align-items: center; gap: 10px; margin: 14px 28px 0; padding: 10px 14px; border-radius: var(--r10); font-size: 12.5px; border: 1px solid; }
+    .banner.success { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+    .banner.info { background: var(--accent-soft); border-color: var(--accent-line); color: #3730a3; }
+    .banner.warn { background: var(--warn-soft); border-color: var(--warn-line); color: var(--warn); }
+    .banner .grow { flex: 1; }
+    .notice { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border-radius: var(--r10); border: 1px solid var(--warn-line); background: var(--warn-soft); color: #93370d; font-size: 12px; }
+
+    /* Composer */
+    .composer { border: 1px solid var(--line-strong); border-radius: var(--r12); background: var(--surface); box-shadow: var(--sh-md); overflow: hidden; }
+    .composer.focused { border-color: var(--accent); box-shadow: var(--sh-md), var(--ring); }
+    .composer .area { padding: 11px 13px 4px; color: var(--faint); font-size: 13px; min-height: 42px; }
+    .composer .toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+    .modelChip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-soft); font-size: 11.5px; color: var(--ink-2); font-weight: 550; }
+    .sendBtn { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 13px; border-radius: var(--r8); background: var(--accent); color: #fff; font-size: 12.5px; font-weight: 650; }
+
+    /* 建议卡片 */
+    .suggestRow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .suggest { display: grid; gap: 5px; padding: 11px 12px; border: 1px solid var(--line); border-radius: var(--r10); background: var(--surface); text-align: left; font-size: 12.5px; box-shadow: var(--sh-sm); }
+    .suggest small { color: var(--faint); font-size: 11px; }
+    .suggest:hover, .suggest.hover { border-color: var(--accent-line); box-shadow: var(--sh-md); }
+
+    /* 列表行 */
+    .rowList { border: 1px solid var(--line); border-radius: var(--r12); background: var(--surface); overflow: hidden; box-shadow: var(--sh-sm); }
+    .rowItem { display: flex; align-items: center; gap: 11px; padding: 11px 14px; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+    .rowItem:last-child { border-bottom: 0; }
+    .rowItem.selected { background: var(--accent-soft); box-shadow: inset 2px 0 var(--accent); }
+    .rowItem .objIco { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-size: 12px; flex: none; }
+    .rowItem .main { flex: 1; min-width: 0; }
+    .rowItem .main b { display: block; font-size: 12.5px; }
+    .rowItem .main span { color: var(--muted); font-size: 11.5px; display: block; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rowItem .io { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+
+    /* 看板 */
+    .aiHero { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding: 11px 14px; border: 1px solid var(--accent-line); border-radius: var(--r12); background: var(--surface); box-shadow: var(--sh-md), var(--ring); color: var(--faint); font-size: 13px; }
+    .aiHero .ai { color: var(--accent); font-size: 14px; }
+    .lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .lane { min-height: 250px; padding: 10px; border: 1px solid var(--line); border-radius: var(--r12); background: var(--surface-soft); }
+    .laneHead { display: flex; align-items: center; gap: 7px; padding: 2px 4px 10px; font-size: 12.5px; font-weight: 650; }
+    .laneHead .count { color: var(--faint); font-weight: 550; }
+    .lane.dropTarget { border: 1.5px dashed var(--accent); background: var(--accent-soft); }
+    .loopCard { display: grid; gap: 6px; margin-bottom: 9px; padding: 11px 12px; border: 1px solid var(--line); border-radius: var(--r10); background: var(--surface); box-shadow: var(--sh-sm); font-size: 12.5px; }
+    .loopCard .meta { display: flex; align-items: center; gap: 8px; color: var(--faint); font-size: 11px; flex-wrap: wrap; }
+    .loopCard .quick { display: flex; gap: 6px; margin-top: 2px; }
+    .loopCard.dragging { opacity: .55; border-style: dashed; }
+    .emptyLane { display: grid; justify-items: center; align-content: center; gap: 6px; min-height: 150px; padding: 14px; text-align: center; border: 1px dashed var(--line-strong); border-radius: var(--r10); color: var(--muted); font-size: 11.5px; }
+    .emptyLane b { color: var(--ink-2); font-size: 12px; }
+    .flowStrip { display: flex; align-items: center; gap: 9px; margin-top: 14px; padding: 10px 14px; border: 1px dashed var(--line-strong); border-radius: var(--r10); background: var(--surface); color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+    .flowStrip b { color: var(--ink-2); flex: none; }
+
+    /* 入口卡 */
+    .entryCards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .entryCard { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 13px; padding: 16px; border: 1px solid var(--line-strong); border-radius: var(--r12); background: var(--surface); box-shadow: var(--sh-sm); text-align: left; transition: border-color .15s, box-shadow .15s, transform .15s; }
+    .entryCard:hover, .entryCard.hover { border-color: var(--accent); box-shadow: var(--sh-md), var(--ring); transform: translateY(-1px); }
+    .entryCard::after { content: "→"; position: absolute; top: 13px; right: 15px; color: var(--accent); font-size: 13px; opacity: 0; transition: opacity .15s; }
+    .entryCard:hover::after, .entryCard.hover::after { opacity: 1; }
+    .entryCard .ico { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 11px; background: linear-gradient(135deg, var(--accent-soft), #fff); border: 1px solid var(--accent-line); color: var(--accent); font-size: 17px; }
+    .entryCard b { font-size: 13.5px; display: block; margin-bottom: 4px; }
+    .entryCard p { margin: 0 0 9px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .entryCard .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+    .tagChip { padding: 2px 8px; border-radius: 999px; background: var(--surface-soft); border: 1px solid var(--line); color: var(--muted); font-size: 10.5px; }
+
+    /* 向导步骤轨 */
+    .wizard { display: grid; grid-template-columns: 218px minmax(0, 1fr); gap: 0; border: 1px solid var(--line); border-radius: var(--r12); background: var(--surface); overflow: hidden; box-shadow: var(--sh-sm); }
+    .stepRail { padding: 16px 12px; background: var(--surface-soft); border-right: 1px solid var(--line); }
+    .stepRail .progress { padding: 0 8px 12px; color: var(--muted); font-size: 11px; }
+    .railStep { display: flex; align-items: center; gap: 9px; padding: 8px; border-radius: var(--r8); font-size: 12px; color: var(--muted); }
+    .railStep .n { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--line-strong); font-size: 10px; background: var(--surface); flex: none; }
+    .railStep.done { color: var(--ink-2); }
+    .railStep.done .n { background: var(--good); border-color: var(--good); color: #fff; }
+    .railStep.active { background: var(--accent-soft); color: var(--accent-strong); font-weight: 650; }
+    .railStep.active .n { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+    .railStep.locked { color: var(--faint); }
+    .wizardBody { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 340px; }
+    .wizardContent { padding: 20px 22px; }
+    .wizardFooter { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 22px; border-top: 1px solid var(--line); background: var(--surface); }
+
+    /* 步进卡（测试/发布） */
+    .flowSteps { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 12px; color: var(--muted); }
+    .flowSteps .fs { display: inline-flex; align-items: center; gap: 6px; }
+    .flowSteps .fs .n { display: grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; font-size: 10.5px; border: 1.5px solid var(--line-strong); background: var(--surface); }
+    .flowSteps .fs.done { color: var(--good); font-weight: 600; }
+    .flowSteps .fs.done .n { background: var(--good); border-color: var(--good); color: #fff; }
+    .flowSteps .fs.active { color: var(--accent-strong); font-weight: 650; }
+    .flowSteps .fs.active .n { border-color: var(--accent); color: var(--accent); }
+    .flowSteps .fs.locked { color: var(--faint); }
+    .flowSteps .join { flex: 0 0 26px; height: 1px; background: var(--line-strong); }
+    .stepCard { border: 1px solid var(--line); border-radius: var(--r12); background: var(--surface); box-shadow: var(--sh-sm); margin-bottom: 12px; overflow: hidden; }
+    .stepCard .head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; font-size: 13px; font-weight: 650; }
+    .stepCard.done .head { color: var(--good); }
+    .stepCard.locked { background: var(--surface-soft); }
+    .stepCard.locked .head { color: var(--faint); font-weight: 550; }
+    .stepCard .body { padding: 4px 16px 16px; border-top: 1px solid var(--line); }
+    .stepCard .body .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* 详情定义行 */
+    .defRow { display: flex; align-items: baseline; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+    .defRow:last-child { border-bottom: 0; }
+    .defRow .k { flex: 0 0 108px; color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 7px; }
+    .defRow .v { flex: 1; color: var(--ink-2); }
+    .ioChips { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ioChip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: var(--r8); border: 1px solid var(--line); background: var(--surface-soft); font-size: 12px; font-weight: 550; }
+
+    /* 提案 / 摘要栏 */
+    .splitGrid { display: grid; grid-template-columns: minmax(0, 1fr) 268px; gap: 16px; align-items: start; }
+    .card { border: 1px solid var(--line); border-radius: var(--r12); background: var(--surface); box-shadow: var(--sh-sm); overflow: hidden; }
+    .card .cardHead { padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 13px; font-weight: 650; display: flex; align-items: center; justify-content: space-between; }
+    .editRow { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+    .editRow:last-child { border-bottom: 0; }
+    .editRow .k { flex: 0 0 84px; color: var(--muted); font-size: 11.5px; }
+    .editRow .v { flex: 1; }
+    .editRow .edit { color: var(--faint); font-size: 11px; }
+    .editRow:hover .edit { color: var(--accent); }
+    .summaryCard { border: 1px solid var(--line); border-radius: var(--r12); background: var(--surface); box-shadow: var(--sh-sm); padding: 14px 16px; display: grid; gap: 9px; font-size: 12.5px; }
+    .summaryCard h4 { margin: 0 0 2px; font-size: 13px; }
+    .summaryCard .chk { display: flex; gap: 8px; align-items: center; color: var(--ink-2); font-size: 12px; }
+    .summaryCard .chk .ok { color: var(--good); }
+
+    /* Popover（模型切换） */
+    .popover { width: 100%; padding: 7px; border: 1px solid var(--line-strong); border-radius: var(--r12); background: var(--surface); box-shadow: var(--sh-lg); }
+    .popover .groupLabel { padding: 7px 9px 4px; color: var(--faint); font-size: 10.5px; font-weight: 650; letter-spacing: .04em; display: block; }
+    .modelRow { display: flex; align-items: center; gap: 9px; padding: 8px 9px; border-radius: var(--r8); font-size: 12px; }
+    .modelRow .grow { flex: 1; min-width: 0; }
+    .modelRow small { display: block; margin-top: 2px; color: var(--muted); font-size: 10.5px; }
+    .modelRow.selected { background: var(--accent-soft); }
+    .modelRow.unavail { color: var(--faint); }
+    .modelRow.unavail small { color: var(--faint); }
+    .popover .foot { margin-top: 5px; padding: 7px 9px; border-top: 1px solid var(--line); color: var(--faint); font-size: 10.5px; display: block; }
+    .demoLabel { margin: 0 0 7px; color: var(--faint); font-size: 11px; font-weight: 650; letter-spacing: .05em; }
+
+    /* Agent 多 session 版面（参考 Codex 类 agent web GUI） */
+    .agentGrid { display: grid; grid-template-columns: 246px minmax(0, 1fr); min-height: 500px; }
+    .agentGrid.hasReader { grid-template-columns: 236px minmax(0, 1fr) 384px; }
+    .sessionRail { border-right: 1px solid var(--line); background: var(--surface); display: flex; flex-direction: column; min-width: 0; }
+    .sessionRail .railHead { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 11px 12px; border-bottom: 1px solid var(--line); font-size: 12.5px; font-weight: 650; }
+    .sessionGroup { padding: 10px 10px 3px; color: var(--faint); font-size: 10.5px; font-weight: 650; letter-spacing: .05em; }
+    .sessionItem { display: flex; gap: 8px; align-items: flex-start; margin: 1px 6px; padding: 7px 8px; border-radius: var(--r8); font-size: 12px; }
+    .sessionItem.selected { background: var(--accent-soft); box-shadow: inset 2px 0 var(--accent); }
+    .sessionItem .t { flex: 1; min-width: 0; }
+    .sessionItem .t b { display: block; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sessionItem .t span { display: block; margin-top: 1px; color: var(--muted); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sDot { width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; flex: none; }
+    .sDot.run { background: var(--accent); animation: pulse 1.2s infinite; }
+    .sDot.queue { background: #c6c2bc; }
+    .sDot.done { background: var(--good); }
+    .sDot.confirm { background: var(--warn); }
+    .sessionRail .railEmpty { padding: 18px 12px; color: var(--faint); font-size: 11.5px; line-height: 1.5; }
+    .agentMain { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; }
+    .agentScroll { padding: 20px 24px; display: grid; gap: 14px; align-content: start; }
+    .agentComposerBar { padding: 12px 24px 16px; }
+    /* 任务栏折叠态标本 */
+    .collapseSpec { position: absolute; left: 16px; bottom: 14px; display: grid; gap: 6px; justify-items: center; padding: 10px; border: 1px dashed var(--line-strong); border-radius: var(--r10); background: rgb(255 255 255 / .92); box-shadow: var(--sh-md); }
+    .collapseSpec .cap { color: var(--muted); font-size: 10px; white-space: nowrap; }
+    .collapsedRail { width: 40px; height: 132px; border: 1px solid var(--line); border-radius: var(--r10); background: var(--surface); display: grid; justify-items: center; padding: 7px 0; align-content: start; gap: 8px; }
+    .collapsedRail .x { color: var(--accent); font-size: 12px; font-weight: 700; }
+
+    /* Agent 时间线 */
+    .timeline { display: grid; gap: 14px; }
+    .turnUser { justify-self: end; max-width: 75%; padding: 9px 13px; border-radius: 14px 14px 4px 14px; background: var(--accent); color: #fff; font-size: 12.5px; }
+    .turnAgent { display: grid; gap: 8px; max-width: 92%; }
+    .turnAgent .who { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11.5px; }
+    .runningDot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s infinite; }
+    @keyframes pulse { 50% { opacity: .3; } }
+    .resultCard { border: 1px solid var(--line); border-radius: var(--r12); background: var(--surface); box-shadow: var(--sh-sm); padding: 13px 15px; display: grid; gap: 7px; font-size: 12.5px; }
+    .resultCard .art { display: flex; gap: 7px; flex-wrap: wrap; }
+    .queued { color: var(--faint); font-size: 12px; display: flex; align-items: center; gap: 8px; }
+    /* 内联执行细节 */
+    .stepLog { border: 1px solid var(--line); border-radius: var(--r10); background: var(--surface); padding: 9px 12px; display: grid; gap: 6px; font-size: 11.5px; box-shadow: var(--sh-sm); }
+    .stepLog .s { display: flex; gap: 8px; align-items: center; color: var(--ink-2); }
+    .stepLog .s.done { color: var(--good); }
+    .stepLog .s.now { color: var(--accent-strong); font-weight: 600; }
+    .stepLog .s.todo { color: var(--faint); }
+
+    /* 结果阅读页（打开结果的闭环） */
+    .reader { border-left: 1px solid var(--line); background: var(--surface); display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; }
+    .reader .rHead { display: flex; align-items: center; gap: 9px; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+    .reader .rHead .t { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .reader .rHead .nav2 { display: flex; align-items: center; gap: 5px; color: var(--faint); font-size: 11px; }
+    .reader .rBody { padding: 16px 18px; display: grid; gap: 11px; align-content: start; font-size: 12.5px; }
+    .reader .rMeta { color: var(--faint); font-size: 11px; }
+    .mdMock { display: grid; gap: 8px; padding: 13px 15px; border: 1px solid var(--line); border-radius: var(--r10); background: var(--surface-soft); }
+    .mdMock .h1 { font-size: 15px; font-weight: 750; }
+    .mdMock .h2 { margin-top: 5px; font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+    .mdMock .li { display: flex; gap: 7px; color: var(--ink-2); font-size: 11.5px; line-height: 1.5; }
+    .mdMock .li::before { content: "•"; color: var(--accent); }
+    .provSec { border: 1px solid var(--line); border-radius: var(--r10); background: var(--surface-soft); padding: 10px 12px; display: grid; gap: 7px; font-size: 11.5px; }
+    .provSec .pHead { display: flex; align-items: center; justify-content: space-between; font-weight: 650; font-size: 11.5px; color: var(--ink-2); }
+    .provSec .pRow { display: flex; gap: 8px; color: var(--muted); }
+    .provSec .pRow b { flex: 0 0 44px; font-weight: 550; color: var(--faint); }
+
+    /* 资源库：领域 rail + tabs + 过滤 chips */
+    .libLayout { display: grid; grid-template-columns: 196px minmax(0, 1fr) 316px; min-height: 460px; }
+    .domainRail { border-right: 1px solid var(--line); background: var(--surface-soft); padding: 12px 10px; display: grid; gap: 2px; align-content: start; }
+    .domainRail .dGroup { padding: 4px 9px 6px; color: var(--faint); font-size: 10.5px; font-weight: 650; letter-spacing: .05em; }
+    .domainItem { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 9px; border-radius: var(--r8); font-size: 12px; color: var(--ink-2); }
+    .domainItem .c { color: var(--faint); font-size: 11px; }
+    .domainItem.on { background: var(--accent-soft); color: var(--accent-strong); font-weight: 650; }
+    .domainItem.on .c { color: var(--accent); }
+    .domainRail .dFoot { margin-top: 12px; padding: 9px; border-top: 1px solid var(--line); color: var(--faint); font-size: 10.5px; line-height: 1.5; }
+    .libMain { padding: 16px 18px; min-width: 0; }
+    .libTabs { display: inline-flex; gap: 2px; border-bottom: 1px solid var(--line); }
+    .libTabs span { padding: 7px 11px; font-size: 12.5px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .libTabs .on { color: var(--accent); border-color: var(--accent); font-weight: 650; }
+    .chipToggle { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); font-size: 11.5px; color: var(--muted); }
+    .chipToggle.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-strong); font-weight: 600; }
+    .libPreview { border-left: 1px solid var(--line); background: var(--surface); padding: 16px; display: grid; gap: 11px; align-content: start; font-size: 12.5px; }
+
+    /* 起点模板卡 */
+    .tplGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .tplCard { position: relative; display: grid; gap: 7px; align-content: start; padding: 14px; border: 1px solid var(--line-strong); border-radius: var(--r12); background: var(--surface); box-shadow: var(--sh-sm); font-size: 12.5px; text-align: left; transition: border-color .15s, box-shadow .15s, transform .15s; }
+    .tplCard:hover { border-color: var(--accent); box-shadow: var(--sh-md), var(--ring); transform: translateY(-1px); }
+    .tplCard b { font-size: 13px; }
+    .tplCard p { margin: 0; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+    .tplCard .meta { color: var(--faint); font-size: 10.5px; }
+
+    /* modal 标本 */
+    .modalShade { display: grid; place-items: center; min-height: 420px; padding: 22px; background: rgb(28 25 23 / .34); }
+    .modal { width: min(500px, 94%); background: var(--surface); border-radius: 14px; box-shadow: var(--sh-lg); overflow: hidden; }
+    .modal .mHead { padding: 14px 16px 10px; font-size: 14px; font-weight: 700; }
+    .modal .mBody { padding: 0 16px 12px; display: grid; gap: 9px; }
+    .modal .mFoot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--surface-soft); }
+
+    /* 移动端 */
+    .phoneWrap { display: flex; gap: 26px; justify-content: center; padding: 18px 12px; align-items: flex-start; flex-wrap: wrap; }
+    .phone { width: 292px; min-height: 560px; border: 1px solid #b8b3ac; border-radius: 26px; background: var(--surface); overflow: hidden; box-shadow: var(--sh-lg); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+    .mTop { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 700; }
+    .mBody { padding: 14px; display: grid; gap: 11px; align-content: start; font-size: 12.5px; background: var(--bg); }
+    .mBody h3 { margin: 0; font-size: 16.5px; }
+    .mBody .sub { color: var(--muted); font-size: 11.5px; margin: 0; }
+    .tabBar { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); background: var(--surface); }
+    .tabBar span { display: grid; justify-items: center; gap: 3px; padding: 8px 0 10px; font-size: 9.5px; color: var(--faint); }
+    .tabBar span i { font-style: normal; font-size: 15px; }
+    .tabBar .active { color: var(--accent); font-weight: 650; }
+    .mProgress { height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
+    .mProgress i { display: block; height: 100%; width: 28%; background: var(--accent); border-radius: 2px; }
+    .mStickyFooter { display: flex; gap: 9px; padding: 11px 14px; border-top: 1px solid var(--line); background: var(--surface); }
+    .mStickyFooter .btn { flex: 1; }
+    .mLaneSec { display: grid; gap: 7px; }
+    .mLaneHead { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 650; color: var(--ink-2); }
+    .hChips { display: flex; gap: 6px; overflow: hidden; }
+    .hChips span { flex: none; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); font-size: 11px; color: var(--muted); }
+    .hChips .on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-strong); font-weight: 600; }
+
+    /* 深色对照 */
+    .darkStrip { border-radius: var(--r12); background: #1c1917; padding: 16px; display: grid; gap: 12px; color: #e7e5e4; }
+    .darkStrip .dLabel { color: #a8a29e; font-size: 11px; letter-spacing: .05em; font-weight: 650; }
+    .darkRow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .dGhost { padding: 6px 12px; border-radius: var(--r8); border: 1px solid #57534e; color: #d6d3d1; font-size: 12px; background: transparent; }
+    .dDisabled { padding: 6px 12px; border-radius: var(--r8); background: #292524; color: #a8a29e; font-size: 12px; }
+    .dPill { padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+
+    .specSheet { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .specBlock { border: 1px solid var(--line); border-radius: var(--r12); background: var(--surface); padding: 14px; display: grid; gap: 10px; align-content: start; }
+    .specBlock h4 { margin: 0; font-size: 12.5px; }
+    .specBlock .item { display: flex; align-items: center; gap: 9px; font-size: 11.5px; color: var(--muted); }
+    .swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+    .sw { width: 34px; height: 24px; border-radius: 6px; border: 1px solid rgb(0 0 0 / .08); }
+
+    @media (max-width: 900px) { .board { grid-template-columns: 1fr; padding: 12px; } }
+  </style>
+</head>
+<body>
+  <header class="boardHeader">
+    <h1>M5 关键帧设计总览<span class="pendingTag" style="background:var(--good-soft); color:var(--good); border-color:#a7f3d0;">已批准基线 · 2026-07-28</span></h1>
+    <p>M5 实施设计基线，共 25 帧（00 设计基础 / 01–03 Agent / 04–06+05B–05F Skill 创建 / 07–09+17–18 Loop / 10–12 Skill 管理 / 13 资源库 / 14–16 移动端 / 19 状态语言）。真实视觉签收仍以 Product API 页面 capture + 人工 review 为准；变更记录见各帧注记，配色与文案规范见 M5_UX_REDESIGN_V2.md 第 1.0、8 节。</p>
+  </header>
+  <main class="board">
+    <!-- ============ P0 · 设计基础 ============ -->
+    <article class="frameCard" id="design-foundation">
+      <div class="frameMeta"><strong>00 设计基础（P0）</strong><span class="keyId">buttons · controls · pills · states</span></div>
+      <div class="viewport" style="padding:18px; display:grid; gap:14px;">
+        <div class="specSheet">
+          <section class="specBlock">
+            <h4>按钮三级 · 每屏只有一个 primary</h4>
+            <div class="item"><button class="btn btn-primary">主要动作</button><span>蓝实心 · 每屏 ≤1 个</span></div>
+            <div class="item"><button class="btn btn-secondary">次要动作</button><span>描边 · 替代原黑色实心</span></div>
+            <div class="item"><button class="btn btn-tertiary">文字动作</button><span>返回 / 取消 / 查看</span></div>
+            <div class="item"><button class="btn btn-primary disabled">禁用</button><span>必须附原因（tooltip / inline）</span></div>
+          </section>
+          <section class="specBlock">
+            <h4>表单控件 · 全部可见边框，不用原生皮肤</h4>
+            <div class="item" style="display:grid; gap:5px;"><b style="color:var(--ink-2)">标签在上</b><div class="input">默认：边框 #ddd9d3 · 圆角 8</div></div>
+            <div class="item" style="display:grid; gap:5px;"><div class="input focused">聚焦：蓝边 + 4px 蓝环</div></div>
+            <div class="item"><span class="segmented"><span class="on">全部</span><span>提示词</span><span>脚本</span></span><span>segmented 替代原生 select</span></div>
+            <div class="item"><span class="stepper"><i>−</i><span>30</span><i>＋</i></span><span>自定义 stepper 替代 number</span></div>
+            <div class="item"><span class="dropdown">全部类型<svg width="8" height="6" viewBox="0 0 8 6"><path d="M1 1l3 3 3-3" stroke="#78716c" fill="none" stroke-width="1.5"/></svg></span><span>自定义 dropdown</span></div>
+          </section>
+          <section class="specBlock">
+            <h4>状态语言</h4>
+            <div class="item"><span class="pill grey">草稿</span><span class="pill green">可运行</span><span class="pill purple">已共享</span></div>
+            <div class="item"><span class="pill amber">缺材料</span><span class="pill blue">风险：低</span><span class="pill red">冲突</span></div>
+            <div class="item">色彩之外恒有文字，不单独用颜色表达状态</div>
+            <div class="swatches">
+              <span class="sw" style="background:#f7f6f3"></span><span class="sw" style="background:#fff;border-color:#ddd9d3"></span><span class="sw" style="background:#4f46e5"></span><span class="sw" style="background:#047857"></span><span class="sw" style="background:#b45309"></span><span class="sw" style="background:#b91c1c"></span><span class="sw" style="background:#7c3aed"></span>
+            </div>
+          </section>
+        </div>
+        <div class="grid2">
+          <div class="card"><div class="emptyState"><span class="ico">✦</span><b>统一空态 EmptyState</b><p>40px 图标容器 + 一句标题 + 一行说明 + 最多一个动作。列表为空时给引导，不给"只有表头的表格"。</p><button class="btn btn-tertiary small">了解如何开始</button></div></div>
+          <div style="display:grid; gap:10px; align-content:start;">
+            <div class="banner success" style="margin:0"><span>✓</span><span class="grow">连接已恢复，可以继续刚才的操作。</span><button class="btn btn-tertiary small">知道了</button></div>
+            <div class="banner warn" style="margin:0"><span>⚠</span><span class="grow">你现在的身份只能看，不能改。</span><button class="btn btn-tertiary small">复制访问申请</button></div>
+            <p style="margin:0; color:var(--muted); font-size:11.5px;">Banner 顶部 sticky、可关闭，成功类 5s 自动消退；瞬时反馈（已保存等）走 toast，不常驻页面。</p>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>变更：</b>黑色实心按钮移出体系；原生 select/number/file 全部替换；空态、Banner、toast 三类反馈分层定死；状态 pill 统一。<b>文案规范：</b>界面说人话——schema / 编译 / canonical / 冒烟 / FIFO 等工程词不进界面，治理语义用结果语言表达（详见设计方案第 8 节）。</div>
+    </article>
+
+    <!-- ============ 01 Agent 空状态首页（多 session 版面 · 空态） ============ -->
+    <article class="frameCard full" id="agent-home-empty">
+      <div class="frameMeta"><strong>01 Agent 首页 · 空态（session 栏 + 引导组）</strong><span class="keyId">agent-home-empty · 1440 / ZH / Light</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span class="active">Agent</span><span>技能</span><span>工作流</span><span>团队资源库</span></nav><span class="spacer"></span><span class="topActions"><button class="btn btn-primary small">＋ 新建</button><span class="iconBtn">🔔<span class="badgeDot"></span></span><span class="avatar">陈</span></span></div>
+        <div class="agentGrid">
+          <aside class="sessionRail">
+            <div class="railHead">任务<span style="display:flex; align-items:center; gap:2px;"><button class="btn btn-tertiary small">＋ 新任务</button><button class="iconBtn" title="收起任务栏" style="width:24px; height:24px;">‹</button></span></div>
+            <div class="railEmpty">还没有任务。<br>从右边描述一件你想完成的事，就开始了。</div>
+          </aside>
+          <div class="agentMain">
+            <div class="agentScroll" style="align-content:center; justify-items:center;">
+              <div style="max-width:680px; width:100%; display:grid; gap:16px;">
+                <div>
+                  <h2 style="margin:0 0 5px; font-size:20px;">开始一项任务</h2>
+                  <p style="margin:0; color:var(--muted); font-size:12.5px;">说说你想要什么结果。任务、对话和图像都在同一条历史里；左边会记下你做的每一件事。</p>
+                </div>
+                <div class="suggestRow">
+                  <button class="suggest"><b>📋 整理会议行动项</b><small>摘要 · 需要会议记录</small></button>
+                  <button class="suggest hover"><b>📄 总结文档并列出决策</b><small>文档 · 支持拖入文件</small></button>
+                  <button class="suggest"><b>✦ 把笔记变成执行计划</b><small>计划 · 输出结构化步骤</small></button>
+                </div>
+              </div>
+            </div>
+            <div class="agentComposerBar">
+              <div class="composer focused" style="max-width:680px; margin:0 auto;">
+                <div class="area">描述你想要的结果…</div>
+                <div class="toolbar">
+                  <span class="modelChip">Standard ▾</span>
+                  <span class="spacer"></span>
+                  <span class="iconBtn" title="添加文件">📎</span>
+                  <span class="kbd">⌘ ⏎</span>
+                  <button class="sendBtn">发送 ↑</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>变更：</b>多 session 版面（参考 Codex 类 agent web GUI）：左栏任务列表 + 主区对话流 + composer 固定底部，提交即开新任务；任务栏可用"‹"折叠（r4）。空态时左栏显示引导，主区保留建议卡组；原"整屏虚空 + 两个裸 pill"彻底移除。</div>
+    </article>
+
+    <!-- ============ 02 Agent 多 session 运行版面 + 结果阅读页（闭环） ============ -->
+    <article class="frameCard full" id="agent-running-result">
+      <div class="frameMeta"><strong>02 Agent 运行版面 · 执行细节内联 + 打开结果 → 结果阅读页</strong><span class="keyId">agent-running-result · 1440 / ZH / Light</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span class="active">Agent</span><span>技能</span><span>工作流</span><span>团队资源库</span></nav><span class="spacer"></span><span class="topActions"><button class="btn btn-primary small">＋ 新建</button><span class="iconBtn">🔔</span><span class="avatar">陈</span></span></div>
+        <div class="agentGrid hasReader">
+          <aside class="sessionRail">
+            <div class="railHead">任务<span style="display:flex; align-items:center; gap:2px;"><button class="btn btn-tertiary small">＋ 新任务</button><button class="iconBtn" title="收起任务栏" style="width:24px; height:24px;">‹</button></span></div>
+            <div class="sessionGroup">今天</div>
+            <div class="sessionItem selected"><span class="sDot run"></span><span class="t"><b>访谈决策摘要</b><span>进行中 · 第 2 步，共 3 步</span></span></div>
+            <div class="sessionItem"><span class="sDot queue"></span><span class="t"><b>周报封面图</b><span>排队第 1 位</span></span></div>
+            <div class="sessionItem"><span class="sDot confirm"></span><span class="t"><b>竞品发布笔记整理</b><span>等你确认修改</span></span></div>
+            <div class="sessionGroup">昨天</div>
+            <div class="sessionItem"><span class="sDot done"></span><span class="t"><b>市场研究简报</b><span>已完成 · 昨天 18:02</span></span></div>
+            <div class="sessionItem"><span class="sDot done"></span><span class="t"><b>⤴ 每周产品复盘</b><span>Loop 运行 · 已完成 · 昨天 09:30</span></span></div>
+          </aside>
+          <div class="agentMain">
+            <div class="agentScroll">
+              <div class="timeline">
+                <div class="turnUser">把本周访谈整理成决策摘要，并列出仍需确认的问题。</div>
+                <div class="turnAgent">
+                  <div class="who"><span class="runningDot"></span>Agent · 正在处理（第 2 步，共 3 步）<button class="btn btn-tertiary small">执行细节 ▾</button><button class="btn btn-tertiary small">取消</button></div>
+                  <div class="stepLog">
+                    <div class="s done">✓ 第 1 步 · 读取 6 份访谈记录</div>
+                    <div class="s now">● 第 2 步 · 提炼决策与风险（进行中）</div>
+                    <div class="s todo">○ 第 3 步 · 生成摘要文档</div>
+                  </div>
+                  <div class="resultCard">
+                    <b>访谈决策摘要（草稿）</b>
+                    <span style="color:var(--muted); font-size:12px;">已提炼 4 条决策、3 个风险和 2 个待确认问题。</span>
+                    <div class="art"><span class="tagChip">决策摘要.md</span><span class="tagChip">来源：访谈 ×6</span></div>
+                    <div><button class="btn btn-secondary small">打开结果 →</button></div>
+                  </div>
+                </div>
+                <div class="queued">⋯ 排队第 1 位 · 再生成一张适合周报封面的图像</div>
+              </div>
+            </div>
+            <div class="agentComposerBar">
+              <div class="composer">
+                <div class="area">继续补充要求…</div>
+                <div class="toolbar"><span class="modelChip">Standard ▾</span><span class="spacer"></span><span class="iconBtn" title="添加文件">📎</span><span class="kbd">⌘ ⏎</span><button class="sendBtn">发送 ↑</button></div>
+              </div>
+            </div>
+          </div>
+          <aside class="reader">
+            <div class="rHead">
+              <button class="iconBtn" title="关闭" style="width:26px; height:26px;">✕</button>
+              <span class="t">访谈决策摘要</span>
+              <span class="nav2">1/2 <button class="iconBtn" style="width:22px; height:22px;">‹</button><button class="iconBtn" style="width:22px; height:22px;">›</button></span>
+            </div>
+            <div class="rBody">
+              <span class="rMeta">Markdown · 2.1 KB · 今天 14:02 · 来自任务「访谈决策摘要」</span>
+              <div class="mdMock">
+                <span class="h1">访谈决策摘要</span>
+                <span class="h2">决策（4）</span>
+                <span class="li">注册流程砍到两步，本周内上线</span>
+                <span class="li">定价页增加团队版对比表</span>
+                <span class="h2">风险（3）</span>
+                <span class="li">老用户迁移窗口只有两周</span>
+                <span class="h2">待确认（2）</span>
+                <span class="li">企业版是否包含 SSO</span>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn btn-secondary small">下载 .md</button>
+                <button class="btn btn-secondary small">复制内容</button>
+              </div>
+              <div class="provSec">
+                <div class="pHead">运行信息 <span style="color:var(--faint); font-weight:550;">▾</span></div>
+                <div class="pRow"><b>模型</b>Standard · 本次运行锁定不变</div>
+                <div class="pRow"><b>来源</b>手动任务（非 Loop）</div>
+                <div class="pRow"><b>用时</b>2 分 14 秒</div>
+                <div class="pRow"><b>用量</b>已用 38%</div>
+              </div>
+            </div>
+          </aside>
+        </div>
+        <div class="collapseSpec">
+          <span class="cap">任务栏折叠后</span>
+          <span class="collapsedRail"><span class="x">»</span><span class="sDot run" style="margin:0;"></span><span class="sDot confirm" style="margin:0;"></span><span class="sDot done" style="margin:0;"></span></span>
+        </div>
+      </div>
+      <div class="frameNote"><b>r4 闭环：</b>① 任务栏"‹"可折叠为 44px 图标条（左下标本，状态点仍可见）。② 取消"上下文/运行详情/产物"三 tab drawer——<b>上下文内联</b>：执行细节直接写"读取 6 份访谈记录"，结果卡带"来源"chip，在使用现场可见，不设抽象标签页；<b>运行详情降级</b>：进行中状态内联于时间线（"执行细节 ▾"可展开步骤），完成后的模型/用时/用量收进阅读页底部"运行信息"折叠区；<b>产物不设列表 tab</b>：产物就在结果卡 chips 里，"打开结果"的闭环 = 右侧结果阅读页（渲染好的 Markdown + 下载/复制 + 多产物 1/N 翻页）。</div>
+    </article>
+
+    <!-- ============ 03 模型选择（无模式切换，输入时检测） ============ -->
+    <article class="frameCard" id="model-switch-capabilities">
+      <div class="frameMeta"><strong>03 模型选择 · 无"文本/图像"模式切换</strong><span class="keyId">model-switch-capabilities · Popover</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span class="active">Agent</span><span>技能</span><span>工作流</span><span>团队资源库</span></nav></div>
+        <div class="page" style="display:grid; align-content:center;">
+          <div style="max-width:760px; margin:0 auto; width:100%; display:grid; gap:18px;">
+            <div class="grid2" style="align-items:start;">
+              <div>
+                <p class="demoLabel">工具条只有一个按钮：模型</p>
+                <div class="popover">
+                  <span class="groupLabel">团队开通的模型 · 能力直接标注</span>
+                  <span class="modelRow"><span class="grow"><b>Standard</b><small>团队默认 · 支持图片</small></span><span style="color:var(--accent)">✓</span></span>
+                  <span class="modelRow"><span class="grow"><b>Kimi K2</b><small>长文本 · 支持图片</small></span></span>
+                  <span class="modelRow"><span class="grow"><b>DeepSeek V3</b><small>推理强 · 仅文本</small></span></span>
+                  <span class="modelRow"><span class="grow"><b>Fast</b><small>低延迟 · 仅文本</small></span></span>
+                  <span class="foot">这里只选要用的模型，账号密钥由团队统一管理</span>
+                </div>
+              </div>
+              <div style="display:grid; gap:10px; align-content:start;">
+                <p class="demoLabel">入口在 composer 工具条（无模式切换）</p>
+                <div class="composer">
+                  <div class="area" style="min-height:30px;">描述你想要的结果…</div>
+                  <div class="toolbar"><span class="modelChip" style="border-color:var(--accent-line); background:var(--accent-soft);">Standard ▾</span><span class="spacer"></span><span class="iconBtn" title="添加文件">📎</span><button class="sendBtn">发送 ↑</button></div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <p class="demoLabel">拖入图片但模型看不懂时（输入时检测）</p>
+              <div class="composer">
+                <div style="display:flex; gap:7px; padding:9px 12px 0;"><span class="tagChip" style="display:inline-flex; align-items:center; gap:6px; padding:4px 9px;">🖼 产品截图.png <span style="color:var(--faint)">×</span></span></div>
+                <div class="area" style="min-height:24px;">描述你想要的结果…</div>
+                <div class="toolbar"><span class="modelChip">DeepSeek V3 ▾</span><span class="spacer"></span><span class="iconBtn" title="添加文件">📎</span><button class="btn btn-primary disabled">发送 ↑</button></div>
+              </div>
+              <div class="notice" style="margin-top:9px;"><span>⚠</span><span style="flex:1">DeepSeek V3 看不懂图片。换个支持图片的模型，或移除图片后再发。</span><button class="btn btn-tertiary small">换模型 ▾</button><button class="btn btn-tertiary small">移除图片</button></div>
+              <p style="margin:6px 0 0; color:var(--faint); font-size:11px;">发送保持禁用，tooltip 给出原因：「这个模型看不懂图片」。</p>
+            </div>
+            <div>
+              <p class="demoLabel">没有可用模型时</p>
+              <div class="notice"><span>⚠</span><span style="flex:1">现在还没有可用的模型，请联系管理员开通。</span><button class="btn btn-tertiary small">怎么开通</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>r5 重构：</b>取消"文本/图像"模式切换——用户不该先声明模式，工具条只有模型按钮；模型能力在 popover 里直接标注（支持图片 / 仅文本）；<b>输入时检测</b>：拖入或粘贴图片而当前模型不支持时，图片以附件 chip 出现在 composer，notice 给出两个出路（换模型 / 移除图片），发送禁用并附原因，不静默丢弃。"没有可用模型"notice 保留。</div>
+    </article>
+
+    <!-- ============ 04 Skill 创建入口 ============ -->
+    <article class="frameCard" id="skill-create-entry">
+      <div class="frameMeta"><strong>04 Skill 创建入口</strong><span class="keyId">skill-create-entry · 1440 / ZH / Light</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span>Agent</span><span class="active">技能</span><span>工作流</span><span>团队资源库</span></nav><span class="spacer"></span><span class="topActions"><button class="btn btn-primary small">＋ 新建</button><span class="iconBtn">🔔</span><span class="avatar">陈</span></span></div>
+        <div class="page-narrow">
+          <div class="crumb">技能 / <b>添加技能</b></div>
+          <div class="pageTitleRow">
+            <div><h2>你想怎么添加技能？</h2><p>从头定义一个能力，或者把现成的技能包带进来。</p></div>
+            <button class="btn btn-tertiary">取消</button>
+          </div>
+          <div class="entryCards">
+            <button class="entryCard hover"><span class="ico">✎</span><span><b>定义新技能</b><p>写提示词或 Python 脚本，跟着 7 步向导一步步来。</p><span class="tags"><span class="tagChip">7 步向导</span><span class="tagChip">只有自己可见</span></span></span></button>
+            <button class="entryCard"><span class="ico">⇪</span><span><b>导入已有技能</b><p>把目录、ZIP 或 GitHub 里的技能包带进来，检查没问题才会保存。</p><span class="tags"><span class="tagChip">ZIP</span><span class="tagChip">GitHub</span><span class="tagChip">目录</span></span></span></button>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; margin-top:18px; color:var(--faint); font-size:11.5px;"><span style="flex:1; height:1px; background:var(--line-strong);"></span>其他能力<span style="flex:1; height:1px; background:var(--line-strong);"></span></div>
+          <div class="rowList" style="margin-top:12px;">
+            <div class="rowItem"><span class="objIco">⚙</span><div class="main"><b>工具技能</b><span>接入团队已经审批过的工具</span></div><button class="btn btn-tertiary small">前往导入 →（帧 18）</button></div>
+            <div class="rowItem"><span class="objIco">⤴</span><div class="main"><b>工作流</b><span>工作流就是 Loop，要去 Loop 里创建</span></div><button class="btn btn-tertiary small">去创建 Loop →（帧 07）</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>变更：</b>从 600px modal 解放为专注 route；入口卡带渐变图标容器、预期 chips、hover 浮起+箭头；Tool/Workflow 行直接标注跳往哪一帧；取消降级为右上 tertiary。</div>
+    </article>
+
+    <!-- ============ 05 Skill 向导 · 左侧步骤导航 ============ -->
+    <article class="frameCard" id="skill-wizard-steps">
+      <div class="frameMeta"><strong>05 Skill 向导 · 类型步骤（第 1/7 步）</strong><span class="keyId">skill-wizard · 1440 / ZH / Light</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span>Agent</span><span class="active">技能</span><span>工作流</span><span>团队资源库</span></nav></div>
+        <div class="page">
+          <div style="max-width:900px; margin:0 auto;">
+            <div class="crumb">技能 / 添加技能 / <b>定义新技能</b></div>
+            <div class="wizard">
+              <aside class="stepRail">
+                <div class="progress">第 1 步，共 7 步 · 随时返回，内容不会丢</div>
+                <div class="railStep active"><span class="n">1</span>类型</div>
+                <div class="railStep"><span class="n">2</span>做什么</div>
+                <div class="railStep"><span class="n">3</span>怎么运行</div>
+                <div class="railStep"><span class="n">4</span>分类</div>
+                <div class="railStep"><span class="n">5</span>草稿内容</div>
+                <div class="railStep"><span class="n">6</span>试运行</div>
+                <div class="railStep"><span class="n">7</span>最后检查</div>
+              </aside>
+              <div class="wizardBody">
+                <div class="wizardContent">
+                  <h3 style="margin:0 0 4px; font-size:16px;">这个技能要怎么做出来？</h3>
+                  <p style="margin:0 0 14px; color:var(--muted); font-size:12px;">这里只列出真正能跑起来的方式。</p>
+                  <div class="grid2">
+                    <button class="entryCard hover" style="grid-template-columns:36px 1fr; padding:13px;"><span class="ico" style="width:36px; height:36px; font-size:14px;">✎</span><span><b>提示词</b><p style="margin:0">用提示词驱动，不写代码。</p></span></button>
+                    <button class="entryCard" style="grid-template-columns:36px 1fr; padding:13px;"><span class="ico" style="width:36px; height:36px; font-size:14px;">⌘</span><span><b>脚本</b><p style="margin:0">Python 或 TypeScript，在隔离的沙箱里运行。</p></span></button>
+                    <button class="entryCard" style="grid-template-columns:36px 1fr; padding:13px;"><span class="ico" style="width:36px; height:36px; font-size:14px;">⚙</span><span><b>工具技能</b><p style="margin:0">接入团队审批过的工具 →</p></span></button>
+                    <button class="entryCard" style="grid-template-columns:36px 1fr; padding:13px;"><span class="ico" style="width:36px; height:36px; font-size:14px;">⤴</span><span><b>工作流</b><p style="margin:0">工作流就是 Loop，去那边创建 →</p></span></button>
+                  </div>
+                </div>
+                <div class="wizardFooter"><button class="btn btn-tertiary">取消</button><button class="btn btn-primary">继续 →</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>变更：</b>落实组件规格的"桌面左侧步骤导航"——取代 modal 顶部 7 个看不清的小圆点；步骤名说人话；已完成步骤可点击回跳；类型 2×2 卡片；底部固定 footer。</div>
+    </article>
+
+    <!-- ============ 05B Skill 向导 · 第 2 步 · 做什么 ============ -->
+    <article class="frameCard" id="skill-wizard-step2">
+      <div class="frameMeta"><strong>05B Skill 向导 · 做什么（第 2/7 步）</strong><span class="keyId">skill-wizard · 1440 / ZH / Light</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span>Agent</span><span class="active">技能</span><span>工作流</span><span>团队资源库</span></nav></div>
+        <div class="page">
+          <div style="max-width:900px; margin:0 auto;">
+            <div class="crumb">技能 / 添加技能 / <b>定义新技能</b></div>
+            <div class="wizard">
+              <aside class="stepRail">
+                <div class="progress">第 2 步，共 7 步</div>
+                <div class="railStep done"><span class="n">✓</span>类型</div>
+                <div class="railStep active"><span class="n">2</span>做什么</div>
+                <div class="railStep"><span class="n">3</span>怎么运行</div>
+                <div class="railStep"><span class="n">4</span>分类</div>
+                <div class="railStep"><span class="n">5</span>草稿内容</div>
+                <div class="railStep"><span class="n">6</span>试运行</div>
+                <div class="railStep"><span class="n">7</span>最后检查</div>
+              </aside>
+              <div class="wizardBody">
+                <div class="wizardContent">
+                  <h3 style="margin:0 0 4px; font-size:16px;">它做什么？</h3>
+                  <p style="margin:0 0 14px; color:var(--muted); font-size:12px;">一句话说清职责；运行时要你准备什么、会生成什么。</p>
+                  <div style="display:grid; gap:13px;">
+                    <div class="field"><b>职责</b><div class="input">把访谈内容整理成决策摘要</div></div>
+                    <div class="field"><b>需要的材料</b>
+                      <div class="rowList">
+                        <div class="rowItem" style="padding:8px 12px;"><span class="objIco" style="width:26px; height:26px;">📄</span><div class="main"><b>访谈记录</b><span>Markdown 或文本文件</span></div><span class="pill blue">必须</span><button class="btn btn-tertiary small">×</button></div>
+                      </div>
+                      <button class="btn btn-tertiary small" style="justify-self:start;">＋ 添加材料</button>
+                    </div>
+                    <div class="field"><b>需要的参数</b>
+                      <div class="rowList">
+                        <div class="rowItem" style="padding:8px 12px;"><span class="objIco" style="width:26px; height:26px;">⚙</span><div class="main"><b>audience</b><span>摘要给谁看</span></div><span class="pill grey">可选</span><button class="btn btn-tertiary small">×</button></div>
+                      </div>
+                      <button class="btn btn-tertiary small" style="justify-self:start;">＋ 添加参数</button>
+                      <span class="help">材料和参数都可以没有——都不需要时，详情页会显示"不需要，直接就能跑"。</span>
+                    </div>
+                    <div class="field"><b>会生成（运行完交给下一步）</b>
+                      <div class="rowList">
+                        <div class="rowItem" style="padding:8px 12px;"><div class="main"><b>决策摘要</b><span>Markdown 文档</span></div><span class="pill green">一定会生成</span><button class="btn btn-tertiary small">×</button></div>
+                      </div>
+                      <button class="btn btn-tertiary small" style="justify-self:start;">＋ 添加一项</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="wizardFooter"><button class="btn btn-tertiary">← 上一步</button><button class="btn btn-primary">继续 →</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>新增：</b>输入/输出的行编辑器——每项 = 名称 + 说明 + 必填/可选 pill + 删除，"＋ 添加一项"就地新增；与详情页（帧 11）的"要你提供 / 会生成"展示一一对应。</div>
+    </article>
+
+    <!-- ============ 05C Skill 向导 · 第 3 步 · 怎么运行 ============ -->
+    <article class="frameCard" id="skill-wizard-step3">
+      <div class="frameMeta"><strong>05C Skill 向导 · 怎么运行（第 3/7 步）</strong><span class="keyId">skill-wizard · 1440 / ZH / Light</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span>Agent</span><span class="active">技能</span><span>工作流</span><span>团队资源库</span></nav></div>
+        <div class="page">
+          <div style="max-width:900px; margin:0 auto;">
+            <div class="crumb">技能 / 添加技能 / <b>定义新技能</b></div>
+            <div class="wizard">
+              <aside class="stepRail">
+                <div class="progress">第 3 步，共 7 步</div>
+                <div class="railStep done"><span class="n">✓</span>类型</div>
+                <div class="railStep done"><span class="n">✓</span>做什么</div>
+                <div class="railStep active"><span class="n">3</span>怎么运行</div>
+                <div class="railStep"><span class="n">4</span>分类</div>
+                <div class="railStep"><span class="n">5</span>草稿内容</div>
+                <div class="railStep"><span class="n">6</span>试运行</div>
+                <div class="railStep"><span class="n">7</span>最后检查</div>
+              </aside>
+              <div class="wizardBody">
+                <div class="wizardContent">
+                  <h3 style="margin:0 0 4px; font-size:16px;">它在哪里跑？</h3>
+                  <p style="margin:0 0 14px; color:var(--muted); font-size:12px;">选一个运行环境；再确认运行配置。</p>
+                  <div style="display:grid; gap:13px;">
+                    <div class="field" style="gap:8px;"><b>运行环境</b>
+                      <div class="grid2">
+                        <div class="entryCard hover" style="grid-template-columns:34px 1fr; padding:12px; cursor:default;"><span class="ico" style="width:34px; height:34px; font-size:13px;">🐍</span><span><b>Python 3.12 <span class="pill blue" style="margin-left:4px;">已选</span></b><p style="margin:3px 0 0;">隔离沙箱 · 文本与数据处理常用</p></span></div>
+                        <div class="entryCard" style="grid-template-columns:34px 1fr; padding:12px;"><span class="ico" style="width:34px; height:34px; font-size:13px;">🟨</span><span><b>Node.js 20 · TypeScript</b><p style="margin:3px 0 0;">隔离沙箱 · HTTP / JSON 处理顺手</p></span></div>
+                      </div>
+                      <span class="help">环境目录由团队维护、陆续接入；需要新环境找管理员开通。前端只展示后端下发的目录，不硬编码。</span>
+                    </div>
+                    <div class="grid2">
+                      <div class="field"><b>最长运行时间</b><span class="stepper"><i>−</i><span>30 秒</span><i>＋</i></span></div>
+                      <div class="field"><b>内存上限</b><span class="stepper"><i>−</i><span>512 MB</span><i>＋</i></span></div>
+                    </div>
+                    <div class="notice" style="border-color:var(--accent-line); background:var(--accent-soft); color:#3730a3;"><span>🛡</span><span style="flex:1">两种环境都在隔离沙箱里跑：不能访问网络和工作区连接，任意命令进不来。</span></div>
+                  </div>
+                </div>
+                <div class="wizardFooter"><button class="btn btn-tertiary">← 上一步</button><button class="btn btn-primary">继续 →</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>r7：</b>运行环境从"类型决定、不可选"改为<b>用户可选</b>（Python 3.12 / Node.js 20 · TypeScript，均在隔离沙箱）；环境目录由后端下发、前端不硬编码，需要新环境找管理员开通；超时/内存 stepper + 沙箱边界说明保留。</div>
+    </article>
+
+    <!-- ============ 05D Skill 向导 · 第 4 步 · 分类 ============ -->
+    <article class="frameCard" id="skill-wizard-step4">
+      <div class="frameMeta"><strong>05D Skill 向导 · 分类（第 4/7 步）</strong><span class="keyId">skill-wizard · 1440 / ZH / Light</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span>Agent</span><span class="active">技能</span><span>工作流</span><span>团队资源库</span></nav></div>
+        <div class="page">
+          <div style="max-width:900px; margin:0 auto;">
+            <div class="crumb">技能 / 添加技能 / <b>定义新技能</b></div>
+            <div class="wizard">
+              <aside class="stepRail">
+                <div class="progress">第 4 步，共 7 步</div>
+                <div class="railStep done"><span class="n">✓</span>类型</div>
+                <div class="railStep done"><span class="n">✓</span>做什么</div>
+                <div class="railStep done"><span class="n">✓</span>怎么运行</div>
+                <div class="railStep active"><span class="n">4</span>分类</div>
+                <div class="railStep"><span class="n">5</span>草稿内容</div>
+                <div class="railStep"><span class="n">6</span>试运行</div>
+                <div class="railStep"><span class="n">7</span>最后检查</div>
+              </aside>
+              <div class="wizardBody">
+                <div class="wizardContent">
+                  <h3 style="margin:0 0 4px; font-size:16px;">给它归个类</h3>
+                  <p style="margin:0 0 14px; color:var(--muted); font-size:12px;">方便团队在技能库和资源库里找到它。</p>
+                  <div style="display:grid; gap:13px;">
+                    <div class="field"><b>领域</b><div class="hChips"><span>📋 产品</span><span class="on">🔬 研究</span><span>📊 数据</span><span>🛠 工程</span></div></div>
+                    <div class="field"><b>适合场景</b>
+                      <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                        <span class="tagChip" style="padding:4px 10px;">自动化 <span style="color:var(--faint)">×</span></span>
+                        <span class="tagChip" style="padding:4px 10px;">每周例行 <span style="color:var(--faint)">×</span></span>
+                        <span class="search" style="min-height:30px; flex:0 0 140px; font-size:12px;">输入后回车添加</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="wizardFooter"><button class="btn btn-tertiary">← 上一步</button><button class="btn btn-primary">继续 →</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>r7：</b>领域 chips 与资源库（帧 13）的领域 rail 同一套分类——创建时归好类，库里才找得到；<b>删除"风险自评"</b>：它是工程 gate，不该由用户自评，风险由系统按能力边界推导展示。</div>
+    </article>
+
+    <!-- ============ 05E Skill 向导 · 第 5 步 · 草稿内容 ============ -->
+    <article class="frameCard" id="skill-wizard-step5">
+      <div class="frameMeta"><strong>05E Skill 向导 · 草稿内容（第 5/7 步）</strong><span class="keyId">skill-wizard · 1440 / ZH / Light</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span>Agent</span><span class="active">技能</span><span>工作流</span><span>团队资源库</span></nav></div>
+        <div class="page">
+          <div style="max-width:900px; margin:0 auto;">
+            <div class="crumb">技能 / 添加技能 / <b>定义新技能</b></div>
+            <div class="wizard">
+              <aside class="stepRail">
+                <div class="progress">第 5 步，共 7 步</div>
+                <div class="railStep done"><span class="n">✓</span>类型</div>
+                <div class="railStep done"><span class="n">✓</span>做什么</div>
+                <div class="railStep done"><span class="n">✓</span>怎么运行</div>
+                <div class="railStep done"><span class="n">✓</span>分类</div>
+                <div class="railStep active"><span class="n">5</span>草稿内容</div>
+                <div class="railStep"><span class="n">6</span>试运行</div>
+                <div class="railStep"><span class="n">7</span>最后检查</div>
+              </aside>
+              <div class="wizardBody">
+                <div class="wizardContent">
+                  <h3 style="margin:0 0 4px; font-size:16px;">草稿里会有什么</h3>
+                  <p style="margin:0 0 14px; color:var(--muted); font-size:12px;">这些文件会进入草稿，创建前都可以预览。</p>
+                  <div class="rowList">
+                    <div class="rowItem"><span class="objIco">📄</span><div class="main"><b>SKILL.md</b><span>技能说明（职责、输入输出、使用方式） · 1.2 KB</span></div><button class="btn btn-tertiary small">预览</button></div>
+                    <div class="rowItem"><span class="objIco">⚙</span><div class="main"><b>skill.runtime.json</b><span>运行配置（环境、超时、内存） · 0.4 KB</span></div><button class="btn btn-tertiary small">预览</button></div>
+                    <div class="rowItem"><span class="objIco">⌘</span><div class="main"><b>scripts/main.py</b><span>主脚本（由前几步的定义生成） · 2.8 KB</span></div><button class="btn btn-tertiary small">预览</button></div>
+                  </div>
+                  <div class="notice" style="margin-top:12px; border-color:var(--accent-line); background:var(--accent-soft); color:#3730a3;"><span>✎</span><span style="flex:1">文件名与结构按技能包规范生成；创建草稿后仍可在"文件"页继续修改。</span></div>
+                </div>
+                <div class="wizardFooter"><button class="btn btn-tertiary">← 上一步</button><button class="btn btn-primary">继续 →</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>新增：</b>将生成的文件清单（名称、作用、大小、可预览）——用户在保存前就知道草稿长什么样；明示"创建后仍可改"，降低保存的心理门槛。</div>
+    </article>
+
+    <!-- ============ 05F Skill 向导 · 第 6 步 · 试运行 ============ -->
+    <article class="frameCard" id="skill-wizard-step6">
+      <div class="frameMeta"><strong>05F Skill 向导 · 试运行（第 6/7 步）</strong><span class="keyId">skill-wizard · 1440 / ZH / Light</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span>Agent</span><span class="active">技能</span><span>工作流</span><span>团队资源库</span></nav></div>
+        <div class="page">
+          <div style="max-width:900px; margin:0 auto;">
+            <div class="crumb">技能 / 添加技能 / <b>定义新技能</b></div>
+            <div class="wizard">
+              <aside class="stepRail">
+                <div class="progress">第 6 步，共 7 步</div>
+                <div class="railStep done"><span class="n">✓</span>类型</div>
+                <div class="railStep done"><span class="n">✓</span>做什么</div>
+                <div class="railStep done"><span class="n">✓</span>怎么运行</div>
+                <div class="railStep done"><span class="n">✓</span>分类</div>
+                <div class="railStep done"><span class="n">✓</span>草稿内容</div>
+                <div class="railStep active"><span class="n">6</span>试运行</div>
+                <div class="railStep"><span class="n">7</span>最后检查</div>
+              </aside>
+              <div class="wizardBody">
+                <div class="wizardContent">
+                  <h3 style="margin:0 0 4px; font-size:16px;">先想好试运行要证明什么</h3>
+                  <p style="margin:0 0 14px; color:var(--muted); font-size:12px;">保存草稿后的第一件事就是试跑。这里先写好试跑用的例子和预期。</p>
+                  <div style="display:grid; gap:13px;">
+                    <div class="field"><b>试运行要证明</b><div class="input">能输出结构化的行动项（负责人 + 截止日）</div></div>
+                    <div class="field"><b>示例输入</b><div class="textarea code" style="min-height:88px;">{ "meeting_notes": "周一例会：注册流程砍到两步，由小李本周五前上线……" }</div></div>
+                    <div class="field"><b>预期结果（可选）</b><div class="input" style="color:var(--faint);">留空表示接受任何有效结果</div></div>
+                    <div class="notice" style="border-color:var(--accent-line); background:var(--accent-soft); color:#3730a3;"><span>✓</span><span style="flex:1">保存草稿后才真正试跑；这里的例子会自动带到"试运行与发布"页（帧 12）。</span></div>
+                  </div>
+                </div>
+                <div class="wizardFooter"><button class="btn btn-tertiary">← 上一步</button><button class="btn btn-primary">继续 →</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>新增：</b>试运行只收集"要证明什么 + 示例输入 + 预期"，不在向导里真跑——与帧 12 的三步流程衔接：保存草稿 → 先试跑一次（例子已填好）→ 确认 → 发布。</div>
+    </article>
+
+    <!-- ============ 06 Skill 向导 · 最终 Review ============ -->
+    <article class="frameCard" id="skill-wizard-review">
+      <div class="frameMeta"><strong>06 Skill 向导 · 最后检查（第 7/7 步）</strong><span class="keyId">skill-wizard-review · 只有自己可见</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span>Agent</span><span class="active">技能</span><span>工作流</span><span>团队资源库</span></nav></div>
+        <div class="page">
+          <div style="max-width:900px; margin:0 auto;">
+            <div class="crumb">技能 / 添加技能 / <b>定义新技能</b></div>
+            <div class="wizard">
+              <aside class="stepRail">
+                <div class="progress">第 7 步，共 7 步</div>
+                <div class="railStep done"><span class="n">✓</span>类型</div>
+                <div class="railStep done"><span class="n">✓</span>做什么</div>
+                <div class="railStep done"><span class="n">✓</span>怎么运行</div>
+                <div class="railStep done"><span class="n">✓</span>分类</div>
+                <div class="railStep done"><span class="n">✓</span>草稿内容</div>
+                <div class="railStep done"><span class="n">✓</span>试运行</div>
+                <div class="railStep active"><span class="n">7</span>最后检查</div>
+              </aside>
+              <div class="wizardBody">
+                <div class="wizardContent">
+                  <h3 style="margin:0 0 4px; font-size:16px;">最后检查一遍</h3>
+                  <p style="margin:0 0 13px; color:var(--muted); font-size:12px;">保存后，试运行、验证和发布都由你单独发起。</p>
+                  <div class="card">
+                    <div class="editRow" style="align-items:flex-start;"><span class="k">概述</span><span class="v"><b>会议行动清单生成</b><br><span style="color:var(--muted); font-size:11.5px;">把访谈内容整理成决策摘要 · 作用于访谈/会议材料的整理</span><div style="display:flex; gap:5px; margin-top:6px; flex-wrap:wrap;"><span class="tagChip">🔬 研究</span><span class="tagChip">自动化</span><span class="tagChip">每周例行</span></div></span><button class="btn btn-tertiary small edit">返回修改</button></div>
+                    <div class="editRow"><span class="k">定义</span><span class="v">类型：脚本 · 运行环境：Python 3.12 · 隔离沙箱</span><button class="btn btn-tertiary small edit">返回修改</button></div>
+                    <div class="editRow" style="align-items:flex-start;"><span class="k">需要与生成</span><span class="v">材料：访谈记录（必须） · 参数：audience（可选）<br><span style="color:var(--muted); font-size:11.5px;">生成：决策摘要（Markdown） · 一定会生成</span></span><button class="btn btn-tertiary small edit">返回修改</button></div>
+                    <div class="editRow"><span class="k">包含文件</span><span class="v">SKILL.md · skill.runtime.json · scripts/main.py</span><button class="btn btn-tertiary small edit">预览</button></div>
+                    <div class="editRow" style="align-items:flex-start;"><span class="k">试运行要证明</span><span class="v">能输出结构化的行动项（负责人 + 截止日）<br><span style="color:var(--muted); font-size:11.5px;">示例：周一例会记录 · 预期至少 3 条行动项</span></span><button class="btn btn-tertiary small edit">返回修改</button></div>
+                  </div>
+                </div>
+                <div class="wizardFooter">
+                  <button class="btn btn-tertiary">← 上一步</button>
+                  <div style="display:flex; align-items:center; gap:12px; color:var(--muted); font-size:11.5px;"><span>只有你能看到 · 保存后不会自动运行或发布</span><button class="btn btn-primary">没问题，保存草稿</button></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>变更：</b>review 从 modal 摘要盒改为整页分区清单；治理承诺收进 footer 主按钮旁；主按钮"没问题，保存草稿"。<b>r7：</b>检查内容补全——概述（名称 + 职责/作用于哪块 + 领域与场景 chips）、定义（类型 + 运行环境）、输入输出、包含文件、试运行要证明（含示例与预期），每区"返回修改"直达对应步骤，不再是简单表格。</div>
+    </article>
+
+    <!-- ============ 07 Loop 创建入口 ============ -->
+    <article class="frameCard" id="loop-create-entry">
+      <div class="frameMeta"><strong>07 Loop 创建入口 · 第二跳全部有去处</strong><span class="keyId">loop-create-entry · 1440 / ZH / Light</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span>Agent</span><span>技能</span><span class="active">工作流</span><span>团队资源库</span></nav><span class="spacer"></span><span class="topActions"><button class="btn btn-primary small">＋ 新建</button><span class="iconBtn">🔔</span><span class="avatar">陈</span></span></div>
+        <div class="page-narrow">
+          <div class="crumb">工作流 / <b>创建 Loop</b></div>
+          <div class="pageTitleRow">
+            <div><h2>你想怎么创建这个 Loop？</h2><p>从文档生成并检查 AI 提案，或导入你已有的定义文件。</p></div>
+            <button class="btn btn-tertiary">取消</button>
+          </div>
+          <div class="entryCards">
+            <button class="entryCard hover"><span class="ico">📄</span><span><b>从文档生成</b><p>描述目标或贴上需求文档，AI 先给你一份提案，你确认后才算数。</p><span class="tags"><span class="tagChip">先看提案再决定</span><span class="tagChip">不会直接创建</span></span></span></button>
+            <button class="entryCard"><span class="ico">⇪</span><span><b>导入 Loop 定义</b><p>导入 .loop.json 定义文件，确认依赖都对得上才保存。</p><span class="tags"><span class="tagChip">.loop.json</span><span class="tagChip">自动核对依赖</span></span></span></button>
+          </div>
+          <div style="margin-top:16px;">
+            <p style="margin:0 0 7px; color:var(--faint); font-size:11px; font-weight:650; letter-spacing:.05em;">其他起点</p>
+            <div class="rowList">
+              <div class="rowItem"><div class="main"><b>空白 Loop</b><span>直接进编辑器，从一个节点开始搭 → 跳 builder</span></div><button class="btn btn-tertiary small">创建 →</button></div>
+              <div class="rowItem"><div class="main"><b>从起点开始</b><span>浏览团队发布的起点模板 → 跳帧 17</span></div><button class="btn btn-tertiary small">浏览 →</button></div>
+              <div class="rowItem"><div class="main"><b>复制现有 Loop</b><span>选一个现有 Loop，复制成草稿 → 跳帧 18</span></div><button class="btn btn-tertiary small">选择 →</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>变更：</b>删除通栏"取消"灰条；入口卡收敛为信息完整卡。第二跳补全：空白 Loop 直接进 builder 大纲（复用现有 builder 关键帧）；从起点开始 → 帧 17；复制现有 Loop → 帧 18。</div>
+    </article>
+
+    <!-- ============ 08 Staged Proposal Review ============ -->
+    <article class="frameCard" id="loop-staged-proposal-review">
+      <div class="frameMeta"><strong>08 检查 Loop 提案</strong><span class="keyId">loop-staged-proposal-review · 尚未创建 Loop</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span>Agent</span><span>技能</span><span class="active">工作流</span><span>团队资源库</span></nav></div>
+        <div class="banner info" style="margin:14px 28px 0;"><span>✦</span><span class="grow"><b>Loop 还没有创建。</b>这份提案可以直接改，你确认后才会保存；中途刷新也不会丢。</span></div>
+        <div class="page">
+          <div style="max-width:980px; margin:0 auto;">
+            <div class="splitGrid">
+              <div class="card">
+                <div class="cardHead">定义与步骤<span class="pill blue">AI 提案 · 可以直接改</span></div>
+                <div class="editRow"><span class="k">目标</span><span class="v">每周整理产品变化、风险与行动项</span><button class="btn btn-tertiary small edit">编辑</button></div>
+                <div class="editRow"><span class="k">约束</span><span class="v">只使用已确认来源，输出不超过一页</span><button class="btn btn-tertiary small edit">编辑</button></div>
+                <div class="editRow"><span class="k">步骤 1</span><span class="v">⠿ 收集产品信号</span><button class="btn btn-tertiary small edit">重命名</button></div>
+                <div class="editRow"><span class="k">步骤 2</span><span class="v">⠿ 生成周摘要草稿</span><button class="btn btn-tertiary small edit">重命名</button></div>
+                <div class="editRow"><span class="k">步骤 3</span><span class="v">⠿ 人工检查后发出</span><button class="btn btn-tertiary small edit">重命名</button></div>
+              </div>
+              <aside class="summaryCard">
+                <h4>提案状态</h4>
+                <div class="chk"><span class="ok">✓</span>格式检查通过</div>
+                <div class="chk"><span class="ok">✓</span>3 个步骤 · 用到 2 个技能</div>
+                <div class="chk" style="color:var(--muted)"><span>○</span>保存后随时可以接着改</div>
+                <button class="btn btn-primary" style="margin-top:4px;">保存为草稿</button>
+                <button class="btn btn-tertiary">放弃提案</button>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>变更：</b>顶部常驻 info banner 明示"Loop 还没有创建"；字段与节点标题行内可编辑；右侧摘要卡固定单一 primary"保存为草稿"。</div>
+    </article>
+
+    <!-- ============ 09 Loop 三态看板 ============ -->
+    <article class="frameCard full" id="loop-lifecycle-run-boundary">
+      <div class="frameMeta"><strong>09 Loop 三态看板 · 运行回到 Agent 页</strong><span class="keyId">loop-lifecycle-run-boundary · 1440 / ZH / Light</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span>Agent</span><span>技能</span><span class="active">工作流</span><span>团队资源库</span></nav><span class="spacer"></span><span class="topActions"><button class="btn btn-primary small">＋ 新建</button><span class="iconBtn">🔔<span class="badgeDot"></span></span><span class="avatar">陈</span></span></div>
+        <div class="page">
+          <div class="pageTitleRow">
+            <div><h2>工作流</h2><p>这里只管工作流本身的状态；运行和结果都回到 Agent 页。</p></div>
+            <div style="display:flex; gap:9px;"><button class="btn btn-secondary">⇪ 上传 Loop</button><button class="btn btn-primary">＋ 新建 Loop</button></div>
+          </div>
+          <div class="aiHero"><span class="ai">✦</span><span style="flex:1">描述你想要的结果或修改，AI 先给你一份提案…</span><span class="kbd">⌘ K</span></div>
+          <div class="lanes">
+            <section class="lane">
+              <div class="laneHead"><span class="dot" style="background:#a8a29e"></span>设计中 <span class="count">2</span></div>
+              <div class="loopCard dragging"><b>每周产品复盘</b><span class="meta">4 节点 · 2 技能 · 3 小时前</span><span class="pill grey">草稿</span></div>
+              <div class="loopCard"><b>客户反馈分诊</b><span class="meta">3 节点 · 1 技能 · 昨天</span><span class="pill amber">还差 1 个连接没配好</span></div>
+            </section>
+            <section class="lane dropTarget">
+              <div class="laneHead"><span class="dot" style="background:var(--good)"></span>可运行 <span class="count">1</span></div>
+              <div class="emptyLane" style="border-color:var(--accent); background:rgb(79 70 229/.06); color:var(--accent-strong);"><b>拖到这里，验证通过就能运行</b><span>松开后会先自动检查</span></div>
+              <div class="loopCard"><b>会议跟进</b><span class="meta">5 节点 · 3 技能 · 2 天前</span><span class="pill green">可运行</span><span class="quick"><button class="btn btn-secondary small">编辑</button><button class="btn btn-tertiary small">⋯</button></span><button class="btn btn-tertiary small" style="justify-self:start;">▶ 去 Agent 页运行 →</button></div>
+            </section>
+            <section class="lane">
+              <div class="laneHead"><span class="dot" style="background:var(--purple)"></span>已发布共享 <span class="count">1</span></div>
+              <div class="loopCard"><b>研究简报</b><span class="meta">v1.3 · 团队可见</span><span class="pill purple">已发布 v1.3</span><span class="meta">最近一次运行：✓ 完成 · <span style="color:var(--accent)">在 Agent 页查看 ↗</span></span></div>
+              <div class="emptyLane"><b>发布后会出现在这里</b><span>从可运行的 Loop 发布到团队资源库</span><button class="btn btn-tertiary small">查看资源库</button></div>
+            </section>
+          </div>
+          <div class="flowStrip"><b>边界</b><span>看板只表达状态（设计中 / 可运行 / 已共享）。点「去 Agent 页运行 →」跳到统一的多 session 执行页（帧 02），成为任务栏里的一条 ⤴ 任务；运行结束后，状态自动回到这里更新。</span></div>
+        </div>
+      </div>
+      <div class="frameNote"><b>变更：</b>移除卡片内嵌"运行"按钮——运行不在看板内发生，统一去 Agent 页（多 session 版面）执行和看结果；卡片快捷操作只留编辑/⋯，运行入口为明确的跳转链接；运行记录从 Agent 页回看。保留：动作收敛为 2 个按钮、drop target 只在目标列高亮、AI hero 条。</div>
+    </article>
+
+    <!-- ============ 10 Skills 库 ============ -->
+    <article class="frameCard full" id="skills-library">
+      <div class="frameMeta"><strong>10 Skills 库</strong><span class="keyId">skills-library · 1440 / ZH / Light</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span>Agent</span><span class="active">技能</span><span>工作流</span><span>团队资源库</span></nav><span class="spacer"></span><span class="topActions"><button class="btn btn-primary small">＋ 新建</button><span class="iconBtn">🔔</span><span class="avatar">陈</span></span></div>
+        <div class="page">
+          <div class="pageTitleRow">
+            <div><h2>技能</h2><p>管理可复用的技能，把它们加进工作流。</p></div>
+            <div style="display:flex; gap:9px;"><button class="btn btn-secondary">⇪ 上传技能</button><button class="btn btn-primary">＋ 创建技能</button></div>
+          </div>
+          <div style="display:flex; gap:10px; margin-bottom:14px;">
+            <span class="search" style="flex:0 0 320px;">⌕ 搜索用途、需要的信息或风险…<span class="spacer"></span><kbd>⌘K</kbd></span>
+            <span class="segmented"><span class="on">全部</span><span>提示词</span><span>脚本</span><span>工具</span></span>
+          </div>
+          <div style="display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:16px; align-items:start; max-width:1200px;">
+            <div class="rowList">
+              <div class="rowItem selected"><span class="objIco">✦</span><div class="main"><b>会议行动清单生成</b><span>把会议记录变成带负责人和截止日的行动清单</span><span class="io"><span class="ioChip">会议记录 → 行动清单</span></span></div><span class="pill amber">缺材料</span><span style="color:var(--faint)">›</span></div>
+              <div class="rowItem"><span class="objIco">📄</span><div class="main"><b>来源新鲜度检查</b><span>检查引用来源的发布时间是否仍在有效期内</span><span class="io"><span class="ioChip">链接 → 报告</span></span></div><span class="pill green">已验证</span><span style="color:var(--faint)">›</span></div>
+              <div class="rowItem"><span class="objIco">⚙</span><div class="main"><b>周报发布器</b><span>把周报草稿发布到团队频道（工具技能）</span><span class="io"><span class="ioChip">草稿 → 频道</span></span></div><span class="pill grey">草稿</span><span style="color:var(--faint)">›</span></div>
+            </div>
+            <aside class="card">
+              <div class="cardHead" style="align-items:flex-start; gap:8px;"><div><b style="font-size:13.5px;">会议行动清单生成</b><div style="display:flex; gap:6px; margin-top:7px;"><span class="pill amber">缺材料</span><span class="pill blue">风险：低</span></div></div><span class="pill grey">工作区</span></div>
+              <div style="padding:13px 16px; display:grid; gap:10px;">
+                <button class="btn btn-primary">继续完善</button>
+                <button class="btn btn-tertiary small" style="justify-self:start;">查看技能 →</button>
+                <div style="border-top:1px solid var(--line); padding-top:11px; display:grid; gap:8px;">
+                  <div class="defRow" style="padding:0; border:0;"><span class="k">⇥ 需要</span><span class="v">访谈记录（文件）· 必须</span></div>
+                  <div class="defRow" style="padding:0; border:0;"><span class="k">⇤ 生成</span><span class="v">决策摘要（Markdown）</span></div>
+                  <div class="defRow" style="padding:0; border:0;"><span class="k">✓ 适合</span><span class="v">自动化</span></div>
+                </div>
+                <div style="border-top:1px solid var(--line); padding-top:10px; color:var(--muted); font-size:11.5px;">用在哪：还没有工作流用到它</div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>变更：</b>6 列全宽表格改为行结构列表 + 360px 预览面板；每行直接露出人话命名的"材料 → 产物"（会议记录 → 行动清单），不用点进去就知道它干什么；原生 select 换 segmented；0 行时引导空态。</div>
+    </article>
+
+    <!-- ============ 11 Skill 详情 · 概览 ============ -->
+    <article class="frameCard" id="skill-detail-overview">
+      <div class="frameMeta"><strong>11 Skill 详情 · 概览</strong><span class="keyId">skill-detail · 1440 / ZH / Light</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span>Agent</span><span class="active">技能</span><span>工作流</span><span>团队资源库</span></nav></div>
+        <div class="page">
+          <div style="max-width:960px; margin:0 auto;">
+            <div class="objectHead">
+              <button class="btn btn-tertiary small" style="justify-self:start;">← 返回技能</button>
+              <div class="nameRow"><h2>会议行动清单生成</h2><button class="btn btn-tertiary small" title="重命名">✎</button><span class="pill grey">草稿</span><span class="pill blue">风险：低</span><span class="pill grey">尚未发布</span><span class="spacer"></span><button class="btn btn-primary">继续编辑</button></div>
+              <div class="sub">名字可以随时改（团队内唯一）；包名 decision-follow-up-writer 与版本规则不变 · 把会议记录变成带负责人和截止日的行动清单</div>
+            </div>
+            <div class="tabs"><span class="active">概览</span><span>说明</span><span>文件</span><span>详细设置</span><span>测试</span><span>版本</span></div>
+            <div class="grid2">
+              <div>
+                <div class="sectionTitle">它需要你提供 <button class="btn btn-tertiary small">编辑</button></div>
+                <p class="sectionDesc">每次运行前要准备好的东西；都不需要时这里会明说"不需要"。</p>
+                <div class="card" style="padding:2px 14px;">
+                  <div class="defRow"><span class="k">📄 材料</span><span class="v">访谈记录（Markdown 或文本）<span class="pill blue" style="margin-left:5px;">必须</span></span></div>
+                  <div class="defRow"><span class="k">⚙ 参数</span><span class="v">audience 摘要给谁看<span class="pill grey" style="margin-left:5px;">可选 · 默认团队读者</span></span></div>
+                </div>
+              </div>
+              <div>
+                <div class="sectionTitle">会生成 <button class="btn btn-tertiary small">编辑</button></div>
+                <p class="sectionDesc">运行完交给下一步的内容。</p>
+                <div class="ioChips"><span class="ioChip">决策摘要（Markdown） <span class="pill green">一定会生成</span></span></div>
+              </div>
+            </div>
+            <div class="sectionTitle">它能做什么 <button class="btn btn-tertiary small">编辑</button></div>
+            <p class="sectionDesc">它运行的时候能碰到什么、不能碰什么。</p>
+            <div class="card" style="padding:2px 16px;">
+              <div class="defRow"><span class="k">⚡ 外部动作</span><span class="v">不会改变其他系统</span></div>
+              <div class="defRow"><span class="k">🔌 连接</span><span class="v">不需要工作区连接</span></div>
+              <div class="defRow"><span class="k">✓ 安全说明</span><span class="v">不会执行外部动作</span></div>
+            </div>
+            <div class="sectionTitle">用在哪</div>
+            <p class="sectionDesc">还没有工作流用到它。<button class="btn btn-tertiary small">加入工作流 →</button></p>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>变更：</b>去双标题；"继续编辑"全页一次。自定义命名：对象头 ✎ 行内重命名（团队内唯一），包名/ID 与版本规则不变。<b>r9：</b>"要你提供 input · 必填"（input schema 外露）改为两组人话需求——<b>需要的材料</b>（要分析的文件，必须/可选）与<b>需要的参数</b>（入参，必须/可选）；两组都可以没有，都没有时显示"不需要，直接就能跑"。</div>
+    </article>
+
+    <!-- ============ 12 试运行与发布 · 显性三步 ============ -->
+    <article class="frameCard" id="skill-test-publish">
+      <div class="frameMeta"><strong>12 试运行与发布 · 显性三步</strong><span class="keyId">skill-test-publish · 1440 / ZH / Light</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span>Agent</span><span class="active">技能</span><span>工作流</span><span>团队资源库</span></nav></div>
+        <div class="page">
+          <div style="max-width:860px; margin:0 auto;">
+            <div class="objectHead">
+              <button class="btn btn-tertiary small" style="justify-self:start;">← 返回技能</button>
+              <div class="nameRow"><h2>试运行与发布</h2><span class="pill grey">草稿</span><span class="sub" style="margin-left:4px;">会议行动清单生成</span></div>
+            </div>
+            <div class="flowSteps">
+              <span class="fs done"><span class="n">✓</span>先试跑一次</span><span class="join"></span>
+              <span class="fs active"><span class="n">2</span>确认它的能力范围</span><span class="join"></span>
+              <span class="fs locked"><span class="n">3</span>发布固定版本</span>
+            </div>
+            <div class="stepCard done">
+              <div class="head">✓ 先试跑一次<span class="spacer"></span><span style="font-weight:550; font-size:11.5px;">通过了 · 2.4s</span><button class="btn btn-tertiary small">展开重跑</button></div>
+            </div>
+            <div class="stepCard">
+              <div class="head">② 确认它的能力范围</div>
+              <div class="body">
+                <p class="sectionDesc" style="margin-top:10px;">试跑已经证明：它不会联网，也不会碰工作区的连接。</p>
+                <div class="notice" style="border-color:var(--accent-line); background:var(--accent-soft); color:#3730a3;"><span>🛡</span><span style="flex:1">不执行外部动作 · 不需要工作区连接 · 不访问网络。</span></div>
+                <label style="display:flex; gap:9px; align-items:flex-start; margin-top:12px; font-size:12.5px; color:var(--ink-2);"><input type="checkbox" checked style="margin-top:2px;">我明白它能做什么、不能做什么。</label>
+                <div class="actions"><button class="btn btn-primary">确认，继续</button></div>
+              </div>
+            </div>
+            <div class="stepCard locked">
+              <div class="head">③ 发布固定版本<span class="spacer"></span><span class="pill grey">完成上一步就能发布</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>变更：</b>一页长表单改为显性三步：完成步折叠为绿色摘要（可展开重跑）、当前步展开、后续步锁定并说明解锁条件；主按钮收进步骤卡内右对齐；文案去工程化。步骤 1 展开态的控件规格见 00 帧。</div>
+    </article>
+
+    <!-- ============ 13 团队资源库 · 平台化 ============ -->
+    <article class="frameCard full" id="team-library">
+      <div class="frameMeta"><strong>13 团队资源库 · 领域分类 + "能做什么"一目了然</strong><span class="keyId">team-library · 1440 / ZH / Light</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span>Agent</span><span>技能</span><span>工作流</span><span class="active">团队资源库</span></nav><span class="spacer"></span><span class="topActions"><button class="btn btn-primary small">＋ 新建</button><span class="iconBtn">🔔</span><span class="avatar">陈</span></span></div>
+        <div class="libLayout">
+          <aside class="domainRail">
+            <div class="dGroup">领域</div>
+            <div class="domainItem on"><span>全部资产</span><span class="c">14</span></div>
+            <div class="domainItem"><span>📋 产品</span><span class="c">5</span></div>
+            <div class="domainItem"><span>🔬 研究</span><span class="c">4</span></div>
+            <div class="domainItem"><span>📊 数据</span><span class="c">3</span></div>
+            <div class="domainItem"><span>🛠 工程</span><span class="c">2</span></div>
+            <div class="dGroup" style="margin-top:10px;">状态</div>
+            <div class="domainItem"><span>已安装</span><span class="c">3</span></div>
+            <div class="domainItem"><span>有更新</span><span class="c">1</span></div>
+            <div class="dFoot">本版不含权限设置：团队内成员均可安装；可见性以标签区分（团队 / 仅本组）。</div>
+          </aside>
+          <div class="libMain">
+            <div style="display:flex; align-items:flex-end; gap:14px; margin-bottom:13px; flex-wrap:wrap;">
+              <span class="libTabs"><span class="on">全部</span><span>技能 9</span><span>工作流 4</span><span>起点模板 1</span></span>
+              <span class="spacer"></span>
+              <span class="search" style="flex:0 0 240px;">⌕ 搜索名字或用途…</span>
+            </div>
+            <div class="rowList">
+              <div class="rowItem"><span class="objIco">✦</span><div class="main"><b>会议行动提取器</b><span>把会议记录变成带负责人和截止日的行动清单</span><span class="io"><span class="ioChip">会议记录 → 行动清单</span><span class="tagChip">📋 产品</span><span class="tagChip">3 个工作流在用</span></span></div><span class="pill grey">未安装</span><button class="btn btn-secondary small">安装</button></div>
+              <div class="rowItem selected"><span class="objIco">⤴</span><div class="main"><b>每周产品复盘</b><span>每周汇总产品变化、风险与行动项，人工检查后发出</span><span class="io"><span class="ioChip">4 节点 · 2 技能</span><span class="tagChip">🔬 研究</span></span></div><span class="pill amber">有更新</span><button class="btn btn-secondary small">查看更新</button></div>
+              <div class="rowItem"><span class="objIco">📄</span><div class="main"><b>来源新鲜度检查</b><span>检查引用来源的发布时间是否仍在有效期内</span><span class="io"><span class="ioChip">链接 → 报告</span><span class="tagChip">📊 数据</span><span class="tagChip">仅本组</span></span></div><span class="pill green">已安装</span><button class="btn btn-tertiary small">打开</button></div>
+            </div>
+          </div>
+          <aside class="libPreview">
+            <div style="display:grid; gap:6px;">
+              <b style="font-size:14px;">每周产品复盘</b>
+              <div style="display:flex; gap:6px; flex-wrap:wrap;"><span class="tagChip">🔬 研究</span><span class="tagChip">工作流</span><span class="tagChip">研究组发布</span></div>
+            </div>
+            <p style="margin:0; color:var(--muted); font-size:12px; line-height:1.55;">每周汇总产品变化、风险与行动项，生成一页草稿，人工检查后发到团队频道。</p>
+            <div style="display:grid; gap:7px; border-top:1px solid var(--line); padding-top:10px;">
+              <div class="defRow" style="padding:0; border:0;"><span class="k">包含</span><span class="v">4 节点 · 用到 2 个技能</span></div>
+              <div class="defRow" style="padding:0; border:0;"><span class="k">用在哪</span><span class="v">3 个工作流在用</span></div>
+              <div class="defRow" style="padding:0; border:0;"><span class="k">版本</span><span class="v">你用 v4.1 · 最新 v4.3</span></div>
+            </div>
+            <div class="notice" style="border-color:var(--warn-line);"><span>⚠</span><span style="flex:1">更新只生成一份新草稿，不会动你现在的工作流。</span></div>
+            <button class="btn btn-primary">看看影响再决定</button>
+            <button class="btn btn-tertiary small" style="justify-self:start;">稍后再说</button>
+          </aside>
+        </div>
+      </div>
+      <div class="frameNote"><b>变更：</b>按"团队资产平台"重排三栏——左：领域 rail（产品/研究/数据/工程，带计数；状态过滤收进同栏；注明本版不含权限设置）；中：类型 tabs + 行列表，每行露出用途 + 输入输出 chips + 领域标签 + 使用情况；右：预览面板（能做什么/包含什么/用在哪/版本对比 + 唯一主按钮）。</div>
+    </article>
+
+    <!-- ============ 14 Agent 移动端 · 列表 / 详情 / 结果阅读页 ============ -->
+    <article class="frameCard full" id="agent-mobile">
+      <div class="frameMeta"><strong>14 Agent 移动端 · 任务列表 → 任务详情 → 结果阅读页</strong><span class="keyId">agent-mobile · 390 × 844</span></div>
+      <div class="viewport"><div class="phoneWrap">
+        <div class="phone">
+          <div class="mTop"><span class="brandMark" style="width:20px;height:20px;font-size:9px;">lo</span><span style="flex:1">任务</span><span class="iconBtn">🔔<span class="badgeDot"></span></span><span class="avatar" style="width:22px;height:22px;">陈</span></div>
+          <div class="mBody">
+            <button class="btn btn-primary" style="width:100%;">＋ 新任务</button>
+            <p class="demoLabel" style="margin:4px 0 0;">今天</p>
+            <div class="rowList">
+              <div class="rowItem" style="padding:9px 11px;"><span class="sDot run"></span><div class="main"><b>访谈决策摘要</b><span>进行中 · 第 2 步</span></div><span style="color:var(--faint)">›</span></div>
+              <div class="rowItem" style="padding:9px 11px;"><span class="sDot confirm"></span><div class="main"><b>竞品发布笔记整理</b><span>等你确认修改</span></div><span style="color:var(--faint)">›</span></div>
+            </div>
+            <p class="demoLabel" style="margin:4px 0 0;">昨天</p>
+            <div class="rowList">
+              <div class="rowItem" style="padding:9px 11px;"><span class="sDot done"></span><div class="main"><b>市场研究简报</b><span>已完成</span></div><span style="color:var(--faint)">›</span></div>
+              <div class="rowItem" style="padding:9px 11px;"><span class="sDot done"></span><div class="main"><b>⤴ 每周产品复盘</b><span>Loop 运行 · 已完成</span></div><span style="color:var(--faint)">›</span></div>
+            </div>
+          </div>
+          <nav class="tabBar"><span class="active"><i>✦</i>Agent</span><span><i>▣</i>技能</span><span><i>⤴</i>工作流</span><span><i>◈</i>资源库</span></nav>
+        </div>
+        <div class="phone">
+          <div class="mTop"><button class="btn btn-tertiary small" style="margin-left:-8px;">‹ 任务</button><span style="flex:1">访谈决策摘要</span></div>
+          <div class="mBody">
+            <div class="turnUser" style="max-width:92%;">把本周访谈整理成决策摘要。</div>
+            <div class="turnAgent" style="max-width:100%;">
+              <div class="who"><span class="runningDot"></span>第 2 步，共 3 步<button class="btn btn-tertiary small">细节 ▾</button><button class="btn btn-tertiary small">取消</button></div>
+              <div class="resultCard" style="padding:11px 12px;">
+                <b>访谈决策摘要（草稿）</b>
+                <span style="color:var(--muted); font-size:11.5px;">4 条决策 · 3 个风险 · 2 个待确认</span>
+                <div><button class="btn btn-secondary small">打开结果 →</button></div>
+              </div>
+            </div>
+          </div>
+          <div class="mStickyFooter" style="display:block; padding:9px 12px;">
+            <div class="composer"><div class="toolbar"><span class="area" style="flex:1; padding:4px 4px 0; min-height:28px;">继续补充…</span><span class="iconBtn">📎</span><button class="sendBtn">↑</button></div></div>
+          </div>
+        </div>
+        <div class="phone">
+          <div class="mTop"><button class="btn btn-tertiary small" style="margin-left:-8px;">‹</button><span style="flex:1">访谈决策摘要</span><span style="color:var(--faint); font-weight:550; font-size:11px;">1/2</span></div>
+          <div class="mBody">
+            <div class="mdMock" style="padding:11px 12px;">
+              <span class="h1" style="font-size:14px;">访谈决策摘要</span>
+              <span class="h2">决策（4）</span>
+              <span class="li">注册流程砍到两步</span>
+              <span class="li">定价页增加团队版对比</span>
+              <span class="h2">待确认（2）</span>
+              <span class="li">企业版是否包含 SSO</span>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-secondary small" style="flex:1;">下载 .md</button>
+              <button class="btn btn-secondary small" style="flex:1;">复制内容</button>
+            </div>
+            <div class="provSec">
+              <div class="pHead">运行信息 <span style="color:var(--faint);">›</span></div>
+              <div class="pRow"><b>模型</b>Standard · 用时 2 分 14 秒</div>
+            </div>
+          </div>
+          <nav class="tabBar"><span class="active"><i>✦</i>Agent</span><span><i>▣</i>技能</span><span><i>⤴</i>工作流</span><span><i>◈</i>资源库</span></nav>
+        </div>
+      </div></div>
+      <div class="frameNote"><b>r4 闭环：</b>移动端与桌面同一心智模型：任务列表 → 任务详情（执行细节内联）→ "打开结果"推进到整页结果阅读页（渲染预览 + 下载/复制 + 运行信息折叠区）。新任务从列表页 ＋ 进入；底部 tab bar 解决 "Team libr…" 截断。</div>
+    </article>
+
+    <!-- ============ 15 创建流程移动端 ============ -->
+    <article class="frameCard" id="creation-mobile">
+      <div class="frameMeta"><strong>15 创建流程移动端 · 定义轻流程，导入回桌面</strong><span class="keyId">creation-mobile · 390 × 844</span></div>
+      <div class="viewport"><div class="phoneWrap">
+        <div class="phone">
+          <div class="mTop"><button class="btn btn-tertiary small" style="margin-left:-8px;">‹</button><span style="flex:1">定义新技能</span><span style="color:var(--faint); font-weight:550; font-size:11px;">2/7</span></div>
+          <div style="padding:10px 14px 0;"><div class="mProgress"><i style="width:28%"></i></div></div>
+          <div class="mBody">
+            <h3>它做什么？</h3>
+            <p class="sub">运行时要你准备什么、会生成什么？</p>
+            <div class="field"><b>职责</b><div class="input">把访谈内容整理成决策摘要</div></div>
+            <div class="field"><b>需要的材料</b><div class="input">访谈记录（文件）· 必须</div></div>
+            <div class="field"><b>需要的参数</b><div class="input">audience · 可选</div></div>
+            <div class="field"><b>会生成</b><div class="input">决策摘要（Markdown）</div></div>
+          </div>
+          <div class="mStickyFooter"><button class="btn btn-secondary">上一步</button><button class="btn btn-primary">继续</button></div>
+        </div>
+        <div class="phone">
+          <div class="mTop"><button class="btn btn-tertiary small" style="margin-left:-8px;">‹</button><span style="flex:1">导入技能包</span></div>
+          <div class="mBody" style="align-content:center; text-align:center;">
+            <div class="emptyState" style="padding:20px 8px;">
+              <span class="ico">📦</span>
+              <b>导入要在电脑上完成</b>
+              <p>手机上选不了技能包文件。在电脑上打开同一页面就能导入，进度自动同步。</p>
+              <div style="display:flex; gap:8px; justify-content:center; margin-top:4px;">
+                <button class="btn btn-secondary small">复制链接</button>
+                <button class="btn btn-tertiary small">发送到我的邮箱</button>
+              </div>
+            </div>
+            <div style="text-align:left; border-top:1px solid var(--line); padding-top:11px; display:grid; gap:7px; font-size:11.5px; color:var(--ink-2);">
+              <b style="font-size:11.5px;">在手机上你可以：</b>
+              <span>✓ 查看定义和进度</span>
+              <span>✓ 试运行并看结果</span>
+              <span>✓ 确认后发布</span>
+            </div>
+          </div>
+          <nav class="tabBar"><span><i>✦</i>Agent</span><span class="active"><i>▣</i>技能</span><span><i>⤴</i>工作流</span><span><i>◈</i>资源库</span></nav>
+        </div>
+      </div></div>
+      <div class="frameNote"><b>变更：</b>移动端创建收敛为"定义新技能"轻流程（全屏 route：返回 + 步骤名 + N/M + 细进度条，底部 sticky footer）；移动端不提供技能包文件导入，改为明确告知 + 回桌面继续的通路。</div>
+    </article>
+
+    <!-- ============ 16 移动端 · 工作流与资源库 ============ -->
+    <article class="frameCard" id="loops-library-mobile">
+      <div class="frameMeta"><strong>16 移动端 · 工作流看板 + 团队资源库</strong><span class="keyId">loops-mobile / library-mobile · 390 × 844</span></div>
+      <div class="viewport"><div class="phoneWrap">
+        <div class="phone">
+          <div class="mTop"><span style="flex:1">工作流</span><button class="btn btn-tertiary small">＋ 新建</button></div>
+          <div class="mBody">
+            <div class="aiHero" style="margin:0; padding:9px 11px; font-size:12px;"><span class="ai">✦</span><span style="flex:1">描述结果或修改，AI 先给提案…</span></div>
+            <div class="mLaneSec">
+              <div class="mLaneHead"><span class="dot" style="background:#a8a29e"></span>设计中 · 2</div>
+              <div class="loopCard" style="margin:0;"><b>每周产品复盘</b><span class="meta">4 节点 · 3 小时前</span><span class="pill grey">草稿</span></div>
+              <div class="loopCard" style="margin:0;"><b>客户反馈分诊</b><span class="meta">3 节点 · 昨天</span><span class="pill amber">还差 1 个连接</span></div>
+            </div>
+            <div class="mLaneSec">
+              <div class="mLaneHead"><span class="dot" style="background:var(--good)"></span>可运行 · 1</div>
+              <div class="loopCard" style="margin:0;"><b>会议跟进</b><span class="meta">5 节点 · 2 天前</span><span class="pill green">可运行</span><button class="btn btn-tertiary small" style="justify-self:start;">▶ 去 Agent 页运行 →</button></div>
+            </div>
+            <div class="mLaneSec">
+              <div class="mLaneHead"><span class="dot" style="background:var(--purple)"></span>已共享 · 1</div>
+              <div class="loopCard" style="margin:0;"><b>研究简报</b><span class="meta">v1.3 · 团队可见</span></div>
+            </div>
+          </div>
+          <nav class="tabBar"><span><i>✦</i>Agent</span><span><i>▣</i>技能</span><span class="active"><i>⤴</i>工作流</span><span><i>◈</i>资源库</span></nav>
+        </div>
+        <div class="phone">
+          <div class="mTop"><span style="flex:1">团队资源库</span><span class="iconBtn">⌕</span></div>
+          <div class="mBody">
+            <div class="hChips"><span class="on">全部 14</span><span>📋 产品 5</span><span>🔬 研究 4</span><span>📊 数据 3</span></div>
+            <div class="rowList">
+              <div class="rowItem" style="padding:10px 11px;"><span class="objIco">✦</span><div class="main"><b>会议行动提取器</b><span>会议记录 → 行动清单</span><span class="io"><span class="tagChip">📋 产品</span><span class="tagChip">3 个工作流在用</span></span></div><button class="btn btn-secondary small">安装</button></div>
+              <div class="rowItem" style="padding:10px 11px;"><span class="objIco">⤴</span><div class="main"><b>每周产品复盘</b><span>每周汇总变化、风险与行动项</span><span class="io"><span class="tagChip">🔬 研究</span></span></div><span class="pill amber">有更新</span></div>
+              <div class="rowItem" style="padding:10px 11px;"><span class="objIco">📄</span><div class="main"><b>来源新鲜度检查</b><span>引用来源是否仍在有效期内</span><span class="io"><span class="tagChip">📊 数据</span></span></div><span class="pill green">已安装</span></div>
+            </div>
+            <p class="sub">领域分类与桌面端一致；类型筛选（技能/工作流/起点）收进搜索旁的过滤。</p>
+          </div>
+          <nav class="tabBar"><span><i>✦</i>Agent</span><span><i>▣</i>技能</span><span><i>⤴</i>工作流</span><span class="active"><i>◈</i>资源库</span></nav>
+        </div>
+      </div></div>
+      <div class="frameNote"><b>新增：</b>补齐移动端另外两页。工作流：三态 lanes 单列竖排 + AI 条 + 底部 tab，运行入口同样是"去 Agent 页运行 →"；资源库：领域 chips 横滑 + 行结构，与桌面 13 帧同一信息架构。</div>
+    </article>
+
+    <!-- ============ 17 创建第二跳 · 起点模板库 ============ -->
+    <article class="frameCard full" id="starting-points-library">
+      <div class="frameMeta"><strong>17 创建第二跳 · 起点模板库</strong><span class="keyId">loop-create-starting-points · 1440 / ZH / Light</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span>Agent</span><span>技能</span><span class="active">工作流</span><span>团队资源库</span></nav></div>
+        <div class="page">
+          <div style="max-width:1000px; margin:0 auto;">
+            <div class="crumb">工作流 / 创建 Loop / <b>从起点开始</b></div>
+            <div class="pageTitleRow">
+              <div><h2>选一个起点</h2><p>都是团队发布过的模板，选后会复制成你的草稿，随便改。</p></div>
+              <button class="btn btn-tertiary">取消</button>
+            </div>
+            <div class="hChips" style="margin-bottom:14px;"><span class="on">全部</span><span>📋 产品</span><span>🔬 研究</span><span>📊 数据</span><span>🛠 工程</span></div>
+            <div class="tplGrid">
+              <div class="tplCard"><span class="tags"><span class="tagChip">🔬 研究</span></span><b>每周产品复盘</b><p>汇总一周产品变化、风险与行动项，人工检查后发出。</p><span class="meta">4 节点 · 2 技能 · 研究组 · v4.3</span><span><button class="btn btn-secondary small">用这个起点</button></span></div>
+              <div class="tplCard"><span class="tags"><span class="tagChip">📋 产品</span></span><b>客户反馈分诊</b><p>按主题归集反馈，标注紧急度，分派给负责人。</p><span class="meta">3 节点 · 1 技能 · 产品组 · v2.1</span><span><button class="btn btn-secondary small">用这个起点</button></span></div>
+              <div class="tplCard"><span class="tags"><span class="tagChip">📊 数据</span></span><b>数据来源周报</b><p>检查关键数据来源的更新与新鲜度，产出周报。</p><span class="meta">5 节点 · 2 技能 · 数据组 · v1.8</span><span><button class="btn btn-secondary small">用这个起点</button></span></div>
+              <div class="tplCard"><span class="tags"><span class="tagChip">📋 产品</span></span><b>发布笔记草稿</b><p>从合并记录生成发布笔记，人工润色后发布。</p><span class="meta">3 节点 · 1 技能 · 产品组 · v1.2</span><span><button class="btn btn-secondary small">用这个起点</button></span></div>
+              <div class="tplCard"><span class="tags"><span class="tagChip">🛠 工程</span></span><b>依赖升级检查</b><p>定期检查依赖版本，列出需要升级的项目。</p><span class="meta">4 节点 · 2 技能 · 工程组 · v0.9</span><span><button class="btn btn-secondary small">用这个起点</button></span></div>
+              <div class="tplCard"><span class="tags"><span class="tagChip">🔬 研究</span></span><b>竞品动态追踪</b><p>跟踪竞品发布与价格变化，每周汇总。</p><span class="meta">4 节点 · 3 技能 · 研究组 · v2.0</span><span><button class="btn btn-secondary small">用这个起点</button></span></div>
+            </div>
+            <div class="flowStrip"><b>之后</b><span>点「用这个起点」→ 复制成你的草稿并直接进入 builder 大纲继续编辑（builder 复用现有关键帧 03/04，不在本次重设计范围）。</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>新增：</b>补"从起点开始"的第二跳页面：领域 chips 筛选 + 模板卡网格（用途、包含内容、发布组、版本，hover 浮起）；选后复制草稿进 builder——每个入口都有明确落地页，不再是死路。</div>
+    </article>
+
+    <!-- ============ 18 创建第二跳 · 复制 Loop + 工具导入 ============ -->
+    <article class="frameCard full" id="duplicate-and-tool-import">
+      <div class="frameMeta"><strong>18 创建第二跳 · 复制现有 Loop（对话框） + 工具技能导入（页面）</strong><span class="keyId">loop-duplicate / skill-tool-import</span></div>
+      <div class="viewport" style="display:grid; grid-template-columns:1fr 1fr;">
+        <div class="modalShade" style="border-right:1px solid var(--line-strong);">
+          <div class="modal">
+            <div class="mHead">复制现有 Loop</div>
+            <div class="mBody">
+              <span class="search">⌕ 搜索工作区里的 Loop…</span>
+              <div class="rowList">
+                <div class="rowItem selected" style="padding:9px 12px;"><span class="objIco">⤴</span><div class="main"><b>每周产品复盘</b><span>设计中 · 3 小时前更新</span></div><span style="color:var(--accent)">✓</span></div>
+                <div class="rowItem" style="padding:9px 12px;"><span class="objIco">⤴</span><div class="main"><b>会议跟进</b><span>可运行 · 2 天前更新</span></div></div>
+                <div class="rowItem" style="padding:9px 12px;"><span class="objIco">⤴</span><div class="main"><b>客户反馈分诊</b><span>设计中 · 昨天更新</span></div></div>
+              </div>
+            </div>
+            <div class="mFoot"><span style="color:var(--muted); font-size:11.5px;">复制为一份新草稿，原 Loop 不变</span><span style="display:flex; gap:8px;"><button class="btn btn-tertiary">取消</button><button class="btn btn-primary">复制并打开</button></span></div>
+          </div>
+        </div>
+        <div class="shell" style="min-height:420px; grid-template-rows:minmax(0,1fr);">
+          <div class="page" style="padding:22px 24px;">
+            <div class="crumb">技能 / 添加技能 / <b>接入工具</b></div>
+            <div class="pageTitleRow">
+              <div><h2 style="font-size:18px;">接入团队审批过的工具</h2><p>只列出团队已注册的工具；接入后同样走草稿 → 试跑 → 确认 → 发布。</p></div>
+              <button class="btn btn-tertiary">取消</button>
+            </div>
+            <div class="rowList">
+              <div class="rowItem"><span class="objIco">💬</span><div class="main"><b>Slack 发布器</b><span>把内容发布到团队频道 · Action: slack.postMessage</span></div><span class="pill green">已注册</span><button class="btn btn-secondary small">接入</button></div>
+              <div class="rowItem"><span class="objIco">📅</span><div class="main"><b>日历查询</b><span>读取团队忙闲状态 · Action: calendar.freebusy</span></div><span class="pill green">已注册</span><button class="btn btn-secondary small">接入</button></div>
+              <div class="rowItem"><span class="objIco">📊</span><div class="main"><b>数据看板快照</b><span>抓取看板当前快照 · Action: bi.snapshot</span></div><span class="pill green">已注册</span><button class="btn btn-secondary small">接入</button></div>
+            </div>
+            <div class="flowStrip"><b>边界</b><span>后端只接受精确批准的 Action ID，任意命令进不来；接入后进入帧 12 的试运行与发布流程。</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>新增：</b>补两个第二跳。复制现有 Loop：对话框内搜索+选择，页脚注明"复制为新草稿，原 Loop 不变"，确认后打开 builder；工具技能：团队已注册工具列表（名称、能干什么、精确 Action ID、已注册状态），接入后同样走草稿与发布流程。</div>
+    </article>
+
+    <!-- ============ 19 状态语言 + 深色对比度 ============ -->
+    <article class="frameCard" id="state-board">
+      <div class="frameMeta"><strong>19 状态语言与深色对比度</strong><span class="keyId">state-board · 一个原因 + 一个恢复动作</span></div>
+      <div class="viewport shell">
+        <div class="topbar"><span class="brand"><span class="brandMark">lo</span>looloomi</span><nav class="nav"><span class="active">Agent</span><span>技能</span><span>工作流</span><span>团队资源库</span></nav></div>
+        <div class="banner success" style="margin:14px 28px 0;"><span>✓</span><span class="grow">连接已恢复，可以继续刚才的操作。</span><button class="btn btn-tertiary small">知道了</button></div>
+        <div class="page" style="display:grid; gap:14px;">
+          <div class="grid2">
+            <div class="card"><div class="emptyState"><span class="ico">↻</span><b>这个页面暂时打不开</b><p>服务暂时不可用。已经确认的内容不会丢。</p><button class="btn btn-secondary small">重试</button></div></div>
+            <div class="card"><div class="emptyState"><span class="ico" style="background:var(--warn-soft); color:var(--warn);">⚠</span><b>只能看，不能改</b><p>你现在的身份没有修改权限，写操作已禁用。</p><button class="btn btn-secondary small">复制访问申请</button></div></div>
+            <div class="card"><div class="emptyState"><span class="ico" style="background:var(--danger-soft); color:var(--danger);">✕</span><b>和别人改重了</b><p>有人刚保存了新版本，你的修改没有丢。</p><span style="display:flex; gap:8px;"><button class="btn btn-tertiary small">下载我的修改</button><button class="btn btn-secondary small">用最新版本</button></span></div></div>
+            <div class="card"><div class="emptyState"><span class="ico" style="background:var(--surface-soft); color:var(--muted);">◌</span><b>正在加载</b><p>与目标布局同形的 skeleton，不出现全屏 spinner。</p><span style="display:grid; gap:6px; width:150px;"><span style="height:8px; border-radius:4px; background:var(--line);"></span><span style="height:8px; width:70%; border-radius:4px; background:var(--line);"></span></span></div></div>
+          </div>
+          <div class="darkStrip">
+            <span class="dLabel">深色 token 校准（原 Hide details / 禁用态几乎不可见）</span>
+            <div class="darkRow">
+              <button class="dGhost">隐藏详情</button>
+              <button class="dDisabled">发送 ↑（禁用 · 对比度 ≥3:1）</button>
+              <span class="dPill" style="background:#312e8155; color:#a5b4fc; border:1px solid #6366f1;">草稿</span>
+              <span class="dPill" style="background:#064e3b55; color:#6ee7b7; border:1px solid #059669;">可运行</span>
+              <span class="dPill" style="background:#7c2d1255; color:#fcd34d; border:1px solid #d97706;">缺材料</span>
+            </div>
+            <span style="color:#a8a29e; font-size:11px;">ghost/tertiary 文字 ≥4.5:1；边框与禁用底 ≥3:1；pill 深色下用 tinted 底 + 亮文字 + 描边，不做简单反色。</span>
+          </div>
+        </div>
+      </div>
+      <div class="frameNote"><b>变更：</b>错误/权限/冲突/加载全部收敛到统一 EmptyState（标题说人话）；Banner 顶部 sticky 可关闭；深色 ghost 按钮、禁用态、状态 pill 单独校准对比度并列入验收。</div>
+    </article>
+  </main>
+</body>
+</html>

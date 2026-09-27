@@ -14,5 +14,3 @@ export function createWorkbenchQueryClient() {
     },
   });
 }
-
-export const workbenchQueryClient = createWorkbenchQueryClient();

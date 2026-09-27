@@ -5,7 +5,7 @@ import {
   MEETING_ACTION_EXTRACTOR_EXECUTION_REF,
   MEETING_ACTION_EXTRACTOR_INPUT_SCHEMA,
   MEETING_ACTION_EXTRACTOR_OUTPUT_SCHEMA,
-} from "../../../../../agent/code/agent-runtime/extensions/meeting-action-extractor/binding.mjs";
+} from "../../../../../agent/code/agent-runtime/public-api.mjs";
 
 import { inspectSkillPackage } from "../validation/skill-package-inspector.mjs";
 

@@ -13,7 +13,7 @@ export const cmcRuntimeToolNames = new Set([
 
 export async function executeRuntimeToolViaCore(toolName, params = {}, {
   refreshCMCLive,
-  piKernel,
+  runtimeKernel,
   cmcDefaultSymbols = ["BTC", "ETH", "SOL"],
 } = {}) {
   if (toolName === CLOUD_ASR_TOOL_NAME) {
@@ -49,8 +49,8 @@ export async function executeRuntimeToolViaCore(toolName, params = {}, {
       },
     };
   }
-  if (!piKernel || typeof piKernel.executeTool !== "function") throw new Error("core_provider_missing_pi_kernel");
-  return piKernel.executeTool(toolName, params);
+  if (!runtimeKernel || typeof runtimeKernel.executeTool !== "function") throw new Error("core_provider_missing_runtime_kernel");
+  return runtimeKernel.executeTool(toolName, params);
 }
 
 export function extractSymbolsFromPrompt(prompt, fallbackSymbols = ["BTC", "ETH", "SOL"]) {

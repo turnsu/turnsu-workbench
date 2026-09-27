@@ -7,6 +7,17 @@ import {
 } from "../../src/skills/github-skill-repository-source.mjs";
 
 const skill = "---\nname: imported-skill\ndescription: Imported safely.\n---\n";
+const runtime = `${JSON.stringify({
+  runtime: "python3.12",
+  entrypoint: "scripts/main.py",
+  protocol: { stdin: "json", stdout: "json" },
+  permissions: {
+    network: false,
+    connections: [],
+    externalActions: false,
+    filesystem: "scratch-only",
+  },
+})}\n`;
 const script = "print('ok')\n";
 
 test("GitHub repository source reads only the bounded Skill contract through the fixed API host", async () => {
@@ -14,8 +25,12 @@ test("GitHub repository source reads only the bounded Skill contract through the
   const source = createGitHubSkillRepositorySource({
     fetchImpl: async (url, options) => {
       requests.push({ url: String(url), options });
-      const executable = String(url).includes("scripts/main.py");
-      const content = executable ? script : skill;
+      const path = String(url);
+      const content = path.includes("scripts/main.py")
+        ? script
+        : path.includes("skill.runtime.json")
+          ? runtime
+          : skill;
       return new Response(JSON.stringify({ type: "file", encoding: "base64", size: Buffer.byteLength(content), content: Buffer.from(content).toString("base64") }), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -29,9 +44,10 @@ test("GitHub repository source reads only the bounded Skill contract through the
   });
   assert.deepEqual(imported.files.map(({ path, content }) => [path, content.toString("utf8")]), [
     ["SKILL.md", skill],
+    ["skill.runtime.json", runtime],
     ["scripts/main.py", script],
   ]);
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 3);
   assert.ok(requests.every(({ url }) => new URL(url).hostname === "api.github.com"));
   assert.ok(requests.every(({ options }) => options.redirect === "error"));
   assert.equal(imported.repository.repositoryUrl, "https://github.com/openai/example");
@@ -39,12 +55,38 @@ test("GitHub repository source reads only the bounded Skill contract through the
 
 test("GitHub repository source allows an instructions-only Skill", async () => {
   const source = createGitHubSkillRepositorySource({
-    fetchImpl: async (url) => String(url).includes("scripts/main.py")
+    fetchImpl: async (url) => !String(url).includes("SKILL.md")
       ? new Response("not found", { status: 404 })
       : new Response(JSON.stringify({ type: "file", encoding: "base64", size: Buffer.byteLength(skill), content: Buffer.from(skill).toString("base64") }), { status: 200 }),
   });
   const imported = await source.readSkillFiles({ repositoryUrl: "https://github.com/openai/example" });
   assert.deepEqual(imported.files.map(({ path }) => path), ["SKILL.md"]);
+});
+
+test("GitHub repository source rejects incomplete Python runtime pairs", async () => {
+  for (const missingPath of ["skill.runtime.json", "scripts/main.py"]) {
+    const source = createGitHubSkillRepositorySource({
+      fetchImpl: async (url) => {
+        const path = String(url);
+        if (path.includes(missingPath)) return new Response("not found", { status: 404 });
+        const content = path.includes("SKILL.md")
+          ? skill
+          : path.includes("skill.runtime.json")
+            ? runtime
+            : script;
+        return new Response(JSON.stringify({
+          type: "file",
+          encoding: "base64",
+          size: Buffer.byteLength(content),
+          content: Buffer.from(content).toString("base64"),
+        }), { status: 200 });
+      },
+    });
+    await assert.rejects(
+      () => source.readSkillFiles({ repositoryUrl: "https://github.com/openai/example" }),
+      (failure) => failure?.code === "repository_runtime_pair_incomplete",
+    );
+  }
 });
 
 test("GitHub repository source rejects arbitrary hosts, credentials, deep links, and traversal", async () => {
@@ -76,5 +118,51 @@ test("GitHub repository source turns missing SKILL.md and malformed content into
   await assert.rejects(
     () => malformed.readSkillFiles({ repositoryUrl: "https://github.com/openai/example" }),
     (failure) => failure?.code === "repository_response_invalid",
+  );
+});
+
+test("GitHub repository source distinguishes rate limits, private repositories, redirects, and cancellation", async () => {
+  const rateLimited = createGitHubSkillRepositorySource({
+    fetchImpl: async () => new Response("", {
+      status: 403,
+      headers: { "x-ratelimit-remaining": "0" },
+    }),
+  });
+  await assert.rejects(
+    () => rateLimited.readSkillFiles({ repositoryUrl: "https://github.com/openai/example" }),
+    (failure) => failure?.code === "repository_rate_limited" && failure.retryable === true,
+  );
+
+  const privateRepository = createGitHubSkillRepositorySource({
+    fetchImpl: async () => new Response("", { status: 403 }),
+  });
+  await assert.rejects(
+    () => privateRepository.readSkillFiles({ repositoryUrl: "https://github.com/openai/example" }),
+    (failure) => failure?.code === "repository_private_or_forbidden" && failure.retryable === false,
+  );
+
+  const redirected = createGitHubSkillRepositorySource({
+    fetchImpl: async () => {
+      throw new TypeError("redirect mode is set to error");
+    },
+  });
+  await assert.rejects(
+    () => redirected.readSkillFiles({ repositoryUrl: "https://github.com/openai/example" }),
+    (failure) => failure?.code === "repository_redirect_forbidden",
+  );
+
+  const controller = new AbortController();
+  controller.abort();
+  const cancelled = createGitHubSkillRepositorySource({
+    fetchImpl: async () => {
+      throw new DOMException("aborted", "AbortError");
+    },
+  });
+  await assert.rejects(
+    () => cancelled.readSkillFiles({
+      repositoryUrl: "https://github.com/openai/example",
+      signal: controller.signal,
+    }),
+    (failure) => failure?.code === "repository_import_cancelled",
   );
 });

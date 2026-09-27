@@ -48,7 +48,6 @@ export const skillDefinitionExample = {
       },
     },
   },
-  status: "ready",
   inputSchema: skillInputDataSchema,
   outputSchema: skillOutputDataSchema,
   risk: {
@@ -695,6 +694,8 @@ export const workspaceResponseExample = {
     session: {
       csrfToken: "csrf-local-workbench-session-token-0001",
       expiresAt: "2026-07-10T18:00:00.000Z",
+      userId: "user-local",
+      workspaceId: "workspace-local",
     },
   },
   requestId: "request-workspace-1",
@@ -1240,12 +1241,19 @@ export const portableLoopPackageResponseExample = {
   ...portableLoopPackageExample,
 };
 
+export const runCommandRequestExample = {
+  schemaVersion: API_SCHEMA_VERSION,
+  data: { reason: "Retry the immutable Run safely." },
+};
+
 export const mutationRequestExamples = {
   useTemplate: useTemplateRequestExample,
   saveWorkflowRevision: saveWorkflowRevisionRequestExample,
   compileWorkflow: compileWorkflowRequestExample,
   startRun: startRunRequestExample,
   submitReviewDecision: reviewDecisionRequestExample,
+  cancelRun: runCommandRequestExample,
+  retryRun: runCommandRequestExample,
 };
 
 export const publicContractExamples = [
@@ -1290,6 +1298,7 @@ export const publicContractExamples = [
   { name: "run events response", schema: "RunEventsResponseSchema", value: runEventsResponseExample },
   { name: "review decision request", schema: "ReviewDecisionRequestSchema", value: reviewDecisionRequestExample },
   { name: "review decision response", schema: "ReviewDecisionResponseSchema", value: reviewDecisionResponseExample },
+  { name: "run command request", schema: "RunCommandRequestSchema", value: runCommandRequestExample },
   { name: "Skill test case", schema: "SkillTestCaseSchema", value: skillTestCaseExample },
   { name: "create Skill test request", schema: "CreateSkillTestRequestSchema", value: createSkillTestRequestExample },
   { name: "Skill test run response", schema: "SkillTestRunResponseSchema", value: skillTestRunResponseExample },

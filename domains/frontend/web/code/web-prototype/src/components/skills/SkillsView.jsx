@@ -58,11 +58,6 @@ function actionBoundaryLabel(value, t) {
   return value;
 }
 
-function isProductSkill(skill) {
-  const text = `${skill?.title || ""} ${skill?.description || ""}`.toLowerCase();
-  return !/(conformance|fixture|executable review smoke|smoke boundary)/.test(text);
-}
-
 function skillOwner(skill, t) {
   if (skill?.source === "Installed") return t("skills.teamOwner");
   return t("skills.youOwner");
@@ -70,7 +65,7 @@ function skillOwner(skill, t) {
 
 export function SkillsView({ workspace }) {
   const t = workspace.t;
-  const productSkills = workspace.managedSkills.filter(isProductSkill);
+  const productSkills = workspace.managedSkills;
   const rows = productSkills.filter((skill) => {
     const haystack = `${skill.title} ${skill.description} ${skill.setupState} ${skill.risk}`.toLowerCase();
     const matchesQuery = haystack.includes(workspace.query.toLowerCase());

@@ -1,0 +1,12 @@
+.turnsuBrand { display: inline-flex; align-items: center; flex: 0 0 auto; }
+.turnsuWordmark { display: block; width: 150px; height: 40px; object-fit: contain; }
+.turnsuWordmark-dark, .turnsuBrand .turnsuCompactMark { display: none; }
+.turnsuMark { display: inline-block; flex-shrink: 0; object-fit: contain; }
+:root[data-theme="dark"] .turnsuWordmark-light { display: none; }
+:root[data-theme="dark"] .turnsuWordmark-dark { display: block; }
+.authBrand .turnsuWordmark { width: 168px; height: 45px; }
+
+@media (max-width: 1100px) {
+  .turnsuBrand-responsive .turnsuWordmark { display: none; }
+  .turnsuBrand-responsive .turnsuCompactMark { display: block; }
+}

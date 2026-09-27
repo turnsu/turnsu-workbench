@@ -35,14 +35,6 @@ export const LocalizedDisplaySchema = strictObject({
   }),
 });
 
-export const SkillStatusSchema = stringEnum([
-  "draft",
-  "validating",
-  "ready",
-  "blocked",
-  "retired",
-]);
-
 export const SkillRiskSchema = strictObject({
   level: stringEnum(["low", "medium", "high"]),
   externalAction: Type.Boolean(),
@@ -72,6 +64,10 @@ const SkillExecutionRefBaseProperties = {
 export const NonModelSkillExecutionRefSchema = strictObject({
   ...SkillExecutionRefBaseProperties,
   executionMode: stringEnum(["agent", "deterministic", "orchestrator"]),
+  allowedChildren: Type.Optional(Type.Array(
+    Type.String({ minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$" }),
+    { minItems: 1, maxItems: 100, uniqueItems: true },
+  )),
 });
 
 export const ModelSkillExecutionRefSchema = strictObject({
@@ -113,7 +109,6 @@ export const SkillDefinitionSchema = strictObject(
     description: Type.String({ minLength: 1, maxLength: 2000 }),
     category: Type.String({ minLength: 1, maxLength: 100 }),
     display: LocalizedDisplaySchema,
-    status: SkillStatusSchema,
     inputSchema: DataSchemaSchema,
     outputSchema: DataSchemaSchema,
     risk: SkillRiskSchema,
@@ -137,7 +132,6 @@ export const SkillCatalogItemSchema = strictObject(
     description: Type.String({ minLength: 1, maxLength: 2000 }),
     category: Type.String({ minLength: 1, maxLength: 100 }),
     display: LocalizedDisplaySchema,
-    status: SkillStatusSchema,
     inputSchema: DataSchemaSchema,
     outputSchema: DataSchemaSchema,
     risk: SkillRiskSchema,

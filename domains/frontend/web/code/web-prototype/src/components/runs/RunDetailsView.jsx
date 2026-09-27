@@ -5,9 +5,12 @@ import { Button } from "../shared/Button.jsx";
 import { ObjectQueryState } from "../shared/ObjectQueryState.jsx";
 import { StatusPill } from "../shared/StatusPill.jsx";
 import { useRunInvocationsQuery } from "../../api/queries.js";
+import {
+  canCancelRun,
+  canRepeatOrRetryRun,
+  isTerminalRunStatus,
+} from "../../api/client.js";
 import { ArtifactImage } from "../models/ArtifactImage.jsx";
-
-const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 
 function statusLabel(status, t) {
   const keys = {
@@ -18,14 +21,17 @@ function statusLabel(status, t) {
     paused: "status.needsFollowUp",
     failed: "status.failed",
     cancelled: "status.cancelled",
+    cancellation_requested: "status.cancellationRequested",
+    partial: "status.partial",
+    effect_outcome_unknown: "status.effectOutcomeUnknown",
   };
   return keys[status] ? t(keys[status]) : status;
 }
 
 function toneFor(status) {
   if (status === "completed") return "success";
-  if (["failed", "cancelled"].includes(status)) return "danger";
-  if (["waiting_review", "paused"].includes(status)) return "warning";
+  if (["failed", "cancelled", "partial", "effect_outcome_unknown"].includes(status)) return "danger";
+  if (["waiting_review", "paused", "cancellation_requested"].includes(status)) return "warning";
   return "info";
 }
 
@@ -34,8 +40,6 @@ export function RunDetailsView({ workspace }) {
   const run = workspace.activeRun;
   const loop = workspace.loops.find((item) => item.id === run?.loopId) || workspace.selectedWorkflow;
   const history = workspace.runs.filter((entry) => entry.loopId === run?.loopId);
-  const previousRun = history.find((entry) => entry.id !== run?.id && TERMINAL.has(entry.status));
-  const comparison = workspace.activeRunComparison;
   const connection = workspace.runStream?.connection;
   const reviewBusy = workspace.serverState?.mutations?.review?.isPending === true;
   const cancelBusy = workspace.serverState?.mutations?.cancelRun?.isPending === true;
@@ -43,7 +47,11 @@ export function RunDetailsView({ workspace }) {
     ? workspace.serverState?.mutations?.startRun?.isPending === true
     : workspace.serverState?.mutations?.retryRun?.isPending === true;
   const [reviewNote, setReviewNote] = useState("");
-  const invocationsQuery = useRunInvocationsQuery(run?.id, Boolean(run?.id));
+  const invocationsQuery = useRunInvocationsQuery(
+    run?.id,
+    Boolean(run?.id),
+    { pollWhileRunActive: Boolean(run && !isTerminalRunStatus(run.status)) },
+  );
   const invocations = invocationsQuery.data?.data || [];
   const modelInvocations = invocations.filter((invocation) => (
     invocation.mode === "model_call"
@@ -98,7 +106,7 @@ export function RunDetailsView({ workspace }) {
         </div>
       </header>
 
-      {!TERMINAL.has(run.status) && connection?.status === "disconnected" ? (
+      {!isTerminalRunStatus(run.status) && connection?.status === "disconnected" ? (
         <div className="inlineRecovery runStreamRecovery" role="status" aria-live="polite" data-testid="loopops.runs.reconnect-state">
           <span>
             <strong>{t(connection.reason === "browser_offline" ? "runs.offlineTitle" : "runs.connectionLostTitle")}</strong>
@@ -165,48 +173,29 @@ export function RunDetailsView({ workspace }) {
             </section>
           ) : null}
 
-          <div className="buttonRow">
-            <Button variant="secondary" onClick={workspace.createDraftFromActiveRun} data-testid="loopops.runs.create-draft">
-              {t("actions.continueFromRun")}
-            </Button>
-            {run.status === "completed" && loop ? (
+          {run.status === "completed" && loop ? (
+            <div className="buttonRow">
               <Button variant="primary" onClick={() => workspace.openPublishReview(loop.id)} data-testid="loopops.runs.publish">
                 {t("actions.publish")}
-              </Button>
-            ) : null}
-          </div>
-
-          {previousRun && !comparison ? (
-            <div className="buttonRow">
-              <Button variant="secondary" onClick={() => workspace.compareActiveRunWith(previousRun.id)} data-testid="loopops.runs.compare.open">
-                {t("actions.comparePreviousRun")}
               </Button>
             </div>
           ) : null}
 
-          {comparison ? (
-            <section className="reviewDecisionPanel" data-testid="loopops.runs.comparison">
-              <p className="sectionEyebrow">{t("runs.comparisonTitle")}</p>
-              <dl className="propertyGrid">
-                <dt>{t("runs.thisRun")}</dt>
-                <dd>{comparison.left.skillVersions.length ? comparison.left.skillVersions.join(", ") : t("runs.versionUnavailable")}</dd>
-                <dt>{t("runs.previousRun")}</dt>
-                <dd>{comparison.right.skillVersions.length ? comparison.right.skillVersions.join(", ") : t("runs.versionUnavailable")}</dd>
-                <dt>{t("runs.workflowChanged")}</dt>
-                <dd>{comparison.workflowRevisionChanged ? t("runs.changed") : t("runs.unchanged")}</dd>
-                <dt>{t("runs.resultChanged")}</dt>
-                <dd>{comparison.finalAnswerChanged ? t("runs.changed") : t("runs.unchanged")}</dd>
-              </dl>
-              <Button variant="plain" onClick={workspace.clearRunComparison}>{t("actions.stopComparing")}</Button>
+          {run.failure ? <section className="runFailure" role="alert"><h3>{t("runs.failed")}</h3><p>{run.failure.code === "provider_payment_required" ? t("skillLifecycle.diagnostic.provider_payment_required") : run.failure.message}</p></section> : null}
+
+          {run.recoveryActions?.length ? (
+            <section className="runFailure" data-testid="loopops.runs.recovery-actions">
+              <h3>{t("runs.recoveryActions")}</h3>
+              <ul className="cleanList">
+                {run.recoveryActions.map((action) => <li key={action.code}>{action.label}</li>)}
+              </ul>
             </section>
           ) : null}
 
-          {run.failure ? <section className="runFailure" role="alert"><h3>{t("runs.failed")}</h3><p>{run.failure.message}</p></section> : null}
-
-          {!TERMINAL.has(run.status) ? (
+          {canCancelRun(run.status) ? (
             <div className="buttonRow"><Button variant="secondary" icon={<X size={15} />} disabled={cancelBusy} onClick={workspace.cancelActiveRun} data-testid="loopops.runs.cancel">{cancelBusy ? t("state.loading") : t("runs.cancel")}</Button></div>
           ) : null}
-          {TERMINAL.has(run.status) ? (
+          {canRepeatOrRetryRun(run.status) ? (
             <div className="buttonRow"><Button variant="primary" icon={<RotateCcw size={15} />} disabled={retryBusy} onClick={workspace.retryActiveRun} data-testid="loopops.runs.retry">{retryBusy ? t("state.loading") : t("runs.retry")}</Button></div>
           ) : null}
         </main>

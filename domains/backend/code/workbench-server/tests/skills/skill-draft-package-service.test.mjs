@@ -41,11 +41,14 @@ function fixture({ uploadState = "promoted", currentDraftId = "draft-a", bytes =
     calls,
     async connect() {},
     async runIdempotentMutation(_options, mutation) { return mutation({}); },
+    async runIdempotentExternalMutation(options, mutation) {
+      return mutation(`${options.operationIdKind}-test`);
+    },
     async withTransaction(mutation) { return mutation({}); },
     async authorizeWorkspace(input) { calls.push({ kind: "authorize", input }); },
     async getSkillDraft(input) {
       calls.push({ kind: "draft", input });
-      return { skill: { skillId: "skill-a", currentDraftId }, draft };
+      return { skill: { skillId: "skill-a", currentDraftId, ownerId: "user-a" }, draft };
     },
     repositories: {
       uploads: {
@@ -54,6 +57,7 @@ function fixture({ uploadState = "promoted", currentDraftId = "draft-a", bytes =
           return {
             uploadId,
             workspaceId: options.workspaceId,
+            requestedBy: "user-a",
             state: uploadState,
             objectId: storedObjectId,
           };

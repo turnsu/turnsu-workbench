@@ -9,8 +9,11 @@ const EDITABLE_REVISION_FIELDS = [
 
 export const EDITOR_ACTIONS = Object.freeze({
   LOAD_REVISION: "editor/load-revision",
+  SYNC_REVISION: "editor/sync-revision",
   SELECT_NODE: "editor/select-node",
   REPLACE_DRAFT: "editor/replace-draft",
+  UNDO: "editor/undo",
+  REDO: "editor/redo",
   COMPILE_STARTED: "editor/compile-started",
   COMPILE_SUCCEEDED: "editor/compile-succeeded",
   COMPILE_FAILED: "editor/compile-failed",
@@ -104,6 +107,8 @@ export function createEditorState(revision, { etag = null, selectedNodeId = null
     saveStatus: "idle",
     lastSaveError: null,
     conflict: null,
+    past: [],
+    future: [],
   };
 }
 
@@ -147,8 +152,25 @@ function normalizeSaveConflict(state, action) {
   };
 }
 
+export function editorRevisionSyncKind(state, revision, etag) {
+  if (!revision?.revisionId || !revision?.workflowId) return "ignore";
+  if (!state || state.workflowId !== revision.workflowId) return "replace";
+  // Query refetches can arrive before/after the save mutation settles. They
+  // must not overwrite local work or roll the editor back to an older base.
+  if (state.dirty || state.saveStatus === "saving" || state.conflict
+    || revision.revisionNumber < state.baseRevision.revisionNumber) return "ignore";
+  if (state.baseRevision.revisionId !== revision.revisionId) return "replace";
+  return etag && etag !== state.serverEtag ? "refresh" : "ignore";
+}
+
 export function editorReducer(state, action) {
   switch (action?.type) {
+    case EDITOR_ACTIONS.SYNC_REVISION: {
+      const kind = editorRevisionSyncKind(state, action.revision, action.etag);
+      if (kind === "ignore") return state;
+      if (kind === "refresh") return { ...state, serverEtag: action.etag };
+      return createEditorState(action.revision, { etag: action.etag, selectedNodeId: state?.selectedNodeId });
+    }
     case EDITOR_ACTIONS.LOAD_REVISION:
       return createEditorState(action.revision, {
         etag: action.etag ?? null,
@@ -161,8 +183,23 @@ export function editorReducer(state, action) {
         selectedNodeId: resolveSelection(state.draft, action.nodeId),
       };
 
-    case EDITOR_ACTIONS.REPLACE_DRAFT:
-      return replaceDraft(state, action.draft);
+    case EDITOR_ACTIONS.REPLACE_DRAFT: {
+      const next = replaceDraft(state, action.draft);
+      if (sameDraft(state.draft, next.draft)) return state;
+      return { ...next, past: [...(state.past || []), state.draft].slice(-50), future: [] };
+    }
+
+    case EDITOR_ACTIONS.UNDO: {
+      if (!state?.past?.length || state.saveStatus === "saving" || state.conflict) return state;
+      return { ...replaceDraft(state, state.past.at(-1)), past: state.past.slice(0, -1),
+        future: [state.draft, ...(state.future || [])].slice(0, 50) };
+    }
+
+    case EDITOR_ACTIONS.REDO: {
+      if (!state?.future?.length || state.saveStatus === "saving" || state.conflict) return state;
+      return { ...replaceDraft(state, state.future[0]), past: [...(state.past || []), state.draft].slice(-50),
+        future: state.future.slice(1) };
+    }
 
     case EDITOR_ACTIONS.COMPILE_STARTED:
       return {
@@ -205,7 +242,7 @@ export function editorReducer(state, action) {
         etag: action.etag ?? null,
         selectedNodeId: state.selectedNodeId,
       });
-      return { ...next, saveStatus: "saved" };
+      return { ...next, saveStatus: "saved", past: state.past || [], future: state.future || [] };
     }
 
     case EDITOR_ACTIONS.SAVE_FAILED:
@@ -222,6 +259,8 @@ export function editorReducer(state, action) {
     case EDITOR_ACTIONS.DISCARD_CHANGES:
       return {
         ...state,
+        past: [],
+        future: [],
         draft: revisionToEditorDraft(state.baseRevision),
         selectedNodeId: resolveSelection(
           revisionToEditorDraft(state.baseRevision),

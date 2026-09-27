@@ -15,6 +15,7 @@ import {
   runEventExample,
   saveWorkflowRevisionRequestExample,
   skillDefinitionExample,
+  skillCatalogItemExample,
   skillTestCaseExample,
   skillTestRunExample,
   skillValidationRecordExample,
@@ -29,6 +30,7 @@ import {
   portableLoopPackageExample,
   loopImportResponseExample,
   runSettingsExample,
+  startRunRequestExample,
   workflowGraphExample,
   workflowDetailResponseExample,
   workflowRevisionExample,
@@ -85,6 +87,19 @@ test("required fields and unknown mutation fields are rejected", () => {
       `${endpoint.operationId} accepted an unknown mutation data field`,
     );
   }
+});
+
+test("public Skill catalog contracts expose runtime readiness without a second status state machine", () => {
+  assert.equal("status" in skillDefinitionExample, false);
+  assert.equal(contracts.Check(contracts.SkillDefinitionSchema, {
+    ...structuredClone(skillDefinitionExample),
+    status: "ready",
+  }), false);
+  assert.equal(contracts.Check(contracts.SkillCatalogItemSchema, {
+    ...structuredClone(skillCatalogItemExample),
+    status: "blocked",
+  }), false);
+  assert.equal(contracts.Check(contracts.SkillListQuerySchema, { status: "ready" }), false);
 });
 
 test("validation errors come from the TypeBox value runtime", () => {
@@ -177,6 +192,23 @@ test("error envelope has the frozen strict shape", () => {
 test("run event sequence and identity shape is strict", () => {
   assert.equal(contracts.Check(contracts.RunEventSchema, runEventExample), true);
 
+  for (const [type, status] of [
+    ["node.effect_recovery_started", "running"],
+    ["node.effect_recovery_completed", "completed"],
+    ["node.effect_recovery_unknown", "effect_outcome_unknown"],
+  ]) {
+    assert.equal(
+      contracts.Check(contracts.RunEventSchema, {
+        ...runEventExample,
+        type,
+        status,
+        nodeId: "node-skill",
+      }),
+      true,
+      `rejected durable effect recovery event ${type}`,
+    );
+  }
+
   for (const sequence of [0, -1, 1.5]) {
     assert.equal(
       contracts.Check(contracts.RunEventSchema, { ...runEventExample, sequence }),
@@ -252,16 +284,23 @@ test("workspace Connection contracts are product-safe, revisioned, and explicitl
     connectionId: "connection-calendar-team",
     workspaceId: "workspace-alpha",
     capabilityKey: "calendar-read",
+    driverKey: "lark",
+    driverBackend: "production",
     label: "Team calendar",
     configuration: {
       accountLabel: "Operations calendar",
       permissionSummary: "Read events from calendars selected by this workspace.",
     },
+    credentialState: "bound",
     status: "connected",
     validation: {
       status: "valid",
       checkedAt: now,
       message: "Connection setup is ready.",
+      principal: "operations-calendar",
+      scopes: ["calendar:read"],
+      effects: ["calendar.events.read"],
+      expiresAt: null,
     },
     revision: 2,
     createdAt: now,
@@ -299,6 +338,14 @@ test("workspace Connection contracts are product-safe, revisioned, and explicitl
     schemaVersion: "workbench-api-v1",
     data: {},
   }), true);
+  assert.equal(contracts.Check(contracts.BindConnectionCredentialRequestSchema, {
+    schemaVersion: "workbench-api-v1",
+    data: { secretRef: "secret-store:lark/team-calendar" },
+  }), true);
+  assert.equal(contracts.Check(contracts.BindConnectionCredentialRequestSchema, {
+    schemaVersion: "workbench-api-v1",
+    data: { secretRef: "raw-secret\nvalue" },
+  }), false);
 
   const binding = { requirementId: "calendar-read", connectionId: connection.connectionId };
   assert.equal(contracts.Check(contracts.ConnectionBindingSchema, binding), true);
@@ -314,7 +361,30 @@ test("workspace Connection contracts are product-safe, revisioned, and explicitl
   const endpoints = contracts.WORKBENCH_V1_LIFECYCLE_ENDPOINTS;
   assert.deepEqual(endpoints.updateConnection.requiredRequestHeaders, ["Idempotency-Key", "If-Match"]);
   assert.deepEqual(endpoints.validateConnection.requiredRequestHeaders, ["Idempotency-Key", "If-Match"]);
+  assert.deepEqual(endpoints.bindConnectionCredential.requiredRequestHeaders, ["Idempotency-Key", "If-Match"]);
   assert.deepEqual(endpoints.getConnection.responseHeaders, ["ETag"]);
+});
+
+test("Run material contracts carry immutable Product refs and reject host paths or raw bytes", () => {
+  const request = structuredClone(startRunRequestExample);
+  request.data.materialBindings = [{
+    nodeId: "node-skill",
+    binding: {
+      materialKey: "source_file",
+      source: {
+        kind: "attachment",
+        attachment: {
+          attachmentId: "attachment-1",
+          version: 1,
+          contentHash: `sha256:${"a".repeat(64)}`,
+          mediaType: "text/markdown",
+        },
+      },
+    },
+  }];
+  assert.equal(contracts.Check(contracts.StartRunRequestSchema, request), true);
+  request.data.materialBindings[0].binding.source.hostPath = "/Users/private/file.md";
+  assert.equal(contracts.Check(contracts.StartRunRequestSchema, request), false);
 });
 
 test("execution plan freezes sequential pinned execution", () => {
@@ -372,7 +442,6 @@ test("first-slice endpoint metadata covers the frozen API and excludes proposals
     "GET /api/workbench/v1/skills/{skillId}",
     "GET /api/workbench/v1/templates",
     "GET /api/workbench/v1/templates/{templateId}",
-    "POST /api/workbench/v1/templates/{templateId}/workflows",
     "GET /api/workbench/v1/workflows",
     "GET /api/workbench/v1/workflows/{workflowId}",
     "GET /api/workbench/v1/workflows/{workflowId}/revisions/{revisionId}",
@@ -535,6 +604,7 @@ test("V1 lifecycle contracts preserve immutable versions and product-safe record
     versionId: "skill-version-meeting-summary-1",
     contentHash: "sha256:fedcba9876543210",
     visibility: "workspace",
+    domain: "research",
     startingPoint: false,
     releaseNotes: "Initial release.",
     dependencies: [],
@@ -559,7 +629,6 @@ test("V1 lifecycle contracts preserve immutable versions and product-safe record
   const snapshot = {
     schemaVersion: "workbench-v1",
     runId: "run-meeting-1",
-    workspaceId: "workspace-alpha",
     workflowId: workflowRevisionExample.workflowId,
     workflowRevisionId: workflowRevisionExample.revisionId,
     loopVersionId: null,
@@ -567,10 +636,26 @@ test("V1 lifecycle contracts preserve immutable versions and product-safe record
     inputForm: inputFormExample,
     outputDefinition: outputDefinitionExample,
     runSettings: runSettingsExample,
-    planHash: "sha256:0011223344556677",
+    plan: executionPlanExample,
+    planHash: executionPlanExample.contentHash,
     skillVersions: [skillVersion],
     resourceObjectIds: [],
-    connectionIds: [],
+    connectionBindings: [{
+      approvalSchemaVersion: "connection-approval-v1",
+      requirementId: "lark.task.create",
+      connectionId: "connection-lark-1",
+      connectionRevision: 7,
+      capabilityKey: "lark.task.create",
+      driverKey: "lark",
+      driverBackend: "production",
+      principal: "lark-user-123",
+      principalFingerprint: "sha256:1111111111111111",
+      permissionFingerprint: "sha256:2222222222222222",
+      credentialBindingFingerprint: "sha256:3333333333333333",
+      validationExpiresAt: "2099-01-01T00:00:00.000Z",
+      approvalFingerprint: "sha256:4444444444444444",
+    }],
+    connectionIds: ["connection-lark-1"],
     createdAt: now,
   };
   const upload = {
@@ -614,7 +699,7 @@ test("V1 lifecycle contracts preserve immutable versions and product-safe record
       schemaVersion: "workbench-v1",
       skillId: skillVersion.skillId,
       visibility: "private",
-      lifecycle: "ready",
+      lifecycle: "published",
       currentDraftId: skillDraft.skillDraftId,
       latestPublishedVersionId: skillVersion.skillVersionId,
       allowedActions: ["create_version", "retire"],
@@ -657,6 +742,13 @@ test("V1 lifecycle contracts preserve immutable versions and product-safe record
     },
   };
   assert.equal(contracts.Check(contracts.SkillAssetSummarySchema, skillAssetSummary), true);
+  for (const lifecycle of ["draft", "validating", "tested", "published", "deprecated", "archived"]) {
+    assert.equal(contracts.Check(contracts.SkillLifecycleSchema, lifecycle), true, lifecycle);
+    assert.equal(contracts.Check(contracts.AssetLifecycleSchema, lifecycle), true, lifecycle);
+  }
+  for (const legacyLifecycle of ["ready", "shared", "blocked"]) {
+    assert.equal(contracts.Check(contracts.SkillLifecycleSchema, legacyLifecycle), false, legacyLifecycle);
+  }
   for (const [target, field, value] of [
     ["skill", "workspaceId", "workspace-alpha"],
     ["skill", "ownerId", "user-owner"],
@@ -680,6 +772,21 @@ test("V1 lifecycle contracts preserve immutable versions and product-safe record
   assert.equal(contracts.Check(contracts.WorkspaceAssetReleaseSchema, release), true);
   assert.equal(contracts.Check(contracts.LifecycleBuilderProposalSchema, proposal), true);
   assert.equal(contracts.Check(contracts.RunExecutionSnapshotSchema, snapshot), true);
+  for (const forbiddenRelationship of ["workspaceId", "requestedBy"]) {
+    assert.equal(
+      contracts.Check(contracts.RunExecutionSnapshotSchema, {
+        ...snapshot,
+        [forbiddenRelationship]: forbiddenRelationship === "workspaceId"
+          ? "workspace-alpha"
+          : "user-owner",
+      }),
+      false,
+      `Run execution snapshot accepted duplicated relationship ${forbiddenRelationship}`,
+    );
+  }
+  const legacySnapshot = structuredClone(snapshot);
+  delete legacySnapshot.connectionBindings;
+  assert.equal(contracts.Check(contracts.RunExecutionSnapshotSchema, legacySnapshot), true);
   const runJob = {
     schemaVersion: "workbench-v1",
     runJobId: "job-meeting-1",
@@ -694,7 +801,29 @@ test("V1 lifecycle contracts preserve immutable versions and product-safe record
     queuedAt: now,
     updatedAt: now,
   };
-  assert.equal(contracts.Check(contracts.RunJobSchema, runJob), true);
+  for (const status of [
+    "queued",
+    "leased",
+    "running",
+    "migration_draining",
+    "paused",
+    "cancellation_requested",
+    "completed",
+    "failed",
+    "cancelled",
+    "partial",
+    "effect_outcome_unknown",
+  ]) {
+    assert.equal(
+      contracts.Check(contracts.RunJobSchema, { ...runJob, status }),
+      true,
+      `rejected persisted RunJob status ${status}`,
+    );
+  }
+  assert.equal(
+    contracts.Check(contracts.RunJobSchema, { ...runJob, status: "unknown" }),
+    false,
+  );
   assert.equal(typeof contracts.RunLeaseSchema, "object");
   assert.equal(contracts.Check(contracts.RunLeaseSchema, {
     schemaVersion: "workbench-v1",
@@ -743,25 +872,19 @@ test("V1 lifecycle endpoint metadata is additive and protects writes", () => {
   const endpoints = Object.values(contracts.WORKBENCH_V1_LIFECYCLE_ENDPOINTS);
   assert.ok(endpoints.length >= 20);
   assert.ok(endpoints.every((endpoint) => endpoint.path.startsWith(contracts.WORKBENCH_API_PREFIX)));
-  assert.ok(endpoints.some((endpoint) => endpoint.path.includes("/proposals")));
+  assert.ok(endpoints.some((endpoint) => endpoint.path.includes("/loop-draft-proposals")));
+  assert.ok(endpoints.every((endpoint) => !endpoint.path.includes("/loops/{workflowId}/proposals")));
   assert.ok(endpoints.some((endpoint) => endpoint.path.includes("/team-library")));
   assert.ok(endpoints.some((endpoint) => endpoint.path.includes("/uploads")));
   assert.ok(endpoints.some((endpoint) => endpoint.path.includes("/runs/{runId}/cancel")));
-  const fork = contracts.WORKBENCH_V1_LIFECYCLE_ENDPOINTS.forkTeamLibraryLoop;
-  assert.equal(fork.method, "POST");
-  assert.equal(fork.path, `${contracts.WORKBENCH_API_PREFIX}/team-library/{releaseId}/fork`);
-  assert.equal(fork.successStatus, 201);
-  assert.deepEqual(fork.requiredRequestHeaders, ["Idempotency-Key"]);
-  assert.equal(fork.requestBodySchema, contracts.StartFromReleaseRequestSchema);
-  assert.equal(fork.responseBodySchema, contracts.CreateLoopResponseSchema);
-  const preview = contracts.WORKBENCH_V1_LIFECYCLE_ENDPOINTS.getLoopSkillUpdatePreview;
-  assert.equal(preview.method, "GET");
   assert.equal(
-    preview.path,
-    `${contracts.WORKBENCH_API_PREFIX}/loops/{workflowId}/skill-updates/{skillVersionId}`,
+    contracts.WORKBENCH_V1_LIFECYCLE_ENDPOINTS.listSkillRuntimes.path,
+    `${contracts.WORKBENCH_API_PREFIX}/skill-runtimes`,
   );
-  assert.deepEqual(preview.requiredRequestHeaders, []);
-  assert.deepEqual(preview.responseHeaders, ["ETag"]);
+  assert.equal(
+    contracts.WORKBENCH_V1_LIFECYCLE_ENDPOINTS.startLoopAgentTask.path,
+    `${contracts.WORKBENCH_API_PREFIX}/loops/{workflowId}/agent-tasks`,
+  );
   assert.equal(
     contracts.Check(contracts.LoopSkillUpdatePreviewResponseSchema, {
       schemaVersion: "workbench-api-v1",
@@ -800,10 +923,93 @@ test("V1 lifecycle endpoint metadata is additive and protects writes", () => {
     ),
   );
   assert.ok(
-    endpoints.filter((endpoint) => endpoint.path.includes("publish") || endpoint.path.includes("proposals")).every(
+    endpoints.filter((endpoint) => (
+      endpoint.mutation
+      && (endpoint.path.includes("publish") || endpoint.path.includes("/loops/{workflowId}/proposals"))
+    )).every(
       (endpoint) => endpoint.requiredRequestHeaders.includes("If-Match"),
     ),
   );
+  const staged = contracts.WORKBENCH_V1_LIFECYCLE_ENDPOINTS.generateStagedLoopProposal;
+  assert.equal(staged.path, `${contracts.WORKBENCH_API_PREFIX}/loop-draft-proposals`);
+  assert.deepEqual(staged.requiredRequestHeaders, ["Idempotency-Key"]);
+  assert.equal(
+    contracts.WORKBENCH_V1_LIFECYCLE_ENDPOINTS.commitStagedLoopProposal.path,
+    `${contracts.WORKBENCH_API_PREFIX}/loop-draft-proposals/{proposalId}/commit`,
+  );
+});
+
+test("Skill runtime catalog exposes product-safe Python and Node TypeScript choices", () => {
+  const response = {
+    schemaVersion: "workbench-api-v1",
+    data: [
+      {
+        runtimeId: "python3.12",
+        label: "Python",
+        language: "python",
+        versionLabel: "Python 3.12",
+        entrypoint: "scripts/main.py",
+        availability: "ready",
+        availabilityReason: null,
+        isolation: "container",
+        network: false,
+        filesystem: "scratch-only",
+        timeoutSeconds: { minimum: 1, maximum: 120, step: 1, default: 30 },
+        memoryMiB: { minimum: 64, maximum: 512, step: 64, default: 128 },
+      },
+      {
+        runtimeId: "nodejs20-typescript",
+        label: "Node.js · TypeScript",
+        language: "typescript",
+        versionLabel: "Node.js 20 · TypeScript",
+        entrypoint: "scripts/main.ts",
+        availability: "unavailable",
+        availabilityReason: "Ask an administrator to configure this isolated runtime.",
+        isolation: "container",
+        network: false,
+        filesystem: "scratch-only",
+        timeoutSeconds: { minimum: 1, maximum: 120, step: 1, default: 30 },
+        memoryMiB: { minimum: 64, maximum: 512, step: 64, default: 128 },
+      },
+    ],
+    page: { nextCursor: null, hasMore: false },
+    requestId: "request-skill-runtimes",
+  };
+  assert.equal(contracts.Check(contracts.SkillRuntimeCatalogResponseSchema, response), true);
+  assert.equal(JSON.stringify(response).includes("image"), false);
+  assert.equal(JSON.stringify(response).includes("command"), false);
+});
+
+test("registered Tool catalog exposes exact Action IDs without execution internals", () => {
+  const response = {
+    schemaVersion: "workbench-api-v1",
+    data: [{
+      toolPackageId: "registered:lark-task",
+      skillName: "lark-task",
+      label: "Lark Tasks",
+      description: "Read assigned tasks and create governed follow-up tasks after confirmation.",
+      registrationStatus: "registered",
+      actions: [
+        {
+          actionId: "lark.task.create",
+          effect: "write",
+          confirmationRequired: true,
+        },
+        {
+          actionId: "lark.task.list_mine",
+          effect: "read",
+          confirmationRequired: false,
+        },
+      ],
+    }],
+    page: { nextCursor: null, hasMore: false },
+    requestId: "request-registered-tools",
+  };
+  assert.equal(contracts.Check(contracts.RegisteredToolCatalogResponseSchema, response), true);
+  assert.equal(JSON.stringify(response).includes("command"), false);
+  assert.equal(JSON.stringify(response).includes("connection"), false);
+  assert.equal(contracts.WORKBENCH_V1_LIFECYCLE_ENDPOINTS.listRegisteredToolPackages.path,
+    `${contracts.WORKBENCH_API_PREFIX}/registered-tool-packages`);
 });
 
 test("uploaded Skill test and validation records are exact-hash, strict, and bounded", () => {
@@ -1079,6 +1285,11 @@ test("Skill test and validation endpoints freeze paths and revision headers", ()
       "/api/workbench/v1/skills/{skillId}/tests/{testRunId}",
     ],
     [
+      endpoints.cancelSkillTest,
+      "POST",
+      "/api/workbench/v1/skills/{skillId}/tests/{testRunId}/cancel",
+    ],
+    [
       endpoints.createSkillValidation,
       "POST",
       "/api/workbench/v1/skills/{skillId}/drafts/{draftId}/validations",
@@ -1118,6 +1329,20 @@ test("Skill test and validation endpoints freeze paths and revision headers", ()
       false,
     );
   }
+  assert.equal(endpoints.cancelSkillTest.successStatus, 202);
+  assert.deepEqual(endpoints.cancelSkillTest.requiredRequestHeaders, ["Idempotency-Key"]);
+  assert.equal(contracts.Check(endpoints.cancelSkillTest.requestBodySchema, {
+    schemaVersion: "workbench-api-v1",
+    data: { reason: "No longer needed." },
+  }), true);
+  assert.equal(contracts.Check(endpoints.cancelSkillTest.requestBodySchema, {
+    schemaVersion: "workbench-api-v1",
+    data: { reason: "" },
+  }), false);
+  assert.equal(contracts.Check(endpoints.cancelSkillTest.requestBodySchema, {
+    schemaVersion: "workbench-api-v1",
+    data: { unexpected: true },
+  }), false);
 });
 
 test("upload promotion permission acknowledgement is optional and strict", () => {
@@ -1169,6 +1394,10 @@ test("resumable upload and repository import contracts expose only product progr
             connections: [],
             externalActions: false,
             filesystem: "scratch-only",
+          },
+          limits: {
+            timeoutSeconds: 30,
+            memoryMiB: 128,
           },
         },
       },
@@ -1429,108 +1658,30 @@ test("Loop import DTO requires explicit strict Skill, material, and connection m
   assert.equal(contracts.Check(contracts.LoopImportResponseSchema, mismatchedRequirementKind), false);
 });
 
-test("portable Loop import/export endpoint metadata freezes paths, revisions, and headers", () => {
-  const endpoints = contracts.WORKBENCH_V1_LIFECYCLE_ENDPOINTS;
-
-  assert.equal(endpoints.createLoopImport.method, "POST");
-  assert.equal(endpoints.createLoopImport.path, "/api/workbench/v1/loop-imports");
-  assert.equal(endpoints.createLoopImport.successStatus, 202);
-  assert.deepEqual(endpoints.createLoopImport.requiredRequestHeaders, ["Idempotency-Key"]);
-  assert.deepEqual(endpoints.createLoopImport.responseHeaders, ["ETag"]);
-
-  assert.equal(endpoints.getLoopImport.method, "GET");
-  assert.equal(endpoints.getLoopImport.path, "/api/workbench/v1/loop-imports/{importId}");
-  assert.deepEqual(endpoints.getLoopImport.requiredRequestHeaders, []);
-  assert.deepEqual(endpoints.getLoopImport.responseHeaders, ["ETag"]);
-
-  assert.equal(endpoints.commitLoopImport.method, "POST");
-  assert.equal(
-    endpoints.commitLoopImport.path,
-    "/api/workbench/v1/loop-imports/{importId}/commit",
-  );
-  assert.deepEqual(
-    endpoints.commitLoopImport.requiredRequestHeaders,
-    ["Idempotency-Key", "If-Match"],
-  );
-  assert.equal(
-    contracts.Check(endpoints.commitLoopImport.requestHeadersSchema, {
-      "Idempotency-Key": "idem-loop-import-1",
-      "If-Match": '"loop-import-reviewed-brief-1"',
-    }),
-    true,
-  );
-  assert.equal(
-    contracts.Check(endpoints.commitLoopImport.requestHeadersSchema, {
-      "Idempotency-Key": "idem-loop-import-1",
-    }),
-    false,
-  );
-  assert.deepEqual(endpoints.commitLoopImport.responseHeaders, ["ETag"]);
-
-  assert.equal(endpoints.exportLoop.method, "GET");
-  assert.equal(endpoints.exportLoop.path, "/api/workbench/v1/loops/{workflowId}/export");
-  assert.equal(
-    endpoints.exportLoop.responseMediaType,
-    "application/vnd.looloomi.loop-package+json",
-  );
-  assert.equal(
-    endpoints.exportLoop.responseBodySchema,
-    contracts.PortableLoopPackageV1Schema,
-  );
-  assert.deepEqual(endpoints.exportLoop.requiredRequestHeaders, []);
-  assert.deepEqual(endpoints.exportLoop.optionalRequestHeaders, ["If-None-Match"]);
-  assert.equal(
-    contracts.Check(endpoints.exportLoop.requestHeadersSchema, {
-      "If-None-Match": '"sha256:abcdef0123456789"',
-    }),
-    true,
-  );
-  assert.equal(
-    contracts.Check(endpoints.exportLoop.requestHeadersSchema, {}),
-    true,
-  );
-  assert.equal(
-    contracts.Check(endpoints.exportLoop.requestHeadersSchema, {
-      "If-None-Match": 'W/"sha256:abcdef0123456789"',
-    }),
-    false,
-  );
-  assert.deepEqual(endpoints.exportLoop.responseHeaders, ["ETag", "Content-Disposition"]);
-  assert.equal(
-    contracts.Check(endpoints.exportLoop.responseHeadersSchema, {
-      ETag: '"sha256:abcdef0123456789"',
-      "Content-Disposition": 'attachment; filename="weekly-brief.loop.json"',
-    }),
-    true,
-  );
-  assert.equal(
-    contracts.Check(endpoints.exportLoop.responseHeadersSchema, {
-      ETag: '"sha256:abcdef0123456789"',
-      "Content-Disposition": 'attachment; filename="weekly-brief.zip"',
-    }),
-    false,
-  );
-  assert.equal(
-    contracts.Check(endpoints.exportLoop.responseHeadersSchema, {
-      ETag: 'W/"sha256:abcdef0123456789"',
-      "Content-Disposition": 'attachment; filename="weekly-brief.loop.json"',
-    }),
-    false,
-  );
-  assert.equal(
-    contracts.Check(endpoints.exportLoop.querySchema, {
-      revisionId: "revision-reviewed-brief-1",
-    }),
-    true,
-  );
-  assert.equal(contracts.Check(endpoints.exportLoop.querySchema, {}), false);
-  assert.equal(
-    contracts.Check(endpoints.exportLoop.querySchema, {
-      revisionId: "revision-reviewed-brief-1",
-      latest: true,
-    }),
-    false,
-  );
+test("unmigrated Store-shaped operations are absent from the public contract", () => {
+  const publicOperationIds = new Set(contracts.PUBLIC_ENDPOINTS.map((endpoint) => endpoint.operationId));
+  for (const operationId of [
+    "addMembership",
+    "useTemplate",
+    "getRunComparison",
+    "createLoopImport",
+    "getLoopImport",
+    "commitLoopImport",
+    "duplicateLoop",
+    "createLoopDraftFromRun",
+    "exportLoop",
+    "createLoopSkillUpdate",
+    "getLoopSkillUpdatePreview",
+    "generateLoopProposal",
+    "getLoopProposal",
+    "applyLoopProposal",
+    "dismissLoopProposal",
+    "adoptInstallationRelease",
+    "useReleaseAsStartingPoint",
+    "forkTeamLibraryLoop",
+  ]) {
+    assert.equal(publicOperationIds.has(operationId), false, operationId);
+  }
 });
 
 test("uploads accept explicit Loop kind while preserving the legacy Skill default", () => {
@@ -1564,4 +1715,52 @@ test("uploads accept explicit Loop kind while preserving the legacy Skill defaul
     }),
     false,
   );
+});
+
+test("Skill scaffold material contracts accept governed media types and reject arbitrary binaries", () => {
+  const request = {
+    schemaVersion: "workbench-api-v1",
+    data: {
+      definitionType: "prompt",
+      name: "Document reader",
+      description: "Read one governed document.",
+      category: "research",
+      tags: [],
+      materials: [{
+        name: "Source document",
+        identifier: "source_document",
+        description: "The document to analyze.",
+        required: true,
+        acceptedMediaTypes: [
+          "text/markdown",
+          "application/pdf",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ],
+      }],
+      parameters: [],
+      outputs: [{
+        name: "result",
+        description: "Analysis result.",
+        type: "markdown",
+      }],
+      smoke: {
+        purpose: "Read the document.",
+        input: "Summarize it.",
+        expectedOutcome: "",
+      },
+    },
+  };
+  const schema = contracts.WORKBENCH_V1_LIFECYCLE_ENDPOINTS
+    .scaffoldSkillDraftPackage.requestBodySchema;
+  assert.equal(contracts.Check(schema, request), true);
+  assert.equal(contracts.Check(schema, {
+    ...request,
+    data: {
+      ...request.data,
+      materials: [{
+        ...request.data.materials[0],
+        acceptedMediaTypes: ["application/octet-stream"],
+      }],
+    },
+  }), false);
 });

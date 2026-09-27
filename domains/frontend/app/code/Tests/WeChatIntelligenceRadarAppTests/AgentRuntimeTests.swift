@@ -8,7 +8,6 @@ let agentRuntimeChecks: Void = {
     try! checkCMCProviderUsesFreshStoreSnapshot()
     try! checkCMCProviderMarksExpiredStoreSnapshotStale()
     try! checkCMCProviderDoesNotPromoteFixtureSnapshotToLive()
-    try! checkAgentDaemonAuthTokenLoadsFromRuntime()
     try! checkRuntimeResolverFindsProjectRootFromBundledAppPath()
     checkTimeWindowFilteringChangesSnapshotSizeAndArtifactsWrite()
     checkDefaultMonthWindowGeneratesThreeCrystals()
@@ -49,12 +48,6 @@ let agentRuntimeChecks: Void = {
     checkLoopOpsLocalStoreRunScopedChatsStayIsolated()
     checkLoopOpsKnowledgeRowsHideInternalTerms()
     checkLoopOpsVisibleCopyHidesInternalTerms()
-    try! checkLoopOpsAcceptanceHarnessCoversBatchRunArtifacts()
-    try! checkLoopOpsActionHarnessCoversUserActions()
-    try! checkLoopOpsUIActionContractCoversVisibleActionsWithoutPermissions()
-    try! checkLoopOpsInteractionCoverageMatrixIsExplicit()
-    try! checkLoopOpsInteractionReplayIncludesBeforeAfterEvidence()
-    try! checkLoopOpsNativeActivationHarnessCoversNoPermissionActionWiring()
     checkLoopOpsLocalStorePersistsRunLedgerAndShareSafeLog()
     checkDashboardViewModelReconcilesLoopOpsLedgerFromPersistedRows()
     try! checkLoopOpsLocalJSONStoreRoundTripsObjects()
@@ -1388,18 +1381,6 @@ private func checkCMCProviderDoesNotPromoteFixtureSnapshotToLive() throws {
     require(market.status == "degraded", "Fixture snapshot must not remain enabled")
     require(market.freshness == "fixture", "Fixture snapshot must not be promoted to fresh")
     require(market.assets.allSatisfy { !$0.isLive }, "Fixture assets must not be live")
-}
-
-private func checkAgentDaemonAuthTokenLoadsFromRuntime() throws {
-    let temp = temporaryDirectory()
-    let authDir = temp.appendingPathComponent("runtime/agent", isDirectory: true)
-    try FileManager.default.createDirectory(at: authDir, withIntermediateDirectories: true)
-    let authURL = authDir.appendingPathComponent("auth-token.json")
-    let payload = #"{"schemaVersion":"agent-daemon-auth-token-v1","token":"test-token-123"}"#
-    try payload.data(using: .utf8)!.write(to: authURL)
-
-    let token = AgentDaemonAuth.loadToken(pathResolver: RuntimePathResolver(root: temp))
-    require(token == "test-token-123", "Agent daemon auth token should load from runtime/agent/auth-token.json")
 }
 
 private func checkTimeWindowFilteringChangesSnapshotSizeAndArtifactsWrite() {

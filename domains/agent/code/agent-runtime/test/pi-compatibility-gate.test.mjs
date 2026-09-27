@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   DefaultResourceLoader,
+  ModelRuntime,
   SessionManager,
   VERSION,
   createAgentSession,
@@ -16,11 +17,13 @@ import * as workflowApi from "@agwab/pi-workflow";
 
 test("Pi and AgwaB public compatibility surface is pinned", async (t) => {
   const lock = JSON.parse(await readFile(new URL("../package-lock.json", import.meta.url), "utf8"));
-  assert.equal(VERSION, "0.80.7");
-  assert.equal(lock.packages["node_modules/@earendil-works/pi-coding-agent"].version, "0.80.7");
+  assert.equal(VERSION, "0.85.1");
+  assert.equal(lock.packages["node_modules/@earendil-works/pi-ai"].version, "0.85.1");
+  assert.equal(lock.packages["node_modules/@earendil-works/pi-coding-agent"].version, "0.85.1");
   assert.equal(lock.packages["node_modules/@agwab/pi-subagent"].version, "0.4.8");
-  assert.equal(lock.packages["node_modules/@agwab/pi-workflow"].version, "0.8.1");
+  assert.equal(lock.packages["node_modules/@agwab/pi-workflow"].version, "0.10.1");
   assert.equal(typeof DefaultResourceLoader, "function");
+  assert.equal(typeof ModelRuntime.create, "function");
   assert.equal(typeof SessionManager.inMemory, "function");
   assert.equal(typeof createAgentSession, "function");
   assert.equal(typeof loadSkillsFromDir, "function");
@@ -43,4 +46,9 @@ test("Pi and AgwaB public compatibility surface is pinned", async (t) => {
   });
   await loader.reload();
   assert.deepEqual(loader.getSkills().skills, []);
+
+  const sessionManager = SessionManager.inMemory(root);
+  assert.equal(sessionManager.isPersisted(), false);
+  assert.equal(typeof sessionManager.appendCustomEntry, "function");
+  assert.equal(typeof sessionManager.buildSessionContext, "function");
 });

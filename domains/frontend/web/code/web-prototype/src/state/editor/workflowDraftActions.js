@@ -149,7 +149,13 @@ export function reorderDraftNode(draft, fromIndex, toIndex) {
 
 export function deleteDraftNode(draft, nodeId) {
   const next = clone(draft);
+  const removed = next.graph.nodes.find((node) => node.nodeId === nodeId);
   next.graph.nodes = next.graph.nodes.filter((node) => node.nodeId !== nodeId);
+  if (removed?.kind === "Input") {
+    const retained = new Set(next.graph.nodes.flatMap((node) => node.configuration?.fieldIds || []));
+    const removedFields = new Set(removed.configuration?.fieldIds || []);
+    next.inputForm.fields = next.inputForm.fields.filter((field) => !removedFields.has(field.fieldId) || retained.has(field.fieldId));
+  }
   next.graph.edges = next.graph.edges.filter((edge) => edge.sourceNodeId !== nodeId && edge.targetNodeId !== nodeId);
   for (const node of next.graph.nodes) {
     node.inputBindings = node.inputBindings.filter((binding) => binding.source.kind !== "nodeOutput" || binding.source.nodeId !== nodeId);
@@ -178,6 +184,13 @@ export function connectDraftNodes(draft, fromNodeId, toNodeId, idFactory) {
   const targetPort = target.inputPorts.find((port) => !bound.has(port.portId));
   if (!sourcePort || !targetPort) return next;
   if (next.graph.edges.some((edge) => edge.sourceNodeId === fromNodeId && edge.sourcePort === sourcePort.portId && edge.targetNodeId === toNodeId && edge.targetPort === targetPort.portId)) return next;
+  // A single-value result forwards the connected value. Its initial text
+  // bounds must not reject a valid Skill result or change that result's shape.
+  if (target.kind === "Output" && target.inputPorts.length === 1 && target.outputPorts.length === 1
+    && targetPort.schema.type === sourcePort.schema.type) {
+    targetPort.schema = clone(sourcePort.schema);
+    target.outputPorts[0].schema = clone(sourcePort.schema);
+  }
   next.graph.edges.push({
     edgeId: idFactory("edge"),
     sourceNodeId: fromNodeId,
@@ -188,6 +201,54 @@ export function connectDraftNodes(draft, fromNodeId, toNodeId, idFactory) {
   target.inputBindings.push({
     targetPort: targetPort.portId,
     source: { kind: "nodeOutput", nodeId: fromNodeId, portId: sourcePort.portId },
+  });
+  return next;
+}
+
+// The document editor changes the same bindings and edges as the canvas.
+// A row's visual position must never imply an execution dependency.
+export function inputSourceOptions(graph, targetNodeId, targetPortId) {
+  const target = graph.nodes.find((node) => node.nodeId === targetNodeId);
+  const port = target?.inputPorts.find((item) => item.portId === targetPortId);
+  if (!port) return [];
+  const downstream = new Set([targetNodeId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const edge of graph.edges) {
+      if (downstream.has(edge.sourceNodeId) && !downstream.has(edge.targetNodeId)) {
+        downstream.add(edge.targetNodeId);
+        changed = true;
+      }
+    }
+  }
+  return graph.nodes.filter((node) => !downstream.has(node.nodeId)).flatMap((node) => (
+    node.outputPorts.filter((output) => output.schema.type === port.schema.type)
+      .map((output) => ({ nodeId: node.nodeId, portId: output.portId, nodeTitle: node.title, name: output.name }))
+  ));
+}
+
+export function bindDraftNodeInput(draft, nodeId, portId, source, idFactory) {
+  const next = clone(draft);
+  const target = next.graph.nodes.find((node) => node.nodeId === nodeId);
+  const port = target?.inputPorts.find((item) => item.portId === portId);
+  if (!port) throw new Error("workflow_input_not_found");
+  if (source && !inputSourceOptions(next.graph, nodeId, portId).some((option) => (
+    option.nodeId === source.nodeId && option.portId === source.portId
+  ))) throw new Error("workflow_input_source_invalid");
+  next.graph.edges = next.graph.edges.filter((edge) => edge.targetNodeId !== nodeId || edge.targetPort !== portId);
+  target.inputBindings = target.inputBindings.filter((binding) => binding.targetPort !== portId);
+  if (!source) return next;
+  const sourcePort = next.graph.nodes.find((node) => node.nodeId === source.nodeId)
+    .outputPorts.find((output) => output.portId === source.portId);
+  if (target.kind === "Output" && target.inputPorts.length === 1 && target.outputPorts.length === 1) {
+    port.schema = clone(sourcePort.schema);
+    target.outputPorts[0].schema = clone(sourcePort.schema);
+  }
+  target.inputBindings.push({ targetPort: portId, source: { kind: "nodeOutput", ...source } });
+  next.graph.edges.push({
+    edgeId: idFactory("edge"), sourceNodeId: source.nodeId, sourcePort: source.portId,
+    targetNodeId: nodeId, targetPort: portId,
   });
   return next;
 }

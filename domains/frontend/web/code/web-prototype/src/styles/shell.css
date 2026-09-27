@@ -6,6 +6,21 @@
   overflow: hidden;
 }
 
+.workspaceSkipLink {
+  position: fixed;
+  top: 8px;
+  left: 12px;
+  z-index: 400;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--surface);
+  transform: translateY(-150%);
+}
+.workspaceSkipLink:focus { transform: translateY(0); }
+.globalWorkspaceName { display: none; }
+.globalInboxLabel { display: none; }
+
 .globalNav {
   position: relative;
   z-index: 70;
@@ -47,8 +62,8 @@
   width: 30px;
   height: 30px;
   border-radius: 7px;
-  background: var(--text);
-  color: var(--surface);
+  background: var(--accent);
+  color: #fff;
   font-size: 12px;
   font-weight: 800;
 }
@@ -74,7 +89,8 @@
   min-height: 36px;
   padding: 0 12px;
   border: 0;
-  border-radius: 7px;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -82,13 +98,15 @@
 }
 
 .globalPrimaryNav button:hover,
-.globalPrimaryNav button:focus-visible,
-.globalPrimaryNav button.active {
+.globalPrimaryNav button:focus-visible {
   background: var(--surface-subtle);
   color: var(--text);
 }
 
 .globalPrimaryNav button.active {
+  border-bottom-color: var(--accent);
+  background: transparent;
+  color: var(--accent);
   font-weight: 700;
 }
 
@@ -289,6 +307,83 @@
   grid-row: 2;
   min-width: 0;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace > .workspaceBody { flex: 1; }
+
+@media (min-width: 821px) {
+  .shell {
+    grid-template-columns: 190px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    height: 100dvh;
+  }
+  .globalNav {
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0;
+    padding: 24px 12px 12px;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+    background: var(--sidebar);
+  }
+  .globalBrand { padding: 0 8px; gap: 10px; }
+  .globalBrandMark { width: 32px; height: 32px; border-radius: 10px; }
+  .globalBrand strong { font-size: 17px; letter-spacing: -.5px; }
+  .globalWorkspaceName {
+    display: block;
+    margin: 26px 10px 10px;
+    color: var(--muted);
+    font-size: 11px;
+    overflow-wrap: anywhere;
+  }
+  .globalPrimaryNav { display: grid; justify-content: stretch; gap: 5px; }
+  .globalPrimaryNav button {
+    gap: 11px;
+    min-height: 42px;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    text-align: left;
+    font-size: 13px;
+  }
+  .globalPrimaryNav button.active {
+    background: var(--surface);
+    border-color: var(--line);
+    color: var(--accent);
+    box-shadow: var(--shadow-tight);
+  }
+  .globalNavActions {
+    margin-top: auto;
+    padding-top: 32px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .globalNavActions > .globalMenuRoot { width: 100%; }
+  .globalNavActions > .globalMenuRoot:first-child > button { width: 100%; }
+  .globalMenuRoot:has(.globalIconAction) { display: flex; align-items: center; }
+  .globalInboxLabel { display: block; color: var(--muted); font-size: 12px; pointer-events: none; }
+  .globalIconAction { width: 100%; justify-items: start; padding-left: 12px; }
+  .globalIconAction + .globalInboxLabel { position: absolute; left: 42px; }
+  .globalCount { right: 8px; top: 9px; }
+  .accountTrigger { width: 100%; max-width: none; padding: 9px 6px; border-top-color: var(--line); border-radius: 0; }
+  .globalPopover { top: auto; bottom: 0; left: calc(100% + 18px); right: auto; }
+  .workspace { grid-row: 1; grid-column: 2; }
+}
+
+@media (min-width: 821px) and (max-width: 1100px) {
+  .shell { grid-template-columns: 72px minmax(0, 1fr); }
+  .globalNav { padding: 20px 8px 12px; }
+  .globalBrand { padding: 0; align-self: center; }
+  .globalBrand strong, .globalWorkspaceName, .globalInboxLabel,
+  .accountText, .accountTrigger > svg { display: none; }
+  .globalPrimaryNav { margin-top: 28px; gap: 10px; }
+  .globalPrimaryNav button { flex-direction: column; justify-content: center; gap: 4px; padding: 7px 0; font-size: 9px; }
+  .globalNavActions > .globalMenuRoot:first-child > button { padding: 8px; font-size: 11px; }
+  .accountTrigger { display: flex; justify-content: center; }
 }
 
 .topbar {
@@ -333,35 +428,58 @@
 
 @media (max-width: 820px) {
   .shell {
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: 56px minmax(0, 1fr);
     overflow: visible;
   }
 
   .globalNav {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-areas:
-      "brand spacer actions"
-      "primary primary primary";
-    gap: 6px 10px;
-    padding: 8px 10px 7px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "brand actions";
+    gap: 10px;
+    min-height: 56px;
+    padding: 6px 10px;
   }
 
   .globalBrand { grid-area: brand; }
-  .globalPrimaryNav { grid-area: primary; justify-content: stretch; }
-  .globalPrimaryNav button { flex: 1 1 0; justify-content: center; min-height: 44px; padding: 0 7px; }
+  .globalPrimaryNav {
+    position: fixed;
+    z-index: 190;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    justify-content: stretch;
+    min-height: 64px;
+    padding: 5px max(8px, env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    box-shadow: 0 -8px 24px rgb(27 25 23 / 7%);
+  }
+  .globalPrimaryNav button {
+    flex: 1 1 0;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    min-height: 52px;
+    padding: 3px 7px;
+    font-size: 10px;
+  }
   .globalNavActions { grid-area: actions; }
   .globalNavActions .loopButton { min-height: 44px; padding-inline: 10px; }
   .globalIconAction, .accountTrigger { min-height: 44px; }
   .accountText, .accountTrigger > svg { display: none; }
   .accountTrigger { display: inline-grid; grid-template-columns: auto; padding: 3px; }
-  .globalPopover { position: fixed; top: 112px; right: 10px; max-height: calc(100dvh - 124px); }
+  .globalPopover { position: fixed; top: 60px; right: 10px; max-height: calc(100dvh - 136px); }
   .workspace { grid-row: 2; }
+  .workspaceBody { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
 }
 
 @media (max-width: 520px) {
   .globalBrand strong { display: none; }
   .globalNavActions { gap: 3px; }
-  .globalNavActions .loopButton { font-size: 0; width: 44px; padding: 0; }
+  .globalNavActions .loopButton { width: 44px; padding: 0; }
+  [data-testid="loopops.global-create"] > span > span:nth-child(2) { display: none; }
   .globalNavActions .loopButton svg { margin: 0; }
   .globalPopover { top: 112px; left: 8px; right: 8px; width: auto; }
   .globalPopover button[role="menuitem"] { min-height: 58px; }

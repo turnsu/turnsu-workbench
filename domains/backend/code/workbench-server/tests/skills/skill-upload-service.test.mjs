@@ -29,6 +29,7 @@ function memoryStore() {
   const objects = new Map();
   const mutations = new Map();
   return {
+    lastExternalEffectivePrincipalId: null,
     async connect() {},
     async authorizeWorkspace({ userId, workspaceId }) {
       if (userId !== "user-a" || workspaceId !== "workspace-a") {
@@ -42,6 +43,16 @@ function memoryStore() {
       const key = `${options.workspaceId}:${options.scope}:${options.key}`;
       if (mutations.has(key)) return structuredClone(mutations.get(key));
       const value = await callback(null);
+      mutations.set(key, structuredClone(value));
+      return value;
+    },
+    async runIdempotentExternalMutation(options, callback) {
+      this.lastExternalEffectivePrincipalId = options.effectivePrincipalId;
+      const key = `external:${options.workspaceId}:${options.effectivePrincipalId}:${options.scope}:${options.key}`;
+      if (mutations.has(key)) return structuredClone(mutations.get(key));
+      const operationId = `${options.operationIdKind}-external`;
+      const recovered = await options.recover?.(operationId);
+      const value = recovered ?? await callback(operationId);
       mutations.set(key, structuredClone(value));
       return value;
     },
@@ -167,7 +178,7 @@ test("repository import is server-owned, idempotent, and returns only the public
       };
     },
   };
-  const { service } = await fixture(t, { repositorySource });
+  const { service, store } = await fixture(t, { repositorySource });
   const input = {
     workspaceId: "workspace-a",
     requestedBy: "user-a",
@@ -185,7 +196,8 @@ test("repository import is server-owned, idempotent, and returns only the public
   assert.equal("requestedBy" in imported, false);
   assert.equal("objectId" in imported, false);
   assert.equal("contentHash" in imported.inspection, false);
-  assert.equal(calls.length, 2, "network read is repeatable but all product mutations remain idempotent");
+  assert.equal(calls.length, 1, "an idempotent replay must not re-read a mutable repository branch");
+  assert.equal(store.lastExternalEffectivePrincipalId, "user-a");
 });
 
 test("resumable Loop upload stores only a contract-valid quarantined portable package", async (t) => {

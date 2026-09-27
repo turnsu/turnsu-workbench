@@ -117,6 +117,26 @@ test("Stability driver accepts bounded JSON/base64 and still returns only Artifa
   assert.deepEqual(writes[0].bytes, PNG_1X1);
 });
 
+test("Stability accepts a valid image response without a seed when no seed was requested", async () => {
+  const writes = [];
+  const executor = makeExecutor({
+    fetchImpl: async () => new Response(PNG_1X1, {
+      status: 200,
+      headers: {
+        "content-type": "image/png",
+        "finish-reason": "SUCCESS",
+      },
+    }),
+    artifactWriter: async (value) => {
+      writes.push(value);
+      return { artifactId: "artifact-no-seed", mediaType: value.mediaType };
+    },
+  });
+  const result = await executor(imageInput({ seed: undefined }));
+  assert.equal(result.seed, null);
+  assert.equal(writes[0].seed, null);
+});
+
 test("Stability validates response MIME, requested format, image signature, and dimensions before Artifact writes", async (t) => {
   const fixtures = [
     ["invalid MIME", new Response(PNG_1X1, {

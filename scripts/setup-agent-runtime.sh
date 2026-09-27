@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Preflight: report whether the agent backend is fully configured to run.
-# Prints only key PRESENCE (set / EMPTY), never the secret values.
+# Preflight for the Product-owned Agent Runtime boundary.
+# It never reads or reports Provider credentials.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,8 +14,7 @@ if [ -n "$NODE_BIN" ]; then
 else
   ROOT_DIR="$REPO_HINT"
 fi
-ENV_FILE="$ROOT_DIR/.env"
-DAEMON_PORT="${WECHAT_AGENT_DAEMON_PORT:-8797}"
+WORKBENCH_PORT="${WORKBENCH_PORT:-8798}"
 
 # Prefer the project-local Node runtime if present.
 ok="✓"; bad="✗"; warn="•"
@@ -38,34 +37,21 @@ else
   echo "$bad dependencies missing — run: (cd domains/agent/code/agent-runtime && npm install)"
 fi
 
-# .env + keys (presence only)
-key_status() {
-  local k="$1" v
-  v="$(grep -E "^$k=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2-)"
-  [ -n "$v" ] && echo "set" || echo "EMPTY"
-}
-if [ -f "$ENV_FILE" ]; then
-  echo "$ok .env present"
-  echo "    DEEPSEEK_API_KEY: $(key_status DEEPSEEK_API_KEY)  (required for reasoning)"
-  echo "    KIMI_API_KEY:     $(key_status KIMI_API_KEY)  (optional, image analysis)"
-else
-  echo "$bad .env missing — run: cp .env.example .env  then add keys"
-fi
-
-# Daemon health
+# Product API readiness. The legacy port-8797 daemon is test-only and is not a
+# production dependency or credential boundary.
 if [ -n "$NODE_BIN" ]; then
   if "$NODE_BIN" -e '
-    fetch(`http://127.0.0.1:${process.argv[1]}/health`).then(async response => {
+    fetch(`http://127.0.0.1:${process.argv[1]}/readyz`).then(async response => {
       if (!response.ok) process.exit(1);
-      const daemon=(await response.json()).daemon || {};
-      process.exit(daemon.owner==="looloomi-agent-runtime" && daemon.runtimeOwner==="repository-runtime-agent-v1" ? 0 : 1);
+      const readiness=await response.json();
+      process.exit(readiness.status==="ready" ? 0 : 1);
     }).catch(() => process.exit(1));
-  ' "$DAEMON_PORT" >/dev/null 2>&1; then
-    echo "$ok daemon responding on 127.0.0.1:$DAEMON_PORT"
+  ' "$WORKBENCH_PORT" >/dev/null 2>&1; then
+    echo "$ok Product Workbench ready on 127.0.0.1:$WORKBENCH_PORT"
   else
-    echo "$warn owned daemon not running — start: scripts/start-agent-daemon.sh"
+    echo "$warn Product Workbench not ready — run: scripts/start-workbench-server.sh"
   fi
 fi
 
 echo "-------------------------------------------"
-echo "When all required rows are $ok, the Swift app's 后台服务 will show connected."
+echo "Provider readiness is evaluated by the Product model catalog and host Secret Store; this script does not inspect secrets."

@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 
 import {
   createRunStreamState,
+  isRunTerminalEvent,
   reduceRunEvents,
   runEventReceived,
+  runEventRequiresReadModelRefresh,
   runReadModelRefreshed,
   runStreamConnected,
   runStreamConnectionStarted,
@@ -12,9 +14,26 @@ import {
   selectRunEventCursor,
   selectRunStream,
 } from "../src/state/run-stream/index.js";
+import { canCancelRun, canRepeatOrRetryRun } from "../src/api/client.js";
 
 const RUN_A = "run-a";
 const RUN_B = "run-b";
+
+for (const status of ["completed", "failed", "cancelled", "partial", "effect_outcome_unknown", "cancellation_requested", "", "unknown"]) {
+  assert.equal(canCancelRun(status), false, `${status} must not remain cancellable`);
+}
+for (const status of ["queued", "running"]) {
+  assert.equal(canCancelRun(status), true, `${status} must remain cancellable`);
+}
+for (const status of ["waiting_review", "paused"]) {
+  assert.equal(canCancelRun(status), false, `${status} must use its dedicated review decision path`);
+}
+for (const status of ["completed", "failed", "cancelled"]) {
+  assert.equal(canRepeatOrRetryRun(status), true, `${status} must allow its explicit repeat/retry action`);
+}
+for (const status of ["partial", "effect_outcome_unknown", "queued", "running"]) {
+  assert.equal(canRepeatOrRetryRun(status), false, `${status} must not use the generic repeat/retry path`);
+}
 
 let state = createRunStreamState();
 assert.deepEqual(state, { byRunId: {} });
@@ -93,6 +112,28 @@ runA = selectRunStream(state, RUN_A);
 assert.equal(runA.status, "running", "a node event resumes the projection after review approval");
 assert.equal(runA.currentNodeId, "node-output");
 
+state = runStreamReducer(state, runEventReceived(event(10, "run.cancellation_requested", {
+  status: "cancellation_requested",
+  summary: "Cancellation requested.",
+})));
+runA = selectRunStream(state, RUN_A);
+assert.equal(runA.status, "cancellation_requested");
+assert.equal(runA.readModelRefreshRequired, true);
+assert.equal(runA.terminal, null, "a cancellation request is not a terminal event");
+
+state = runStreamReducer(state, runEventReceived(event(11, "node.progress", {
+  nodeId: "node-output",
+  status: "running",
+  summary: "Late progress after cancellation was requested.",
+})));
+runA = selectRunStream(state, RUN_A);
+assert.equal(
+  runA.status,
+  "cancellation_requested",
+  "late node progress must not roll the Run projection back to running",
+);
+assert.equal(runA.nodes["node-output"].lastSequence, 11, "node evidence still advances independently");
+
 state = runStreamReducer(state, runStreamDisconnected(RUN_A, {
   reason: "network_lost",
   retryable: true,
@@ -103,9 +144,9 @@ assert.deepEqual(runA.connection, {
   reason: "network_lost",
   retryable: true,
 });
-assert.equal(runA.lastSequence, 9, "disconnects must preserve the resume cursor");
+assert.equal(runA.lastSequence, 11, "disconnects must preserve the resume cursor");
 
-state = runStreamReducer(state, runEventReceived(event(10, "run.completed", {
+state = runStreamReducer(state, runEventReceived(event(12, "run.completed", {
   status: "completed",
   summary: "Run completed; fetch the result detail.",
 })));
@@ -116,8 +157,8 @@ assert.deepEqual(runA.terminal, {
   type: "run.completed",
   status: "completed",
   summary: "Run completed; fetch the result detail.",
-  occurredAt: "2026-07-10T10:00:10.000Z",
-  sequence: 10,
+  occurredAt: "2026-07-10T10:00:12.000Z",
+  sequence: 12,
 });
 assert.equal("finalAnswer" in runA, false, "SSE state must never construct the authoritative final answer");
 assert.equal("readModel" in runA, false, "RunReadModel belongs to server state, not the event reducer");
@@ -146,6 +187,34 @@ const cancelledState = reduceRunEvents(createRunStreamState(), [
 ]);
 assert.equal(selectRunStream(cancelledState, RUN_A).status, "cancelled");
 assert.equal(selectRunStream(cancelledState, RUN_A).terminal.type, "run.cancelled");
+
+const partialState = reduceRunEvents(createRunStreamState(), [
+  event(1, "run.started", { status: "running" }),
+  event(2, "run.cancellation_requested", { status: "cancellation_requested" }),
+  event(3, "run.partial", { status: "partial", summary: "Some external effects completed." }),
+]);
+assert.equal(selectRunStream(partialState, RUN_A).status, "partial");
+assert.equal(selectRunStream(partialState, RUN_A).terminal.type, "run.partial");
+assert.equal(selectRunStream(partialState, RUN_A).readModelRefreshRequired, true);
+
+const unknownEffectState = reduceRunEvents(createRunStreamState(), [
+  event(1, "run.started", { status: "running" }),
+  event(2, "run.cancellation_requested", { status: "cancellation_requested" }),
+  event(3, "run.effect_outcome_unknown", {
+    status: "effect_outcome_unknown",
+    summary: "The external effect outcome is unknown.",
+  }),
+]);
+assert.equal(selectRunStream(unknownEffectState, RUN_A).status, "effect_outcome_unknown");
+assert.equal(selectRunStream(unknownEffectState, RUN_A).terminal.type, "run.effect_outcome_unknown");
+assert.equal(selectRunStream(unknownEffectState, RUN_A).readModelRefreshRequired, true);
+
+for (const type of ["run.completed", "run.failed", "run.cancelled", "run.partial", "run.effect_outcome_unknown"]) {
+  assert.equal(isRunTerminalEvent(type), true);
+  assert.equal(runEventRequiresReadModelRefresh(type), true);
+}
+assert.equal(isRunTerminalEvent("run.cancellation_requested"), false);
+assert.equal(runEventRequiresReadModelRefresh("run.cancellation_requested"), true);
 
 assert.equal(selectRunStream(state, "missing-run"), null);
 assert.equal(selectRunEventCursor(state, "missing-run"), 0);

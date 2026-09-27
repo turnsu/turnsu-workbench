@@ -1,8 +1,4 @@
-import { WorkflowSkillRegistryError } from "../../../../../agent/code/agent-runtime/core/workflow/workflow-skill-executor-registry.mjs";
-import {
-  isUploadedExecutionRef,
-  UPLOADED_SKILL_INTERNAL_TOOL_NAME,
-} from "../../../../../agent/code/agent-runtime/extensions/uploaded-skill-executor/binding.mjs";
+import { isUploadedExecutionRef } from "../../../../../agent/code/plugins/src/index.mjs";
 
 import {
   AgentRuntimePort,
@@ -14,6 +10,7 @@ const DEFAULT_TIMEOUT_MS = 30000;
 const MAX_TIMEOUT_MS = 120000;
 const DEFAULT_MAX_ACTIVE_INVOCATIONS = 64;
 const MAX_ACTIVE_INVOCATIONS = 1024;
+const LEGACY_UPLOADED_SKILL_INTERNAL_TOOL_NAME = "workflow.uploaded_skill.execute";
 
 export function createInProcessAgentAdapter(options) {
   return assertAgentRuntimePort(new InProcessAgentAdapter(options));
@@ -21,9 +18,10 @@ export function createInProcessAgentAdapter(options) {
 
 export class InProcessAgentAdapter extends AgentRuntimePort {
   #agentRuntimeCore;
-  #piKernel;
+  #runtimeKernel;
   #executorRegistry;
   #uploadedSkillRuntime;
+  #businessPluginRuntime;
   #activeInvocations = new Map();
   #defaultTimeoutMs;
   #maxTimeoutMs;
@@ -32,9 +30,10 @@ export class InProcessAgentAdapter extends AgentRuntimePort {
 
   constructor({
     agentRuntimeCore,
-    piKernel,
+    runtimeKernel,
     executorRegistry,
     uploadedSkillRuntime = null,
+    businessPluginRuntime = null,
     defaultTimeoutMs = DEFAULT_TIMEOUT_MS,
     maxTimeoutMs = MAX_TIMEOUT_MS,
     maxActiveInvocations = DEFAULT_MAX_ACTIVE_INVOCATIONS,
@@ -46,11 +45,16 @@ export class InProcessAgentAdapter extends AgentRuntimePort {
       || typeof agentRuntimeCore?.executeKernelTool !== "function"
       || typeof agentRuntimeCore?.buildFinalReadModel !== "function"
       || typeof agentRuntimeCore?.generateBuilderProposal !== "function"
-      || typeof piKernel?.ensure !== "function"
-      || typeof piKernel?.status !== "function"
+      || typeof runtimeKernel?.ensure !== "function"
+      || typeof runtimeKernel?.status !== "function"
       || typeof executorRegistry?.resolve !== "function"
       || typeof executorRegistry?.acceptsInput !== "function"
       || typeof executorRegistry?.readKernelOutput !== "function"
+      || (businessPluginRuntime !== null && (
+        typeof businessPluginRuntime?.acceptsExecutionRef !== "function"
+        || typeof businessPluginRuntime?.probe !== "function"
+        || typeof businessPluginRuntime?.invoke !== "function"
+      ))
       || typeof now !== "function"
     ) {
       throw new AgentRuntimePortError("agent_runtime_adapter_invalid_dependencies");
@@ -68,20 +72,33 @@ export class InProcessAgentAdapter extends AgentRuntimePort {
       throw new AgentRuntimePortError("agent_runtime_adapter_invalid_capacity");
     }
     this.#agentRuntimeCore = agentRuntimeCore;
-    this.#piKernel = piKernel;
+    this.#runtimeKernel = runtimeKernel;
     this.#executorRegistry = executorRegistry;
     this.#uploadedSkillRuntime = uploadedSkillRuntime;
+    this.#businessPluginRuntime = businessPluginRuntime;
     this.#now = now;
   }
 
   async probeSkill(executionRef, { workspaceId } = {}) {
-    if (isUploadedExecutionRef(executionRef)) {
+    if (this.#businessPluginRuntime?.acceptsExecutionRef(executionRef) === true) {
+      try {
+        return await this.#businessPluginRuntime.probe({ workspaceId, executionRef: structuredClone(executionRef) });
+      } catch {
+        return skillProbe(false, "first_party_skill_runtime_unavailable");
+      }
+    }
+    if (
+      isUploadedExecutionRef(executionRef)
+      || this.#uploadedSkillRuntime?.acceptsExecutionRef?.(executionRef) === true
+    ) {
       if (typeof this.#uploadedSkillRuntime?.probeExecution !== "function") {
         return skillProbe(false, "uploaded_skill_runtime_unavailable");
       }
       try {
-        await this.#piKernel.ensure();
-        if (!this.#isUploadedToolBound()) return skillProbe(false, "uploaded_skill_tool_unavailable");
+        if (isUploadedExecutionRef(executionRef)) {
+          await this.#runtimeKernel.ensure();
+          if (!this.#isUploadedToolBound()) return skillProbe(false, "uploaded_skill_tool_unavailable");
+        }
         return await this.#uploadedSkillRuntime.probeExecution({ workspaceId, executionRef });
       } catch {
         return skillProbe(false, "uploaded_skill_runtime_unavailable");
@@ -91,7 +108,7 @@ export class InProcessAgentAdapter extends AgentRuntimePort {
     if (!registration) return skillProbe(false, "skill_execution_ref_unknown");
 
     try {
-      await this.#piKernel.ensure();
+      await this.#runtimeKernel.ensure();
       const readiness = this.#agentRuntimeCore.skillReadiness(
         registration.internalBinding.skillId,
       );
@@ -103,13 +120,36 @@ export class InProcessAgentAdapter extends AgentRuntimePort {
     }
   }
 
-  async invokeSkillNode({ invocationId, workspaceId, executionRef, input, timeoutMs, signal } = {}) {
-    if (isUploadedExecutionRef(executionRef)) {
+  async invokeSkillNode({
+    invocationId,
+    workspaceId,
+    executionRef,
+    input,
+    materials = [],
+    timeoutMs,
+    signal,
+  } = {}) {
+    if (this.#businessPluginRuntime?.acceptsExecutionRef(executionRef) === true) {
+      return this.#invokeBusinessPlugin({
+        invocationId,
+        workspaceId,
+        executionRef,
+        input,
+        materials,
+        timeoutMs,
+        signal,
+      });
+    }
+    if (
+      isUploadedExecutionRef(executionRef)
+      || this.#uploadedSkillRuntime?.acceptsExecutionRef?.(executionRef) === true
+    ) {
       return this.#invokeUploadedSkill({
         invocationId,
         workspaceId,
         executionRef,
         input,
+        materials,
         timeoutMs,
         signal,
       });
@@ -123,7 +163,7 @@ export class InProcessAgentAdapter extends AgentRuntimePort {
     const normalizedInvocationId = boundedIdentifier(invocationId, "invocation_id_invalid");
     const active = this.#beginInvocation(normalizedInvocationId, { timeoutMs, signal });
     try {
-      await raceWithAbort(this.#piKernel.ensure(), active.controller.signal);
+      await raceWithAbort(this.#runtimeKernel.ensure(), active.controller.signal);
       const readiness = this.#agentRuntimeCore.skillReadiness(
         registration.internalBinding.skillId,
       );
@@ -221,7 +261,7 @@ export class InProcessAgentAdapter extends AgentRuntimePort {
     try {
       return this.#executorRegistry.resolve(executionRef);
     } catch (error) {
-      if (error instanceof WorkflowSkillRegistryError) {
+      if (String(error?.code || "").startsWith("workflow_registry_")) {
         throw new AgentRuntimePortError("skill_execution_ref_invalid");
       }
       throw error;
@@ -229,31 +269,94 @@ export class InProcessAgentAdapter extends AgentRuntimePort {
   }
 
   #isToolBound(registration) {
-    const registeredTools = this.#piKernel.status()?.registeredTools;
+    const registeredTools = this.#runtimeKernel.status()?.registeredTools;
     return Array.isArray(registeredTools)
       && registeredTools.includes(registration.internalBinding.toolName);
   }
 
   #isUploadedToolBound() {
-    const registeredTools = this.#piKernel.status()?.registeredTools;
-    return Array.isArray(registeredTools) && registeredTools.includes(UPLOADED_SKILL_INTERNAL_TOOL_NAME);
+    const registeredTools = this.#runtimeKernel.status()?.registeredTools;
+    return Array.isArray(registeredTools) && registeredTools.includes(LEGACY_UPLOADED_SKILL_INTERNAL_TOOL_NAME);
   }
 
-  async #invokeUploadedSkill({ invocationId, workspaceId, executionRef, input, timeoutMs, signal }) {
+  async #invokeBusinessPlugin({
+    invocationId,
+    workspaceId,
+    executionRef,
+    input,
+    materials = [],
+    timeoutMs,
+    signal,
+  }) {
+    const registration = this.#resolveRegistration(executionRef);
+    if (!registration && !isUploadedExecutionRef(executionRef)) {
+      throw new AgentRuntimePortError("skill_execution_ref_unknown");
+    }
+    if (registration && !this.#executorRegistry.acceptsInput(registration, input)) {
+      throw new AgentRuntimePortError("skill_input_invalid");
+    }
+    const normalizedInvocationId = boundedIdentifier(invocationId, "invocation_id_invalid");
+    const active = this.#beginInvocation(normalizedInvocationId, { timeoutMs, signal });
+    try {
+      throwIfAborted(active.controller.signal);
+      active.executionPromise = Promise.resolve(this.#businessPluginRuntime.invoke({
+        workspaceId,
+        executionRef: structuredClone(executionRef),
+        input: structuredClone(input),
+        materials: normalizeBusinessMaterials(materials),
+        signal: active.controller.signal,
+      }));
+      const output = await raceWithAbort(active.executionPromise, active.controller.signal);
+      if (registration && !this.#executorRegistry.acceptsOutput(registration, output)) {
+        throw new AgentRuntimePortError("skill_output_invalid");
+      }
+      if (!registration && (!output || typeof output !== "object" || Array.isArray(output))) {
+        throw new AgentRuntimePortError("skill_output_invalid");
+      }
+      return structuredClone(output);
+    } catch (error) {
+      throw mapBusinessPluginError(error);
+    } finally {
+      this.#endInvocation(normalizedInvocationId, active);
+    }
+  }
+
+  async #invokeUploadedSkill({
+    invocationId,
+    workspaceId,
+    executionRef,
+    input,
+    materials = [],
+    timeoutMs,
+    signal,
+  }) {
     if (typeof this.#uploadedSkillRuntime?.probeExecution !== "function") {
       throw new AgentRuntimePortError("uploaded_skill_runtime_unavailable");
     }
     const normalizedInvocationId = boundedIdentifier(invocationId, "invocation_id_invalid");
     const active = this.#beginInvocation(normalizedInvocationId, { timeoutMs, signal });
     try {
-      await raceWithAbort(this.#piKernel.ensure(), active.controller.signal);
+      await raceWithAbort(this.#runtimeKernel.ensure(), active.controller.signal);
       const readiness = await this.#uploadedSkillRuntime.probeExecution({ workspaceId, executionRef });
       if (!readiness?.ready || !this.#isUploadedToolBound()) {
         throw new AgentRuntimePortError("skill_not_ready");
       }
       throwIfAborted(active.controller.signal);
+      if (materials.length > 0) {
+        active.executionPromise = Promise.resolve(this.#uploadedSkillRuntime.executePublished({
+          workspaceId,
+          executionRef: structuredClone(executionRef),
+          input: structuredClone(input),
+          materials: materials.map((material) => ({
+            ...structuredClone(material),
+            bytes: Buffer.from(material.bytes),
+          })),
+          signal: active.controller.signal,
+        }));
+        return await raceWithAbort(active.executionPromise, active.controller.signal);
+      }
       active.executionPromise = Promise.resolve(this.#agentRuntimeCore.executeKernelTool(
-        UPLOADED_SKILL_INTERNAL_TOOL_NAME,
+        LEGACY_UPLOADED_SKILL_INTERNAL_TOOL_NAME,
         { workspaceId, executionRef: structuredClone(executionRef), input: structuredClone(input) },
         { signal: active.controller.signal },
       ));
@@ -342,7 +445,7 @@ function skillProbe(ready, code) {
 
 function mapInvocationError(error) {
   if (error instanceof AgentRuntimePortError) return error;
-  if (error instanceof WorkflowSkillRegistryError) {
+  if (String(error?.code || "").startsWith("workflow_registry_")) {
     if (
       error.code === "workflow_registry_kernel_output_missing"
       || error.code === "workflow_registry_output_schema_mismatch"
@@ -351,6 +454,30 @@ function mapInvocationError(error) {
     }
   }
   return new AgentRuntimePortError("skill_invocation_failed");
+}
+
+function mapBusinessPluginError(error) {
+  if (error instanceof AgentRuntimePortError) return error;
+  if (error?.code === "uploaded_skill_execution_port_unavailable") {
+    return new AgentRuntimePortError("uploaded_skill_runtime_unavailable");
+  }
+  if (error?.code === "uploaded_skill_output_invalid") {
+    return new AgentRuntimePortError("skill_output_invalid");
+  }
+  if (error?.code === "uploaded_skill_cancelled" || error?.code === "first_party_child_cancelled") {
+    return new AgentRuntimePortError("invocation_cancelled");
+  }
+  return new AgentRuntimePortError("skill_invocation_failed");
+}
+
+function normalizeBusinessMaterials(materials) {
+  if (!Array.isArray(materials)) throw new AgentRuntimePortError("skill_input_invalid");
+  return materials.map((material) => ({
+    ...structuredClone(material),
+    ...(material?.bytes instanceof Uint8Array || Buffer.isBuffer(material?.bytes)
+      ? { bytes: Buffer.from(material.bytes) }
+      : {}),
+  }));
 }
 
 function raceWithAbort(promise, signal) {

@@ -1,81 +1,39 @@
-# Project Wiki
+# Turnsu 工作台 · 项目 Wiki
 
-Updated: 2026-07-17
+更新：2026-09-28
 
-## Product Direction
+Turnsu 工作台以本地桌面项目为入口：打开真实目录，使用自己的 Codex、Claude Code 或 Pi 完成任务，查看文件与结果，关闭后继续。有效方法进入 Skill OS；只有需要多步骤复用时才整理成 Loop。约八人团队可在明确授权的共享项目里接力，个人原生会话、凭据和私有文件不因连接团队而自动共享。
 
-Looloomi is a Skill & Loop cloud workbench. It helps individuals and teams:
+## 从哪里读起
 
-- create, upload, test, version, publish, and improve Skills;
-- turn a goal contract and pinned Skills into an executable Loop;
-- compile, run, review, rerun, and compare immutable Loop versions;
-- discover, install, fork, and explicitly update workspace-published assets;
-- share packages and metadata without sharing credentials.
+| 问题 | 权威入口 |
+| --- | --- |
+| 产品要做什么、用户路径和边界 | [Master PRD v0.6](prd/2026-08-04-looloomi-team-intelligence-workspace-master-prd.md)；[产品摘要](../PRODUCT.md) |
+| 现在真正实现了什么、证据与缺口 | [Current System Architecture](architecture/CURRENT_SYSTEM_ARCHITECTURE.md) |
+| 下一轮工作台、Skill OS、极简 Loop 怎样迭代 | [2026-09-28 迭代方案](design/2026-09-28-workbench-skillos-iteration-plan.md) |
+| 桌面外壳和 WorkBuddy 内存如何判断 | [2026-09-28 专项调研](design/2026-09-28-desktop-framework-memory-research.md) |
+| 本机与云端谁持有数据和执行 | [桌面 / 云端职责边界](architecture/desktop-cloud-boundary.md) |
+| 开发与验收必须遵守什么 | [仓库开发约束](../AGENTS.md)；[界面约束](../DESIGN.md) |
 
-`Skill`, `Loop`, and `Run` are the primary product terms. `Workflow` remains a current backend
-and graph term. Templates are published Loop starting points, not a separate durable product.
+PRD 定义目标，不证明已交付；架构文档记录现状，不替代产品决策。9 月 28 日方案是当前迭代顺序，实际完成度只按真实入口、持久化、平台与用户操作证据更新。
 
-## Sources of Truth
+## 当前产品地图
 
-Read in this order:
+- **工作台**：项目 / 会话导航、任务输入、Agent 与模型选择、原处处理提问和权限、按需查看文件与成果。个人本地路径无需 Turnsu 云端登录。
+- **Skill OS**：从已有成果整理方法，区分本机、项目和团队固定版本；查看、试做、在另一任务复用，以及经授权发布。当前桌面已有部分本地整理与团队方法入口，统一目录仍是待建设能力。
+- **Loop**：Skill OS 下的可复用流程。管理首页保持简洁；复杂依赖才打开图形编辑。本机试做与团队云端运行的授权、状态和执行位置必须分别显示。
+- **共享项目**：Product API / PostgreSQL 管理成员、Work Item、授权、版本和共享结果；本机 Host 管理原生 Agent 进程、会话、草稿与待同步状态。同步和接力不等于上传私人原生历史。
 
-1. [../PRODUCT.md](../PRODUCT.md) for product scope and language.
-2. [prd/README.md](prd/README.md) for the target product PRD set.
-3. [design/skill-loop-cloud-workbench-v1/README.md](design/skill-loop-cloud-workbench-v1/README.md) for target UI/UX, diagrams, and visual directions.
-4. [architecture/CURRENT_SYSTEM_ARCHITECTURE.md](architecture/CURRENT_SYSTEM_ARCHITECTURE.md) for implemented Web/Backend/Agent reality and boundaries.
-5. [../DESIGN.md](../DESIGN.md) for the selected visual authority and current rejection boundary.
-6. [../domains/frontend/documents/current-skill-workflow-loop-workbench.md](../domains/frontend/documents/current-skill-workflow-loop-workbench.md) for current frontend behavior, not visual acceptance.
+现有独立桌面客户端、Web 工作台、Product API 和 Agent Runtime 的具体能力与未验证项目，见[架构现状](architecture/CURRENT_SYSTEM_ARCHITECTURE.md)。Tauri 2 是当前桌面实现，不是长期架构限制；外壳决策须经过同工作负载的 macOS / Windows 验证。
 
-Target PRDs do not prove implementation. The architecture and fresh QA evidence decide what is
-working today.
+## 文档导航
 
-## Current Full-Stack Status
+- [需求索引](prd/README.md)：当前 PRD 与历史裁决。
+- [设计索引](design/README.md)：本轮方案、桌面调研、交互研究与旧设计包。
+- [架构索引](architecture/README.md)：现状、桌面 / 云端职责和后端边界。
+- [计划索引](plan/README.md)：当前迭代顺序及旧阶段计划。
+- [状态索引](state/README.md)：只指向现状，不另建进度台账。
+- [QA 索引](qa/README.md)：按实际候选和环境区分证据。
+- [历史资料](history/)：保留但不控制当前产品方向。
 
-The Web is connected to a same-origin Product API with workspace Skills, immutable revisions,
-server compilation, durable Runs, SSE, Review Gate continuation, authoritative results, Team
-library, upload/import, Builder proposals and version updates. Current capability details remain in
-the architecture document.
-
-The rendered Web visual result was rejected on 2026-07-15. Its functional behavior remains useful,
-but its old layout and generated screenshot matrix are not current design evidence.
-
-The current dependency direction is:
-
-```text
-Web -> Product API/BFF -> Product Store + Compiler/Runner/AgentTurnRunner
-    -> Execution Broker -> process/container/remote adapter
-    -> Agent Runtime Core -> PI Kernel/AgwaB -> Skill adapters
-```
-
-The target extends this boundary with identity/workspaces, package ingestion, object storage,
-secret-safe connections, Team library publication, and tenant-aware runtime execution.
-
-## Active Surfaces
-
-Current product navigation:
-
-- Skills
-- Loops
-- Team library
-
-Builder remains a Loop editing route. Runs remain attached to Loop detail. Templates move into
-Loop creation and Team library discovery.
-
-## Current Code and Evidence
-
-- Web: [../domains/frontend/web/code/web-prototype/](../domains/frontend/web/code/web-prototype/)
-- Product contracts: [../domains/backend/code/workbench-contracts/](../domains/backend/code/workbench-contracts/)
-- Product server: [../domains/backend/code/workbench-server/](../domains/backend/code/workbench-server/)
-- Agent Runtime: [../domains/agent/code/agent-runtime/](../domains/agent/code/agent-runtime/)
-- P0 acceptance: [qa/2026-07-10-skill-workflow-loop-first-slice-acceptance.md](qa/2026-07-10-skill-workflow-loop-first-slice-acceptance.md)
-- Backend/Agent Slice 0–4 acceptance: [qa/2026-07-16-backend-agent-slices-0-4-acceptance.md](qa/2026-07-16-backend-agent-slices-0-4-acceptance.md)
-- Backend/Agent single-machine production readiness: [qa/2026-07-17-backend-agent-slices-0-4-single-machine-production-readiness.md](qa/2026-07-17-backend-agent-slices-0-4-single-machine-production-readiness.md) — code-complete, release `NO-GO`
-
-## Historical Boundary
-
-Crypto, markets, meetings, office, WeChat, old Blocks Workbench, Command Desk, LoopOps v2,
-SwiftUI-first surfaces, and monitoring consoles are examples or history. They cannot define
-active acceptance unless a current PRD explicitly references them.
-
-Historical documents are indexed under [history/](history/) and
-[../domains/frontend/documents/history/](../domains/frontend/documents/history/).
+仓库中的 looloomi 文件名、数据库名和迁移标识仍可能作为兼容标识存在；不要为品牌改名而改写持久化身份或历史链接。

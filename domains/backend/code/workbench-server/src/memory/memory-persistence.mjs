@@ -68,6 +68,7 @@ export class InMemoryMemoryPersistence {
     const memory = this.memories.get(memoryId);
     if (!memory || memory.workspaceId !== workspaceId) return null;
     this.memories.delete(memoryId);
+    this.candidates.delete(memory.candidateId);
     this.tombstones.set(tombstone.tombstoneId, clone(tombstone));
     this.events.set(event.memoryEventId, clone(event));
     return clone(tombstone);
@@ -76,6 +77,14 @@ export class InMemoryMemoryPersistence {
     return clone([...this.tombstones.values()].find((item) => (
       item.memoryIdHash === memoryIdHash && item.workspaceId === workspaceId
     )) ?? null);
+  }
+  async listEvents({ workspaceId, limit = 500 }) {
+    return [...this.events.values()]
+      .filter((event) => event.workspaceId === workspaceId)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt)
+        || left.memoryEventId.localeCompare(right.memoryEventId))
+      .slice(0, limit)
+      .map(clone);
   }
   async appendEvent(event) { this.events.set(event.memoryEventId, clone(event)); return clone(event); }
 }

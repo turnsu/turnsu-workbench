@@ -3,20 +3,8 @@ import test from "node:test";
 
 import { ProductAgentProposalService } from "../../src/agents/index.mjs";
 
-test("Agent proposal storage derives object identity from the personal Module Session", async () => {
-  const records = [];
-  const store = {
-    repositories: null,
-    async connect() {
-      this.repositories = {
-        agentObjectProposals: {
-          async insert(value) { records.push(structuredClone(value)); return structuredClone(value); },
-        },
-      };
-    },
-  };
+test("Agent proposal preparation derives object identity from the personal Module Session", async () => {
   const service = new ProductAgentProposalService({
-    store,
     clock: () => "2026-07-17T01:00:00.000Z",
     idFactory: () => "agent-proposal-alpha",
   });
@@ -33,7 +21,7 @@ test("Agent proposal storage derives object identity from the personal Module Se
       baseVersionId: "revision-alpha",
     },
   };
-  const saved = await service.createFromAgent({
+  const saved = service.prepareFromAgent({
     session,
     turn: { turnId: "agent-turn-alpha", sessionId: session.sessionId },
     proposal: {
@@ -51,10 +39,9 @@ test("Agent proposal storage derives object identity from the personal Module Se
   assert.equal(saved.baseVersionId, "revision-alpha");
   assert.equal(saved.createdBy, "alice");
   assert.deepEqual(saved.evidenceRefs, ["artifact-alpha"]);
-  assert.equal(records.length, 1);
 });
 
-test("Agent proposal storage rejects invalid paths and failed worker validation", async () => {
+test("Agent proposal preparation rejects invalid paths and failed worker validation", async () => {
   const service = new ProductAgentProposalService({
     store: {
       async connect() {},
@@ -76,7 +63,7 @@ test("Agent proposal storage rejects invalid paths and failed worker validation"
       baseVersionId: "skill-draft-alpha:1",
     },
   };
-  await assert.rejects(service.createFromAgent({
+  assert.throws(() => service.prepareFromAgent({
     session,
     turn: { turnId: "agent-turn-alpha", sessionId: session.sessionId },
     proposal: {
@@ -86,7 +73,7 @@ test("Agent proposal storage rejects invalid paths and failed worker validation"
       validationResult: { status: "passed", diagnostics: [] },
     },
   }), { code: "agent_proposal_operation_invalid" });
-  await assert.rejects(service.createFromAgent({
+  assert.throws(() => service.prepareFromAgent({
     session,
     turn: { turnId: "agent-turn-alpha", sessionId: session.sessionId },
     proposal: {

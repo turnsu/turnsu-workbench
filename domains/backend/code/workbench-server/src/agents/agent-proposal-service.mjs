@@ -12,16 +12,15 @@ export class AgentProposalServiceError extends Error {
 }
 
 export class ProductAgentProposalService {
-  constructor({ store, clock = () => new Date().toISOString(), idFactory } = {}) {
-    if (!store?.connect || typeof clock !== "function" || typeof idFactory !== "function") {
+  constructor({ clock = () => new Date().toISOString(), idFactory } = {}) {
+    if (typeof clock !== "function" || typeof idFactory !== "function") {
       throw new TypeError("agent_proposal_service_dependencies_required");
     }
-    this.store = store;
     this.clock = clock;
     this.idFactory = idFactory;
   }
 
-  async createFromAgent({ session, turn, proposal }) {
+  prepareFromAgent({ session, turn, proposal }) {
     if (session?.scope?.kind !== "module" || turn?.sessionId !== session.sessionId) {
       throw new AgentProposalServiceError("agent_proposal_context_invalid");
     }
@@ -54,10 +53,7 @@ export class ProductAgentProposalService {
     if (!Check(AgentObjectProposalSchema, record)) {
       throw new AgentProposalServiceError("agent_proposal_invalid");
     }
-    await this.store.connect();
-    const repository = this.store.repositories?.agentObjectProposals;
-    if (!repository?.insert) throw new AgentProposalServiceError("agent_proposal_storage_unavailable");
-    return repository.insert(record);
+    return structuredClone(record);
   }
 }
 

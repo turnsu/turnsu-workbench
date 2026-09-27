@@ -1,6 +1,19 @@
+import {
+  ProductApiError,
+  ProductClientProtocolError,
+} from "@looloomi/product-client";
+import { createAuthProductClient } from "@looloomi/product-client/auth";
+import { createInboxProductClient } from "@looloomi/product-client/inbox";
+import { createReadinessProductClient } from "@looloomi/product-client/readiness";
+import { createAutomationProductClient } from "@looloomi/product-client/automation";
+import { createDeviceProductClient } from "@looloomi/product-client/devices";
+import { createScopeProductClient } from "@looloomi/product-client/scope";
+import { createRunProductClient } from "@looloomi/product-client/runs";
+import { createWorkItemProductClient } from "@looloomi/product-client/work-items";
+import { createWorkspaceProductClient } from "@looloomi/product-client/workspace";
+
 const API_PREFIX = "/api/workbench/v1";
 const SKILL_PACKAGE_FORMAT = "workbench-skill-package-v1";
-export const PORTABLE_LOOP_PACKAGE_MEDIA_TYPE = "application/vnd.looloomi.loop-package+json";
 
 export const RUN_EVENT_TYPES = Object.freeze([
   "run.queued",
@@ -11,10 +24,43 @@ export const RUN_EVENT_TYPES = Object.freeze([
   "node.failed",
   "review.requested",
   "run.paused",
+  "run.cancellation_requested",
   "run.completed",
   "run.failed",
   "run.cancelled",
+  "run.partial",
+  "run.effect_outcome_unknown",
 ]);
+
+export const RUN_TERMINAL_STATUSES = Object.freeze([
+  "completed",
+  "failed",
+  "cancelled",
+  "partial",
+  "effect_outcome_unknown",
+]);
+
+const RUN_TERMINAL_STATUS_SET = new Set(RUN_TERMINAL_STATUSES);
+const RUN_CANCELLABLE_STATUS_SET = new Set(["queued", "running"]);
+const RUN_REPEAT_OR_RETRY_STATUS_SET = new Set(["completed", "failed", "cancelled"]);
+const PUBLIC_AUTH_MUTATION_OPERATIONS = new Set([
+  "register",
+  "login",
+  "inspectInvitation",
+  "startOAuth",
+]);
+
+export function isTerminalRunStatus(status) {
+  return RUN_TERMINAL_STATUS_SET.has(status);
+}
+
+export function canCancelRun(status) {
+  return RUN_CANCELLABLE_STATUS_SET.has(status);
+}
+
+export function canRepeatOrRetryRun(status) {
+  return RUN_REPEAT_OR_RETRY_STATUS_SET.has(status);
+}
 
 export class WorkbenchApiError extends Error {
   constructor({ code, message, details = {}, retryable = false, requestId = "", status = 0 } = {}) {
@@ -45,11 +91,6 @@ function encoded(value) {
   return encodeURIComponent(String(value));
 }
 
-export function portableLoopFilename(contentDisposition, fallback = "loop.loop.json") {
-  const match = String(contentDisposition || "").match(/filename="([A-Za-z0-9][A-Za-z0-9._-]*\.loop\.json)"/i);
-  return match?.[1] || fallback;
-}
-
 export function formatSkillPackageBytes(files) {
   const records = Array.isArray(files) ? files.map((file) => ({
     path: String(file?.path ?? ""),
@@ -74,31 +115,90 @@ export function createWorkbenchApiClient({
   eventSourceFactory = (url, options) => new EventSource(url, options),
   idFactory = defaultIdFactory,
   basePath = API_PREFIX,
+  reviewMode = import.meta.env?.VITE_REVIEW_MODE || "",
 } = {}) {
   if (typeof fetchImpl !== "function") throw new TypeError("workbench_fetch_required");
   let csrfToken = "";
   let sessionRefreshPromise = null;
+  let sessionEpoch = 0;
+  let sessionPrincipal = "";
+  const productClientOptions = {
+    fetch: fetchImpl,
+    basePath,
+    csrfToken: (operationId) => (
+      PUBLIC_AUTH_MUTATION_OPERATIONS.has(operationId) ? undefined : (csrfToken || undefined)
+    ),
+  };
+  const workspaceProductClient = createWorkspaceProductClient(productClientOptions);
+  const authProductClient = createAuthProductClient(productClientOptions);
+  const readinessProductClient = createReadinessProductClient(productClientOptions);
+  const inboxProductClient = createInboxProductClient(productClientOptions);
+  const automationProductClient = createAutomationProductClient(productClientOptions);
+  const deviceProductClient = createDeviceProductClient(productClientOptions);
+  const scopeProductClient = createScopeProductClient(productClientOptions);
+  const runProductClient = createRunProductClient(productClientOptions);
+  const workItemProductClient = createWorkItemProductClient(productClientOptions);
+  let modelProductClientPromise = null;
+
+  function modelProductClient() {
+    if (!modelProductClientPromise) {
+      modelProductClientPromise = import("@looloomi/product-client/model")
+        .then(({ createModelProductClient }) => createModelProductClient(productClientOptions));
+    }
+    return modelProductClientPromise;
+  }
 
   function installSession(result) {
-    csrfToken = result.data?.session?.csrfToken || "";
-    if (!csrfToken) {
+    const nextToken = result.data?.session?.csrfToken || "";
+    const nextUserId = result.data?.session?.userId || "";
+    const nextWorkspaceId = result.data?.session?.workspaceId || "";
+    const nextPrincipal = nextUserId && nextWorkspaceId
+      ? `${nextUserId}:${nextWorkspaceId}`
+      : "";
+    if (!nextToken || !nextPrincipal) {
       throw new WorkbenchApiError({
         code: "workspace_session_invalid",
         message: "The Workbench session could not be initialized.",
       });
     }
+    if (sessionPrincipal && sessionPrincipal !== nextPrincipal) sessionEpoch += 1;
+    csrfToken = nextToken;
+    sessionPrincipal = nextPrincipal;
     return result;
   }
 
   function refreshSession() {
     if (!sessionRefreshPromise) {
-      sessionRefreshPromise = request("/workspace", { retrySession: false })
-        .then(installSession)
+      const refreshEpoch = sessionEpoch;
+      let activeRefresh;
+      activeRefresh = requestProduct(workspaceProductClient, "workspace", {})
+        .then((result) => {
+          if (sessionEpoch !== refreshEpoch) {
+            throw principalChanged();
+          }
+          return installSession(result);
+        })
         .finally(() => {
-          sessionRefreshPromise = null;
+          if (sessionRefreshPromise === activeRefresh) sessionRefreshPromise = null;
         });
+      sessionRefreshPromise = activeRefresh;
     }
     return sessionRefreshPromise;
+  }
+
+  async function installAuthenticatedSession(result) {
+    const workspaceResult = await refreshSession();
+    const authPrincipal = `${result.data.user.userId}:${result.data.workspaceId}`;
+    const workspacePrincipal = `${workspaceResult.data.session.userId}:${workspaceResult.data.session.workspaceId}`;
+    if (authPrincipal !== workspacePrincipal) {
+      client.resetSession();
+      throw new WorkbenchApiError({
+        code: "auth_session_principal_mismatch",
+        message: "The authenticated account does not match the active workspace session.",
+        status: 409,
+      });
+    }
+    return result;
   }
 
   async function request(path, {
@@ -107,10 +207,14 @@ export function createWorkbenchApiClient({
     ifMatch,
     idempotencyKey,
     query,
+    signal,
+    keepalive = false,
     retrySession = true,
+    publicMutation = false,
   } = {}) {
     const mutation = method !== "GET";
-    if (mutation && !csrfToken) {
+    if (mutation) ensureVisualMutationAllowed(path);
+    if (mutation && !publicMutation && !csrfToken) {
       if (retrySession) await refreshSession();
       else {
         throw new WorkbenchApiError({
@@ -120,13 +224,17 @@ export function createWorkbenchApiClient({
         });
       }
     }
+    const requestEpoch = sessionEpoch;
+    const requestPrincipal = sessionPrincipal;
     const headers = { Accept: "application/json" };
-    const resolvedIdempotencyKey = mutation ? (idempotencyKey || idFactory()) : undefined;
+    const resolvedIdempotencyKey = mutation && !publicMutation
+      ? (idempotencyKey || idFactory())
+      : idempotencyKey;
     let body;
     if (mutation) {
       headers["Content-Type"] = "application/json";
-      headers["Idempotency-Key"] = resolvedIdempotencyKey;
-      headers["X-Workbench-CSRF"] = csrfToken;
+      if (resolvedIdempotencyKey) headers["Idempotency-Key"] = resolvedIdempotencyKey;
+      if (!publicMutation) headers["X-Workbench-CSRF"] = csrfToken;
       if (ifMatch) headers["If-Match"] = ifMatch;
       body = JSON.stringify({ schemaVersion: "workbench-api-v1", data });
     }
@@ -137,6 +245,8 @@ export function createWorkbenchApiClient({
         headers,
         body,
         credentials: "same-origin",
+        signal,
+        keepalive,
       });
     } catch (error) {
       throw new WorkbenchApiError({
@@ -155,9 +265,16 @@ export function createWorkbenchApiClient({
     if (!response.ok) {
       const sessionRejected = response.status === 401
         || (response.status === 403 && payload?.code === "csrf_invalid");
-      if (mutation && retrySession && sessionRejected) {
+      if (mutation && !publicMutation && retrySession && sessionRejected) {
         csrfToken = "";
         await refreshSession();
+        if (
+          sessionEpoch !== requestEpoch
+          || !requestPrincipal
+          || sessionPrincipal !== requestPrincipal
+        ) {
+          throw principalChanged();
+        }
         return request(path, {
           method,
           data,
@@ -165,6 +282,9 @@ export function createWorkbenchApiClient({
           idempotencyKey: resolvedIdempotencyKey,
           query,
           retrySession: false,
+          publicMutation,
+          signal,
+          keepalive,
         });
       }
       throw new WorkbenchApiError({
@@ -187,63 +307,47 @@ export function createWorkbenchApiClient({
     };
   }
 
-  async function requestPortableLoop(path, { query, ifNoneMatch } = {}) {
-    const headers = { Accept: PORTABLE_LOOP_PACKAGE_MEDIA_TYPE };
-    if (ifNoneMatch) headers["If-None-Match"] = ifNoneMatch;
-    let response;
-    try {
-      response = await fetchImpl(`${basePath}${path}${queryString(query)}`, {
-        method: "GET",
-        headers,
-        credentials: "same-origin",
-      });
-    } catch (error) {
-      throw new WorkbenchApiError({
-        code: "workbench_unreachable",
-        message: "The local Workbench service could not be reached.",
-        details: { reason: error?.message || "network_error" },
-        retryable: true,
-      });
-    }
-
-    const etag = response.headers.get("etag");
-    const contentDisposition = response.headers.get("content-disposition");
-    if (response.status === 304) {
-      return {
-        bytes: null,
-        notModified: true,
-        etag,
-        filename: portableLoopFilename(contentDisposition),
-        mediaType: PORTABLE_LOOP_PACKAGE_MEDIA_TYPE,
-      };
-    }
-    if (!response.ok) {
-      let payload = null;
-      try {
-        payload = await response.json();
-      } catch {
-        // Product-safe error fields are optional when an intermediary rejects the request.
+  async function requestSessionProduct(operationId, input, {
+    signal,
+    retrySession = true,
+  } = {}) {
+    if (!csrfToken) {
+      if (retrySession) await refreshSession();
+      else {
+        throw new WorkbenchApiError({
+          code: "workspace_session_required",
+          message: "Open the workspace before making changes.",
+          status: 401,
+        });
       }
-      throw new WorkbenchApiError({
-        ...(payload && typeof payload === "object" ? payload : {}),
-        status: response.status,
+    }
+    const requestEpoch = sessionEpoch;
+    const requestPrincipal = sessionPrincipal;
+    try {
+      return await requestProduct(
+        await modelProductClient(),
+        operationId,
+        input,
+        { signal },
+      );
+    } catch (error) {
+      const sessionRejected = error instanceof WorkbenchApiError
+        && (error.status === 401 || (error.status === 403 && error.code === "csrf_invalid"));
+      if (!retrySession || !sessionRejected) throw error;
+      csrfToken = "";
+      await refreshSession();
+      if (
+        sessionEpoch !== requestEpoch
+        || !requestPrincipal
+        || sessionPrincipal !== requestPrincipal
+      ) {
+        throw principalChanged();
+      }
+      return requestSessionProduct(operationId, input, {
+        signal,
+        retrySession: false,
       });
     }
-    const mediaType = String(response.headers.get("content-type") || "").split(";", 1)[0];
-    if (mediaType !== PORTABLE_LOOP_PACKAGE_MEDIA_TYPE) {
-      throw new WorkbenchApiError({
-        code: "loop_export_response_invalid",
-        message: "The Loop download has an unsupported format.",
-        status: response.status,
-      });
-    }
-    return {
-      bytes: new Uint8Array(await response.arrayBuffer()),
-      notModified: false,
-      etag,
-      filename: portableLoopFilename(contentDisposition),
-      mediaType,
-    };
   }
 
   async function requestArtifactContent(path) {
@@ -291,38 +395,375 @@ export function createWorkbenchApiClient({
   }
 
   const client = {
+    authStatus() {
+      return requestProduct(authProductClient, "authStatus", {});
+    },
+    async register(data, options = {}) {
+      ensureVisualMutationAllowed("/auth/register");
+      const result = await requestProduct(authProductClient, "register", {
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      });
+      return installAuthenticatedSession(result);
+    },
+    async login(data) {
+      const result = await requestProduct(authProductClient, "login", {
+        body: { schemaVersion: "workbench-api-v1", data },
+      });
+      return installAuthenticatedSession(result);
+    },
+    async logout() {
+      ensureVisualMutationAllowed("/auth/logout");
+      if (!csrfToken) {
+        throw new WorkbenchApiError({
+          code: "workspace_session_required",
+          message: "Open the workspace before making changes.",
+          status: 401,
+        });
+      }
+      const result = await requestProduct(authProductClient, "logout", {
+        body: { schemaVersion: "workbench-api-v1", data: {} },
+      });
+      client.resetSession();
+      return result;
+    },
+    listMembers(options = {}) {
+      return requestProduct(authProductClient, "listMembers", {}, options);
+    },
+    updateMember(userId, data, options = {}) {
+      return requestProduct(authProductClient, "updateMember", {
+        pathParams: { userId },
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
+    },
+    listInvitations(options = {}) {
+      return requestProduct(authProductClient, "listInvitations", {}, options);
+    },
+    createInvitation(data, options = {}) {
+      ensureVisualMutationAllowed("/workspace/invitations");
+      return requestProduct(authProductClient, "createInvitation", {
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
+    },
+    revokeInvitation(invitationId, options = {}) {
+      ensureVisualMutationAllowed(`/workspace/invitations/${encoded(invitationId)}/revoke`);
+      return requestProduct(authProductClient, "revokeInvitation", {
+        pathParams: { invitationId },
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data: {} },
+      }, options);
+    },
+    resendInvitation(invitationId, options = {}) {
+      ensureVisualMutationAllowed(`/workspace/invitations/${encoded(invitationId)}/resend`);
+      return requestProduct(authProductClient, "resendInvitation", {
+        pathParams: { invitationId },
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data: {} },
+      }, options);
+    },
+    inspectInvitation(token, options = {}) {
+      return requestProduct(authProductClient, "inspectInvitation", {
+        body: { schemaVersion: "workbench-api-v1", data: { token } },
+      }, options);
+    },
+    startOAuth(provider, { token, bindExistingAccount = false } = {}, options = {}) {
+      return requestProduct(authProductClient, "startOAuth", {
+        pathParams: { provider },
+        body: {
+          schemaVersion: "workbench-api-v1",
+          data: { token, ...(bindExistingAccount ? { bindExistingAccount: true } : {}) },
+        },
+      }, options);
+    },
+    listOwnNativeClientSessions(options = {}) {
+      return requestProduct(authProductClient, "listOwnNativeClientSessions", {}, options);
+    },
+    revokeOwnNativeClientSession(clientSessionId, options = {}) {
+      ensureVisualMutationAllowed(`/auth/native/sessions/${encoded(clientSessionId)}/revoke`);
+      return requestProduct(authProductClient, "revokeOwnNativeClientSession", {
+        pathParams: { clientSessionId }, body: { schemaVersion: "workbench-api-v1", data: {} },
+      }, options);
+    },
+    approveNativeAuthorization(authorizationId, options = {}) {
+      return requestProduct(authProductClient, "approveNativeAuthorization", {
+        body: {
+          schemaVersion: "workbench-api-v1",
+          data: { authorizationId },
+        },
+      }, options);
+    },
     async bootstrap() {
       return refreshSession();
     },
-    getActiveSession() { return request("/session"); },
-    listModelProfiles({ capabilities = [], context, selectedRevisionId, readiness, cursor, limit } = {}) {
-      return request("/model-profiles", {
-        query: {
-          capabilities: capabilities.length ? capabilities.join(",") : undefined,
-          context,
-          selectedRevisionId,
-          readiness,
-          cursor,
-          limit,
+    getWorkspaceFeatureReadiness(options = {}) {
+      return requestProduct(
+        readinessProductClient,
+        "getWorkspaceFeatureReadiness",
+        {},
+        options,
+      );
+    },
+    listScopes(options = {}) {
+      return requestProduct(scopeProductClient, "listScopes", {}, options);
+    },
+    getScope(scopeId, options = {}) {
+      return requestProduct(scopeProductClient, "getScope", {
+        pathParams: { scopeId },
+      }, options);
+    },
+    reviseScopePolicy(scopeId, data, { ifMatch, idempotencyKey, ...options } = {}) {
+      ensureVisualMutationAllowed(`/scopes/${encoded(scopeId)}/policy`);
+      return requestProduct(scopeProductClient, "reviseScopePolicy", {
+        pathParams: { scopeId },
+        headers: {
+          "Idempotency-Key": idempotencyKey || idFactory(),
+          "If-Match": ifMatch,
         },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
+    },
+    listAutomations(query = {}, options = {}) {
+      return requestProduct(automationProductClient, "listAutomations", { query }, options);
+    },
+    listAutomationCandidates(query = {}, options = {}) {
+      return requestProduct(automationProductClient, "listAutomationCandidates", { query }, options);
+    },
+    createAutomation(data, { idempotencyKey, ...options } = {}) {
+      ensureVisualMutationAllowed("/automations");
+      return requestProduct(automationProductClient, "createAutomation", {
+        headers: { "Idempotency-Key": idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
+    },
+    getAutomation(automationId, options = {}) {
+      return requestProduct(automationProductClient, "getAutomation", {
+        pathParams: { automationId },
+      }, options);
+    },
+    reviseAutomation(automationId, data, { ifMatch, idempotencyKey, ...options } = {}) {
+      ensureVisualMutationAllowed(`/automations/${encoded(automationId)}`);
+      return requestProduct(automationProductClient, "reviseAutomation", {
+        pathParams: { automationId },
+        headers: {
+          "Idempotency-Key": idempotencyKey || idFactory(),
+          "If-Match": ifMatch,
+        },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
+    },
+    transitionAutomation(automationId, transition, { ifMatch, idempotencyKey, ...options } = {}) {
+      const operations = {
+        activate: "activateAutomation",
+        pause: "pauseAutomation",
+        archive: "archiveAutomation",
+      };
+      const operationId = operations[transition];
+      if (!operationId) throw new WorkbenchApiError({
+        code: "automation_transition_invalid",
+        message: "This Automation transition is not supported.",
       });
+      ensureVisualMutationAllowed(`/automations/${encoded(automationId)}/${transition}`);
+      return requestProduct(automationProductClient, operationId, {
+        pathParams: { automationId },
+        headers: {
+          "Idempotency-Key": idempotencyKey || idFactory(),
+          "If-Match": ifMatch,
+        },
+        body: { schemaVersion: "workbench-api-v1", data: {} },
+      }, options);
+    },
+    listAutomationOccurrences(automationId, query = {}, options = {}) {
+      return requestProduct(automationProductClient, "listAutomationOccurrences", {
+        pathParams: { automationId },
+        query,
+      }, options);
+    },
+    listDevices(options = {}) {
+      return requestProduct(deviceProductClient, "listDevices", {}, options);
+    },
+    revokeDevice(deviceId, data = {}, options = {}) {
+      ensureVisualMutationAllowed(`/devices/${encoded(deviceId)}/revoke`);
+      return requestProduct(deviceProductClient, "revokeDevice", {
+        pathParams: { deviceId },
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
+    },
+    getActiveSession() { return request("/session"); },
+    listRecentWork(query) { return request("/recent-work", { query }); },
+    async createModelProfile(data, options = {}) {
+      ensureVisualMutationAllowed("/model-profiles");
+      return requestProduct(await modelProductClient(), "createModelProfile", {
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
+    },
+    async listModelProfiles({ profileId, capabilities = [], context, selectedRevisionId, readiness, cursor, limit } = {}, options = {}) {
+      const query = {};
+      if (profileId) query.profileId = profileId;
+      if (capabilities.length) query.capabilities = capabilities.join(",");
+      if (context) query.context = context;
+      if (selectedRevisionId) query.selectedRevisionId = selectedRevisionId;
+      if (readiness) query.readiness = readiness;
+      if (cursor) query.cursor = cursor;
+      if (limit !== undefined && limit !== null) query.limit = limit;
+      return requestProduct(
+        await modelProductClient(),
+        "listModelProfiles",
+        { query },
+        options,
+      );
     },
     listAgentDefinitions() { return request("/agent-definitions"); },
+    listAgentSessions(query, options = {}) { return request("/agent-sessions", { query, ...options }); },
     createAgentSession(data, options = {}) {
       return request("/agent-sessions", { method: "POST", data, ...options });
     },
-    getAgentSession(sessionId) { return request(`/agent-sessions/${encoded(sessionId)}`); },
-    selectAgentSessionModel(sessionId, data, options = {}) {
-      return request(`/agent-sessions/${encoded(sessionId)}/model`, { method: "POST", data, ...options });
+    getAgentSession(sessionId, options = {}) { return request(`/agent-sessions/${encoded(sessionId)}`, options); },
+    promoteAgentSessionToWorkItem(sessionId, data, options = {}) {
+      ensureVisualMutationAllowed(`/agent-sessions/${encoded(sessionId)}/promote-to-work-item`);
+      return requestProduct(workItemProductClient, "promoteAgentSessionToWorkItem", {
+        pathParams: { sessionId },
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
     },
-    listAgentTurns(sessionId, query) {
-      return request(`/agent-sessions/${encoded(sessionId)}/turns`, { query });
+    listProjects(query = {}, options = {}) {
+      return requestProduct(workItemProductClient, "listProjects", { query }, options);
+    },
+    createProject(data, { idempotencyKey, ...options } = {}) {
+      ensureVisualMutationAllowed("/projects");
+      return requestProduct(workItemProductClient, "createProject", {
+        headers: { "Idempotency-Key": idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
+    },
+    getProject(projectId, options = {}) {
+      return requestProduct(workItemProductClient, "getProject", {
+        pathParams: { projectId },
+      }, options);
+    },
+    reviseProjectMembers(projectId, data, { ifMatch, idempotencyKey, ...options } = {}) {
+      ensureVisualMutationAllowed(`/projects/${encoded(projectId)}/members`);
+      return requestProduct(workItemProductClient, "reviseProjectMembers", {
+        pathParams: { projectId },
+        headers: {
+          "Idempotency-Key": idempotencyKey || idFactory(),
+          "If-Match": ifMatch,
+        },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
+    },
+    listWorkItems(query = {}, options = {}) {
+      return requestProduct(workItemProductClient, "listWorkItems", { query }, options);
+    },
+    createTeamWorkItem(data, { idempotencyKey, ...options } = {}) {
+      ensureVisualMutationAllowed("/work-items");
+      return requestProduct(workItemProductClient, "createTeamWorkItem", {
+        headers: { "Idempotency-Key": idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
+    },
+    createTeamWorkItemAgentEntry(data, { idempotencyKey, ...options } = {}) {
+      ensureVisualMutationAllowed("/work-items/agent-entry");
+      return requestProduct(workItemProductClient, "createTeamWorkItemAgentEntry", {
+        headers: { "Idempotency-Key": idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
+    },
+    updateTeamWorkItem(workItemId, data, { ifMatch, idempotencyKey, ...options } = {}) {
+      ensureVisualMutationAllowed(`/work-items/${encoded(workItemId)}`);
+      return requestProduct(workItemProductClient, "updateTeamWorkItem", {
+        pathParams: { workItemId },
+        headers: {
+          "Idempotency-Key": idempotencyKey || idFactory(),
+          "If-Match": ifMatch,
+        },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
+    },
+    listWorkItemPromotionParticipants(options = {}) {
+      return requestProduct(workItemProductClient, "listWorkItemPromotionParticipants", {}, options);
+    },
+    getWorkItem(workItemId, options = {}) {
+      return requestProduct(workItemProductClient, "getWorkItem", {
+        pathParams: { workItemId },
+      }, options);
+    },
+    listWorkItemLoopRuns(workItemId, options = {}) {
+      return requestProduct(workItemProductClient, "listWorkItemLoopRuns", { pathParams: { workItemId } }, options);
+    },
+    startWorkItemLoopRun(workItemId, data, { idempotencyKey, ...options } = {}) {
+      ensureVisualMutationAllowed(`/work-items/${encoded(workItemId)}/loop-runs`);
+      return requestProduct(workItemProductClient, "startWorkItemLoopRun", {
+        pathParams: { workItemId }, headers: { "Idempotency-Key": idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
+    },
+    listWorkItemThreadEntries(workItemId, query = {}, options = {}) {
+      return requestProduct(workItemProductClient, "listWorkItemThreadEntries", {
+        pathParams: { workItemId },
+        query,
+      }, options);
+    },
+    createWorkItemThreadComment(workItemId, data, options = {}) {
+      ensureVisualMutationAllowed(`/work-items/${encoded(workItemId)}/thread-entries`);
+      return requestProduct(workItemProductClient, "createWorkItemThreadComment", {
+        pathParams: { workItemId },
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
+    },
+    recordWorkItemDecision(workItemId, data, options = {}) {
+      ensureVisualMutationAllowed(`/work-items/${encoded(workItemId)}/decisions`);
+      return requestProduct(workItemProductClient, "recordWorkItemDecision", {
+        pathParams: { workItemId },
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
+    },
+    createWorkItemContinuation(workItemId, options = {}) {
+      ensureVisualMutationAllowed(`/work-items/${encoded(workItemId)}/continuations`);
+      return requestProduct(workItemProductClient, "createWorkItemContinuation", {
+        pathParams: { workItemId },
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data: {} },
+      }, options);
+    },
+    createWorkItemContinuationAgentEntry(workItemId, data, options = {}) {
+      ensureVisualMutationAllowed(`/work-items/${encoded(workItemId)}/agent-entry`);
+      return requestProduct(workItemProductClient, "createWorkItemContinuationAgentEntry", {
+        pathParams: { workItemId },
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
+    },
+    revokeWorkItemAccessGrant(workItemId, grantId, options = {}) {
+      ensureVisualMutationAllowed(`/work-items/${encoded(workItemId)}/access-grants/${encoded(grantId)}/revoke`);
+      return requestProduct(workItemProductClient, "revokeWorkItemAccessGrant", {
+        pathParams: { workItemId, grantId },
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data: {} },
+      }, options);
+    },
+    selectAgentSessionModel(sessionId, data, options = {}) {
+      ensureVisualMutationAllowed(`/agent-sessions/${encoded(sessionId)}/model`);
+      return requestSessionProduct("selectAgentSessionModel", {
+        pathParams: { sessionId },
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, { signal: options.signal });
+    },
+    listAgentTurns(sessionId, query, options = {}) {
+      return request(`/agent-sessions/${encoded(sessionId)}/turns`, { query, ...options });
     },
     createAgentTurn(sessionId, data, options = {}) {
       return request(`/agent-sessions/${encoded(sessionId)}/turns`, { method: "POST", data, ...options });
     },
-    getAgentTurn(sessionId, turnId) {
-      return request(`/agent-sessions/${encoded(sessionId)}/turns/${encoded(turnId)}`);
+    getAgentTurn(sessionId, turnId, options = {}) {
+      return request(`/agent-sessions/${encoded(sessionId)}/turns/${encoded(turnId)}`, options);
     },
     cancelAgentTurn(sessionId, turnId, data = {}, options = {}) {
       return request(`/agent-sessions/${encoded(sessionId)}/turns/${encoded(turnId)}/cancel`, {
@@ -331,11 +772,55 @@ export function createWorkbenchApiClient({
         ...options,
       });
     },
-    listAgentSessionEvents(sessionId, query) {
-      return request(`/agent-sessions/${encoded(sessionId)}/events`, { query });
+    listAgentSessionEvents(sessionId, query, options = {}) {
+      return request(`/agent-sessions/${encoded(sessionId)}/events`, { query, ...options });
+    },
+    getAgentProposal(sessionId, proposalId, options = {}) {
+      return request(
+        `/agent-sessions/${encoded(sessionId)}/proposals/${encoded(proposalId)}`,
+        options,
+      );
+    },
+    applyAgentProposal(sessionId, proposalId, options = {}) {
+      return request(
+        `/agent-sessions/${encoded(sessionId)}/proposals/${encoded(proposalId)}/apply`,
+        { method: "POST", data: {}, ...options },
+      );
+    },
+    rejectAgentProposal(sessionId, proposalId, options = {}) {
+      return request(
+        `/agent-sessions/${encoded(sessionId)}/proposals/${encoded(proposalId)}/reject`,
+        { method: "POST", data: {}, ...options },
+      );
+    },
+    listAttachments(query, options = {}) { return request("/attachments", { query, ...options }); },
+    getAttachment(attachmentId, options = {}) {
+      return request(`/attachments/${encoded(attachmentId)}`, options);
+    },
+    createAttachment(data, options = {}) {
+      return request("/attachments", { method: "POST", data, ...options });
+    },
+    retryAttachment(attachmentId, options = {}) {
+      return request(`/attachments/${encoded(attachmentId)}/retry`, {
+        method: "POST",
+        data: {},
+        ...options,
+      });
+    },
+    deleteAttachment(attachmentId, options = {}) {
+      return request(`/attachments/${encoded(attachmentId)}`, {
+        method: "DELETE",
+        data: {},
+        ...options,
+      });
+    },
+    getInbox(query = {}, options = {}) {
+      return requestProduct(inboxProductClient, "getInbox", { query }, options);
     },
     listSkills(query) { return request("/skills", { query }); },
     listSkillAssets(query) { return request("/skill-assets", { query }); },
+    listSkillRuntimes() { return request("/skill-runtimes"); },
+    listRegisteredToolPackages() { return request("/registered-tool-packages"); },
     getSkill(skillId) { return request(`/skills/${encoded(skillId)}`); },
     createSkill(data, options = {}) { return request("/skills", { method: "POST", data, ...options }); },
     getSkillDraft(skillId, draftId) {
@@ -385,6 +870,9 @@ export function createWorkbenchApiClient({
     getSkillValidation(skillId, validationId) {
       return request(`/skills/${encoded(skillId)}/validations/${encoded(validationId)}`);
     },
+    scaffoldSkillDraftPackage(data, options = {}) {
+      return request("/skill-draft-packages/scaffold", { method: "POST", data, ...options });
+    },
     listSkillVersions(skillId) { return request(`/skills/${encoded(skillId)}/versions`); },
     getSkillUsage(skillId) { return request(`/skills/${encoded(skillId)}/usage`); },
     getSkillVersionDiff(skillId, fromVersionId, toVersionId) {
@@ -399,6 +887,12 @@ export function createWorkbenchApiClient({
     createUpload(data, options = {}) { return request("/uploads", { method: "POST", data, ...options }); },
     importSkillRepository(data, options = {}) {
       return request("/uploads/repository", { method: "POST", data, ...options });
+    },
+    scanServerSkills(data) {
+      return request("/skills/scan", { method: "POST", data });
+    },
+    importServerSkills(data, options = {}) {
+      return request("/skills/import", { method: "POST", data, ...options });
     },
     uploadSkillPackage(uploadId, data, options = {}) {
       return request(`/uploads/${encoded(uploadId)}/package`, { method: "POST", data, ...options });
@@ -420,6 +914,9 @@ export function createWorkbenchApiClient({
     listResources(query) { return request("/resources", { query }); },
     getResource(resourceId) { return request(`/resources/${encoded(resourceId)}`); },
     createResource(data, options = {}) { return request("/resources", { method: "POST", data, ...options }); },
+    createResourceFromAttachment(data, options = {}) {
+      return request("/resources/from-attachment", { method: "POST", data, ...options });
+    },
     listConnections(query) { return request("/connections", { query }); },
     getConnection(connectionId) { return request(`/connections/${encoded(connectionId)}`); },
     createConnection(data, options = {}) {
@@ -441,48 +938,64 @@ export function createWorkbenchApiClient({
         idempotencyKey,
       });
     },
-    createLoop(data, options = {}) { return request("/loops", { method: "POST", data, ...options }); },
-    createLoopImport(data, options = {}) {
-      return request("/loop-imports", { method: "POST", data, ...options });
-    },
-    getLoopImport(importId) { return request(`/loop-imports/${encoded(importId)}`); },
-    commitLoopImport(importId, data, { ifMatch, idempotencyKey } = {}) {
-      return request(`/loop-imports/${encoded(importId)}/commit`, {
+    bindConnectionCredential(connectionId, secretRef, { ifMatch, idempotencyKey } = {}) {
+      return request(`/connections/${encoded(connectionId)}/credential-binding`, {
         method: "POST",
-        data,
+        data: { secretRef },
         ifMatch,
         idempotencyKey,
       });
     },
-    exportLoop(workflowId, revisionId, { ifNoneMatch } = {}) {
-      return requestPortableLoop(`/loops/${encoded(workflowId)}/export`, {
-        query: { revisionId },
-        ifNoneMatch,
-      });
-    },
-    duplicateLoop(workflowId, data, options = {}) {
-      return request(`/loops/${encoded(workflowId)}/duplicate`, { method: "POST", data, ...options });
+    createLoop(data, options = {}) { return request("/loops", { method: "POST", data, ...options }); },
+    createLoopFromRelease(releaseId, data = {}, options = {}) {
+      return request(`/team-library/${encoded(releaseId)}/workflows`, { method: "POST", data, ...options });
     },
     listTemplates(query) { return request("/templates", { query }); },
+    getNativeSkillPackage(releaseId) { return request(`/team-library/${encoded(releaseId)}/native-skill-package`); },
     listTeamLibrary(query) { return request("/team-library", { query }); },
     installTeamRelease(releaseId, data = { connectionIds: [], connectionBindings: [] }, options = {}) {
       return request(`/team-library/${encoded(releaseId)}/install`, { method: "POST", data, ...options });
     },
     listInstallations(query) { return request("/installations", { query }); },
     getInstallation(installationId) { return request(`/installations/${encoded(installationId)}`); },
-    adoptInstallationRelease(installationId, data, options = {}) {
-      return request(`/installations/${encoded(installationId)}/adopt-release`, { method: "POST", data, ...options });
+    getInstallationUpdateImpact(installationId, releaseId, options = {}) {
+      return request(`/installations/${encoded(installationId)}/update-impact`, {
+        query: { releaseId },
+        ...options,
+      });
     },
-    useTeamReleaseAsStartingPoint(releaseId, data, options = {}) {
-      return request(`/team-library/${encoded(releaseId)}/starting-point`, { method: "POST", data, ...options });
+    createInstallationUpdateDraft(installationId, data, options = {}) {
+      return request(`/installations/${encoded(installationId)}/update-drafts`, {
+        method: "POST",
+        data,
+        ...options,
+      });
     },
-    forkTeamLoopRelease(releaseId, data, options = {}) {
-      return request(`/team-library/${encoded(releaseId)}/fork`, { method: "POST", data, ...options });
+    getInstallationUpdateDraft(updateDraftId, options = {}) {
+      return request(`/installation-update-drafts/${encoded(updateDraftId)}`, options);
+    },
+    refreshInstallationUpdateDraft(updateDraftId, data = {}, options = {}) {
+      return request(`/installation-update-drafts/${encoded(updateDraftId)}/refresh`, {
+        method: "POST",
+        data,
+        ...options,
+      });
+    },
+    confirmInstallationUpdateDraft(updateDraftId, data = {}, options = {}) {
+      return request(`/installation-update-drafts/${encoded(updateDraftId)}/confirm`, {
+        method: "POST",
+        data,
+        ...options,
+      });
+    },
+    keepCurrentInstallationVersion(updateDraftId, options = {}) {
+      return request(`/installation-update-drafts/${encoded(updateDraftId)}/keep-current`, {
+        method: "POST",
+        data: {},
+        ...options,
+      });
     },
     getTemplate(templateId) { return request(`/templates/${encoded(templateId)}`); },
-    useTemplate(templateId, data, options = {}) {
-      return request(`/templates/${encoded(templateId)}/workflows`, { method: "POST", data, ...options });
-    },
     listWorkflows(query) { return request("/workflows", { query }); },
     getWorkflow(workflowId) { return request(`/workflows/${encoded(workflowId)}`); },
     getWorkflowRevision(workflowId, revisionId) {
@@ -504,38 +1017,23 @@ export function createWorkbenchApiClient({
         idempotencyKey,
       });
     },
-    createLoopSkillUpdate(workflowId, data, { ifMatch, idempotencyKey } = {}) {
-      return request(`/loops/${encoded(workflowId)}/skill-updates`, {
+    generateStagedLoopProposal(data, { idempotencyKey } = {}) {
+      return request("/loop-draft-proposals", { method: "POST", data, idempotencyKey });
+    },
+    getStagedLoopProposal(proposalId) {
+      return request(`/loop-draft-proposals/${encoded(proposalId)}`);
+    },
+    commitStagedLoopProposal(proposalId, data, { idempotencyKey } = {}) {
+      return request(`/loop-draft-proposals/${encoded(proposalId)}/commit`, {
         method: "POST",
         data,
-        ifMatch,
         idempotencyKey,
       });
     },
-    getLoopSkillUpdatePreview(workflowId, skillVersionId) {
-      return request(`/loops/${encoded(workflowId)}/skill-updates/${encoded(skillVersionId)}`);
-    },
-    generateLoopProposal(workflowId, data, { ifMatch, idempotencyKey } = {}) {
-      return request(`/loops/${encoded(workflowId)}/proposals`, {
+    dismissStagedLoopProposal(proposalId, { idempotencyKey } = {}) {
+      return request(`/loop-draft-proposals/${encoded(proposalId)}/dismiss`, {
         method: "POST",
-        data,
-        ifMatch,
-        idempotencyKey,
-      });
-    },
-    applyLoopProposal(workflowId, proposalId, data, { ifMatch, idempotencyKey } = {}) {
-      return request(`/loops/${encoded(workflowId)}/proposals/${encoded(proposalId)}/apply`, {
-        method: "POST",
-        data,
-        ifMatch,
-        idempotencyKey,
-      });
-    },
-    dismissLoopProposal(workflowId, proposalId, data, { ifMatch, idempotencyKey } = {}) {
-      return request(`/loops/${encoded(workflowId)}/proposals/${encoded(proposalId)}/dismiss`, {
-        method: "POST",
-        data,
-        ifMatch,
+        data: {},
         idempotencyKey,
       });
     },
@@ -552,10 +1050,21 @@ export function createWorkbenchApiClient({
     startRun(workflowId, data, options = {}) {
       return request(`/workflows/${encoded(workflowId)}/runs`, { method: "POST", data, ...options });
     },
+    startLoopAgentTask(workflowId, data, options = {}) {
+      return request(`/loops/${encoded(workflowId)}/agent-tasks`, {
+        method: "POST",
+        data,
+        ...options,
+      });
+    },
     listWorkflowRuns(workflowId, query) {
       return request(`/workflows/${encoded(workflowId)}/runs`, { query });
     },
-    getRun(runId) { return request(`/runs/${encoded(runId)}`); },
+    getRun(runId, options = {}) {
+      return requestProduct(runProductClient, "getRun", {
+        pathParams: { runId },
+      }, options);
+    },
     listRunInvocations(runId) { return request(`/runs/${encoded(runId)}/invocations`); },
     listRunExecutionEvents(runId, query) {
       return request(`/runs/${encoded(runId)}/execution-events`, { query });
@@ -567,20 +1076,29 @@ export function createWorkbenchApiClient({
     artifactContentUrl(artifactId) {
       return `${basePath}/artifacts/${encoded(artifactId)}/content`;
     },
-    getRunComparison(runId, otherRunId) {
-      return request(`/runs/${encoded(runId)}/comparison/${encoded(otherRunId)}`);
-    },
-    createLoopDraftFromRun(runId, data, options = {}) {
-      return request(`/runs/${encoded(runId)}/draft`, { method: "POST", data, ...options });
-    },
     submitReviewDecision(runId, data, options = {}) {
-      return request(`/runs/${encoded(runId)}/review-decisions`, { method: "POST", data, ...options });
+      ensureVisualMutationAllowed(`/runs/${encoded(runId)}/review-decisions`);
+      return requestProduct(runProductClient, "submitReviewDecision", {
+        pathParams: { runId },
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
     },
     cancelRun(runId, data = {}, options = {}) {
-      return request(`/runs/${encoded(runId)}/cancel`, { method: "POST", data, ...options });
+      ensureVisualMutationAllowed(`/runs/${encoded(runId)}/cancel`);
+      return requestProduct(runProductClient, "cancelRun", {
+        pathParams: { runId },
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
     },
     retryRun(runId, data = {}, options = {}) {
-      return request(`/runs/${encoded(runId)}/retry`, { method: "POST", data, ...options });
+      ensureVisualMutationAllowed(`/runs/${encoded(runId)}/retry`);
+      return requestProduct(runProductClient, "retryRun", {
+        pathParams: { runId },
+        headers: { "Idempotency-Key": options.idempotencyKey || idFactory() },
+        body: { schemaVersion: "workbench-api-v1", data },
+      }, options);
     },
     openRunEventStream(runId, { after = 0, onEvent, onError, onOpen } = {}) {
       const source = eventSourceFactory(
@@ -605,8 +1123,73 @@ export function createWorkbenchApiClient({
       return source;
     },
     hasSession() { return Boolean(csrfToken); },
+    resetSession() {
+      sessionEpoch += 1;
+      csrfToken = "";
+      sessionPrincipal = "";
+      sessionRefreshPromise = null;
+    },
   };
+
+  function ensureVisualMutationAllowed(path) {
+    if (reviewMode === "visual-only" && path !== "/auth/login") {
+      throw new WorkbenchApiError({
+        code: "visual_review_mutation_forbidden",
+        message: "The visual review environment cannot change product data.",
+        status: 409,
+      });
+    }
+  }
+
   return Object.freeze(client);
+}
+
+async function requestProduct(productClient, operationId, input, options = {}) {
+  try {
+    const response = await productClient.call(operationId, input, options);
+    return {
+      data: response.body.data,
+      page: response.body.page,
+      requestId: response.body.requestId,
+      etag: response.headers.ETag || null,
+    };
+  } catch (error) {
+    if (error instanceof ProductApiError) {
+      throw new WorkbenchApiError({
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        retryable: error.retryable,
+        requestId: error.requestId,
+        status: error.status,
+      });
+    }
+    if (error instanceof ProductClientProtocolError) {
+      if (error.stage === "transport") {
+        throw new WorkbenchApiError({
+          code: "workbench_unreachable",
+          message: "The local Workbench service could not be reached.",
+          details: { operationId: error.operationId },
+          retryable: true,
+        });
+      }
+      throw new WorkbenchApiError({
+        code: "workbench_response_invalid",
+        message: "The Workbench returned an invalid response.",
+        details: { operationId: error.operationId, stage: error.stage },
+        status: error.status || 0,
+      });
+    }
+    throw error;
+  }
+}
+
+function principalChanged() {
+  return new WorkbenchApiError({
+    code: "workbench_principal_changed",
+    message: "The signed-in user changed before this request completed. The change was not replayed.",
+    status: 409,
+  });
 }
 
 export const workbenchApi = createWorkbenchApiClient();

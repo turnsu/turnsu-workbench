@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,11 +8,15 @@ import {
   buildContainerIsolationArguments,
   DIGEST_PINNED_CONTAINER_IMAGE,
 } from "./container-sandbox-policy.mjs";
+import {
+  createProductExecutionGrant,
+  productToolEffectMap,
+} from "./product-execution-grant.mjs";
 
 export const AGENT_SANDBOX_RUNTIME_VERSIONS = Object.freeze({
-  pi: "0.80.7",
+  pi: "0.85.1",
   subagent: "0.4.8",
-  workflow: "0.8.1",
+  workflow: "0.10.1",
 });
 export const AGENT_SANDBOX_OWNER_LABEL = "com.looloomi.workbench.agent-sandbox";
 export const AGENT_SANDBOX_OWNER_VALUE = "v1";
@@ -40,29 +45,41 @@ export class AgentContainerSandboxError extends Error {
 export class AgentContainerSandbox {
   #image;
   #gatewayServer;
+  #approvalServer;
   #dockerBinary;
   #dockerEnvironment;
   #spawnProcess;
   #dockerControl;
   #tempRoot;
   #limits;
+  #transcriptArtifactService;
+  #requireTranscriptArtifact;
 
   constructor({
     image,
     gatewayServer,
+    approvalServer = null,
     dockerBinary = "docker",
     dockerEnvironment = defaultDockerEnvironment(),
     spawnProcess = spawn,
     dockerControl,
     tempRoot = join(tmpdir(), "looloomi-agent-sandbox"),
     limits = {},
+    transcriptArtifactService = null,
+    requireTranscriptArtifact = false,
   } = {}) {
     if (!DIGEST_PINNED_CONTAINER_IMAGE.test(image || "")) throw new TypeError("agent_sandbox_digest_pinned_image_required");
-    if (!gatewayServer?.open || typeof spawnProcess !== "function" || typeof tempRoot !== "string") {
+    if (!gatewayServer?.open || typeof spawnProcess !== "function" || typeof tempRoot !== "string"
+      || (approvalServer !== null && typeof approvalServer?.open !== "function")) {
       throw new TypeError("agent_sandbox_dependencies_invalid");
     }
+    if (transcriptArtifactService !== null && typeof transcriptArtifactService?.commit !== "function") {
+      throw new TypeError("worker_transcript_artifact_service_invalid");
+    }
+    if (typeof requireTranscriptArtifact !== "boolean") throw new TypeError("worker_transcript_requirement_invalid");
     this.#image = image;
     this.#gatewayServer = gatewayServer;
+    this.#approvalServer = approvalServer;
     this.#dockerBinary = dockerBinary;
     this.#dockerEnvironment = Object.freeze({ ...dockerEnvironment });
     this.#spawnProcess = spawnProcess;
@@ -74,9 +91,18 @@ export class AgentContainerSandbox {
     }));
     this.#tempRoot = tempRoot;
     this.#limits = validateLimits({ ...DEFAULT_LIMITS, ...limits });
+    this.#transcriptArtifactService = transcriptArtifactService;
+    this.#requireTranscriptArtifact = requireTranscriptArtifact;
   }
 
   async probe() {
+    if (this.#requireTranscriptArtifact && !this.#transcriptArtifactService) {
+      throw new AgentContainerSandboxError(
+        "worker_transcript_storage_unavailable",
+        "Governed Worker transcript storage is unavailable.",
+        { status: "blocked" },
+      );
+    }
     try {
       const result = await this.#dockerControl([
         "image", "inspect", "--format", "{{json .Config.Labels}}", this.#image,
@@ -100,6 +126,7 @@ export class AgentContainerSandbox {
     let root = null;
     let endpoint = null;
     const gatewaySessions = new Map();
+    const approvalSessions = new Map();
     let containerName = null;
     try {
       await mkdir(this.#tempRoot, { recursive: true, mode: 0o700 });
@@ -115,6 +142,17 @@ export class AgentContainerSandbox {
         throw new AgentContainerSandboxError("agent_gateway_session_invalid", "Agent gateway session is invalid.", { status: "blocked" });
       }
       gatewaySessions.set(lease.capabilityLeaseId, endpoint);
+      if (this.#approvalServer) {
+        const approvalEndpoint = await this.#approvalServer.open({
+          invocationId: request.invocationId,
+          attemptId: request.attemptId,
+          capabilityLeaseId: lease.capabilityLeaseId,
+        });
+        if (!approvalEndpoint || typeof approvalEndpoint.handle !== "function" || typeof approvalEndpoint.close !== "function") {
+          throw new AgentContainerSandboxError("agent_approval_session_invalid", "Agent approval session is invalid.", { status: "blocked" });
+        }
+        approvalSessions.set(lease.capabilityLeaseId, approvalEndpoint);
+      }
       const payload = containerPayload(request, lease);
       containerName = containerNameFor(request.invocationId, request.attemptId);
       const args = buildAgentContainerArguments({
@@ -134,6 +172,7 @@ export class AgentContainerSandbox {
         invocationId: request.invocationId,
         payload,
         gatewaySessions,
+        approvalSessions,
         openChildGateway: async (binding) => {
           validateGatewayBinding(binding);
           const existing = gatewaySessions.get(binding.capabilityLeaseId);
@@ -143,9 +182,29 @@ export class AgentContainerSandbox {
             throw new AgentContainerSandboxError("agent_gateway_session_invalid", "Agent gateway session is invalid.", { status: "blocked" });
           }
           gatewaySessions.set(binding.capabilityLeaseId, childEndpoint);
+          if (this.#approvalServer) {
+            const childApprovalEndpoint = await this.#approvalServer.open(binding);
+            if (!childApprovalEndpoint || typeof childApprovalEndpoint.handle !== "function" || typeof childApprovalEndpoint.close !== "function") {
+              throw new AgentContainerSandboxError("agent_approval_session_invalid", "Agent approval session is invalid.", { status: "blocked" });
+            }
+            approvalSessions.set(binding.capabilityLeaseId, childApprovalEndpoint);
+          }
           return childEndpoint;
         },
-        emit,
+        emit: (type, payload) => {
+          if (request.metadata?.agentKind === "builder_proposal"
+            && request.metadata?.objectKind === "staged_loop"
+            && type === "agent.kernel.model_visible") {
+            const session = payload?.modelVisibleEvent?.session;
+            if (session?.sessionId !== request.lineage?.sessionId || session?.branchId !== null) {
+              throw new AgentContainerSandboxError("builder_worker_session_mismatch", "The proposal Worker returned an unrelated session event.", { status: "permission_denied" });
+            }
+            // Standalone proposals retain their events on the execution that owns
+            // them. Only actual Agent Session events enter the chat projection.
+            return emit?.("agent.builder.model_visible", payload);
+          }
+          return emit?.(type, payload);
+        },
         checkpoint,
         reportChild,
         signal,
@@ -157,15 +216,34 @@ export class AgentContainerSandbox {
         maxBytes: request.limits.maxOutputBytes,
         maxFiles: this.#limits.maxArtifactFiles,
       });
+      const transcriptRef = await persistWorkerTranscript({
+        service: this.#transcriptArtifactService,
+        request,
+        transcript: result.workerTranscript,
+        signal,
+      });
       const route = aggregateModelRoute(gatewaySessions.values());
       return sanitizeBackendResult({
         ...result,
+        ...(transcriptRef ? {
+          evidence: [
+            ...(Array.isArray(result.evidence) ? result.evidence : []),
+            { kind: "worker_transcript", ref: `worker-transcript:${transcriptRef.transcriptArtifactId}` },
+          ],
+        } : {}),
         requestedModelRevisionId: route.requestedModelRevisionId ?? null,
         actualModelRevisionId: route.actualModelRevisionId ?? null,
+        usage: {
+          ...result.usage,
+          ...route.usage,
+          // Local Worker steps can exceed remote gateway calls.
+          steps: Math.max(result.usage?.steps ?? 0, route.usage.steps),
+        },
       });
     } finally {
       if (containerName) await cleanupContainer(this.#dockerControl, containerName, request.invocationId).catch(() => {});
       await Promise.allSettled([...gatewaySessions.values()].map((session) => session.close()));
+      await Promise.allSettled([...approvalSessions.values()].map((session) => session.close()));
       if (root) {
         await chmod(join(root, "output"), 0o700).catch(() => {});
         await rm(root, { recursive: true, force: true }).catch(() => {});
@@ -206,6 +284,12 @@ export class AgentContainerSandbox {
 export function createAgentContainerBackend({ sandbox } = {}) {
   if (!sandbox?.run) throw new TypeError("agent_container_sandbox_required");
   return Object.freeze({
+    async probe() {
+      if (typeof sandbox.probe !== "function") {
+        return { available: true, verified: false };
+      }
+      return sandbox.probe();
+    },
     execute({ request, lease, signal, emit, checkpoint, reportChild }) {
       return sandbox.run({ request, lease, signal, emit, checkpoint, reportChild });
     },
@@ -252,8 +336,8 @@ export function buildAgentContainerArguments({
 
 function containerPayload(request, lease) {
   const safeMetadataKeys = new Set([
-    "outerNodeId", "definitionId", "agentSessionId", "agentTurnId",
-    "objectKind", "objectId", "branchId", "proposalKind",
+    "outerNodeId", "definitionId", "responseFormat", "agentSessionId", "agentTurnId",
+    "objectKind", "objectId", "branchId", "proposalKind", "toolApprovalResume",
   ]);
   return {
     schemaVersion: request.schemaVersion,
@@ -267,19 +351,35 @@ function containerPayload(request, lease) {
     resultSchema: structuredClone(request.resultSchema),
     evidenceRequirements: structuredClone(request.evidenceRequirements),
     metadata: Object.fromEntries(Object.entries(request.metadata ?? {}).filter(([key]) => safeMetadataKeys.has(key))),
+    ...(request.mode === "bounded_agent" ? {
+      agentKernel: {
+        profileId: "product-pi",
+        profileRevision: "product-pi-first-party-v1",
+      },
+    } : {}),
     runtimeVersions: AGENT_SANDBOX_RUNTIME_VERSIONS,
     gateway: {
       transport: "stdio-jsonl-v1",
       capabilityLeaseId: lease.capabilityLeaseId,
     },
+    executionGrant: createProductExecutionGrant({
+      invocationId: request.invocationId,
+      capabilityLeaseId: lease.capabilityLeaseId,
+      expiresAt: lease.expiresAt,
+      capabilities: request.capabilities,
+      maxToolCalls: request.limits.maxSteps,
+      scopeRef: request.lineage?.sessionId ?? request.invocationId,
+    }),
+    toolEffects: productToolEffectMap(request.capabilities),
   };
 }
 
 const MAX_PROTOCOL_FRAME_BYTES = 4 * 1024 * 1024;
+const MAX_TRANSCRIPT_BYTES = 4 * 1024 * 1024;
 
 async function executeAgentContainer({
   dockerBinary, dockerEnvironment, spawnProcess, dockerControl, args, containerName, invocationId,
-  payload, gatewaySessions, openChildGateway, emit, checkpoint, reportChild, signal, timeoutMs, maxStdoutBytes, maxStderrBytes,
+  payload, gatewaySessions, approvalSessions, openChildGateway, emit, checkpoint, reportChild, signal, timeoutMs, maxStdoutBytes, maxStderrBytes,
 }) {
   let child;
   try {
@@ -293,6 +393,8 @@ async function executeAgentContainer({
   let stderrBytes = 0;
   let terminalError = null;
   let terminalResult = null;
+  let transcriptDraft = null;
+  let terminalTranscript = null;
   let writeChain = Promise.resolve();
   const pending = new Set();
   const terminate = (error) => {
@@ -320,10 +422,12 @@ async function executeAgentContainer({
         || !frame.message || typeof frame.message !== "object" || Array.isArray(frame.message)) {
         throw protocolError();
       }
-      const gatewaySession = gatewaySessions.get(frame.message.capabilityLeaseId);
-      const operation = Promise.resolve(gatewaySession
-        ? gatewaySession.handle(frame.message)
-        : Promise.reject(gatewaySessionMissing()))
+      const endpoint = frame.message.operation === "approval"
+        ? approvalSessions.get(frame.message.capabilityLeaseId)
+        : gatewaySessions.get(frame.message.capabilityLeaseId);
+      const operation = Promise.resolve(endpoint
+        ? endpoint.handle(frame.message)
+        : Promise.reject(frame.message.operation === "approval" ? approvalSessionMissing() : gatewaySessionMissing()))
         .then(
           (result) => send({ kind: "rpc_response", id: frame.id, ok: true, result }),
           (error) => send({
@@ -367,6 +471,8 @@ async function executeAgentContainer({
           if (isTerminalChildStatus(update.status)) {
             const session = gatewaySessions.get(binding.capabilityLeaseId);
             await session?.close();
+            const approvalSession = approvalSessions.get(binding.capabilityLeaseId);
+            await approvalSession?.close();
           }
         }, (error) => send({
           kind: "child_response",
@@ -382,8 +488,48 @@ async function executeAgentContainer({
       track(operation);
       return;
     }
+    if (frame.kind === "transcript_start") {
+      if (terminalResult || transcriptDraft || terminalTranscript
+        || !["application/json", "application/x-ndjson", "text/plain"].includes(frame.mediaType)
+        || !Number.isSafeInteger(frame.byteLength) || frame.byteLength < 1 || frame.byteLength > MAX_TRANSCRIPT_BYTES
+        || typeof frame.contentHash !== "string" || !/^sha256:[a-f0-9]{64}$/.test(frame.contentHash)) {
+        throw protocolError();
+      }
+      transcriptDraft = {
+        mediaType: frame.mediaType,
+        byteLength: frame.byteLength,
+        contentHash: frame.contentHash,
+        chunks: [],
+        bytes: 0,
+      };
+      return;
+    }
+    if (frame.kind === "transcript_chunk") {
+      if (!transcriptDraft || terminalResult
+        || frame.sequence !== transcriptDraft.chunks.length + 1
+        || typeof frame.bytesBase64 !== "string") throw protocolError();
+      const chunk = Buffer.from(frame.bytesBase64, "base64");
+      if (chunk.byteLength < 1 || chunk.toString("base64") !== frame.bytesBase64
+        || transcriptDraft.bytes + chunk.byteLength > transcriptDraft.byteLength
+        || transcriptDraft.bytes + chunk.byteLength > MAX_TRANSCRIPT_BYTES) throw protocolError();
+      transcriptDraft.chunks.push(chunk);
+      transcriptDraft.bytes += chunk.byteLength;
+      return;
+    }
+    if (frame.kind === "transcript_end") {
+      if (!transcriptDraft || terminalResult || terminalTranscript
+        || frame.chunks !== transcriptDraft.chunks.length
+        || transcriptDraft.bytes !== transcriptDraft.byteLength) throw protocolError();
+      const content = Buffer.concat(transcriptDraft.chunks, transcriptDraft.bytes);
+      if (`sha256:${createHash("sha256").update(content).digest("hex")}` !== transcriptDraft.contentHash) {
+        throw protocolError();
+      }
+      terminalTranscript = { mediaType: transcriptDraft.mediaType, content };
+      transcriptDraft = null;
+      return;
+    }
     if (frame.kind === "result") {
-      if (terminalResult || !isPlainObject(frame.result)) throw protocolError();
+      if (terminalResult || transcriptDraft || !isPlainObject(frame.result)) throw protocolError();
       terminalResult = structuredClone(frame.result);
       return;
     }
@@ -432,7 +578,10 @@ async function executeAgentContainer({
   if (terminalError) throw terminalError;
   if (outcome.error || outcome.code !== 0) throw unavailable();
   if (stdoutBuffer.toString("utf8").trim().length > 0 || !terminalResult) throw protocolError();
-  return terminalResult;
+  return {
+    ...terminalResult,
+    ...(terminalTranscript ? { workerTranscript: terminalTranscript } : {}),
+  };
 }
 
 function writeStream(stream, bytes) {
@@ -464,21 +613,81 @@ async function verifyArtifactOutput(root, { maxBytes, maxFiles }) {
 
 function sanitizeBackendResult(value) {
   const result = structuredClone(value);
-  for (const key of ["image", "imageDigest", "hostPath", "socketPath", "gatewaySocket", "containerName"]) delete result[key];
+  for (const key of ["image", "imageDigest", "hostPath", "socketPath", "gatewaySocket", "containerName", "workerTranscript"]) delete result[key];
   return result;
+}
+
+async function persistWorkerTranscript({ service, request, transcript, signal }) {
+  if (!transcript) {
+    if (service) {
+      throw new AgentContainerSandboxError(
+        "worker_transcript_missing",
+        "The Agent Worker did not provide its governed transcript.",
+        { status: "failed" },
+      );
+    }
+    return null;
+  }
+  if (!service) {
+    throw new AgentContainerSandboxError(
+      "worker_transcript_storage_unavailable",
+      "Governed Worker transcript storage is unavailable.",
+      { status: "blocked" },
+    );
+  }
+  const ownerUserId = request.actor?.userId;
+  if (typeof ownerUserId !== "string" || ownerUserId.length === 0) {
+    throw new AgentContainerSandboxError(
+      "worker_transcript_owner_missing",
+      "The Agent Worker transcript has no governed owner.",
+      { status: "blocked" },
+    );
+  }
+  const objectScope = request.metadata?.agentKind === "builder_proposal"
+    && request.metadata?.objectKind === "staged_loop" && request.metadata?.objectId
+    ? { objectKind: "builder_proposal", objectId: request.metadata.objectId }
+    : request.lineage?.sessionId
+      ? { objectKind: "agent_session", objectId: request.lineage.sessionId }
+      : { objectKind: request.controller.kind, objectId: request.controller.controllerId };
+  try {
+    return await service.commit({
+      workspaceId: request.workspaceId,
+      ownerUserId,
+      objectScope,
+      invocationId: request.invocationId,
+      attemptId: request.attemptId,
+      content: transcript.content,
+      mediaType: transcript.mediaType,
+      signal,
+    });
+  } catch (error) {
+    throw new AgentContainerSandboxError(
+      typeof error?.code === "string" ? error.code : "worker_transcript_write_failed",
+      error?.productSafe === true ? error.message : "The Agent Worker transcript could not be retained.",
+      { status: "blocked" },
+    );
+  }
 }
 
 function aggregateModelRoute(sessions) {
   const requested = new Set();
   const actual = new Set();
+  const seen = new Set();
+  const usage = { steps: 0, modelRequests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, imageCount: 0, costUsdMicros: 0 };
   for (const session of sessions) {
+    // Several lease endpoints can expose the same invocation accounting.
+    const key = session.binding ? `${session.binding.invocationId}:${session.binding.attemptId}` : session;
+    if (seen.has(key)) continue;
+    seen.add(key);
     const snapshot = session.snapshot?.() ?? {};
     if (typeof snapshot.requestedModelRevisionId === "string") requested.add(snapshot.requestedModelRevisionId);
     if (typeof snapshot.actualModelRevisionId === "string") actual.add(snapshot.actualModelRevisionId);
+    for (const name of Object.keys(usage)) usage[name] += snapshot.usage?.[name] ?? 0;
   }
   return {
     requestedModelRevisionId: requested.size === 1 ? [...requested][0] : null,
     actualModelRevisionId: actual.size === 1 ? [...actual][0] : null,
+    usage,
   };
 }
 
@@ -574,6 +783,10 @@ function protocolError() {
 
 function gatewaySessionMissing() {
   return new AgentContainerSandboxError("gateway_capability_lease_invalid", "Gateway request is not permitted.", { status: "permission_denied" });
+}
+
+function approvalSessionMissing() {
+  return new AgentContainerSandboxError("agent_tool_approval_unavailable", "Product Tool approval is unavailable.", { status: "blocked" });
 }
 
 function limitError() {

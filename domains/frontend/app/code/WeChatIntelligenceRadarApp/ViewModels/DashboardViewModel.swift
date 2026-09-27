@@ -108,7 +108,7 @@ final class DashboardViewModel: ObservableObject {
     @Published var agentPrompt: String = ""
     @Published var agentAttachments: [AgentAttachment] = []
     @Published var selectedAgentModelPreference: AgentModelPreferenceOption = .auto
-    @Published var agentSubmitStatus: String = "daemon_not_checked"
+    @Published var agentSubmitStatus: String = "legacy_client_disabled_use_product_api"
     @Published var loopOpsFocusedContractID: String?
     @Published var selectedLoopOpsRunID: String?
     @Published private(set) var lastLoopOpsRunSubmissionReport = LoopOpsRunSubmissionReport()
@@ -234,7 +234,7 @@ final class DashboardViewModel: ObservableObject {
                 wechatLiveStatus = "实时微信未就绪：\(result.hint ?? result.reason ?? result.status)"
             }
         } catch {
-            wechatLiveStatus = "后台未连接，使用本地数据"
+            wechatLiveStatus = "历史 Swift 后台链路已停用，请使用 Web Product API"
         }
         refresh(reason: "wechat_live_refresh")
     }
@@ -424,7 +424,7 @@ final class DashboardViewModel: ObservableObject {
             } catch {
                 await MainActor.run {
                     self.agentDaemonStatus = .unavailable
-                    self.agentSubmitStatus = "daemon_unavailable_start_script"
+                    self.agentSubmitStatus = "legacy_client_disabled_use_product_api"
                 }
             }
         }

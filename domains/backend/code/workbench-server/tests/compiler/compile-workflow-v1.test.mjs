@@ -134,6 +134,67 @@ test("compiles a linear graph to a frozen contract-valid plan", () => {
   );
 });
 
+test("requires a direct Review Gate before every external-action Skill", () => {
+  const revision = makeRevision();
+  const externalResolver = makeResolver({
+    resolveSkill(skillRef) {
+      const definition = makeSkillDefinition(skillRef);
+      definition.risk = {
+        level: "medium",
+        externalAction: true,
+        summary: "Writes to an external system.",
+      };
+      return {
+        definition,
+        adapterReadiness: { status: "ready", reason: "ready" },
+        piReadiness: { status: "ready", reason: "ready" },
+      };
+    },
+  });
+
+  const blocked = compile(revision, externalResolver);
+  assert.equal(blocked.status, "blocked");
+  assertDiagnostic(blocked, "external_action_review_gate_required", "node-skill-b");
+
+  const input = revision.graph.nodes.find(({ nodeId }) => nodeId === "node-input");
+  const skill = revision.graph.nodes.find(({ nodeId }) => nodeId === "node-skill-b");
+  const review = makeReviewNode({
+    sourceNodeId: input.nodeId,
+    sourcePortId: "topic",
+  });
+  revision.graph.nodes.push(review);
+  revision.graph.edges = revision.graph.edges.filter(
+    ({ edgeId }) => edgeId !== "edge-input-skill-b",
+  );
+  revision.graph.edges.push(
+    makeEdge({
+      edgeId: "edge-input-review",
+      sourceNodeId: input.nodeId,
+      sourcePort: "topic",
+      targetNodeId: review.nodeId,
+      targetPort: "candidate",
+    }),
+    makeEdge({
+      edgeId: "edge-review-skill",
+      sourceNodeId: review.nodeId,
+      sourcePort: "approved",
+      targetNodeId: skill.nodeId,
+      targetPort: "topic",
+    }),
+  );
+  skill.inputBindings[0].source = {
+    kind: "nodeOutput",
+    nodeId: review.nodeId,
+    portId: "approved",
+  };
+
+  const ready = compile(revision, externalResolver);
+  assert.equal(ready.status, "ready");
+  const skillStep = ready.executionPlan.steps.find(({ nodeId }) => nodeId === skill.nodeId);
+  assert.equal(skillStep.capabilities.externalActions, true);
+  assert.deepEqual(skillStep.dependsOn, [review.nodeId]);
+});
+
 test("pins an agent controller revision and explicit compatible Workflow fallback", () => {
   const revision = makeRevision();
   revision.runSettings.agentControllerModelProfileId = "claude-sonnet";
@@ -607,7 +668,7 @@ test("rejects a missing or invalid explicit primary Output", async (t) => {
 
 test("uses blocked only for unresolved Skill, adapter, PI, and Resource readiness", async (t) => {
   await t.test("Skill blocked", () => {
-    const result = compile(makeRevision(), makeResolver({ skillStatus: "blocked" }));
+    const result = compile(makeRevision(), makeResolver({ skillReadinessStatus: "blocked" }));
     assert.equal(result.status, "blocked");
     assert.equal(Check(CompileResultSchema, result), true);
     assert.equal(result.unavailableSkills.length, 1);

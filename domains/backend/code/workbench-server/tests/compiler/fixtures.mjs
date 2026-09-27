@@ -228,7 +228,7 @@ export function makeRevision() {
 
 export function makeSkillDefinition(
   skillRef,
-  { status = "ready", readinessStatus = "ready" } = {},
+  { readinessStatus = "ready" } = {},
 ) {
   return {
     schemaVersion: "workbench-v1",
@@ -246,7 +246,6 @@ export function makeSkillDefinition(
         },
       },
     },
-    status,
     inputSchema: {
       type: "object",
       properties: { topic: structuredClone(stringSchema) },
@@ -283,7 +282,6 @@ export function makeSkillDefinition(
 }
 
 export function makeResolver({
-  skillStatus = "ready",
   skillReadinessStatus = "ready",
   adapterStatus = "ready",
   piStatus = "ready",
@@ -302,7 +300,6 @@ export function makeResolver({
       }
       return {
         definition: makeSkillDefinition(skillRef, {
-          status: skillStatus,
           readinessStatus: skillReadinessStatus,
         }),
         adapterReadiness: {

@@ -118,6 +118,8 @@ export class ArtifactService {
       fence: executionRef.fence,
       capabilityLeaseId: executionRef.capabilityLeaseId,
       execution: executionRef,
+      ownerUserId: null,
+      objectScope: scopeForSource(artifactSource),
       expiresAt: expiration,
       createdAt,
       updatedAt: createdAt,
@@ -126,7 +128,8 @@ export class ArtifactService {
     let pendingCreated = false;
     let objectStored = false;
     try {
-      await this.#requireActiveExecution(workspaceId, executionRef);
+      const authority = await this.#requireActiveExecution(workspaceId, executionRef, artifactSource);
+      pending.ownerUserId = authority.ownerUserId;
       const stored = await this.#objects.put({
         workspaceId,
         objectId,
@@ -175,13 +178,35 @@ export class ArtifactService {
     }
   }
 
-  async getMetadata({ workspaceId, artifactId } = {}) {
-    const record = await this.#readyRecord(workspaceId, artifactId);
+  async getMetadata({ workspaceId, artifactId, requestedBy, authorizedObjectScopes = [] } = {}) {
+    const record = await this.#readyRecord(workspaceId, artifactId, {
+      requestedBy,
+      authorizedObjectScopes,
+    });
     return publicArtifact(record);
   }
 
-  async readContent({ workspaceId, artifactId, signal } = {}) {
-    const record = await this.#readyRecord(workspaceId, artifactId);
+  async getAuthorizationDescriptor({ workspaceId, artifactId } = {}) {
+    validateAddress(workspaceId, artifactId);
+    const record = await this.#metadata.get({ workspaceId, artifactId });
+    if (!sameWorkspace(record, workspaceId) || record.state !== "ready") throw notFound();
+    return {
+      ownerUserId: record.ownerUserId,
+      objectScope: structuredClone(record.objectScope),
+    };
+  }
+
+  async readContent({
+    workspaceId,
+    artifactId,
+    requestedBy,
+    authorizedObjectScopes = [],
+    signal,
+  } = {}) {
+    const record = await this.#readyRecord(workspaceId, artifactId, {
+      requestedBy,
+      authorizedObjectScopes,
+    });
     let stored;
     try {
       stored = await this.#objects.read({ workspaceId, objectId: record.objectId, signal });
@@ -374,17 +399,27 @@ export class ArtifactService {
     return this.#objects.deleteObject({ workspaceId: record.workspaceId, objectId: record.objectId });
   }
 
-  async #readyRecord(workspaceId, artifactId) {
+  async #readyRecord(workspaceId, artifactId, { requestedBy, authorizedObjectScopes }) {
     validateAddress(workspaceId, artifactId);
+    validateId(requestedBy, "artifact_principal_invalid");
+    const scopes = normalizeAuthorizedScopes(authorizedObjectScopes);
     const record = await this.#metadata.get({ workspaceId, artifactId });
-    if (!sameWorkspace(record, workspaceId) || record.state !== "ready") throw notFound();
+    if (!sameWorkspace(record, workspaceId)
+      || record.state !== "ready"
+      || !canReadArtifact(record, requestedBy, scopes)) throw notFound();
     return record;
   }
 
-  async #requireActiveExecution(workspaceId, executionRef) {
+  async #requireActiveExecution(workspaceId, executionRef, source = null) {
     if (await this.#executionState(workspaceId, executionRef) !== "active") {
       throw new ArtifactServiceError("artifact_execution_fenced", "The execution can no longer attach artifacts.");
     }
+    if (!source) return null;
+    const invocation = await this.#execution.getInvocation(executionRef.invocationId);
+    const ownerUserId = invocation?.request?.actor?.userId;
+    validateId(ownerUserId, "artifact_execution_owner_invalid");
+    if (!sourceMatchesInvocation(source, invocation)) throw failure("artifact_source_invalid");
+    return { ownerUserId };
   }
 
   async #executionState(workspaceId, executionRef) {
@@ -471,6 +506,44 @@ function normalizeSource(value, executionRef) {
     };
   }
   throw failure("artifact_source_invalid");
+}
+
+function scopeForSource(source) {
+  return source.kind === "agent_turn"
+    ? { objectKind: "agent_session", objectId: source.sessionId }
+    : { objectKind: "workflow_run", objectId: source.runId };
+}
+
+function sourceMatchesInvocation(source, invocation) {
+  if (!invocation?.request || invocation.request.actor?.userId === undefined) return false;
+  if (source.kind === "agent_turn") {
+    return invocation.controller?.kind === "agent_turn"
+      && invocation.controller.controllerId === source.turnId
+      && invocation.request.lineage?.sessionId === source.sessionId;
+  }
+  return source.kind === "workflow_run"
+    && invocation.controller?.kind === "workflow_run"
+    && invocation.controller.controllerId === source.runId;
+}
+
+function normalizeAuthorizedScopes(value) {
+  if (!Array.isArray(value)) throw failure("artifact_scope_invalid");
+  return value.map((scope) => {
+    if (!scope || typeof scope !== "object" || Array.isArray(scope)) {
+      throw failure("artifact_scope_invalid");
+    }
+    validateId(scope.objectKind, "artifact_scope_invalid");
+    validateId(scope.objectId, "artifact_scope_invalid");
+    return { objectKind: scope.objectKind, objectId: scope.objectId };
+  });
+}
+
+function canReadArtifact(record, requestedBy, authorizedObjectScopes) {
+  if (record.ownerUserId === requestedBy) return true;
+  return authorizedObjectScopes.some((scope) => (
+    record.objectScope?.objectKind === scope.objectKind
+    && record.objectScope?.objectId === scope.objectId
+  ));
 }
 
 function normalizeImageLimits(value) {

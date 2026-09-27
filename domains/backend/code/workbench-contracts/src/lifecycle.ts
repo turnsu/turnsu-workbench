@@ -4,16 +4,21 @@ import {
   AuditEventIdSchema,
   CheckpointIdSchema,
   ConnectionIdSchema,
+  AutomationIdSchema,
   ContentHashSchema,
   DataSchemaSchema,
   DiagnosticSchema,
   InstallationIdSchema,
+  InstallationUpdateDraftIdSchema,
+  InvocationIdSchema,
   JsonObjectSchema,
   LoopVersionIdSchema,
   MembershipIdSchema,
   ObjectIdSchema,
   ProposalIdSchema,
+  ProductCommandIdSchema,
   ReleaseIdSchema,
+  ResourceRefSchema,
   ResourceIdSchema,
   RunAttemptIdSchema,
   RunCommandIdSchema,
@@ -34,6 +39,12 @@ import {
 } from "./common.js";
 import { PinnedSkillRefSchema, SkillDependencySchema, SkillExecutionRefSchema, SkillRiskSchema } from "./skills.js";
 import { strictObject, stringEnum } from "./schema.js";
+import { ExecutionPlanSchema } from "./compiler.js";
+import {
+  AttachmentMediaTypeSchema,
+  AttachmentRefSchema,
+  SkillMaterialBindingSchema,
+} from "./attachments.js";
 import {
   BuilderOperationSchema,
   InputFormSchema,
@@ -42,22 +53,22 @@ import {
   WorkflowDefinitionSchema,
   WorkflowGraphSchema,
 } from "./workflows.js";
+import { WorkspaceRoleSchema } from "./workspace-role.js";
 
-export const WorkspaceRoleSchema = stringEnum([
-  "owner",
-  "maintainer",
-  "member",
-  "viewer",
-]);
+export { WORKSPACE_ROLES, WorkspaceRoleSchema, type WorkspaceRole } from "./workspace-role.js";
 
 export const AssetVisibilitySchema = stringEnum(["private", "workspace"]);
-export const AssetLifecycleSchema = stringEnum([
+export const SkillLifecycleSchema = stringEnum([
   "draft",
-  "ready",
-  "shared",
-  "blocked",
+  "validating",
+  "tested",
+  "published",
   "deprecated",
+  "archived",
 ]);
+// Retain the public export name while the V1 package still groups Skill contracts
+// under lifecycle.ts. Sharing and readiness are represented separately.
+export const AssetLifecycleSchema = SkillLifecycleSchema;
 
 export const ProductUserSchema = strictObject(
   {
@@ -192,6 +203,20 @@ export const SkillTestCaseSchema = strictObject(
     input: JsonObjectSchema,
     expectedOutput: Type.Optional(JsonObjectSchema),
     timeoutSeconds: Type.Integer({ minimum: 1, maximum: 120 }),
+    materialBindings: Type.Optional(
+      Type.Array(SkillMaterialBindingSchema, {
+        maxItems: 32,
+      }),
+    ),
+    connectionBindings: Type.Optional(
+      Type.Array(
+        strictObject({
+          requirementId: Type.String({ minLength: 1, maxLength: 128 }),
+          connectionId: ConnectionIdSchema,
+        }),
+        { maxItems: 32 },
+      ),
+    ),
   },
   { $id: "SkillTestCase" },
 );
@@ -364,7 +389,7 @@ export const SkillSchema = strictObject(
     workspaceId: WorkspaceIdSchema,
     ownerId: UserIdSchema,
     visibility: AssetVisibilitySchema,
-    lifecycle: AssetLifecycleSchema,
+    lifecycle: SkillLifecycleSchema,
     retirement: Type.Optional(SkillRetirementSchema),
     currentDraftId: Type.Union([SkillDraftIdSchema, Type.Null()]),
     latestPublishedVersionId: Type.Union([SkillVersionIdSchema, Type.Null()]),
@@ -379,7 +404,7 @@ export const SkillAssetRecordSummarySchema = strictObject(
     schemaVersion: WorkbenchSchemaVersionSchema,
     skillId: SkillIdSchema,
     visibility: AssetVisibilitySchema,
-    lifecycle: AssetLifecycleSchema,
+    lifecycle: SkillLifecycleSchema,
     retirement: Type.Optional(SkillRetirementPublicSchema),
     currentDraftId: Type.Union([SkillDraftIdSchema, Type.Null()]),
     latestPublishedVersionId: Type.Union([SkillVersionIdSchema, Type.Null()]),
@@ -576,6 +601,12 @@ export const LoopVersionSchema = strictObject(
 );
 
 export const WorkspaceAssetKindSchema = stringEnum(["skill", "loop"]);
+export const WorkspaceAssetDomainSchema = stringEnum([
+  "product",
+  "research",
+  "data",
+  "engineering",
+]);
 export const UploadAssetKindSchema = Type.Union(
   [Type.Literal("skill"), Type.Literal("loop")],
   { default: "skill" },
@@ -592,11 +623,26 @@ export const WorkspaceAssetReleaseSchema = strictObject(
     version: Type.Optional(VersionSchema),
     contentHash: ContentHashSchema,
     visibility: AssetVisibilitySchema,
+    domain: WorkspaceAssetDomainSchema,
     startingPoint: Type.Boolean(),
     releaseNotes: Type.String({ maxLength: 4000 }),
     dependencies: Type.Array(SkillDependencySchema),
     publishedBy: UserIdSchema,
     publishedAt: UtcTimestampSchema,
+    executionMode: Type.Optional(Type.Literal("native_agent")),
+    executionSemantics: Type.Optional(Type.Literal("agent_guided_recipe")),
+    cloudReady: Type.Optional(Type.Literal(false)),
+    loopSummary: Type.Optional(strictObject({ name: Type.Optional(Type.String({ maxLength: 200 })), description: Type.Optional(Type.String({ maxLength: 8000 })), goal: Type.String({ maxLength: 8000 }), expectedResult: Type.String({ maxLength: 8000 }) })),
+    skillSummary: Type.Optional(strictObject({
+      name: Type.String({ maxLength: 200 }),
+      description: Type.String({ maxLength: 8000 }),
+      inputs: Type.Array(Type.String()),
+      outputs: Type.Array(Type.String()),
+      inputSchema: Type.Optional(DataSchemaSchema),
+      outputSchema: Type.Optional(DataSchemaSchema),
+      dependencies: Type.Array(Type.String()),
+      risk: Type.String(),
+    })),
   },
   { $id: "WorkspaceAssetRelease" },
 );
@@ -613,6 +659,7 @@ export const AssetInstallationSchema = strictObject(
     schemaVersion: WorkbenchSchemaVersionSchema,
     installationId: InstallationIdSchema,
     workspaceId: WorkspaceIdSchema,
+    sourceWorkspaceId: Type.Optional(WorkspaceIdSchema),
     releaseId: ReleaseIdSchema,
     assetKind: WorkspaceAssetKindSchema,
     upstreamAssetId: Type.String({ minLength: 1, maxLength: 128 }),
@@ -621,8 +668,99 @@ export const AssetInstallationSchema = strictObject(
     installedBy: UserIdSchema,
     installedAt: UtcTimestampSchema,
     updatedAt: UtcTimestampSchema,
+    writeVersion: Type.Optional(Type.Integer({ minimum: 1 })),
   },
   { $id: "AssetInstallation" },
+);
+
+export const InstallationUpdateImpactSchema = strictObject(
+  {
+    schemaVersion: WorkbenchSchemaVersionSchema,
+    installationId: InstallationIdSchema,
+    fromReleaseId: ReleaseIdSchema,
+    toReleaseId: ReleaseIdSchema,
+    fromVersionId: Type.Union([SkillVersionIdSchema, LoopVersionIdSchema]),
+    toVersionId: Type.Union([SkillVersionIdSchema, LoopVersionIdSchema]),
+    dependencyChanges: Type.Array(
+      strictObject({
+        dependencyId: Type.String({ minLength: 1, maxLength: 128 }),
+        change: stringEnum(["added", "removed", "changed"]),
+        currentVersion: Type.Union([VersionSchema, Type.Null()]),
+        targetVersion: Type.Union([VersionSchema, Type.Null()]),
+      }),
+      { maxItems: 256 },
+    ),
+    connectionChanges: Type.Array(
+      strictObject({
+        requirementId: Type.String({ minLength: 1, maxLength: 128 }),
+        change: stringEnum(["added", "removed", "changed"]),
+      }),
+      { maxItems: 256 },
+    ),
+    breakingFields: Type.Array(
+      Type.String({ minLength: 1, maxLength: 512 }),
+      { uniqueItems: true, maxItems: 256 },
+    ),
+    affectedObjects: Type.Array(
+      strictObject({
+        objectKind: stringEnum(["skill", "loop"]),
+        objectId: Type.String({ minLength: 1, maxLength: 128 }),
+        label: Type.String({ minLength: 1, maxLength: 200 }),
+      }),
+      { maxItems: 1000 },
+    ),
+    computedAt: UtcTimestampSchema,
+  },
+  { $id: "InstallationUpdateImpact" },
+);
+
+export const InstallationUpdateDraftStatusSchema = stringEnum([
+  "pending_review",
+  "ready",
+  "conflicted",
+  "applied",
+  "kept_current",
+]);
+
+export const InstallationConnectionBindingSchema = strictObject({
+  requirementId: Type.String({ minLength: 1, maxLength: 128 }),
+  connectionId: ConnectionIdSchema,
+});
+
+export const InstallationUpdateDraftSchema = strictObject(
+  {
+    schemaVersion: WorkbenchSchemaVersionSchema,
+    updateDraftId: InstallationUpdateDraftIdSchema,
+    workspaceId: WorkspaceIdSchema,
+    sourceWorkspaceId: Type.Optional(WorkspaceIdSchema),
+    installationId: InstallationIdSchema,
+    baseReleaseId: ReleaseIdSchema,
+    basePinnedVersionId: Type.Union([
+      SkillVersionIdSchema,
+      LoopVersionIdSchema,
+    ]),
+    targetReleaseId: ReleaseIdSchema,
+    targetVersionId: Type.Union([
+      SkillVersionIdSchema,
+      LoopVersionIdSchema,
+    ]),
+    connectionBindings: Type.Array(InstallationConnectionBindingSchema, {
+      uniqueItems: true,
+      maxItems: 128,
+    }),
+    impact: InstallationUpdateImpactSchema,
+    status: InstallationUpdateDraftStatusSchema,
+    conflictReason: Type.Union([
+      Type.String({ minLength: 1, maxLength: 2000 }),
+      Type.Null(),
+    ]),
+    revision: Type.Integer({ minimum: 1 }),
+    createdBy: UserIdSchema,
+    createdAt: UtcTimestampSchema,
+    updatedAt: UtcTimestampSchema,
+    decidedAt: Type.Union([UtcTimestampSchema, Type.Null()]),
+  },
+  { $id: "InstallationUpdateDraft" },
 );
 
 export const UploadStateSchema = stringEnum([
@@ -654,18 +792,94 @@ export const SkillPackageInventoryKindSchema = stringEnum([
   "other",
 ]);
 
-export const SkillRuntimeManifestPreviewSchema = strictObject({
-  runtime: Type.Literal("python3.12"),
-  entrypoint: Type.Literal("scripts/main.py"),
-  protocol: strictObject({
-    stdin: Type.Literal("json"),
-    stdout: Type.Literal("json"),
+export const SkillRuntimeIdSchema = stringEnum([
+  "python3.12",
+  "nodejs20-typescript",
+]);
+
+const SkillRuntimeProtocolSchema = strictObject({
+  stdin: Type.Literal("json"),
+  stdout: Type.Literal("json"),
+});
+
+const SkillRuntimePermissionsSchema = strictObject({
+  network: Type.Literal(false),
+  connections: Type.Tuple([]),
+  externalActions: Type.Literal(false),
+  filesystem: Type.Literal("scratch-only"),
+});
+
+const SkillRuntimeExecutionLimitsSchema = strictObject({
+  timeoutSeconds: Type.Integer({ minimum: 1, maximum: 120 }),
+  memoryMiB: Type.Integer({ minimum: 64, maximum: 512, multipleOf: 64 }),
+});
+
+export const SkillRuntimeManifestPreviewSchema = Type.Union([
+  strictObject({
+    runtime: Type.Literal("python3.12"),
+    entrypoint: Type.Literal("scripts/main.py"),
+    protocol: SkillRuntimeProtocolSchema,
+    permissions: SkillRuntimePermissionsSchema,
+    limits: SkillRuntimeExecutionLimitsSchema,
   }),
-  permissions: strictObject({
-    network: Type.Literal(false),
-    connections: Type.Tuple([]),
-    externalActions: Type.Literal(false),
-    filesystem: Type.Literal("scratch-only"),
+  strictObject({
+    runtime: Type.Literal("nodejs20-typescript"),
+    entrypoint: Type.Literal("scripts/main.ts"),
+    protocol: SkillRuntimeProtocolSchema,
+    permissions: SkillRuntimePermissionsSchema,
+    limits: SkillRuntimeExecutionLimitsSchema,
+  }),
+]);
+
+export const SkillRuntimeLimitSchema = strictObject({
+  minimum: Type.Integer({ minimum: 1 }),
+  maximum: Type.Integer({ minimum: 1 }),
+  step: Type.Integer({ minimum: 1 }),
+  default: Type.Integer({ minimum: 1 }),
+});
+
+export const SkillRuntimeCatalogItemSchema = strictObject({
+  runtimeId: SkillRuntimeIdSchema,
+  label: Type.String({ minLength: 1, maxLength: 120 }),
+  language: stringEnum(["python", "typescript"]),
+  versionLabel: Type.String({ minLength: 1, maxLength: 120 }),
+  entrypoint: Type.String({ minLength: 1, maxLength: 256 }),
+  availability: stringEnum(["ready", "unavailable"]),
+  availabilityReason: Type.Union([
+    Type.String({ minLength: 1, maxLength: 500 }),
+    Type.Null(),
+  ]),
+  isolation: Type.Literal("container"),
+  network: Type.Literal(false),
+  filesystem: Type.Literal("scratch-only"),
+  timeoutSeconds: SkillRuntimeLimitSchema,
+  memoryMiB: SkillRuntimeLimitSchema,
+});
+
+export const RegisteredToolActionSchema = strictObject({
+  actionId: Type.String({
+    minLength: 3,
+    maxLength: 128,
+    pattern: "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)+$",
+  }),
+  effect: stringEnum(["read", "write"]),
+  confirmationRequired: Type.Boolean(),
+});
+
+export const RegisteredToolPackageSchema = strictObject({
+  toolPackageId: Type.String({ minLength: 1, maxLength: 128 }),
+  skillName: Type.String({
+    minLength: 1,
+    maxLength: 64,
+    pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+  }),
+  label: Type.String({ minLength: 1, maxLength: 120 }),
+  description: Type.String({ minLength: 1, maxLength: 500 }),
+  registrationStatus: Type.Literal("registered"),
+  actions: Type.Array(RegisteredToolActionSchema, {
+    minItems: 1,
+    maxItems: 32,
+    uniqueItems: true,
   }),
 });
 
@@ -675,11 +889,55 @@ export const SkillPackageInventoryEntrySchema = strictObject({
   kind: SkillPackageInventoryKindSchema,
 });
 
+export const SkillPackageInterfaceTypeSchema = stringEnum([
+  "string",
+  "number",
+  "boolean",
+  "json",
+  "markdown",
+  "file",
+]);
+
+export const SkillPackageInputPreviewSchema = strictObject({
+  name: Type.String({ minLength: 1, maxLength: 64 }),
+  title: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  type: SkillPackageInterfaceTypeSchema,
+  required: Type.Boolean(),
+  description: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
+  acceptedMediaTypes: Type.Optional(Type.Array(AttachmentMediaTypeSchema, {
+    minItems: 1,
+    maxItems: 9,
+    uniqueItems: true,
+  })),
+});
+
+export const SkillPackageOutputPreviewSchema = strictObject({
+  name: Type.String({ minLength: 1, maxLength: 64 }),
+  type: SkillPackageInterfaceTypeSchema,
+  description: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
+});
+
+export const SkillPackageToolPreviewSchema = strictObject({
+  action: Type.String({ minLength: 1, maxLength: 128 }),
+  effect: stringEnum(["read", "write"]),
+  confirm: Type.Boolean(),
+});
+
+export const SkillPackageDependencyPreviewSchema = strictObject({
+  type: Type.Literal("cli"),
+  name: Type.String({ minLength: 1, maxLength: 128 }),
+});
+
 export const SkillPackageManifestPreviewSchema = strictObject({
   name: Type.Union([Type.String({ minLength: 1, maxLength: 128 }), Type.Null()]),
   description: Type.Union([Type.String({ minLength: 1, maxLength: 2000 }), Type.Null()]),
   compatibility: Type.Union([Type.String({ minLength: 1, maxLength: 2000 }), Type.Null()]),
   disableModelInvocation: Type.Boolean(),
+  version: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+  inputs: Type.Optional(Type.Array(SkillPackageInputPreviewSchema, { maxItems: 64 })),
+  outputs: Type.Optional(Type.Array(SkillPackageOutputPreviewSchema, { maxItems: 64 })),
+  tools: Type.Optional(Type.Array(SkillPackageToolPreviewSchema, { maxItems: 32 })),
+  dependencies: Type.Optional(Type.Array(SkillPackageDependencyPreviewSchema, { maxItems: 32 })),
   runtime: Type.Optional(SkillRuntimeManifestPreviewSchema),
 });
 
@@ -783,8 +1041,17 @@ export const WorkspaceResourceSchema = strictObject(
     version: VersionSchema,
     label: Type.String({ minLength: 1, maxLength: 200 }),
     mediaType: Type.String({ minLength: 1, maxLength: 128 }),
-    sizeBytes: Type.Integer({ minimum: 1, maximum: 1048576 }),
+    sizeBytes: Type.Integer({ minimum: 1, maximum: 16_777_216 }),
     contentHash: ContentHashSchema,
+    source: Type.Optional(Type.Union([
+      strictObject({ kind: Type.Literal("text_entry") }),
+      strictObject({
+        kind: Type.Literal("attachment"),
+        attachment: AttachmentRefSchema,
+        sourceMediaType: Type.String({ minLength: 1, maxLength: 128 }),
+        derivedText: Type.Boolean(),
+      }),
+    ])),
     readiness: strictObject({ status: Type.Literal("ready") }),
     createdAt: UtcTimestampSchema,
     updatedAt: UtcTimestampSchema,
@@ -798,7 +1065,7 @@ export const WorkspaceConnectionSchema = strictObject(
     connectionId: ConnectionIdSchema,
     workspaceId: WorkspaceIdSchema,
     label: Type.String({ minLength: 1, maxLength: 200 }),
-    status: stringEnum(["connected", "needs_setup", "disabled"]),
+    status: stringEnum(["connected", "needs_setup", "checking", "disabled"]),
     createdAt: UtcTimestampSchema,
     updatedAt: UtcTimestampSchema,
   },
@@ -816,6 +1083,8 @@ export const LifecycleBuilderProposalSchema = strictObject(
   {
     schemaVersion: WorkbenchSchemaVersionSchema,
     proposalId: ProposalIdSchema,
+    productCommandId: Type.Optional(ProductCommandIdSchema),
+    invocationId: Type.Optional(InvocationIdSchema),
     workspaceId: WorkspaceIdSchema,
     workflowId: WorkflowIdSchema,
     baseRevisionId: WorkflowRevisionIdSchema,
@@ -831,21 +1100,81 @@ export const LifecycleBuilderProposalSchema = strictObject(
   { $id: "LifecycleBuilderProposal" },
 );
 
+export const StagedLoopDraftSchema = strictObject(
+  {
+    name: Type.String({ minLength: 1, maxLength: 200 }),
+    description: Type.String({ maxLength: 2000 }),
+    definition: LoopDefinitionSchema,
+    graph: WorkflowGraphSchema,
+    inputForm: InputFormSchema,
+    outputDefinition: OutputDefinitionSchema,
+    resourceRefs: Type.Array(ResourceRefSchema),
+    runSettings: RunSettingsSchema,
+  },
+  { $id: "StagedLoopDraft" },
+);
+
+export const StagedLoopProposalSchema = strictObject(
+  {
+    schemaVersion: WorkbenchSchemaVersionSchema,
+    kind: Type.Literal("staged_loop_draft"),
+    proposalId: ProposalIdSchema,
+    productCommandId: Type.Optional(ProductCommandIdSchema),
+    invocationId: Type.Optional(InvocationIdSchema),
+    workspaceId: WorkspaceIdSchema,
+    summary: Type.String({ minLength: 1, maxLength: 2000 }),
+    draft: StagedLoopDraftSchema,
+    operations: Type.Array(LifecycleBuilderOperationSchema),
+    diagnostics: Type.Array(DiagnosticSchema),
+    permissionImpact: Type.Array(ConnectionRequirementSchema),
+    status: stringEnum(["proposed", "applied", "dismissed", "invalid"]),
+    createdBy: UserIdSchema,
+    createdAt: UtcTimestampSchema,
+    expiresAt: UtcTimestampSchema,
+    decidedAt: Type.Union([UtcTimestampSchema, Type.Null()]),
+  },
+  { $id: "StagedLoopProposal" },
+);
+
+export const RunConnectionApprovalSnapshotSchema = strictObject(
+  {
+    approvalSchemaVersion: Type.Literal("connection-approval-v1"),
+    requirementId: Type.String({ minLength: 1, maxLength: 128 }),
+    connectionId: ConnectionIdSchema,
+    connectionRevision: Type.Integer({ minimum: 1 }),
+    capabilityKey: Type.String({ minLength: 1, maxLength: 128 }),
+    driverKey: Type.String({ minLength: 1, maxLength: 128 }),
+    driverBackend: Type.Literal("production"),
+    principal: Type.String({ minLength: 1, maxLength: 512 }),
+    principalFingerprint: ContentHashSchema,
+    permissionFingerprint: ContentHashSchema,
+    credentialBindingFingerprint: ContentHashSchema,
+    validationExpiresAt: Type.Union([UtcTimestampSchema, Type.Null()]),
+    approvalFingerprint: ContentHashSchema,
+  },
+  { $id: "RunConnectionApprovalSnapshot" },
+);
+
 export const RunExecutionSnapshotSchema = strictObject(
   {
     schemaVersion: WorkbenchSchemaVersionSchema,
     runId: RunIdSchema,
-    workspaceId: WorkspaceIdSchema,
     workflowId: WorkflowIdSchema,
     workflowRevisionId: WorkflowRevisionIdSchema,
     loopVersionId: Type.Union([LoopVersionIdSchema, Type.Null()]),
+    // Internal immutable lineage only.  It records the Automation revision
+    // that supplied pinned Resource/Connection inputs without promoting that
+    // implementation identifier onto the public Workflow Run read model.
+    automationRevisionId: Type.Optional(AutomationIdSchema),
     graph: WorkflowGraphSchema,
     inputForm: InputFormSchema,
     outputDefinition: OutputDefinitionSchema,
     runSettings: RunSettingsSchema,
+    plan: ExecutionPlanSchema,
     planHash: ContentHashSchema,
     skillVersions: Type.Array(SkillVersionSchema),
     resourceObjectIds: Type.Array(ObjectIdSchema),
+    connectionBindings: Type.Optional(Type.Array(RunConnectionApprovalSnapshotSchema)),
     connectionIds: Type.Array(ConnectionIdSchema),
     createdAt: UtcTimestampSchema,
   },
@@ -858,7 +1187,19 @@ export const RunJobSchema = strictObject(
     runJobId: RunJobIdSchema,
     runId: RunIdSchema,
     workspaceId: WorkspaceIdSchema,
-    status: stringEnum(["queued", "leased", "running", "paused", "completed", "failed", "cancelled"]),
+    status: stringEnum([
+      "queued",
+      "leased",
+      "running",
+      "migration_draining",
+      "paused",
+      "cancellation_requested",
+      "completed",
+      "failed",
+      "cancelled",
+      "partial",
+      "effect_outcome_unknown",
+    ]),
     fence: Type.Integer({ minimum: 0 }),
     checkpointSequence: Type.Integer({ minimum: 0 }),
     leaseOwner: Type.Union([Type.String({ minLength: 1, maxLength: 128 }), Type.Null()]),
@@ -940,6 +1281,7 @@ export type SkillValidationRecord = Static<typeof SkillValidationRecordSchema>;
 export type SkillVersion = Static<typeof SkillVersionSchema>;
 export type SkillVersionSummary = Static<typeof SkillVersionSummarySchema>;
 export type SkillRetirement = Static<typeof SkillRetirementSchema>;
+export type SkillLifecycle = Static<typeof SkillLifecycleSchema>;
 export type Skill = Static<typeof SkillSchema>;
 export type SkillAssetRecordSummary = Static<typeof SkillAssetRecordSummarySchema>;
 export type SkillDraftSummary = Static<typeof SkillDraftSummarySchema>;
@@ -960,6 +1302,7 @@ export type WorkspaceResource = Static<typeof WorkspaceResourceSchema>;
 export type WorkspaceConnection = Static<typeof WorkspaceConnectionSchema>;
 export type LifecycleBuilderProposal = Static<typeof LifecycleBuilderProposalSchema>;
 export type RunExecutionSnapshot = Static<typeof RunExecutionSnapshotSchema>;
+export type RunConnectionApprovalSnapshot = Static<typeof RunConnectionApprovalSnapshotSchema>;
 export type RunJob = Static<typeof RunJobSchema>;
 export type RunLease = Static<typeof RunLeaseSchema>;
 export type RunCheckpoint = Static<typeof RunCheckpointSchema>;

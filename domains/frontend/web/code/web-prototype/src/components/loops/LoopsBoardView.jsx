@@ -1,39 +1,22 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowUpRight,
+  Bot,
   CircleDashed,
-  Columns3,
   GripVertical,
   Library,
-  List,
   MoreHorizontal,
   Pencil,
-  Play,
   Plus,
   Sparkles,
-  Upload,
 } from "lucide-react";
 
 import { Button } from "../shared/Button.jsx";
 import { productActorName, productDescription, productTitle } from "../../utils/productCopy.js";
+import "../../styles/loops.css";
 
-function countSteps(loop) {
-  return loop.workflow?.nodes?.length || 0;
-}
-
-function isProductLoop(loop) {
-  const text = `${loop?.title || ""} ${loop?.description || ""}`.toLowerCase();
-  return !/(imported focus loop|browser lifecycle verification|conformance|fixture)/.test(text);
-}
-
-function uniqueLoops(items) {
-  const seen = new Set();
-  return items.filter((loop) => {
-    const key = String(loop.title || loop.id).trim().toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+function localCopy(locale, zh, en) {
+  return locale === "zh" ? zh : en;
 }
 
 function versionLabel(loop, t) {
@@ -67,51 +50,78 @@ function setDragPayload(event, payload) {
   event.dataTransfer.setData("application/x-loop-lifecycle", JSON.stringify(payload));
 }
 
-function LoopCard({ loop, stage, featured = false, locale, onOpen, onMore, onPrimary, primaryLabel, primaryIcon, t }) {
-  const steps = countSteps(loop);
-  const readySteps = loop.readiness === "Ready" ? steps : Math.max(0, steps - 1);
+function EmptyLane({ icon: Icon, title, body }) {
+  return (
+    <div className="m5LoopEmpty">
+      <Icon size={20} aria-hidden="true" />
+      <strong>{title}</strong>
+      <p>{body}</p>
+    </div>
+  );
+}
+
+function RunInAgentButton({ loopId, locale, onRun, stableTestId }) {
+  const content = localCopy(locale, "前往 Agent 运行", "Run in Agent");
+  if (stableTestId) {
+    return (
+      <Button
+        variant="plain"
+        size="sm"
+        icon={<Bot size={14} />}
+        onClick={() => onRun(loopId)}
+        data-testid="loopops.loops.run-in-agent"
+      >
+        {content}
+      </Button>
+    );
+  }
+  return (
+    <Button
+      variant="plain"
+      size="sm"
+      icon={<Bot size={14} />}
+      onClick={() => onRun(loopId)}
+      data-testid={`loopops.loops.run-in-agent.${loopId}`}
+    >
+      {content}
+    </Button>
+  );
+}
+
+function LoopCard({ loop, stage, locale, onOpen, onMore, onRun, stableRunTestId = false, t }) {
+  const isReady = stage === "ready";
   return (
     <article
-      className={`lifecycleCard ${featured ? "featured" : ""}`}
+      className="m5LoopCard"
       draggable
       onDragStart={(event) => setDragPayload(event, { kind: "workflow", id: loop.id, stage })}
       data-loop-stage={stage}
       data-workflow-id={loop.id}
     >
-      <div className="lifecycleCardTopline">
-        <GripVertical size={16} className="lifecycleGrip" aria-hidden="true" />
-        <button type="button" className="lifecycleCardTitle" onClick={() => onOpen(loop.id)} title={productTitle(loop, locale)}>
+      <div className="m5LoopCardTopline">
+        <GripVertical size={15} className="m5LoopGrip" aria-hidden="true" />
+        <button type="button" className="m5LoopCardTitle" onClick={() => onOpen(loop.id)}>
           {productTitle(loop, locale)}
         </button>
-        <span className="lifecycleVersion">{versionLabel(loop, t)}</span>
+        <span className="m5LoopVersion">{versionLabel(loop, t)}</span>
       </div>
-      <p className="lifecycleGoal">{productDescription(loop, locale) || t("loopsBoard.noGoal")}</p>
-      <div className="lifecycleOwnerRow">
-        <span className="lifecycleAvatar" aria-hidden="true">{ownerInitial(loop, locale, t)}</span>
+      <p className="m5LoopGoal">{productDescription(loop, locale) || t("loopsBoard.noGoal")}</p>
+      <div className="m5LoopMeta">
+        <span className="m5LoopAvatar" aria-hidden="true">{ownerInitial(loop, locale, t)}</span>
         <span>{ownerLabel(loop, locale, t)}</span>
-        <span className={`lifecycleStateDot ${stage}`} aria-hidden="true" />
-        <span>{stage === "ready" ? t("loopsBoard.ready") : t("loopsBoard.inProgress")}</span>
+        <i className={`m5LoopStateDot ${stage}`} aria-hidden="true" />
+        <span>{isReady ? t("loopsBoard.ready") : t("loopsBoard.draft")}</span>
       </div>
-      {featured && stage === "draft" ? (
-        <div className="lifecycleProgress" aria-label={t("loopsBoard.stepProgress", { ready: readySteps, count: steps })}>
-          <span><i style={{ width: `${steps ? (readySteps / steps) * 100 : 0}%` }} /></span>
-          <small>{t("loopsBoard.stepProgress", { ready: readySteps, count: steps })}</small>
-        </div>
-      ) : null}
-      <div className="lifecycleCardActions">
-        {featured && stage === "draft" ? (
-          <Button variant="secondary" size="sm" icon={<Pencil size={14} />} onClick={() => onOpen(loop.id)}>{t("actions.editLoop")}</Button>
+      <div className="m5LoopCardActions">
+        {isReady ? (
+          <RunInAgentButton loopId={loop.id} locale={locale} onRun={onRun} stableTestId={stableRunTestId} />
         ) : null}
-        <Button
-          variant={featured && stage === "draft" ? "secondary" : "ghost"}
-          size="sm"
-          icon={primaryIcon}
-          onClick={() => onPrimary(loop.id)}
-          data-testid={`loopops.loops.action.${loop.id}`}
-        >
-          {primaryLabel}
+        <Button variant="plain" size="sm" icon={<Pencil size={14} />} onClick={() => onOpen(loop.id)}>
+          {t("actions.edit")}
         </Button>
-        {featured ? <button type="button" className="lifecycleMore" aria-label={t("actions.more")} onClick={() => onMore(loop.id)}><MoreHorizontal size={16} /></button> : null}
+        <button type="button" className="m5LoopMore" aria-label={t("actions.more")} onClick={() => onMore(loop.id)}>
+          <MoreHorizontal size={16} />
+        </button>
       </div>
     </article>
   );
@@ -119,85 +129,117 @@ function LoopCard({ loop, stage, featured = false, locale, onOpen, onMore, onPri
 
 function SharedCard({ release, workspace }) {
   const t = workspace.t;
-  const hasUpdate = Boolean(release.canAdopt);
   return (
     <article
-      className="lifecycleCard sharedCard"
+      className="m5LoopCard"
       draggable
-      onDragStart={(event) => setDragPayload(event, { kind: "release", id: release.releaseId, assetId: release.assetId, stage: "shared" })}
+      onDragStart={(event) => setDragPayload(event, {
+        kind: "release",
+        id: release.releaseId,
+        assetId: release.assetId,
+        stage: "shared",
+      })}
       data-loop-stage="shared"
     >
-      <div className="lifecycleCardTopline">
-        <button type="button" className="lifecycleCardTitle" onClick={() => workspace.openLibraryLoop(release.assetId)}>{release.title}</button>
-        <span className="lifecycleVersion">{release.version ? `v${release.version}` : "v1.0.0"}</span>
+      <div className="m5LoopCardTopline">
+        <button type="button" className="m5LoopCardTitle" onClick={() => workspace.openLibraryLoop(release.assetId)}>
+          {productTitle(release, workspace.locale)}
+        </button>
+        <span className="m5LoopVersion">{release.versionLabel || (release.version ? `v${release.version}` : "v1.0.0")}</span>
       </div>
-      <p className="lifecycleGoal">{release.description || release.releaseNotes || t("library.noReleaseNotes")}</p>
-      <div className="lifecycleOwnerRow">
-        <span className="lifecycleAvatar violet" aria-hidden="true">{String(release.ownerName || t("loopsBoard.team")).slice(0, 1).toUpperCase()}</span>
-        <span>{release.ownerName || t("loopsBoard.team")}</span>
-        <span className="lifecycleStateDot shared" aria-hidden="true" />
-        <span>{hasUpdate ? t("loopsBoard.updateAvailable") : t("loopsBoard.published")}</span>
+      <p className="m5LoopGoal">{productDescription(release, workspace.locale) || release.releaseNotes || t("library.noReleaseNotes")}</p>
+      <div className="m5LoopMeta">
+        <span className="m5LoopAvatar shared" aria-hidden="true">
+          {String(productActorName(release.publishedBy, workspace.locale) || t("loopsBoard.team")).slice(0, 1).toUpperCase()}
+        </span>
+        <span>{productActorName(release.publishedBy, workspace.locale) || t("loopsBoard.team")}</span>
+        <i className="m5LoopStateDot shared" aria-hidden="true" />
+        <span>{release.canAdopt ? t("loopsBoard.updateAvailable") : t("loopsBoard.published")}</span>
       </div>
-      <div className="lifecycleCardActions">
-        <Button variant="ghost" size="sm" icon={<ArrowUpRight size={14} />} onClick={() => workspace.openLibraryLoop(release.assetId)}>
-          {hasUpdate ? t("loopsBoard.reviewUpdate") : t("loopsBoard.openRelease")}
+      <div className="m5LoopCardActions">
+        <Button variant="plain" size="sm" icon={<ArrowUpRight size={14} />} onClick={() => workspace.openLibraryLoop(release.assetId)}>
+          {release.canAdopt ? t("loopsBoard.reviewUpdate") : t("loopsBoard.openRelease")}
         </Button>
       </div>
     </article>
   );
 }
 
-function Lane({ stage, title, count, children, dropLabel, onDropStage }) {
+function Lane({ stage, title, count, children, active, onDragTarget, onDropStage, locale }) {
   return (
     <section
-      className="lifecycleLaneV2"
+      className={`m5LoopLane ${active ? "isDropTarget" : ""}`}
       data-stage={stage}
+      onDragEnter={(event) => {
+        if (event.dataTransfer.types.includes("application/x-loop-lifecycle")) {
+          event.preventDefault();
+          onDragTarget(stage);
+        }
+      }}
       onDragOver={(event) => {
         if (event.dataTransfer.types.includes("application/x-loop-lifecycle")) event.preventDefault();
       }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onDragTarget("");
+      }}
       onDrop={(event) => {
         const value = event.dataTransfer.getData("application/x-loop-lifecycle");
+        onDragTarget("");
         if (!value) return;
         event.preventDefault();
         try { onDropStage(JSON.parse(value), stage); } catch { onDropStage(null, stage); }
       }}
     >
-      <header className="lifecycleLaneV2Header">
-        <span className={`lifecycleLaneDot ${stage}`} aria-hidden="true" />
+      <header className="m5LoopLaneHeader">
+        <i className={`m5LoopLaneDot ${stage}`} aria-hidden="true" />
         <h2>{title}</h2>
-        <span className="lifecycleLaneCount">{count}</span>
+        <span>{count}</span>
       </header>
-      <div className="lifecycleLaneV2List">{children}</div>
-      {dropLabel ? <div className="lifecycleDropTarget">{dropLabel}</div> : null}
+      {active ? <div className="m5LoopDropHint">{localCopy(locale, "放到这里", "Drop here")}</div> : null}
+      <div className="m5LoopLaneList">{children}</div>
     </section>
   );
 }
 
 export function LoopsBoardView({ workspace }) {
   const t = workspace.t;
-  const [view, setView] = useState("board");
   const [command, setCommand] = useState("");
   const [transitionMessage, setTransitionMessage] = useState("");
-  const loops = uniqueLoops(workspace.loops.filter((loop) => loop.type === "LoopWorkflow" && isProductLoop(loop)));
-  const sampleOrder = new Map([
-    ["Weekly Product Review", 0],
-    ["Meeting Follow-up", 1],
-    ["Pre-market Research", 2],
-  ]);
-  const drafts = loops
+  const [dragTarget, setDragTarget] = useState("");
+
+  const shared = useMemo(() => {
+    const newest = new Map();
+    workspace.teamLibrary
+      .filter((release) => release.assetKind === "loop")
+      .forEach((release) => {
+        const current = newest.get(release.assetId);
+        const newer = String(release.publishedAt || release.version || "").localeCompare(String(current?.publishedAt || current?.version || ""));
+        if (!current || newer >= 0) newest.set(release.assetId, release);
+      });
+    return [...newest.values()];
+  }, [workspace.teamLibrary]);
+
+  const sharedAssetIds = useMemo(() => new Set(shared.map((release) => release.assetId)), [shared]);
+  const owned = workspace.loops.filter((loop) => loop.type === "LoopWorkflow" && !sharedAssetIds.has(loop.id));
+  const drafts = owned
     .filter((loop) => loop.readiness !== "Ready")
-    .map((loop, index) => ({ loop, index }))
-    .sort((a, b) => (sampleOrder.get(a.loop.title) ?? 100 + a.index) - (sampleOrder.get(b.loop.title) ?? 100 + b.index))
-    .map(({ loop }) => loop);
-  const ready = loops.filter((loop) => loop.readiness === "Ready");
-  const shared = workspace.teamLibrary.filter((release) => release.assetKind === "loop");
+    .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")));
+  const ready = owned
+    .filter((loop) => loop.readiness === "Ready")
+    .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")));
 
   function requestTransition(payload, target) {
-    if (!payload || payload.stage === target) return setTransitionMessage(t("loopsBoard.transitionNoChange"));
-    if (payload.kind === "workflow" && payload.stage === "draft" && target === "ready") return workspace.editLoop(payload.id, "outline");
-    if (payload.kind === "workflow" && payload.stage === "ready" && target === "shared") return workspace.openPublishReview(payload.id);
-    if (payload.kind === "release" && payload.stage === "shared" && target === "draft") {
-      return workspace.useTeamReleaseAsStartingPoint(payload.id, t("library.startingPointName", { title: shared.find((item) => item.releaseId === payload.id)?.title || t("library.loop") }));
+    if (!payload || payload.stage === target) {
+      setTransitionMessage(t("loopsBoard.transitionNoChange"));
+      return;
+    }
+    if (payload.kind === "workflow" && payload.stage === "draft" && target === "ready") {
+      workspace.editLoop(payload.id, "outline");
+      return;
+    }
+    if (payload.kind === "workflow" && payload.stage === "ready" && target === "shared") {
+      workspace.openPublishReview(payload.id);
+      return;
     }
     setTransitionMessage(t("loopsBoard.transitionBlocked"));
   }
@@ -208,61 +250,123 @@ export function LoopsBoardView({ workspace }) {
   }
 
   return (
-    <div className="surface lifecycleBoard lifecycleBoardV2" data-testid="loopops.loops.board">
-      <header className="baselinePageHeading">
-        <h1>{t("loopsBoard.lifecycleTitle")}</h1>
-        <div className="lifecycleViewToggle" role="group" aria-label={t("loopsBoard.viewLabel")}>
-          <button type="button" className={view === "list" ? "active" : ""} aria-pressed={view === "list"} onClick={() => setView("list")} data-testid="loopops.loops.view.list"><List size={15} />{t("loopsBoard.listView")}</button>
-          <button type="button" className={view === "board" ? "active" : ""} aria-pressed={view === "board"} onClick={() => setView("board")} data-testid="loopops.loops.view.board"><Columns3 size={15} />{t("loopsBoard.boardView")}</button>
+    <div className="surface m5LoopBoard" data-testid="loopops.loops.board" onDragEnd={() => setDragTarget("")}>
+      <header className="m5LoopPageHeader">
+        <div>
+          <p>{localCopy(workspace.locale, "编排与复用", "Orchestrate and reuse")}</p>
+          <h1>{t("loopsBoard.lifecycleTitle")}</h1>
+        </div>
+        <div className="m5LoopHeaderActions">
+          <Button
+            variant="primary"
+            icon={<Plus size={15} />}
+            disabled={workspace.readOnlyWorkspace}
+            onClick={() => workspace.openCreateLoop()}
+            data-testid="loopops.topbar.primary.create-loop"
+          >
+            {t("actions.createLoop")}
+          </Button>
         </div>
       </header>
 
-      <div className="lifecycleCommandRow">
-        <div>
-          <form className="loopCommand loopCommandV2" aria-label={t("loopsBoard.commandLabel")} onSubmit={submitCommand}>
-            <Sparkles size={19} aria-hidden="true" />
-            <label><span className="srOnly">{t("loopsBoard.commandTitle")}</span><input value={command} onChange={(event) => setCommand(event.target.value)} placeholder={t("loopsBoard.commandPlaceholder")} data-testid="loopops.loops.ai-command" /></label>
-            <kbd>⌘ K</kbd>
-            <Button type="submit" variant="primary" disabled={workspace.readOnlyWorkspace || !command.trim()}>{t("loopsBoard.draftProposal")}</Button>
-          </form>
-          <p className="loopCommandSafety">{t("loopsBoard.commandSafety")}</p>
-        </div>
-        <div className="lifecycleQuickActions">
-          <Button variant="secondary" icon={<Plus size={15} />} disabled={workspace.readOnlyWorkspace} onClick={() => workspace.openCreateLoop("goal")} data-testid="loopops.topbar.primary.create-loop">{t("actions.createLoop")}</Button>
-          <Button variant="secondary" icon={<Upload size={15} />} disabled={workspace.readOnlyWorkspace} onClick={workspace.openLoopImportDialog} data-testid="loopops.loops.upload">{t("loopTransfer.uploadLoop")}</Button>
-          <Button variant="secondary" icon={<Plus size={15} />} disabled={workspace.readOnlyWorkspace} onClick={() => workspace.openCreateSkillDialog("create")}>{t("actions.createSkill")}</Button>
-          <Button variant="secondary" icon={<Upload size={15} />} disabled={workspace.readOnlyWorkspace} onClick={() => workspace.openCreateSkillDialog("files")}>{t("globalCreate.uploadSkill")}</Button>
-        </div>
-      </div>
+      <form className="m5LoopCommand" aria-label={t("loopsBoard.commandLabel")} onSubmit={submitCommand}>
+        <Sparkles size={18} aria-hidden="true" />
+        <label>
+          <span className="srOnly">{t("loopsBoard.commandTitle")}</span>
+          <input
+            value={command}
+            onChange={(event) => setCommand(event.target.value)}
+            placeholder={t("loopsBoard.commandPlaceholder")}
+            data-testid="loopops.loops.ai-command"
+          />
+        </label>
+        <span>{localCopy(workspace.locale, "按 Enter 生成提案", "Press Enter for a proposal")}</span>
+      </form>
+      <p className="m5LoopCommandSafety">{t("loopsBoard.commandSafety")}</p>
 
-      {transitionMessage ? <div className="lifecycleTransitionMessage" role="status"><span>{transitionMessage}</span><Button variant="plain" size="sm" onClick={() => setTransitionMessage("")}>{t("actions.dismiss")}</Button></div> : null}
+      {transitionMessage ? (
+        <div className="m5LoopNotice" role="status">
+          <span>{transitionMessage}</span>
+          <Button variant="plain" size="sm" onClick={() => setTransitionMessage("")}>{t("actions.dismiss")}</Button>
+        </div>
+      ) : null}
 
-      <div className={`lifecycleBoardLanesV2 ${view === "list" ? "listView" : ""}`}>
-        <Lane stage="draft" title={t("loopsBoard.drafts")} count={drafts.length} onDropStage={requestTransition} dropLabel={t("loopsBoard.dropReady")}>
-          {drafts.map((loop, index) => <LoopCard key={loop.id} loop={loop} stage="draft" featured={index === 0} locale={workspace.locale} onOpen={(id) => workspace.editLoop(id, "canvas")} onMore={workspace.openLoop} onPrimary={(id) => index === 0 ? workspace.prepareRun(id) : workspace.editLoop(id, "canvas")} primaryLabel={index === 0 ? t("actions.testLoop") : t("actions.continueBuilding")} primaryIcon={<Play size={14} />} t={t} />)}
-        </Lane>
-        <Lane stage="ready" title={t("loopsBoard.ready")} count={ready.length} onDropStage={requestTransition} dropLabel={t("loopsBoard.dropShared")}>
-          {ready.map((loop) => <LoopCard key={loop.id} loop={loop} stage="ready" locale={workspace.locale} onOpen={workspace.openLoop} onMore={workspace.openLoop} onPrimary={workspace.prepareRun} primaryLabel={t("actions.testLoop")} primaryIcon={<Play size={14} />} t={t} />)}
-          {!ready.length ? (
-            <div className="lifecycleEmptyState">
-              <CircleDashed size={22} aria-hidden="true" />
-              <strong>{t("loopsBoard.emptyReady")}</strong>
-              {drafts[0] ? <Button variant="secondary" size="sm" onClick={() => workspace.editLoop(drafts[0].id, "definition")}>{t("actions.continueBuilding")}</Button> : null}
-            </div>
+      <div className="m5LoopLanes">
+        <Lane stage="draft"
+          title={t("loopsBoard.drafts")}
+          count={drafts.length}
+          active={dragTarget === "draft"}
+          onDragTarget={setDragTarget}
+          onDropStage={requestTransition}
+          locale={workspace.locale}
+        >
+          {drafts.map((loop) => (
+            <LoopCard
+              key={loop.id}
+              loop={loop}
+              stage="draft"
+              locale={workspace.locale}
+              onOpen={(id) => workspace.editLoop(id, "canvas")}
+              onMore={workspace.openLoop}
+              onRun={workspace.runLoopInAgent}
+              t={t}
+            />
+          ))}
+          {!drafts.length ? (
+            <EmptyLane
+              icon={CircleDashed}
+              title={localCopy(workspace.locale, "暂无草稿", "No drafts")}
+              body={localCopy(workspace.locale, "新建的 Loop 会先出现在这里。", "New Loops start here.")}
+            />
           ) : null}
         </Lane>
-        <Lane stage="shared" title={t("loopsBoard.shared")} count={shared.length} onDropStage={requestTransition}>
+        <Lane stage="ready"
+          title={t("loopsBoard.ready")}
+          count={ready.length}
+          active={dragTarget === "ready"}
+          onDragTarget={setDragTarget}
+          onDropStage={requestTransition}
+          locale={workspace.locale}
+        >
+          {ready.map((loop, index) => (
+            <LoopCard
+              key={loop.id}
+              loop={loop}
+              stage="ready"
+              locale={workspace.locale}
+              onOpen={workspace.openLoop}
+              onMore={workspace.openLoop}
+              onRun={workspace.runLoopInAgent}
+              stableRunTestId={index === 0}
+              t={t}
+            />
+          ))}
+          {!ready.length ? (
+            <EmptyLane
+              icon={CircleDashed}
+              title={t("loopsBoard.emptyReady")}
+              body={localCopy(workspace.locale, "完成定义与验证后，Loop 会进入 Ready。", "Loops appear here after definition and validation.")}
+            />
+          ) : null}
+        </Lane>
+        <Lane stage="shared"
+          title={t("loopsBoard.shared")}
+          count={shared.length}
+          active={dragTarget === "shared"}
+          onDragTarget={setDragTarget}
+          onDropStage={requestTransition}
+          locale={workspace.locale}
+        >
           {shared.map((release) => <SharedCard key={release.releaseId} release={release} workspace={workspace} />)}
           {!shared.length ? (
-            <div className="lifecycleEmptyState">
-              <Library size={22} aria-hidden="true" />
-              <strong>{t("loopsBoard.emptyShared")}</strong>
-              <Button variant="secondary" size="sm" onClick={() => workspace.setActivePage("library")}>{t("nav.library")}</Button>
-            </div>
+            <EmptyLane
+              icon={Library}
+              title={t("loopsBoard.emptyShared")}
+              body={localCopy(workspace.locale, "发布后的最新版本会在团队中共享。", "The latest published versions are shared with your team.")}
+            />
           ) : null}
         </Lane>
       </div>
-      <footer className="lifecycleBoardFooter"><span>{t("loopsBoard.localTime")}</span><span>{new Intl.DateTimeFormat(workspace.locale === "zh" ? "zh-CN" : "en-US", { year: "numeric", month: "long", day: "numeric" }).format(new Date())}</span></footer>
     </div>
   );
 }

@@ -3,16 +3,17 @@ import assert from "node:assert/strict";
 import {
   encodeBytesBase64,
   formatSkillPackageBytes,
-  PORTABLE_LOOP_PACKAGE_MEDIA_TYPE,
-  portableLoopFilename,
+  isTerminalRunStatus,
   RUN_EVENT_TYPES,
+  RUN_TERMINAL_STATUSES,
   WorkbenchApiError,
   createWorkbenchApiClient,
 } from "../src/api/client.js";
 import {
   importSkillRepositoryPackage,
-  beginPortableLoopImport,
   inspectResumableSkillPackage,
+  runRefetchInterval,
+  workflowRunsRefetchInterval,
 } from "../src/api/queries.js";
 
 const requests = [];
@@ -22,19 +23,550 @@ const response = (data, { status = 200, headers = {} } = {}) => ({
   headers: { get(name) { return headers[name.toLowerCase()] ?? null; } },
   async json() { return data; },
 });
-const rawResponse = (bytes, { status = 200, headers = {} } = {}) => ({
-  ok: status >= 200 && status < 300,
-  status,
-  headers: { get(name) { return headers[name.toLowerCase()] ?? null; } },
-  async json() { return JSON.parse(new TextDecoder().decode(bytes)); },
-  async arrayBuffer() { return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength); },
+const workspaceResponse = (data) => response(data, {
+  headers: { "cache-control": "no-store" },
 });
+const workspaceEnvelope = ({ csrfToken, userId, workspaceId }) => ({
+  schemaVersion: "workbench-api-v1",
+  data: {
+    workspace: {
+      workspaceId,
+      name: "Test workspace",
+      capabilities: {
+        builderProposal: false,
+        resources: false,
+        maxParallelism: 1,
+      },
+      createdAt: "2026-07-10T09:00:00.000Z",
+      updatedAt: "2026-07-10T09:00:00.000Z",
+    },
+    session: {
+      csrfToken,
+      expiresAt: "2026-07-10T10:00:00.000Z",
+      userId,
+      workspaceId,
+    },
+  },
+  requestId: `request-${workspaceId}`,
+});
+const authUser = {
+  userId: "user-1",
+  username: "owner.local",
+  role: "admin",
+  disabled: false,
+  createdAt: "2026-07-10T09:00:00.000Z",
+  updatedAt: "2026-07-10T09:00:00.000Z",
+};
+const authResultEnvelope = ({ user = authUser, workspaceId = "workspace-1" } = {}) => ({
+  schemaVersion: "workbench-api-v1",
+  data: { user, workspaceId },
+  requestId: `request-auth-${workspaceId}`,
+});
+const authStatusEnvelope = ({ authenticated = true } = {}) => ({
+  schemaVersion: "workbench-api-v1",
+  data: {
+    registrationOpen: false,
+    bootstrapRequired: false,
+    bootstrapAvailable: false,
+    authenticated,
+    ...(authenticated ? { user: authUser, workspaceId: "workspace-1" } : {}),
+  },
+  requestId: "request-auth-status",
+});
+const workspaceFeatureReadinessEnvelope = {
+  schemaVersion: "workbench-api-v1",
+  data: {
+    schemaVersion: "workbench-v1",
+    workspaceId: "workspace-1",
+    workspaceRole: "admin",
+    evaluatedAt: "2026-07-10T09:00:00.000Z",
+    actions: {
+      promptSkill: {},
+      scriptSkill: {},
+      registeredToolSkill: {},
+      skillDirectoryImport: {},
+      skillZipImport: {},
+      publicGithubSkillImport: {},
+      serverSkillImport: {},
+      blankLoop: {},
+      stagedLoopProposal: {},
+      connectionSetup: {},
+      workspaceResource: {},
+    },
+    support: {
+      readyRuntimeIds: [],
+      registeredToolPackageCount: 0,
+      selectableBuilderModelCount: 0,
+      readyAttachmentMediaTypes: [],
+      unavailableAttachmentMediaTypes: [],
+    },
+  },
+  requestId: "request-readiness-1",
+};
+const inboxEnvelope = {
+  schemaVersion: "workbench-api-v1",
+  data: {
+    items: [{
+      schemaVersion: "workbench-v1",
+      itemId: "inbox-review-1",
+      workspaceId: "workspace-1",
+      objectKind: "review",
+      objectId: "run-review-1",
+      reason: "review_required",
+      severity: "warning",
+      title: "A run needs review",
+      actionRoute: "/loops/workflow-1/runs/run-review-1",
+      createdAt: "2026-07-10T09:00:00.000Z",
+    }],
+    count: 1,
+    page: { nextCursor: null, hasMore: false },
+  },
+  requestId: "request-inbox-1",
+};
+const automationCandidateEnvelope = {
+  schemaVersion: "workbench-api-v1",
+  data: [{
+    loopVersionId: "loop-daily-v1",
+    workflowId: "workflow-daily",
+    scopeId: "scope-personal",
+    name: "Daily brief",
+    description: "Creates the daily brief.",
+    version: "1.0.0",
+    inputBindings: [{
+      bindingId: "resource-brief-1.0.0",
+      inputKey: "resource-brief",
+      label: "Daily brief source",
+      source: {
+        kind: "resource",
+        resourceId: "resource-brief",
+        version: "1.0.0",
+        contentHash: `sha256:${"a".repeat(64)}`,
+      },
+    }],
+    connectionRequirements: [{
+      requirementId: "calendar-read",
+      capabilityKey: "calendar.read",
+      description: "Read calendar events.",
+      requiredEffects: ["calendar.read"],
+      eligibleConnectionIds: ["connection-1"],
+    }],
+  }],
+  page: { nextCursor: null, hasMore: false },
+  requestId: "request-automation-candidates",
+};
+const automationEnvelope = {
+  schemaVersion: "workbench-api-v1",
+  data: {
+    schemaVersion: "workbench-v1",
+    variant: "daily_cron_v1",
+    automationId: "automation-daily",
+    workspaceId: "workspace-1",
+    scopeId: "scope-personal",
+    ownerId: "user-1",
+    displayName: "Daily brief",
+    loopVersionId: "loop-daily-v1",
+    loopContentHash: `sha256:${"b".repeat(64)}`,
+    triggerRevision: 1,
+    trigger: { kind: "daily_cron", expression: "0 9 * * *", timezone: "Asia/Hong_Kong" },
+    inputBindings: [{
+      bindingId: "resource-brief-1.0.0",
+      inputKey: "resource-brief",
+      source: {
+        kind: "resource",
+        resourceId: "resource-brief",
+        version: "1.0.0",
+        contentHash: `sha256:${"a".repeat(64)}`,
+      },
+    }],
+    connectionBindings: [{
+      requirementId: "calendar-read",
+      connectionId: "connection-1",
+      revision: 1,
+      secretBindingId: "secret-calendar",
+      storeBindingRevision: 1,
+    }],
+    executionLocationPolicy: "cloud",
+    modelPolicy: { policyRevisionId: "model-policy-1", modelProfileRevisionIds: ["model-revision-1"] },
+    budgetPolicy: { maxCostUsdMicros: 1_000_000, maxRuntimeSeconds: 600 },
+    approvalPolicy: {
+      policyRevisionId: "scope-policy-1",
+      permissionMode: { mode: "auto", autoApprovedEffectClasses: ["execute"] },
+    },
+    misfirePolicy: { kind: "run_once", maxLatenessSeconds: 300 },
+    dedupePolicy: { kind: "scheduled_occurrence" },
+    grantId: "automation-grant-1",
+    grantRevision: 1,
+    grantExpiresAt: "2026-08-30T09:00:00.000Z",
+    grantReviewAt: "2026-08-20T09:00:00.000Z",
+    status: "active",
+    blockedReasonCode: null,
+    nextRunAt: "2026-08-14T01:00:00.000Z",
+    lastRunAt: null,
+    lastOutcome: null,
+    failureStreak: 0,
+    revision: 1,
+    createdAt: "2026-08-13T00:00:00.000Z",
+    updatedAt: "2026-08-13T00:00:00.000Z",
+  },
+  requestId: "request-automation-daily",
+};
+const automationOccurrencesEnvelope = {
+  schemaVersion: "workbench-api-v1",
+  data: [{
+    occurrenceId: "automation-occurrence-1",
+    automationId: "automation-daily",
+    workflowId: "workflow-daily",
+    triggerRevision: 1,
+    scheduledFor: "2026-08-14T01:00:00.000Z",
+    localScheduleDate: "2026-08-14",
+    dedupeKey: "automation-daily:1:2026-08-14",
+    status: "accepted",
+    commandId: "product-command-automation-1",
+    runId: "run-automation-1",
+    runStatus: "waiting_review",
+    reasonCode: null,
+    createdAt: "2026-08-14T01:00:00.000Z",
+    updatedAt: "2026-08-14T01:00:00.000Z",
+  }],
+  page: { nextCursor: null, hasMore: false },
+  requestId: "request-automation-occurrences",
+};
+const deviceEnvelope = {
+  schemaVersion: "workbench-api-v1",
+  data: {
+    schemaVersion: "workbench-v1",
+    deviceId: "device-owner-mac",
+    workspaceId: "workspace-1",
+    ownerUserId: "user-1",
+    displayName: "Owner Mac",
+    platform: "macos",
+    architecture: "arm64",
+    appVersion: "0.3.0",
+    workerProtocolVersion: "workbench-device-worker-v1",
+    publicIdentity: `sha256:${"e".repeat(64)}`,
+    capabilityInventory: ["file_read", "notification"],
+    registrationStatus: "active",
+    health: "ready",
+    lastSeenAt: "2026-08-13T00:00:00.000Z",
+    updateRequired: false,
+    revision: 1,
+    createdAt: "2026-08-13T00:00:00.000Z",
+    updatedAt: "2026-08-13T00:00:00.000Z",
+    revokedAt: null,
+  },
+  requestId: "request-device-owner-mac",
+};
+const scopeEnvelope = {
+  schemaVersion: "workbench-api-v1",
+  data: {
+    schemaVersion: "workbench-v1",
+    scopeId: "scope-personal",
+    workspaceId: "workspace-1",
+    kind: "personal",
+    ownerUserId: "user-1",
+    policy: {
+      policyRevisionId: "scope-policy-1",
+      observationTier: "private",
+      defaultPermission: { mode: "auto", autoApprovedEffectClasses: ["execute"] },
+    },
+    createdAt: "2026-08-12T00:00:00.000Z",
+    updatedAt: "2026-08-12T00:00:00.000Z",
+  },
+  requestId: "request-scope-policy",
+};
+const projectEnvelope = {
+  schemaVersion: "workbench-api-v1",
+  data: {
+    schemaVersion: "workbench-v1",
+    projectId: "project-launch",
+    workspaceId: "workspace-1",
+    scopeId: "scope-project-launch",
+    title: "Launch readiness",
+    objective: "Prepare the release with an accountable team.",
+    status: "active",
+    accountableOwnerUserId: "user-1",
+    members: [
+      { userId: "user-1", role: "owner" },
+      { userId: "user-teammate", role: "member" },
+    ],
+    createdAt: "2026-08-13T00:00:00.000Z",
+    updatedAt: "2026-08-13T00:00:00.000Z",
+    archivedAt: null,
+  },
+  requestId: "request-project-launch",
+};
+const teamWorkItemEnvelope = {
+  schemaVersion: "workbench-api-v1",
+  data: {
+    schemaVersion: "workbench-v1",
+    workItemId: "work-item-launch",
+    workspaceId: "workspace-1",
+    projectId: "project-launch",
+    title: "Validate release readiness",
+    objective: "Validate the release path and record the decision.",
+    status: "ready",
+    priority: "high",
+    accountableOwnerUserId: "user-1",
+    requestorUserId: "user-1",
+    members: [
+      {
+        userId: "user-1",
+        roles: ["accountable_owner", "requestor"],
+        accessGrant: { grantId: "grant-owner", workItemId: "work-item-launch", userId: "user-1", access: "owner", status: "active", createdAt: "2026-08-13T00:00:00.000Z", revokedAt: null },
+      },
+      {
+        userId: "user-teammate",
+        roles: ["participant"],
+        accessGrant: { grantId: "grant-teammate", workItemId: "work-item-launch", userId: "user-teammate", access: "contribute", status: "active", createdAt: "2026-08-13T00:00:00.000Z", revokedAt: null },
+      },
+    ],
+    source: { kind: "team_work_item" },
+    dueAt: null,
+    workThreadId: "work-thread-launch",
+    authorizedBranchRefs: [],
+    linkedLoopRef: null,
+    runRefs: [],
+    artifactRefs: [],
+    decisionRefs: [],
+    proposalRefs: [],
+    blockedReason: null,
+    nextAction: "Start validation.",
+    createdByUserId: "user-1",
+    createdAt: "2026-08-13T00:00:00.000Z",
+    updatedAt: "2026-08-13T00:00:00.000Z",
+    completedAt: null,
+  },
+  requestId: "request-team-work-item",
+};
 const fetchImpl = async (url, options = {}) => {
   requests.push({ url, options });
-  if (url.endsWith("/workspace")) {
+  if (url.endsWith("/devices/device-owner-mac/revoke") && options.method === "POST") {
     return response({
-      data: { session: { csrfToken: "c".repeat(32), expiresAt: "2026-07-10T10:00:00.000Z" } },
+      ...deviceEnvelope,
+      data: {
+        ...deviceEnvelope.data,
+        registrationStatus: "revoked",
+        health: "revoked",
+        revision: 2,
+        revokedAt: "2026-08-13T00:01:00.000Z",
+        updatedAt: "2026-08-13T00:01:00.000Z",
+      },
+    }, { headers: { "cache-control": "private, no-store" } });
+  }
+  if (url.endsWith("/devices")) {
+    return response({
+      ...deviceEnvelope,
+      data: [deviceEnvelope.data],
+      page: { nextCursor: null, hasMore: false },
+    }, { headers: { "cache-control": "private, no-store" } });
+  }
+  if (/\/automations\/automation-daily\/occurrences(?:\?|$)/.test(url)) {
+    return response(automationOccurrencesEnvelope, {
+      headers: { "cache-control": "private, no-store" },
     });
+  }
+  if (url.endsWith("/automations/automation-daily") && options.method === "PATCH") {
+    return response({
+      ...automationEnvelope,
+      data: {
+        ...automationEnvelope.data,
+        displayName: "Daily brief, revised",
+        revision: 2,
+        triggerRevision: 2,
+        grantRevision: 2,
+      },
+    }, { headers: { "cache-control": "private, no-store", etag: '"automationv1:automation-daily:2"' } });
+  }
+  if (url.endsWith("/automations/automation-daily")) {
+    return response(automationEnvelope, {
+      headers: { "cache-control": "private, no-store", etag: '"automationv1:automation-daily:1"' },
+    });
+  }
+  if (url.endsWith("/automations") && options.method === "POST") {
+    return response(automationEnvelope, {
+      status: 201,
+      headers: { "cache-control": "private, no-store", etag: '"automationv1:automation-daily:1"' },
+    });
+  }
+  if (url.includes("/automations?") && !url.includes("/automations/candidates")) {
+    return response({
+      ...automationEnvelope,
+      data: [automationEnvelope.data],
+      page: { nextCursor: null, hasMore: false },
+    }, { headers: { "cache-control": "private, no-store" } });
+  }
+  if (url.endsWith("/projects") && options.method === "POST") {
+    return response(projectEnvelope, { status: 201, headers: { "cache-control": "no-store", etag: '"projectv1:project-launch:1"' } });
+  }
+  if (url.endsWith("/projects/project-launch/members") && options.method === "PUT") {
+    return response(projectEnvelope, { headers: { "cache-control": "no-store", etag: '"projectv1:project-launch:2"' } });
+  }
+  if (url.endsWith("/projects/project-launch")) {
+    return response(projectEnvelope, { headers: { "cache-control": "no-store", etag: '"projectv1:project-launch:1"' } });
+  }
+  if (url.includes("/projects?")) {
+    return response({ ...projectEnvelope, data: [projectEnvelope.data], page: { nextCursor: null, hasMore: false } }, { headers: { "cache-control": "no-store" } });
+  }
+  if (url.endsWith("/work-items/agent-entry") && options.method === "POST") {
+    return response({
+      schemaVersion: "workbench-api-v1",
+      data: {
+        workItem: teamWorkItemEnvelope.data,
+        continuation: {
+          continuationId: "work-item-continuation-owner",
+          workItemId: "work-item-launch",
+          agentSessionId: "agent-session-owner-work-entry",
+          handoffId: "handoff-launch",
+          createdAt: "2026-08-13T00:00:00.000Z",
+        },
+        turn: {
+          schemaVersion: "workbench-v1",
+          turnId: "agent-turn-work-entry",
+          sessionId: "agent-session-owner-work-entry",
+          productCommandId: "product-command-work-entry",
+          sequence: 1,
+          kind: "agent_message",
+          status: "queued",
+          modelRoutingState: "pinned",
+          requestedModelRevisionId: "model-revision-chat-1",
+          actualModelRevisionId: null,
+          sessionEpoch: 1,
+          turnFence: 1,
+          input: { message: "Create the first launch checklist." },
+          result: null,
+          artifactRefs: [],
+          queuedAt: "2026-08-13T00:00:00.000Z",
+          startedAt: null,
+          finishedAt: null,
+          updatedAt: "2026-08-13T00:00:00.000Z",
+        },
+      },
+      requestId: "request-team-work-agent-entry",
+    }, { status: 202, headers: { "cache-control": "no-store", etag: '"workv1:work-item-launch:1"' } });
+  }
+  if (url.endsWith("/work-items") && options.method === "POST") {
+    return response(teamWorkItemEnvelope, { status: 201, headers: { "cache-control": "no-store", etag: '"workv1:work-item-launch:1"' } });
+  }
+  if (url.endsWith("/work-items/work-item-launch") && options.method === "PATCH") {
+    return response({ ...teamWorkItemEnvelope, data: { ...teamWorkItemEnvelope.data, status: "active" } }, { headers: { "cache-control": "no-store", etag: '"workv1:work-item-launch:2"' } });
+  }
+  if (url.includes("/work-items?") && !url.includes("promotion-participants")) {
+    return response({ ...teamWorkItemEnvelope, data: [teamWorkItemEnvelope.data], page: { nextCursor: null, hasMore: false } }, { headers: { "cache-control": "no-store" } });
+  }
+  if (url.includes("/automations/candidates")) {
+    return response(automationCandidateEnvelope, {
+      headers: { "cache-control": "private, no-store" },
+    });
+  }
+  if (url.endsWith("/scopes/scope-personal") && options.method === "GET") {
+    return response(scopeEnvelope, {
+      headers: { "cache-control": "private, no-store", etag: '"scopev1:scope-personal:1:scope-policy-1"' },
+    });
+  }
+  if (url.endsWith("/scopes/scope-personal/policy") && options.method === "PATCH") {
+    return response(scopeEnvelope, {
+      headers: { "cache-control": "private, no-store", etag: '"scopev1:scope-personal:2:scope-policy-2"' },
+    });
+  }
+  if (url.endsWith("/auth/status")) {
+    return response(authStatusEnvelope(), { headers: { "cache-control": "no-store" } });
+  }
+  if (url.endsWith("/workspace/feature-readiness")) {
+    return response(workspaceFeatureReadinessEnvelope, {
+      headers: { "cache-control": "private, no-store" },
+    });
+  }
+  if (url.includes("/inbox")) {
+    return response(inboxEnvelope, {
+      headers: { "cache-control": "private, no-store" },
+    });
+  }
+  if (url.endsWith("/workspace")) {
+    return workspaceResponse(workspaceEnvelope({
+      csrfToken: "c".repeat(32),
+      userId: "user-1",
+      workspaceId: "workspace-1",
+    }));
+  }
+  if (url.endsWith("/agent-sessions/session-1/proposals/agent-proposal-1/apply")) {
+    return response({ data: {
+      proposalId: "agent-proposal-1",
+      sessionId: "session-1",
+      branchId: "branch-1",
+      objectKind: "skill_draft",
+      objectId: "skill-1",
+      baseVersionId: "draft-1:1",
+      summary: "Update the description.",
+      operations: [{ op: "replace", path: "/description", value: "Updated." }],
+      status: "accepted",
+      createdAt: "2026-07-29T00:00:00.000Z",
+      decidedAt: "2026-07-29T00:01:00.000Z",
+    } });
+  }
+  if (url.endsWith("/agent-sessions/session-1/proposals/agent-proposal-1/reject")) {
+    return response({ data: {
+      proposalId: "agent-proposal-1",
+      sessionId: "session-1",
+      branchId: "branch-1",
+      objectKind: "skill_draft",
+      objectId: "skill-1",
+      baseVersionId: "draft-1:1",
+      summary: "Update the description.",
+      operations: [{ op: "replace", path: "/description", value: "Updated." }],
+      status: "rejected",
+      createdAt: "2026-07-29T00:00:00.000Z",
+      decidedAt: "2026-07-29T00:01:00.000Z",
+    } });
+  }
+  if (url.endsWith("/agent-sessions/session-1/proposals/agent-proposal-1")) {
+    return response({ data: {
+      proposalId: "agent-proposal-1",
+      sessionId: "session-1",
+      branchId: "branch-1",
+      objectKind: "skill_draft",
+      objectId: "skill-1",
+      baseVersionId: "draft-1:1",
+      summary: "Update the description.",
+      operations: [{ op: "replace", path: "/description", value: "Updated." }],
+      status: "proposed",
+      createdAt: "2026-07-29T00:00:00.000Z",
+    } });
+  }
+  if (url.endsWith("/attachments/attachment-1/retry")) {
+    return response({ data: { attachment: {
+      attachmentId: "attachment-1",
+      filename: "notes.md",
+      mediaType: "text/markdown",
+      sizeBytes: 5,
+      status: "ready",
+      ref: { attachmentId: "attachment-1", version: 1, contentHash: "sha256:attachment" },
+    } } });
+  }
+  if (url.endsWith("/attachments/attachment-1") && options.method === "DELETE") {
+    return response({ data: { attachmentId: "attachment-1", status: "deleted" } });
+  }
+  if (url.endsWith("/attachments/attachment-1")) {
+    return response({ data: { attachment: {
+      attachmentId: "attachment-1",
+      filename: "notes.md",
+      mediaType: "text/markdown",
+      sizeBytes: 5,
+      status: "ready",
+      ref: { attachmentId: "attachment-1", version: 1, contentHash: "sha256:attachment" },
+    } } });
+  }
+  if (url.endsWith("/attachments") && options.method === "POST") {
+    return response({ data: { attachment: {
+      attachmentId: "attachment-1",
+      filename: "notes.md",
+      mediaType: "text/markdown",
+      sizeBytes: 5,
+      status: "ready",
+      ref: { attachmentId: "attachment-1", version: 1, contentHash: "sha256:attachment" },
+    } } }, { status: 201 });
+  }
+  if (url.endsWith("/attachments")) {
+    return response({ data: { items: [], page: { hasMore: false } } });
   }
   if (url.endsWith("/session")) {
     return response({
@@ -48,56 +580,7 @@ const fetchImpl = async (url, options = {}) => {
     return response({ data: [{ skill: { skillId: "skill-1" }, draft: null, latestVersion: null }] });
   }
   if (url.endsWith("/uploads")) {
-    const body = options.body ? JSON.parse(options.body) : null;
-    if (body?.data?.assetKind === "loop") {
-      return response({ data: { uploadId: "upload-loop-1", assetKind: "loop", state: "selecting" } }, { status: 201 });
-    }
     return response({ data: { uploadId: "upload-1", state: "selecting" } }, { status: 201 });
-  }
-  if (url.endsWith("/uploads/upload-loop-1/chunks/0")) {
-    return response({ data: {
-      uploadId: "upload-loop-1",
-      assetKind: "loop",
-      state: "selecting",
-      sizeBytes: 45,
-      ingestMethod: "resumable",
-      transfer: { chunkSizeBytes: 524288, totalChunks: 1, receivedChunks: [0], receivedBytes: 45, complete: true },
-    } });
-  }
-  if (url.endsWith("/uploads/upload-loop-1/complete")) {
-    return response({ data: { uploadId: "upload-loop-1", assetKind: "loop", state: "ready_draft", sizeBytes: 45, ingestMethod: "resumable" } });
-  }
-  if (url.endsWith("/uploads/upload-loop-1") && (!options.method || options.method === "GET")) {
-    return response({ data: {
-      uploadId: "upload-loop-1",
-      assetKind: "loop",
-      state: "selecting",
-      sizeBytes: 45,
-      ingestMethod: "resumable",
-      transfer: { chunkSizeBytes: 524288, totalChunks: 1, receivedChunks: [], receivedBytes: 0, complete: false },
-    } });
-  }
-  if (url.endsWith("/loop-imports") && options.method === "POST") {
-    return response({ data: {
-      importId: "loop-import-1",
-      status: "ready",
-      portableLoop: { name: "Portable proof", requirements: { skills: [], materials: [], connections: [] } },
-      requirementStates: [],
-    } }, { status: 202, headers: { etag: '"liv1:loop-import-1:1"' } });
-  }
-  if (url.endsWith("/loop-imports/loop-import-1") && (!options.method || options.method === "GET")) {
-    return response({ data: { importId: "loop-import-1", status: "ready", portableLoop: { name: "Portable proof" } } }, { headers: { etag: '"liv1:loop-import-1:1"' } });
-  }
-  if (url.endsWith("/loop-imports/loop-import-1/commit")) {
-    return response({ data: { workflow: { workflowId: "workflow-imported" }, revision: { revisionId: "revision-imported" } } }, { status: 201, headers: { etag: '"wfv1:workflow-imported:1"' } });
-  }
-  if (url.includes("/loops/workflow-new/export?revisionId=revision-new")) {
-    const bytes = new TextEncoder().encode('{"schemaVersion":"portable-loop-package-v1"}\n');
-    return rawResponse(bytes, { headers: {
-      "content-type": PORTABLE_LOOP_PACKAGE_MEDIA_TYPE,
-      "content-disposition": 'attachment; filename="portable-proof.loop.json"',
-      etag: '"sha256:portable-proof"',
-    } });
   }
   if (url.endsWith("/uploads/repository")) {
     return response({ data: { uploadId: "upload-repository-1", state: "ready_draft", ingestMethod: "repository" } }, { status: 201 });
@@ -236,48 +719,14 @@ const fetchImpl = async (url, options = {}) => {
   if (url.endsWith("/skills/skill-1/deprecate")) {
     return response({ data: { skillId: "skill-1", lifecycle: "deprecated" } });
   }
-  if (url.endsWith("/runs/run-1/comparison/run-2")) {
-    return response({ data: { left: { runId: "run-1", workflowRevisionId: "revision-2", status: "completed", skillVersions: ["2.0.0"], reviewed: true, finalAnswer: null, finishedAt: null }, right: { runId: "run-2", workflowRevisionId: "revision-1", status: "completed", skillVersions: ["1.0.0"], reviewed: true, finalAnswer: null, finishedAt: null }, workflowRevisionChanged: true, skillVersionsChanged: true, finalAnswerChanged: false } });
-  }
-  if (url.endsWith("/runs/run-1/draft")) {
-    return response({ data: { workflow: { workflowId: "workflow-from-run" }, revision: { revisionId: "revision-from-run" } } }, { status: 201 });
-  }
   if (url.endsWith("/skills/skill-1/publish")) {
     return response({ data: { skill: { skillId: "skill-1" }, version: { skillVersionId: "skill-version-1" }, release: { releaseId: "release-skill-1" } } });
   }
   if (url.endsWith("/skills") && options.method === "POST") {
     return response({ data: { skill: { skillId: "skill-1" }, draft: { skillDraftId: "draft-1" } } }, { status: 201 });
   }
-  if (url.endsWith("/loops/workflow-new/duplicate")) {
-    return response({ data: { workflow: { workflowId: "workflow-copy" }, revision: { revisionId: "revision-copy" } } }, { status: 201 });
-  }
   if (url.endsWith("/loops")) {
     return response({ data: { workflow: { workflowId: "workflow-new" }, revision: { revisionId: "revision-new" } } }, { status: 201 });
-  }
-  if (url.endsWith("/loops/workflow-new/skill-updates")) {
-    return response({ data: { workflow: { workflowId: "workflow-new" }, revision: { revisionId: "revision-v2" } } }, { status: 201, headers: { etag: '"wfv1:workflow-new:2"' } });
-  }
-  if (url.endsWith("/loops/workflow-new/skill-updates/skill-version-2")) {
-    return response({ data: {
-      workflowId: "workflow-new",
-      workflowRevisionId: "revision-new",
-      workflowName: "Meeting follow-up",
-      skillId: "skill-1",
-      currentVersion: { skillVersionId: "skill-version-1", version: "1.0.0" },
-      targetVersion: { skillVersionId: "skill-version-2", version: "2.0.0" },
-      affectedNodes: [{ nodeId: "node-skill", title: "Extract actions" }],
-      changes: [],
-      requiresTestRun: true,
-    } }, { headers: { etag: '"wfv1:workflow-new:1:revision-new"' } });
-  }
-  if (url.endsWith("/loops/workflow-new/proposals") && options.method === "POST") {
-    return response({ data: { proposalId: "proposal-1", baseRevisionId: "revision-new", status: "proposed" } }, { status: 201 });
-  }
-  if (url.endsWith("/loops/workflow-new/proposals/proposal-1/apply") && options.method === "POST") {
-    return response({ data: { proposalId: "proposal-1", baseRevisionId: "revision-new", status: "applied" } });
-  }
-  if (url.endsWith("/loops/workflow-new/proposals/proposal-1/dismiss") && options.method === "POST") {
-    return response({ data: { proposalId: "proposal-1", baseRevisionId: "revision-new", status: "dismissed" } });
   }
   if (url.endsWith("/team-library")) {
     return response({ data: [{ releaseId: "release-1", assetKind: "loop" }] });
@@ -285,17 +734,8 @@ const fetchImpl = async (url, options = {}) => {
   if (url.endsWith("/installations")) {
     return response({ data: [{ installationId: "installation-1", pinnedVersionId: "skill-version-1" }] });
   }
-  if (url.endsWith("/installations/installation-1/adopt-release")) {
-    return response({ data: { installationId: "installation-1", pinnedVersionId: "skill-version-2" } });
-  }
   if (url.endsWith("/installations/installation-1")) {
     return response({ data: { installationId: "installation-1", pinnedVersionId: "skill-version-1" } });
-  }
-  if (url.endsWith("/starting-point")) {
-    return response({ data: { workflow: { workflowId: "workflow-start" }, revision: { revisionId: "revision-start" } } }, { status: 201 });
-  }
-  if (url.endsWith("/fork")) {
-    return response({ data: { workflow: { workflowId: "workflow-fork" }, revision: { revisionId: "revision-fork" } } }, { status: 201 });
   }
   if (url.endsWith("/install")) {
     return response({ data: { installationId: "installation-1" } }, { status: 201 });
@@ -310,10 +750,120 @@ const fetchImpl = async (url, options = {}) => {
     return response({ data: { loopVersion: { loopVersionId: "loop-version-1" }, release: { releaseId: "release-published" } } }, { status: 201 });
   }
   if (url.endsWith("/cancel")) {
-    return response({ data: { runId: "run-1" } });
+    return response({
+      schemaVersion: "workbench-api-v1",
+      data: { runId: "run-1" },
+      requestId: "request-run-cancel",
+    }, { status: 202 });
   }
   if (url.endsWith("/retry")) {
-    return response({ data: { runId: "run-2" } });
+    return response({
+      schemaVersion: "workbench-api-v1",
+      data: { runId: "run-2" },
+      requestId: "request-run-retry",
+    }, { status: 202 });
+  }
+  if (url.endsWith("/work-items/promotion-participants")) {
+    return response({
+      schemaVersion: "workbench-api-v1",
+      data: [{
+        userId: "user-teammate",
+        displayName: "Teammate",
+        username: "teammate",
+        role: "member",
+      }],
+      page: { nextCursor: null, hasMore: false },
+      requestId: "request-work-item-participants",
+    }, { headers: { "cache-control": "no-store" } });
+  }
+  if (url.endsWith("/work-items/work-item-launch/continuations")) {
+    return response({
+      schemaVersion: "workbench-api-v1",
+      data: {
+        continuationId: "work-item-continuation-teammate",
+        workItemId: "work-item-launch",
+        agentSessionId: "agent-session-teammate",
+        handoffId: "handoff-launch",
+        createdAt: "2026-08-11T00:00:00.000Z",
+      },
+      requestId: "request-work-item-continuation",
+    }, { status: 201, headers: { "cache-control": "no-store" } });
+  }
+  if (url.endsWith("/work-items/work-item-launch/agent-entry") && options.method === "POST") {
+    return response({
+      schemaVersion: "workbench-api-v1",
+      data: {
+        continuation: {
+          continuationId: "work-item-continuation-teammate",
+          workItemId: "work-item-launch",
+          agentSessionId: "agent-session-teammate",
+          handoffId: "handoff-launch",
+          createdAt: "2026-08-11T00:00:00.000Z",
+        },
+        turn: {
+          schemaVersion: "workbench-v1",
+          turnId: "agent-turn-continuation-entry",
+          sessionId: "agent-session-teammate",
+          productCommandId: "product-command-continuation-entry",
+          sequence: 1,
+          kind: "agent_message",
+          status: "queued",
+          modelRoutingState: "pinned",
+          requestedModelRevisionId: "model-revision-chat-1",
+          actualModelRevisionId: null,
+          sessionEpoch: 1,
+          turnFence: 1,
+          input: { message: "Continue the release readiness work from the shared handoff." },
+          result: null,
+          artifactRefs: [],
+          queuedAt: "2026-08-13T00:00:00.000Z",
+          startedAt: null,
+          finishedAt: null,
+          updatedAt: "2026-08-13T00:00:00.000Z",
+        },
+      },
+      requestId: "request-work-item-continuation-agent-entry",
+    }, { status: 202, headers: { "cache-control": "no-store" } });
+  }
+  if (url.endsWith("/work-items/work-item-launch/thread-entries") && options.method === "POST") {
+    return response({
+      schemaVersion: "workbench-api-v1",
+      data: {
+        entryId: "work-thread-entry-comment",
+        workItemId: "work-item-launch",
+        workThreadId: "work-thread-launch",
+        sequence: 2,
+        kind: "comment",
+        summary: "I will validate provider readiness for the team.",
+        handoffId: null,
+        decisionId: null,
+        artifactId: null,
+        contentHash: `sha256:${"d".repeat(64)}`,
+        createdByUserId: "user-1",
+        occurredAt: "2026-08-11T00:00:00.000Z",
+      },
+      requestId: "request-work-item-comment",
+    }, { status: 201, headers: { "cache-control": "no-store" } });
+  }
+  if (url.endsWith("/work-items/work-item-launch/decisions") && options.method === "POST") {
+    return response({
+      schemaVersion: "workbench-api-v1",
+      data: {
+        decisionId: "work-item-decision-provider-readiness",
+        workItemId: "work-item-launch",
+        question: "Which readiness action should the team take?",
+        options: ["Proceed", "Validate first"],
+        chosenOutcome: "Validate first",
+        rationale: "The accountable owner accepts the validation time.",
+        evidenceRefs: ["evidence-provider-readiness"],
+        affectedObjects: [{ kind: "workflow", id: "workflow-launch" }],
+        authorUserId: "user-1",
+        approverUserId: "user-1",
+        supersedesDecisionId: null,
+        createdAt: "2026-08-12T00:00:00.000Z",
+      },
+      requestId: "request-work-item-decision",
+    }, { status: 201, headers: { "cache-control": "no-store" } });
   }
   if (url.endsWith("/runs")) {
     return response({
@@ -346,7 +896,236 @@ const api = createWorkbenchApiClient({
   idFactory: () => "idem-fixed",
 });
 
+for (const retiredMethod of [
+  "duplicateLoop",
+  "createLoopImport",
+  "getLoopImport",
+  "commitLoopImport",
+  "exportLoop",
+  "getRunComparison",
+  "createLoopDraftFromRun",
+  "createLoopSkillUpdate",
+  "getLoopSkillUpdatePreview",
+  "generateLoopProposal",
+  "getLoopProposal",
+  "applyLoopProposal",
+  "dismissLoopProposal",
+  "adoptInstallationRelease",
+  "useTeamReleaseAsStartingPoint",
+  "forkTeamLoopRelease",
+]) {
+  assert.equal(api[retiredMethod], undefined, `${retiredMethod} must not remain on the public ProductClient`);
+}
+
 await api.bootstrap();
+assert.equal((await api.authStatus()).data.workspaceId, "workspace-1");
+const devices = await api.listDevices();
+assert.equal(devices.data[0].deviceId, "device-owner-mac");
+assert.equal(devices.data[0].publicIdentity, `sha256:${"e".repeat(64)}`);
+assert.match(requests.at(-1).url, /\/devices$/);
+assert.equal(requests.at(-1).options.credentials, "same-origin");
+const revokedDevice = await api.revokeDevice("device-owner-mac", {
+  reason: "Lost device",
+}, { idempotencyKey: "device-revoke" });
+assert.equal(revokedDevice.data.registrationStatus, "revoked");
+assert.equal(requests.at(-1).options.method, "POST");
+assert.equal(requests.at(-1).options.headers.get("X-Workbench-CSRF"), "c".repeat(32));
+assert.equal(requests.at(-1).options.headers.get("Idempotency-Key"), "device-revoke");
+assert.deepEqual(JSON.parse(requests.at(-1).options.body).data, { reason: "Lost device" });
+const automations = await api.listAutomations({ status: "active", limit: 10 });
+assert.equal(automations.data[0].automationId, "automation-daily");
+assert.equal(automations.data[0].grantExpiresAt, "2026-08-30T09:00:00.000Z");
+assert.match(requests.at(-1).url, /\/automations\?status=active&limit=10$/);
+const automation = await api.getAutomation("automation-daily");
+assert.equal(automation.etag, '"automationv1:automation-daily:1"');
+assert.equal(automation.data.grantReviewAt, "2026-08-20T09:00:00.000Z");
+const revisedAutomation = await api.reviseAutomation("automation-daily", {
+  displayName: "Daily brief, revised",
+  loopVersionId: "loop-daily-v1",
+  trigger: { kind: "daily_cron", expression: "0 10 * * *", timezone: "Asia/Hong_Kong" },
+  inputBindings: automation.data.inputBindings,
+  connectionBindings: [{ requirementId: "calendar-read", connectionId: "connection-1" }],
+  budgetPolicy: { maxCostUsdMicros: 2_000_000, maxRuntimeSeconds: 900 },
+  misfirePolicy: { kind: "run_once", maxLatenessSeconds: 600 },
+  grantExpiresAt: "2026-08-30T09:00:00.000Z",
+  grantReviewAt: "2026-08-20T09:00:00.000Z",
+}, { ifMatch: automation.etag, idempotencyKey: "automation-revise" });
+assert.equal(revisedAutomation.etag, '"automationv1:automation-daily:2"');
+assert.equal(revisedAutomation.data.displayName, "Daily brief, revised");
+assert.equal(requests.at(-1).options.headers.get("If-Match"), automation.etag);
+assert.equal(requests.at(-1).options.headers.get("Idempotency-Key"), "automation-revise");
+assert.equal(JSON.parse(requests.at(-1).options.body).data.grantReviewAt, "2026-08-20T09:00:00.000Z");
+const automationOccurrences = await api.listAutomationOccurrences("automation-daily", { limit: 10 });
+assert.equal(automationOccurrences.data[0].workflowId, "workflow-daily");
+assert.equal(automationOccurrences.data[0].runStatus, "waiting_review");
+assert.match(requests.at(-1).url, /\/automations\/automation-daily\/occurrences\?limit=10$/);
+const automationCandidates = await api.listAutomationCandidates({ scopeId: "scope-personal", limit: 10 });
+assert.equal(automationCandidates.data[0].connectionRequirements[0].eligibleConnectionIds[0], "connection-1");
+assert.match(requests.at(-1).url, /\/automations\/candidates\?scopeId=scope-personal&limit=10$/);
+const scope = await api.getScope("scope-personal");
+assert.equal(scope.etag, '"scopev1:scope-personal:1:scope-policy-1"');
+const revisedScope = await api.reviseScopePolicy("scope-personal", {
+  observationTier: "private",
+  defaultPermission: { mode: "auto", autoApprovedEffectClasses: ["execute"] },
+}, { ifMatch: scope.etag, idempotencyKey: "scope-policy-update" });
+assert.equal(revisedScope.etag, '"scopev1:scope-personal:2:scope-policy-2"');
+assert.equal(requests.at(-1).options.headers.get("If-Match"), scope.etag);
+const projects = await api.listProjects({ status: "active", limit: 10 });
+assert.equal(projects.data[0].projectId, "project-launch");
+assert.match(requests.at(-1).url, /\/projects\?status=active&limit=10$/);
+const project = await api.getProject("project-launch");
+assert.equal(project.etag, '"projectv1:project-launch:1"');
+const createdProject = await api.createProject({
+  title: "Launch readiness",
+  objective: "Prepare the release with an accountable team.",
+  members: [{ userId: "user-teammate" }],
+}, { idempotencyKey: "project-create" });
+assert.equal(createdProject.data.projectId, "project-launch");
+assert.equal(createdProject.etag, '"projectv1:project-launch:1"');
+assert.equal(requests.at(-1).options.headers.get("Idempotency-Key"), "project-create");
+const revisedProject = await api.reviseProjectMembers("project-launch", {
+  members: [{ userId: "user-teammate" }],
+}, { ifMatch: project.etag, idempotencyKey: "project-members" });
+assert.equal(revisedProject.etag, '"projectv1:project-launch:2"');
+assert.equal(requests.at(-1).options.headers.get("If-Match"), project.etag);
+const workItems = await api.listWorkItems({ projectId: "project-launch", limit: 10 });
+assert.equal(workItems.data[0].workItemId, "work-item-launch");
+assert.match(requests.at(-1).url, /\/work-items\?projectId=project-launch&limit=10$/);
+const createdWorkItem = await api.createTeamWorkItem({
+  projectId: "project-launch",
+  title: "Validate release readiness",
+  objective: "Validate the release path and record the decision.",
+  summary: "A safe release handoff.",
+  priority: "high",
+  dueAt: null,
+  members: [{ userId: "user-teammate", access: "contribute", roles: ["participant"] }],
+}, { idempotencyKey: "team-work-create" });
+assert.equal(createdWorkItem.etag, '"workv1:work-item-launch:1"');
+assert.equal(requests.at(-1).options.headers.get("Idempotency-Key"), "team-work-create");
+const teamWorkAgentEntry = await api.createTeamWorkItemAgentEntry({
+  projectId: "project-launch",
+  title: "Agent-led launch checklist",
+  objective: "Produce the first accountable launch checklist.",
+  summary: "Only this safe handoff is shared with the team.",
+  modelProfileId: "model-profile-chat-1",
+  initialTask: { message: "Create the first launch checklist." },
+}, { idempotencyKey: "team-work-agent-entry" });
+assert.equal(teamWorkAgentEntry.data.continuation.agentSessionId, "agent-session-owner-work-entry");
+assert.equal(teamWorkAgentEntry.data.turn.productCommandId, "product-command-work-entry");
+assert.equal(teamWorkAgentEntry.etag, '"workv1:work-item-launch:1"');
+assert.match(requests.at(-1).url, /\/work-items\/agent-entry$/);
+assert.equal(requests.at(-1).options.method, "POST");
+assert.equal(requests.at(-1).options.headers.get("Idempotency-Key"), "team-work-agent-entry");
+assert.deepEqual(JSON.parse(requests.at(-1).options.body).data.initialTask, {
+  message: "Create the first launch checklist.",
+});
+const updatedWorkItem = await api.updateTeamWorkItem("work-item-launch", {
+  status: "active",
+}, { ifMatch: createdWorkItem.etag, idempotencyKey: "team-work-update" });
+assert.equal(updatedWorkItem.data.status, "active");
+assert.equal(updatedWorkItem.etag, '"workv1:work-item-launch:2"');
+assert.equal(requests.at(-1).options.headers.get("If-Match"), createdWorkItem.etag);
+const promotionParticipants = await api.listWorkItemPromotionParticipants();
+assert.deepEqual(promotionParticipants.data, [{
+  userId: "user-teammate",
+  displayName: "Teammate",
+  username: "teammate",
+  role: "member",
+}]);
+assert.match(requests.at(-1).url, /\/work-items\/promotion-participants$/);
+const continuation = await api.createWorkItemContinuation("work-item-launch", {
+  idempotencyKey: "continue-work-item-launch",
+});
+assert.equal(continuation.data.agentSessionId, "agent-session-teammate");
+assert.match(requests.at(-1).url, /\/work-items\/work-item-launch\/continuations$/);
+assert.equal(requests.at(-1).options.method, "POST");
+assert.equal(requests.at(-1).options.headers.get("Idempotency-Key"), "continue-work-item-launch");
+assert.deepEqual(JSON.parse(requests.at(-1).options.body).data, {});
+const continuationAgentEntry = await api.createWorkItemContinuationAgentEntry("work-item-launch", {
+  modelProfileId: "model-profile-chat-1",
+  initialTask: { message: "Continue the release readiness work from the shared handoff." },
+}, { idempotencyKey: "continue-work-item-agent-entry" });
+assert.equal(continuationAgentEntry.data.continuation.agentSessionId, "agent-session-teammate");
+assert.equal(continuationAgentEntry.data.turn.productCommandId, "product-command-continuation-entry");
+assert.match(requests.at(-1).url, /\/work-items\/work-item-launch\/agent-entry$/);
+assert.equal(requests.at(-1).options.method, "POST");
+assert.equal(requests.at(-1).options.headers.get("Idempotency-Key"), "continue-work-item-agent-entry");
+assert.deepEqual(JSON.parse(requests.at(-1).options.body).data, {
+  modelProfileId: "model-profile-chat-1",
+  initialTask: { message: "Continue the release readiness work from the shared handoff." },
+});
+const workItemComment = await api.createWorkItemThreadComment("work-item-launch", {
+  content: "I will validate provider readiness for the team.",
+}, { idempotencyKey: "comment-work-item-launch" });
+assert.equal(workItemComment.data.kind, "comment");
+assert.match(requests.at(-1).url, /\/work-items\/work-item-launch\/thread-entries$/);
+assert.equal(requests.at(-1).options.method, "POST");
+assert.equal(requests.at(-1).options.headers.get("Idempotency-Key"), "comment-work-item-launch");
+assert.deepEqual(JSON.parse(requests.at(-1).options.body).data, {
+  content: "I will validate provider readiness for the team.",
+});
+const workItemDecision = await api.recordWorkItemDecision("work-item-launch", {
+  question: "Which readiness action should the team take?",
+  options: ["Proceed", "Validate first"],
+  chosenOutcome: "Validate first",
+  rationale: "The accountable owner accepts the validation time.",
+  evidenceRefs: ["evidence-provider-readiness"],
+  affectedObjects: [{ kind: "workflow", id: "workflow-launch" }],
+}, { idempotencyKey: "decision-work-item-launch" });
+assert.equal(workItemDecision.data.approverUserId, "user-1");
+assert.match(requests.at(-1).url, /\/work-items\/work-item-launch\/decisions$/);
+assert.equal(requests.at(-1).options.method, "POST");
+assert.equal(requests.at(-1).options.headers.get("Idempotency-Key"), "decision-work-item-launch");
+assert.equal(JSON.parse(requests.at(-1).options.body).data.chosenOutcome, "Validate first");
+const readinessController = new AbortController();
+assert.equal(
+  (await api.getWorkspaceFeatureReadiness({ signal: readinessController.signal })).data.workspaceId,
+  "workspace-1",
+);
+assert.equal(
+  requests.find(({ url }) => url.endsWith("/workspace/feature-readiness")).options.signal,
+  readinessController.signal,
+);
+const inboxController = new AbortController();
+const inbox = await api.getInbox({ cursor: "cursor:2", limit: 25 }, {
+  signal: inboxController.signal,
+});
+assert.equal(inbox.data.count, 1);
+const inboxRequest = requests.find(({ url }) => url.includes("/inbox"));
+assert.match(inboxRequest.url, /cursor=cursor%3A2&limit=25$/);
+assert.equal(inboxRequest.options.signal, inboxController.signal);
+const agentProposal = await api.getAgentProposal("session-1", "agent-proposal-1");
+assert.equal(agentProposal.data.status, "proposed");
+assert.match(requests.at(-1).url, /\/agent-sessions\/session-1\/proposals\/agent-proposal-1$/);
+const acceptedAgentProposal = await api.applyAgentProposal(
+  "session-1",
+  "agent-proposal-1",
+  { idempotencyKey: "agent-proposal-apply-1" },
+);
+assert.equal(acceptedAgentProposal.data.status, "accepted");
+assert.equal(requests.at(-1).options.method, "POST");
+assert.equal(requests.at(-1).options.headers["Idempotency-Key"], "agent-proposal-apply-1");
+assert.deepEqual(JSON.parse(requests.at(-1).options.body).data, {});
+const rejectedAgentProposal = await api.rejectAgentProposal(
+  "session-1",
+  "agent-proposal-1",
+  { idempotencyKey: "agent-proposal-reject-1" },
+);
+assert.equal(rejectedAgentProposal.data.status, "rejected");
+assert.equal(requests.at(-1).options.headers["Idempotency-Key"], "agent-proposal-reject-1");
+const attachment = await api.createAttachment({
+  filename: "notes.md",
+  mediaType: "text/markdown",
+  sizeBytes: 5,
+  contentBase64: "bm90ZXM=",
+}, { idempotencyKey: "attachment-upload-1" });
+assert.equal(attachment.data.attachment.ref.attachmentId, "attachment-1");
+assert.equal(requests.at(-1).options.headers["Idempotency-Key"], "attachment-upload-1");
+assert.equal(JSON.parse(requests.at(-1).options.body).data.filename, "notes.md");
+await api.retryAttachment("attachment-1", { idempotencyKey: "attachment-retry-1" });
+assert.match(requests.at(-1).url, /\/attachments\/attachment-1\/retry$/);
+await api.deleteAttachment("attachment-1", { idempotencyKey: "attachment-delete-1" });
+assert.equal(requests.at(-1).options.method, "DELETE");
 const activeSession = await api.getActiveSession();
 assert.equal(activeSession.data.membership.role, "viewer");
 assert.match(requests.at(-1).url, /\/session$/);
@@ -411,50 +1190,6 @@ assert.equal(createdLoop.data.workflow.workflowId, "workflow-new");
 const createRequest = requests.at(-1);
 assert.match(createRequest.url, /\/loops$/);
 assert.equal(JSON.parse(createRequest.options.body).data.name, "Action follow-up");
-
-const copiedLoop = await api.duplicateLoop("workflow-new", { name: "Action follow-up copy" });
-const duplicateRequest = requests.at(-1);
-assert.match(duplicateRequest.url, /\/loops\/workflow-new\/duplicate$/);
-assert.equal(duplicateRequest.options.method, "POST");
-assert.equal(JSON.parse(duplicateRequest.options.body).data.name, "Action follow-up copy");
-assert.equal(copiedLoop.data.workflow.workflowId, "workflow-copy");
-
-const portableBytes = new TextEncoder().encode('{"schemaVersion":"portable-loop-package-v1"}\n');
-const loopProgress = [];
-const preparedLoop = await beginPortableLoopImport({
-  api,
-  data: { bytes: portableBytes, filename: "portable-proof.loop.json" },
-  idempotencyKey: "portable-proof",
-  onProgress: (progress) => loopProgress.push(progress),
-});
-assert.equal(preparedLoop.upload.assetKind, "loop");
-assert.equal(preparedLoop.loopImport.importId, "loop-import-1");
-assert.equal(preparedLoop.etag, '"liv1:loop-import-1:1"');
-assert.deepEqual(loopProgress.map((item) => item.phase), ["uploading", "uploading", "checking", "preparing"]);
-const portableUploadRequest = requests.find((request) => request.url.endsWith("/uploads") && JSON.parse(request.options.body).data.assetKind === "loop");
-assert.equal(JSON.parse(portableUploadRequest.options.body).data.mediaType, PORTABLE_LOOP_PACKAGE_MEDIA_TYPE);
-assert.equal(JSON.parse(portableUploadRequest.options.body).data.ingestMethod, "resumable");
-assert.match(requests.find((request) => request.url.endsWith("/loop-imports")).options.headers["Idempotency-Key"], /portable-proof:import/);
-
-const refreshedImport = await api.getLoopImport("loop-import-1");
-assert.equal(refreshedImport.etag, '"liv1:loop-import-1:1"');
-const committedImport = await api.commitLoopImport("loop-import-1", {
-  skillMappings: [],
-  materialMappings: [],
-  connectionMappings: [],
-}, { ifMatch: refreshedImport.etag, idempotencyKey: "portable-proof:commit" });
-assert.equal(committedImport.data.workflow.workflowId, "workflow-imported");
-assert.equal(requests.at(-1).options.headers["If-Match"], '"liv1:loop-import-1:1"');
-
-const downloadedLoop = await api.exportLoop("workflow-new", "revision-new");
-assert.equal(downloadedLoop.mediaType, PORTABLE_LOOP_PACKAGE_MEDIA_TYPE);
-assert.equal(downloadedLoop.filename, "portable-proof.loop.json");
-assert.equal(downloadedLoop.etag, '"sha256:portable-proof"');
-assert.equal(new TextDecoder().decode(downloadedLoop.bytes), new TextDecoder().decode(portableBytes));
-assert.equal(portableLoopFilename('attachment; filename="safe-name.loop.json"'), "safe-name.loop.json");
-const exportRequest = requests.at(-1);
-assert.equal(exportRequest.options.headers.Accept, PORTABLE_LOOP_PACKAGE_MEDIA_TYPE);
-assert.equal(exportRequest.options.credentials, "same-origin");
 
 const canonicalPackage = formatSkillPackageBytes([
   { path: "scripts/main.py", contentBase64: "cHJpbnQoJ29rJykK" },
@@ -715,80 +1450,19 @@ const retiredSkill = await api.deprecateSkill("skill-1", { reason: "A newer vers
 assert.equal(retiredSkill.data.lifecycle, "deprecated");
 assert.match(requests.at(-1).url, /\/skills\/skill-1\/deprecate$/);
 assert.equal(JSON.parse(requests.at(-1).options.body).data.reason, "A newer version is available.");
-const runComparison = await api.getRunComparison("run-1", "run-2");
-assert.deepEqual(runComparison.data.left.skillVersions, ["2.0.0"]);
-assert.match(requests.at(-1).url, /\/runs\/run-1\/comparison\/run-2$/);
-const fromRun = await api.createLoopDraftFromRun("run-1", { name: "Action follow-up from run" });
-assert.equal(fromRun.data.workflow.workflowId, "workflow-from-run");
-assert.match(requests.at(-1).url, /\/runs\/run-1\/draft$/);
-assert.equal(JSON.parse(requests.at(-1).options.body).data.name, "Action follow-up from run");
-
 const published = await api.publishLoop("workflow-new", { version: "1.0.0", releaseNotes: "First team release.", startingPoint: true }, { ifMatch: '"wfv1:workflow-new:1"' });
 assert.equal(published.data.release.releaseId, "release-published");
 const publishRequest = requests.at(-1);
 assert.match(publishRequest.url, /\/loops\/workflow-new\/publish$/);
 assert.equal(publishRequest.options.headers["If-Match"], '"wfv1:workflow-new:1"');
 assert.equal(JSON.parse(publishRequest.options.body).data.startingPoint, true);
-const updatedLoop = await api.createLoopSkillUpdate(
-  "workflow-new",
-  { skillId: "skill-1", fromVersion: "1.0.0", toVersion: "2.0.0" },
-  { ifMatch: '"wfv1:workflow-new:1"' },
-);
-assert.equal(updatedLoop.data.revision.revisionId, "revision-v2");
-assert.match(requests.at(-1).url, /\/loops\/workflow-new\/skill-updates$/);
-const updatePreview = await api.getLoopSkillUpdatePreview("workflow-new", "skill-version-2");
-assert.equal(updatePreview.data.targetVersion.version, "2.0.0");
-assert.equal(updatePreview.etag, '"wfv1:workflow-new:1:revision-new"');
-assert.match(requests.at(-1).url, /\/loops\/workflow-new\/skill-updates\/skill-version-2$/);
-
-const proposed = await api.generateLoopProposal(
-  "workflow-new",
-  { instruction: "Add a review step." },
-  { ifMatch: '"wfv1:workflow-new:2"' },
-);
-assert.equal(proposed.data.status, "proposed");
-const proposalRequest = requests.at(-1);
-assert.match(proposalRequest.url, /\/loops\/workflow-new\/proposals$/);
-assert.equal(proposalRequest.options.headers["If-Match"], '"wfv1:workflow-new:2"');
-assert.equal(JSON.parse(proposalRequest.options.body).data.instruction, "Add a review step.");
-
-const appliedProposal = await api.applyLoopProposal(
-  "workflow-new",
-  "proposal-1",
-  { baseRevisionId: "revision-new" },
-  { ifMatch: '"wfv1:workflow-new:2"' },
-);
-assert.equal(appliedProposal.data.status, "applied");
-assert.match(requests.at(-1).url, /\/loops\/workflow-new\/proposals\/proposal-1\/apply$/);
-
-const dismissedProposal = await api.dismissLoopProposal(
-  "workflow-new",
-  "proposal-1",
-  { baseRevisionId: "revision-new" },
-  { ifMatch: '"wfv1:workflow-new:2"' },
-);
-assert.equal(dismissedProposal.data.status, "dismissed");
-assert.match(requests.at(-1).url, /\/loops\/workflow-new\/proposals\/proposal-1\/dismiss$/);
-
 const library = await api.listTeamLibrary();
 assert.equal(library.data[0].releaseId, "release-1");
 const installations = await api.listInstallations();
 assert.equal(installations.data[0].installationId, "installation-1");
 const connectionBindings = [{ requirementId: "calendar.read", connectionId: "connection-1" }];
-const adoptedInstallation = await api.adoptInstallationRelease("installation-1", { releaseId: "release-2", connectionBindings });
-assert.equal(adoptedInstallation.data.pinnedVersionId, "skill-version-2");
-assert.match(requests.at(-1).url, /\/installations\/installation-1\/adopt-release$/);
-assert.deepEqual(JSON.parse(requests.at(-1).options.body).data.connectionBindings, connectionBindings);
 const installed = await api.installTeamRelease("release-1", { connectionIds: ["connection-1"], connectionBindings });
 assert.equal(installed.data.installationId, "installation-1");
-assert.deepEqual(JSON.parse(requests.at(-1).options.body).data.connectionBindings, connectionBindings);
-const startingPoint = await api.useTeamReleaseAsStartingPoint("release-1", { name: "My shared Loop", connectionBindings });
-assert.equal(startingPoint.data.workflow.workflowId, "workflow-start");
-assert.match(requests.at(-1).url, /\/team-library\/release-1\/starting-point$/);
-assert.deepEqual(JSON.parse(requests.at(-1).options.body).data.connectionBindings, connectionBindings);
-const forkedLoop = await api.forkTeamLoopRelease("release-1", { name: "My independent Loop", connectionBindings });
-assert.equal(forkedLoop.data.workflow.workflowId, "workflow-fork");
-assert.match(requests.at(-1).url, /\/team-library\/release-1\/fork$/);
 assert.deepEqual(JSON.parse(requests.at(-1).options.body).data.connectionBindings, connectionBindings);
 
 await assert.rejects(
@@ -819,14 +1493,11 @@ const recoveringApi = createWorkbenchApiClient({
     recoveryRequests.push({ url, options });
     if (url.endsWith("/workspace")) {
       recoveryWorkspaceCalls += 1;
-      return response({
-        data: {
-          session: {
-            csrfToken: (recoveryWorkspaceCalls === 1 ? "a" : "b").repeat(32),
-            expiresAt: "2026-07-10T10:00:00.000Z",
-          },
-        },
-      });
+      return workspaceResponse(workspaceEnvelope({
+        csrfToken: (recoveryWorkspaceCalls === 1 ? "a" : "b").repeat(32),
+        userId: "user-recovery",
+        workspaceId: "workspace-recovery",
+      }));
     }
     if (url.endsWith("/compile")) {
       recoveryCompileCalls += 1;
@@ -865,14 +1536,11 @@ const concurrentApi = createWorkbenchApiClient({
       if (concurrentWorkspaceCalls === 2) {
         await new Promise((resolve) => setTimeout(resolve, 20));
       }
-      return response({
-        data: {
-          session: {
-            csrfToken: (concurrentWorkspaceCalls === 1 ? "a" : "b").repeat(32),
-            expiresAt: "2026-07-10T10:00:00.000Z",
-          },
-        },
-      });
+      return workspaceResponse(workspaceEnvelope({
+        csrfToken: (concurrentWorkspaceCalls === 1 ? "a" : "b").repeat(32),
+        userId: "user-concurrent",
+        workspaceId: "workspace-concurrent",
+      }));
     }
     if (url.endsWith("/compile")) {
       if (options.headers["X-Workbench-CSRF"] === "a".repeat(32)) {
@@ -904,7 +1572,224 @@ assert.deepEqual(
   ["idem-a", "idem-b"],
 );
 
+let principalWorkspaceCalls = 0;
+let principalMutationCalls = 0;
+const principalApi = createWorkbenchApiClient({
+  idFactory: () => "idem-principal-fence",
+  async fetchImpl(url) {
+    if (url.endsWith("/workspace")) {
+      principalWorkspaceCalls += 1;
+      const userId = principalWorkspaceCalls === 1 ? "user-a" : "user-b";
+      return workspaceResponse(workspaceEnvelope({
+        csrfToken: (principalWorkspaceCalls === 1 ? "a" : "b").repeat(32),
+        userId,
+        workspaceId: "workspace-shared",
+      }));
+    }
+    if (url.endsWith("/compile")) {
+      principalMutationCalls += 1;
+      return response({
+        code: "csrf_invalid",
+        message: "The signed-in user changed.",
+        details: {},
+        retryable: false,
+        requestId: "request-principal-changed",
+      }, { status: 403 });
+    }
+    throw new Error(`unexpected_principal_url:${url}`);
+  },
+});
+await principalApi.bootstrap();
+await assert.rejects(
+  principalApi.compileWorkflow("workflow-principal", "revision-principal"),
+  (error) => error?.code === "workbench_principal_changed",
+);
+assert.equal(principalWorkspaceCalls, 2);
+assert.equal(
+  principalMutationCalls,
+  1,
+  "a mutation rejected under one principal must not replay after the cookie switches users",
+);
+
+const authFlowRequests = [];
+const invitationEnvelope = {
+  invitationId: "invitation-1",
+  workspaceId: "workspace-1",
+  email: "member@example.test",
+  role: "member",
+  status: "pending",
+  expiresAt: "2026-08-12T00:00:00.000Z",
+  createdAt: "2026-08-11T00:00:00.000Z",
+  updatedAt: "2026-08-11T00:00:00.000Z",
+  deliveryStatus: "queued",
+};
+const authFlowApi = createWorkbenchApiClient({
+  idFactory: () => "register-idempotency-1",
+  async fetchImpl(url, options = {}) {
+    authFlowRequests.push({ url, options });
+    if (url.endsWith("/workspace")) {
+      return workspaceResponse(workspaceEnvelope({
+        csrfToken: "s".repeat(32),
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      }));
+    }
+    if (url.endsWith("/auth/register")) {
+      return response(authResultEnvelope(), {
+        status: 201,
+        headers: { "cache-control": "no-store" },
+      });
+    }
+    if (url.endsWith("/auth/login")) {
+      return response(authResultEnvelope(), { headers: { "cache-control": "no-store" } });
+    }
+    if (url.endsWith("/auth/logout")) {
+      return response({
+        schemaVersion: "workbench-api-v1",
+        data: { revoked: true },
+        requestId: "request-logout-1",
+      }, { headers: { "cache-control": "no-store" } });
+    }
+    if (url.endsWith("/auth/invitations/inspect")) {
+      return response({
+        schemaVersion: "workbench-api-v1",
+        data: { invitationId: "invitation-1", expiresAt: invitationEnvelope.expiresAt, providers: ["google"] },
+        requestId: "request-invitation-inspect",
+      }, { headers: { "cache-control": "no-store" } });
+    }
+    if (url.endsWith("/auth/oauth/google/start")) {
+      return response({
+        schemaVersion: "workbench-api-v1",
+        data: { authorizationUrl: "https://accounts.example.test/authorize?state=opaque" },
+        requestId: "request-oauth-start",
+      }, { headers: { "cache-control": "no-store" } });
+    }
+    if (url.endsWith("/workspace/invitations")) {
+      if (options.method === "GET") {
+        return response({
+          schemaVersion: "workbench-api-v1",
+          data: [invitationEnvelope],
+          page: { nextCursor: null, hasMore: false },
+          requestId: "request-invitation-list",
+        }, { headers: { "cache-control": "no-store" } });
+      }
+      return response({
+        schemaVersion: "workbench-api-v1",
+        data: { invitation: invitationEnvelope },
+        requestId: "request-invitation-create",
+      }, { status: 201, headers: { "cache-control": "no-store" } });
+    }
+    throw new Error(`unexpected_auth_flow_url:${url}`);
+  },
+});
+await authFlowApi.bootstrap();
+assert.equal((await authFlowApi.register({
+  username: "owner.local",
+  password: "correct horse",
+})).data.workspaceId, "workspace-1");
+assert.equal((await authFlowApi.login({
+  username: "owner.local",
+  password: "correct horse",
+})).data.workspaceId, "workspace-1");
+assert.equal((await authFlowApi.inspectInvitation("v1~invitation~invite-1~opaque")).data.invitationId, "invitation-1");
+assert.equal((await authFlowApi.startOAuth("google", {
+  token: "v1~invitation~invite-1~opaque",
+})).data.authorizationUrl.startsWith("https://"), true);
+assert.equal((await authFlowApi.createInvitation({ email: "member@example.test" })).data.invitation.status, "pending");
+assert.equal((await authFlowApi.listInvitations()).data[0].email, "member@example.test");
+assert.equal((await authFlowApi.logout()).data.revoked, true);
+const registerRequest = authFlowRequests.find(({ url }) => url.endsWith("/auth/register"));
+const loginRequest = authFlowRequests.find(({ url }) => url.endsWith("/auth/login"));
+const logoutRequest = authFlowRequests.find(({ url }) => url.endsWith("/auth/logout"));
+const inspectInvitationRequest = authFlowRequests.find(({ url }) => url.endsWith("/auth/invitations/inspect"));
+const startOAuthRequest = authFlowRequests.find(({ url }) => url.endsWith("/auth/oauth/google/start"));
+const createInvitationRequest = authFlowRequests.find(({ url, options }) => (
+  url.endsWith("/workspace/invitations") && options.method === "POST"
+));
+assert.equal(registerRequest.options.headers.get("Idempotency-Key"), "register-idempotency-1");
+assert.equal(registerRequest.options.headers.get("X-Workbench-CSRF"), null);
+assert.equal(loginRequest.options.headers.get("X-Workbench-CSRF"), null);
+assert.equal(logoutRequest.options.headers.get("X-Workbench-CSRF"), "s".repeat(32));
+assert.equal(inspectInvitationRequest.options.headers.get("X-Workbench-CSRF"), null);
+assert.equal(startOAuthRequest.options.headers.get("X-Workbench-CSRF"), null);
+assert.equal(createInvitationRequest.options.headers.get("X-Workbench-CSRF"), "s".repeat(32));
+const authFlowFetchCount = authFlowRequests.length;
+await assert.rejects(
+  authFlowApi.logout(),
+  (error) => error?.code === "workspace_session_required",
+);
+assert.equal(authFlowRequests.length, authFlowFetchCount, "logout without a session stops before fetch");
+
+let mismatchedAuthFetchCount = 0;
+const mismatchedAuthApi = createWorkbenchApiClient({
+  async fetchImpl(url) {
+    mismatchedAuthFetchCount += 1;
+    if (url.endsWith("/auth/login")) {
+      return response(authResultEnvelope(), { headers: { "cache-control": "no-store" } });
+    }
+    if (url.endsWith("/workspace")) {
+      return workspaceResponse(workspaceEnvelope({
+        csrfToken: "m".repeat(32),
+        userId: "user-other",
+        workspaceId: "workspace-1",
+      }));
+    }
+    throw new Error(`unexpected_mismatched_auth_url:${url}`);
+  },
+});
+await assert.rejects(
+  mismatchedAuthApi.login({ username: "owner.local", password: "correct horse" }),
+  (error) => error?.code === "auth_session_principal_mismatch",
+);
+const mismatchFetchCountAfterLogin = mismatchedAuthFetchCount;
+await assert.rejects(
+  mismatchedAuthApi.logout(),
+  (error) => error?.code === "workspace_session_required",
+);
+assert.equal(
+  mismatchedAuthFetchCount,
+  mismatchFetchCountAfterLogin,
+  "a mismatched auth/session principal must clear the local mutation session",
+);
+
 const events = [];
+const expectedRunEventTypes = [
+  "run.queued",
+  "run.started",
+  "node.started",
+  "node.progress",
+  "node.completed",
+  "node.failed",
+  "review.requested",
+  "run.paused",
+  "run.cancellation_requested",
+  "run.completed",
+  "run.failed",
+  "run.cancelled",
+  "run.partial",
+  "run.effect_outcome_unknown",
+];
+assert.deepEqual(RUN_EVENT_TYPES, expectedRunEventTypes);
+assert.deepEqual(RUN_TERMINAL_STATUSES, [
+  "completed",
+  "failed",
+  "cancelled",
+  "partial",
+  "effect_outcome_unknown",
+]);
+for (const status of RUN_TERMINAL_STATUSES) assert.equal(isTerminalRunStatus(status), true);
+for (const status of ["queued", "running", "waiting_review", "paused", "cancellation_requested"]) {
+  assert.equal(isTerminalRunStatus(status), false);
+}
+assert.equal(runRefetchInterval({ state: { data: { data: { run: { status: "partial" } } } } }), false);
+assert.equal(runRefetchInterval({ state: { data: { data: { run: { status: "effect_outcome_unknown" } } } } }), false);
+assert.equal(runRefetchInterval({ state: { data: { data: { run: { status: "cancellation_requested" } } } } }), 1_000);
+assert.equal(workflowRunsRefetchInterval({
+  state: { data: { data: [{ status: "completed" }, { status: "partial" }] } },
+}), false);
+assert.equal(workflowRunsRefetchInterval({
+  state: { data: { data: [{ status: "partial" }, { status: "running" }] } },
+}), 1_000);
 const stream = api.openRunEventStream("run-1", {
   after: 4,
   onEvent: (event) => events.push(event),
@@ -912,9 +1797,49 @@ const stream = api.openRunEventStream("run-1", {
 assert.equal(eventSources[0].url, "/api/workbench/v1/runs/run-1/events?after=4");
 assert.equal(eventSources[0].options.withCredentials, true);
 assert.ok(RUN_EVENT_TYPES.every((type) => eventSources[0].listeners.has(type)));
-eventSources[0].emit("node.completed", { runId: "run-1", sequence: 5, type: "node.completed" });
-assert.equal(events[0].sequence, 5);
+for (const [index, type] of RUN_EVENT_TYPES.entries()) {
+  eventSources[0].emit(type, { runId: "run-1", sequence: index + 5, type });
+}
+assert.deepEqual(events.map((event) => event.type), expectedRunEventTypes);
 stream.close();
 assert.equal(eventSources[0].closed, true);
+
+let visualReviewFetchCount = 0;
+const visualReviewApi = createWorkbenchApiClient({
+  reviewMode: "visual-only",
+  async fetchImpl(url) {
+    visualReviewFetchCount += 1;
+    if (url.endsWith("/auth/login")) {
+      return response(authResultEnvelope({
+        user: { ...authUser, userId: "visual-reviewer", username: "visual.review" },
+        workspaceId: "workspace-visual",
+      }), { headers: { "cache-control": "no-store" } });
+    }
+    if (url.endsWith("/workspace")) {
+      return workspaceResponse(workspaceEnvelope({
+        csrfToken: "v".repeat(32),
+        userId: "visual-reviewer",
+        workspaceId: "workspace-visual",
+      }));
+    }
+    throw new Error(`visual_review_mutation_reached_fetch:${url}`);
+  },
+});
+await visualReviewApi.bootstrap();
+await visualReviewApi.login({ username: "visual-reviewer", password: "review-only" });
+assert.equal(
+  visualReviewFetchCount,
+  3,
+  "visual-only review may use only login plus its read-only workspace refresh to establish identity",
+);
+await assert.rejects(
+  visualReviewApi.createResource({
+    label: "Must not be written",
+    mediaType: "text/plain",
+    contentBase64: "bm8=",
+  }),
+  (error) => error?.code === "visual_review_mutation_forbidden",
+);
+assert.equal(visualReviewFetchCount, 3, "visual-only business mutations must be blocked before fetch");
 
 console.log("web_api_client_smoke=pass");

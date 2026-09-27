@@ -1,0 +1,1195 @@
+.skillCreationPage {
+  --skill-accent: #4f46e5;
+  --skill-accent-soft: #eef2ff;
+  --skill-border: #ddd9d3;
+  --skill-muted: #78716c;
+  width: min(100%, 900px);
+  min-height: calc(100dvh - 108px);
+  margin: 0 auto;
+  padding: 28px 28px 96px;
+  color: #1c1917;
+}
+
+.skillCreationHeader {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.skillCreationHeader > button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--skill-border);
+  border-radius: 10px;
+  background: #fff;
+  color: #44403c;
+}
+
+.skillCreationHeader span,
+.skillCreationHeader h1 {
+  display: block;
+  margin: 0;
+}
+
+.skillCreationHeader span {
+  margin-bottom: 2px;
+  color: var(--skill-muted);
+  font-size: 12px;
+}
+
+.skillCreationHeader h1 {
+  font-size: clamp(22px, 3vw, 30px);
+  letter-spacing: -.025em;
+}
+
+.skillEntryChoices,
+.skillTypeGrid,
+.skillRuntimeCatalog {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.skillEntryChoices {
+  margin-bottom: 24px;
+}
+
+.skillEntryChoices > button,
+.skillTypeGrid > button,
+.skillRuntimeCatalog > button {
+  display: flex;
+  min-height: 92px;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--skill-border);
+  border-radius: 12px;
+  background: #fff;
+  color: #292524;
+  text-align: left;
+}
+
+.skillEntryChoices > button:hover,
+.skillTypeGrid > button:hover,
+.skillRuntimeCatalog > button:not(:disabled):hover {
+  border-color: #a8a29e;
+  background: #fafaf9;
+}
+
+.skillEntryChoices > button.active,
+.skillTypeGrid > button.active,
+.skillRuntimeCatalog > button.active {
+  border-color: var(--skill-accent);
+  background: var(--skill-accent-soft);
+  box-shadow: 0 0 0 3px rgb(79 70 229 / .1);
+}
+
+.skillEntryChoices strong,
+.skillEntryChoices small,
+.skillTypeGrid strong,
+.skillTypeGrid small,
+.skillRuntimeCatalog strong,
+.skillRuntimeCatalog span,
+.skillRuntimeCatalog small {
+  display: block;
+}
+
+.skillEntryChoices small,
+.skillTypeGrid small,
+.skillRuntimeCatalog span,
+.skillRuntimeCatalog small {
+  margin-top: 5px;
+  color: var(--skill-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.skillWizardLayout {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 34px;
+  align-items: start;
+}
+
+.skillWizardSteps {
+  position: sticky;
+  top: 78px;
+  padding: 16px;
+  border: 1px solid var(--skill-border);
+  border-radius: 12px;
+  background: #fafaf9;
+}
+
+.skillWizardSteps p {
+  margin: 0 0 12px;
+  color: var(--skill-muted);
+  font-size: 12px;
+}
+
+.skillWizardCurrentLabel {
+  display: none;
+}
+
+.skillWizardSteps ol {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skillWizardSteps button {
+  display: grid;
+  width: 100%;
+  min-height: 42px;
+  grid-template-columns: 26px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #78716c;
+  text-align: left;
+}
+
+.skillWizardSteps button:disabled {
+  opacity: 1;
+}
+
+.skillWizardSteps li.active button {
+  background: #fff;
+  color: #3730a3;
+  font-weight: 650;
+  box-shadow: 0 1px 3px rgb(28 25 23 / .08);
+}
+
+.skillWizardSteps li.complete button {
+  color: #166534;
+  cursor: pointer;
+}
+
+.skillWizardStepMarker {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid #d6d3d1;
+  border-radius: 50%;
+  font-size: 11px;
+}
+
+.skillWizardSteps li.active .skillWizardStepMarker {
+  border-color: var(--skill-accent);
+  background: var(--skill-accent);
+  color: #fff;
+}
+
+.skillWizardSteps li.complete .skillWizardStepMarker {
+  border-color: #86efac;
+  background: #dcfce7;
+}
+
+.skillWizardContent {
+  min-width: 0;
+}
+
+.skillWizardHeading {
+  margin-bottom: 22px;
+}
+
+.skillWizardHeading h2,
+.skillWizardHeading p {
+  margin: 0;
+}
+
+.skillWizardHeading h2 {
+  font-size: 22px;
+  letter-spacing: -.02em;
+}
+
+.skillWizardHeading p {
+  margin-top: 6px;
+  color: var(--skill-muted);
+  line-height: 1.55;
+}
+
+.skillCreationPage label {
+  display: grid;
+  gap: 7px;
+  color: #44403c;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.skillCreationPage input:not([type="checkbox"]):not([type="file"]),
+.skillCreationPage textarea {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--skill-border);
+  border-radius: 8px;
+  background: #fff;
+  color: #1c1917;
+  font: inherit;
+  font-weight: 400;
+}
+
+.skillCreationPage input:not([type="checkbox"]):not([type="file"]) {
+  padding: 0 11px;
+}
+
+.skillCreationPage textarea {
+  padding: 10px 11px;
+  line-height: 1.5;
+  resize: none;
+}
+
+.skillCreationPage input:focus,
+.skillCreationPage textarea:focus,
+.skillCreationPage button:focus-visible {
+  border-color: var(--skill-accent);
+  outline: 3px solid rgb(79 70 229 / .1);
+  outline-offset: 1px;
+}
+
+.skillFieldGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.skillContractGroup {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid #e7e5e4;
+}
+
+.skillContractGroup > div:first-child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.skillContractGroup h3,
+.skillContractGroup p {
+  margin: 0;
+}
+
+.skillContractGroup h3 {
+  font-size: 15px;
+}
+
+.skillContractGroup p {
+  flex: 1 1 260px;
+  color: var(--skill-muted);
+  font-size: 12px;
+}
+
+.skillInterfaceEditor {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.skillInterfaceRow {
+  display: grid;
+  grid-template-columns: minmax(110px, .75fr) minmax(160px, 1.4fr) auto auto auto;
+  gap: 8px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid #e7e5e4;
+  border-radius: 10px;
+  background: #fafaf9;
+}
+
+.skillMaterialRequirementRow {
+  grid-template-columns: minmax(150px, .8fr) minmax(220px, 1.2fr) auto auto;
+}
+
+.skillMaterialRequirementRow > label:first-child {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.skillMaterialRequirementRow > .skillInterfaceDescription {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.skillMaterialRequirementRow > .skillRequiredToggle {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.skillMaterialRequirementRow > .skillRemoveRow {
+  grid-column: 4;
+  grid-row: 1;
+}
+
+.skillMaterialFormatPicker {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.skillMaterialFormatPicker legend {
+  margin-bottom: 7px;
+  color: var(--skill-ink);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.skillMultiSelect {
+  position: relative;
+  max-width: 440px;
+}
+
+.skillMultiSelectTrigger {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--skill-border);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--skill-ink);
+  text-align: left;
+}
+
+.skillMultiSelectTrigger > span,
+.skillMultiSelectTrigger strong,
+.skillMultiSelectTrigger small {
+  display: block;
+  min-width: 0;
+}
+
+.skillMultiSelectTrigger strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skillMultiSelectTrigger small {
+  margin-top: 2px;
+  color: var(--skill-muted);
+  font-size: 11px;
+}
+
+.skillMultiSelectTrigger svg {
+  flex: none;
+  color: var(--skill-muted);
+  transition: transform 140ms ease;
+}
+
+.skillMultiSelectTrigger[aria-expanded="true"] {
+  border-color: #a5b4fc;
+  box-shadow: 0 0 0 3px rgb(79 70 229 / .08);
+}
+
+.skillMultiSelectTrigger[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.skillMultiSelectTrigger[aria-invalid="true"] {
+  border-color: #dc2626;
+}
+
+.skillMultiSelectPopover {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 7px);
+  left: 0;
+  display: flex;
+  width: min(100%, 440px);
+  max-height: var(--skill-multiselect-max-height, 420px);
+  min-width: 320px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #d6d3d1;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 18px 45px rgb(28 25 23 / .14), 0 2px 8px rgb(28 25 23 / .08);
+}
+
+.skillMultiSelectPopover[data-placement="above"] {
+  top: auto;
+  bottom: calc(100% + 7px);
+}
+
+.skillMultiSelectHeader,
+.skillMultiSelectActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.skillMultiSelectHeader {
+  border-bottom: 1px solid #f0eeeb;
+}
+
+.skillMultiSelectHeader strong {
+  font-size: 12px;
+}
+
+.skillMultiSelectHeader span {
+  color: var(--skill-muted);
+  font-size: 11px;
+}
+
+.skillMultiSelectOptions {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  gap: 7px;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.skillMultiSelectOptions section {
+  display: grid;
+  gap: 2px;
+}
+
+.skillMultiSelectOptions h4 {
+  margin: 0;
+  padding: 5px 9px 3px;
+  color: var(--skill-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.skillMultiSelectOptions label {
+  display: grid;
+  min-height: 38px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  padding: 7px 9px;
+  border-radius: 7px;
+  color: #44403c;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.skillMultiSelectOptions label:hover {
+  background: #f5f5f4;
+}
+
+.skillMultiSelectOptions label.selected {
+  background: var(--skill-accent-soft);
+  color: #3730a3;
+}
+
+.skillMultiSelectOptions input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--skill-accent);
+}
+
+.skillMultiSelectActions {
+  justify-content: flex-end;
+  border-top: 1px solid #f0eeeb;
+  background: #fafaf9;
+}
+
+.skillMultiSelectActions button {
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #4338ca;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.skillMultiSelectActions button:hover:not(:disabled),
+.skillMultiSelectActions button:focus-visible {
+  background: #eef2ff;
+}
+
+.skillMultiSelectActions button:disabled {
+  color: #a8a29e;
+}
+
+.skillMaterialFormatPicker > small {
+  display: block;
+  margin-top: 7px;
+  color: var(--skill-muted);
+  font-size: 11px;
+}
+
+.skillMaterialFormatPicker > small[role="alert"] {
+  color: #b91c1c;
+}
+
+.skillChoiceChips {
+  display: flex;
+  max-width: 180px;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.skillChoiceChips button,
+.skillCategoryChips button,
+.skillRequiredToggle,
+.skillFixedType {
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 1px solid var(--skill-border);
+  border-radius: 999px;
+  background: #fff;
+  color: #57534e;
+  font-size: 11px;
+}
+
+.skillChoiceChips button.active,
+.skillCategoryChips button.active,
+.skillRequiredToggle.active {
+  border-color: #a5b4fc;
+  background: var(--skill-accent-soft);
+  color: #3730a3;
+}
+
+.skillRemoveRow {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #b91c1c;
+}
+
+.skillInterfaceEmpty {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed #d6d3d1;
+  border-radius: 10px;
+  color: var(--skill-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.skillRuntimeDecision,
+.skillRiskNotice,
+.skillPrivateNotice {
+  padding: 16px;
+  border: 1px solid var(--skill-border);
+  border-radius: 10px;
+  background: #fafaf9;
+}
+
+.skillRuntimeDecision p,
+.skillRiskNotice p,
+.skillPrivateNotice p {
+  margin: 5px 0 0;
+  color: var(--skill-muted);
+  line-height: 1.5;
+}
+
+.skillRiskNotice,
+.skillPrivateNotice {
+  display: flex;
+  gap: 11px;
+  margin-top: 18px;
+}
+
+.skillRiskNotice svg,
+.skillPrivateNotice svg {
+  flex: none;
+  color: var(--skill-accent);
+}
+
+.skillRuntimeCatalog {
+  margin-top: 10px;
+}
+
+.skillRuntimeCatalog > button:disabled {
+  cursor: not-allowed;
+  opacity: .62;
+}
+
+.skillRuntimeError {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #fecaca;
+  border-radius: 9px;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.skillBudgetGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.skillBudgetStepper {
+  padding: 13px;
+  border: 1px solid #e7e5e4;
+  border-radius: 10px;
+}
+
+.skillBudgetStepper > span,
+.skillBudgetStepper > small {
+  display: block;
+  color: var(--skill-muted);
+  font-size: 11px;
+}
+
+.skillBudgetStepper > div {
+  display: grid;
+  grid-template-columns: 36px 1fr 36px;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
+
+.skillBudgetStepper button {
+  height: 36px;
+  border: 1px solid var(--skill-border);
+  border-radius: 8px;
+  background: #fff;
+  color: #3730a3;
+  font-size: 18px;
+}
+
+.skillBudgetStepper output {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.skillCategoryChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.skillCategoryChips button {
+  min-height: 38px;
+  padding-inline: 14px;
+  font-size: 12px;
+}
+
+.skillTagField {
+  display: grid;
+  gap: 7px;
+}
+
+.skillTagField > label {
+  color: #44403c;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.skillTagInput {
+  display: flex;
+  min-height: 46px;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid var(--skill-border);
+  border-radius: 9px;
+  background: #fff;
+  cursor: text;
+}
+
+.skillTagInput:focus-within {
+  border-color: var(--skill-accent);
+  outline: 3px solid rgb(79 70 229 / .1);
+  outline-offset: 1px;
+}
+
+.skillCreationPage .skillTagInput input:not([type="checkbox"]):not([type="file"]) {
+  min-width: 150px;
+  min-height: 30px;
+  flex: 1 1 180px;
+  padding: 0 3px;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
+
+.skillTagToken {
+  display: inline-flex;
+  min-height: 29px;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 5px 4px 9px;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.skillTagToken button {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #6366f1;
+}
+
+.skillTagToken button:hover,
+.skillTagToken button:focus-visible {
+  background: #dbeafe;
+  color: #312e81;
+}
+
+.skillTagField > small {
+  color: var(--skill-muted);
+  font-size: 11px;
+}
+
+.skillTagField > small[role="alert"] {
+  color: #b91c1c;
+}
+
+.skillPackagePreview {
+  display: grid;
+  min-height: 360px;
+  grid-template-columns: 180px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--skill-border);
+  border-radius: 12px;
+}
+
+.skillPackagePreview > div {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 14px;
+  border-right: 1px solid var(--skill-border);
+  background: #fafaf9;
+}
+
+.skillPackagePreview h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+
+.skillPackagePreview button {
+  min-height: 36px;
+  padding: 7px 9px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #57534e;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+.skillPackagePreview button.active {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.skillPackagePreview > section {
+  min-width: 0;
+  padding: 14px;
+}
+
+.skillPackagePreview pre {
+  max-height: 320px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.skillWizardContent > label + label {
+  margin-top: 16px;
+}
+
+.skillStepValidation {
+  margin: 18px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 12px;
+}
+
+.skillReviewSections {
+  display: grid;
+  border: 1px solid var(--skill-border);
+  border-radius: 12px;
+}
+
+.skillReviewSections > section {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 16px;
+  align-items: start;
+}
+
+.skillReviewSections > section + section {
+  border-top: 1px solid #e7e5e4;
+}
+
+.skillReviewSections > section > span,
+.skillReviewSections small {
+  color: var(--skill-muted);
+  font-size: 12px;
+}
+
+.skillReviewSections p {
+  margin: 4px 0;
+  line-height: 1.5;
+}
+
+.skillReviewSections button {
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  color: #4338ca;
+}
+
+.skillImportFlow,
+.skillCreationInspection {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.skillImportFlow > * + *,
+.skillCreationInspection > * + * {
+  margin-top: 18px;
+}
+
+.registeredToolCatalog {
+  display: grid;
+  gap: 18px;
+}
+
+.registeredToolList {
+  display: grid;
+  gap: 12px;
+}
+
+.registeredToolList > article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 1.1fr) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 18px;
+  border: 1px solid var(--skill-border);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.registeredToolSummary > span {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.registeredToolSummary h3,
+.registeredToolSummary p,
+.registeredToolActions strong,
+.registeredToolActions ul {
+  margin: 0;
+}
+
+.registeredToolSummary h3 {
+  margin-top: 8px;
+  font-size: 15px;
+}
+
+.registeredToolSummary p {
+  margin-top: 5px;
+  color: var(--skill-muted);
+  line-height: 1.5;
+}
+
+.registeredToolActions ul {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.registeredToolActions li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+}
+
+.registeredToolActions code {
+  color: #292524;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.registeredToolActions small {
+  color: var(--skill-muted);
+}
+
+.skillCreationFooter {
+  position: fixed;
+  z-index: 20;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  min-height: 70px;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 10px max(20px, calc((100vw - 900px) / 2 + 28px));
+  border-top: 1px solid var(--skill-border);
+  background: rgb(255 255 255 / .96);
+  backdrop-filter: blur(12px);
+}
+
+.skillWizardFooterProgress {
+  flex: 1;
+  color: var(--skill-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.skillPrivatePromise {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  color: #44403c;
+}
+
+.skillPrivatePromise small {
+  display: block;
+  margin-top: 2px;
+  color: var(--skill-muted);
+}
+
+.dialogLayer:has(.skillCreationPage) {
+  padding: 0;
+  background: #f5f5f4;
+}
+
+.dialogLayer:has(.skillCreationPage) .dialogPanel {
+  width: 100%;
+  max-width: none;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  padding: 0;
+  overflow: auto;
+  border-radius: 0;
+}
+
+.dialogLayer:has(.skillCreationPage) .dialogPanel > h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.dialogLayer:has(.skillCreationPage) .dialogPanel > .buttonRow {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  min-height: 70px;
+  justify-content: center;
+  padding: 10px max(20px, calc((100vw - 900px) / 2 + 28px));
+  border-top: 1px solid var(--skill-border);
+  background: rgb(255 255 255 / .96);
+}
+
+@media (max-width: 760px) {
+  .skillCreationPage {
+    min-height: 100dvh;
+    padding: 16px 16px 92px;
+  }
+
+  .skillEntryChoices,
+  .skillTypeGrid,
+  .skillRuntimeCatalog,
+  .skillBudgetGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .registeredToolList > article {
+    grid-template-columns: 1fr;
+  }
+
+  .skillWizardLayout {
+    display: block;
+  }
+
+  .skillWizardSteps {
+    position: static;
+    margin-bottom: 18px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .skillWizardSteps p {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 9px;
+  }
+
+  .skillWizardCurrentLabel {
+    display: block;
+    overflow: hidden;
+    color: #292524;
+    font-size: 12px;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .skillWizardSteps ol {
+    display: flex;
+    gap: 4px;
+  }
+
+  .skillWizardSteps li {
+    flex: 1;
+  }
+
+  .skillWizardSteps button {
+    display: block;
+    min-height: 4px;
+    padding: 0;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #e7e5e4;
+    color: transparent;
+    font-size: 0;
+  }
+
+  .skillWizardStepMarker {
+    display: block;
+    width: 100%;
+    height: 4px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: transparent;
+  }
+
+  .skillWizardStepLabel {
+    display: none;
+  }
+
+  .skillWizardSteps li.active button,
+  .skillWizardSteps li.complete button {
+    background: var(--skill-accent);
+    box-shadow: none;
+  }
+
+  .skillInterfaceRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .skillMaterialRequirementRow > label:first-child,
+  .skillMaterialRequirementRow > .skillInterfaceDescription,
+  .skillChoiceChips,
+  .skillMaterialFormatPicker {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    max-width: none;
+  }
+
+  .skillMaterialRequirementRow > .skillRequiredToggle,
+  .skillMaterialRequirementRow > .skillRemoveRow {
+    grid-row: auto;
+  }
+
+  .skillMaterialRequirementRow > .skillRequiredToggle {
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  .skillMaterialRequirementRow > .skillRemoveRow {
+    grid-column: 2;
+  }
+
+  .skillMultiSelect {
+    max-width: none;
+  }
+
+  .skillMultiSelectPopover {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .skillPackagePreview {
+    grid-template-columns: 1fr;
+  }
+
+  .skillPackagePreview > div {
+    display: flex;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--skill-border);
+  }
+
+  .skillReviewSections > section {
+    grid-template-columns: 1fr auto;
+  }
+
+  .skillReviewSections > section > span {
+    grid-column: 1 / -1;
+  }
+
+  .skillCreationFooter,
+  .dialogLayer:has(.skillCreationPage) .dialogPanel > .buttonRow {
+    justify-content: space-between;
+    padding: 10px 16px;
+  }
+
+  .skillPrivatePromise {
+    display: none;
+  }
+}

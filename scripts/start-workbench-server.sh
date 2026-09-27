@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NODE_BIN="${WORKBENCH_NODE_BIN:-$ROOT_DIR/.tooling/node/bin/node}"
 NPM_BIN="${WORKBENCH_NPM_BIN:-$(dirname "$NODE_BIN")/npm}"
+ENV_FILE="${WORKBENCH_ENV_FILE:-$ROOT_DIR/.env}"
 
 if [[ ! -x "$NODE_BIN" ]]; then
   echo "workbench_node_missing:$NODE_BIN" >&2
@@ -19,37 +20,40 @@ if ! "$NODE_BIN" -e '
 fi
 
 env_value() {
-  "$NODE_BIN" --env-file-if-exists="$ROOT_DIR/.env" -e '
+  "$NODE_BIN" --env-file-if-exists="$ENV_FILE" -e '
     const value = process.env[process.argv[1]];
     if (typeof value === "string") process.stdout.write(value);
   ' "$1"
 }
 
-MONGO_URI="${WORKBENCH_MONGODB_URI:-$(env_value WORKBENCH_MONGODB_URI)}"
-MONGO_DB="${WORKBENCH_MONGODB_DB:-$(env_value WORKBENCH_MONGODB_DB)}"
+POSTGRES_URL="${WORKBENCH_POSTGRES_URL:-$(env_value WORKBENCH_POSTGRES_URL)}"
 OBJECT_STORE_ROOT="${WORKBENCH_OBJECT_STORE_ROOT:-$(env_value WORKBENCH_OBJECT_STORE_ROOT)}"
-MONGO_DB="${MONGO_DB:-looloomi_workbench}"
 OBJECT_STORE_ROOT="${OBJECT_STORE_ROOT:-${HOME}/Library/Application Support/Looloomi/workbench-objects}"
 
-if [[ -z "$MONGO_URI" ]]; then
-  echo "workbench_mongodb_uri_missing:set_WORKBENCH_MONGODB_URI_with_authenticated_credentials" >&2
+if [[ -z "$POSTGRES_URL" ]]; then
+  echo "workbench_postgres_url_missing:set_WORKBENCH_POSTGRES_URL" >&2
   exit 1
 fi
 
 cd "$ROOT_DIR"
-docker compose up -d --wait --wait-timeout 90 mongodb
-
-if ! docker compose exec -T mongodb /bin/bash /opt/looloomi/mongo-healthcheck.sh; then
-  echo "workbench_mongodb_replica_set_unhealthy" >&2
-  exit 1
+if [[ "${WORKBENCH_MANAGED_POSTGRES:-0}" != "1" ]]; then
+  docker compose up -d --wait --wait-timeout 90 postgres
+  echo "postgres_ready"
 fi
-echo "mongodb_replica_set_ready:rs0"
 
-if [[ "${1:-}" == "--mongo-only" ]]; then
+export WORKBENCH_POSTGRES_URL="$POSTGRES_URL"
+export WORKBENCH_OBJECT_STORE_ROOT="$OBJECT_STORE_ROOT"
+
+"$NODE_BIN" \
+  "$ROOT_DIR/domains/backend/code/workbench-server/scripts/migrate-product-store.mjs" \
+  --confirm-write
+echo "postgres_migrations_ready"
+
+if [[ "${1:-}" == "--database-only" ]]; then
   exit 0
 fi
 
-ENTRYPOINT="${WORKBENCH_SERVER_ENTRYPOINT:-$ROOT_DIR/domains/backend/code/workbench-server/src/server.mjs}"
+ENTRYPOINT="${WORKBENCH_SERVER_ENTRYPOINT:-$ROOT_DIR/domains/backend/code/workbench-server/bin/workbench-server.mjs}"
 if [[ "$ENTRYPOINT" != /* ]]; then
   ENTRYPOINT="$ROOT_DIR/$ENTRYPOINT"
 fi
@@ -71,7 +75,4 @@ if [[ "${WORKBENCH_SKIP_WEB_BUILD:-0}" != "1" ]]; then
   )
 fi
 
-export WORKBENCH_MONGODB_URI="$MONGO_URI"
-export WORKBENCH_MONGODB_DB="$MONGO_DB"
-export WORKBENCH_OBJECT_STORE_ROOT="$OBJECT_STORE_ROOT"
-exec "$NODE_BIN" --env-file-if-exists="$ROOT_DIR/.env" "$ENTRYPOINT"
+exec "$NODE_BIN" --env-file-if-exists="$ENV_FILE" "$ENTRYPOINT"

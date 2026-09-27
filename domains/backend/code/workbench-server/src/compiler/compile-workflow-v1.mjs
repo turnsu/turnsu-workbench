@@ -157,6 +157,7 @@ const normalizeResolvedModelRoute = ({
 
 const executionLimitsFor = (node, executionMode, modelRoute) => {
   const modelBacked = MODEL_EXECUTION_MODES.has(executionMode);
+  const agentic = ["bounded_agent", "agent_orchestrator"].includes(executionMode);
   const orchestrator = executionMode === "agent_orchestrator";
   const imageGeneration = modelRoute?.modelCapability === "image_generation";
   const routeLimits = modelRoute?.limits ?? {};
@@ -164,7 +165,12 @@ const executionLimitsFor = (node, executionMode, modelRoute) => {
     timeoutMs: node.timeoutSeconds * 1000,
     maxSteps: executionMode === "model_call" ? 1 : modelBacked ? (orchestrator ? 128 : 32) : 1,
     maxModelRequests: executionMode === "model_call" ? 1 : modelBacked ? (orchestrator ? 64 : 16) : 0,
-    maxChildren: orchestrator ? 16 : 0,
+    maxChildren: orchestrator ? 4 : 0,
+    ...(agentic ? {
+      maxDepth: orchestrator ? 2 : 0,
+      maxSpawnedChildren: orchestrator ? 100 : 0,
+      maxToolResultChars: 320_000,
+    } : {}),
     maxInputBytes: routeLimits.maxInputBytes ?? 1_000_000,
     maxOutputBytes: routeLimits.maxOutputBytes ?? 1_000_000,
     maxImageCount: imageGeneration ? (routeLimits.maxImageCount ?? 1) : 0,
@@ -177,15 +183,19 @@ const executionPolicyFor = (node, resolvedSkill, modelRoute = null) => {
   const modelBacked = MODEL_EXECUTION_MODES.has(executionMode);
   const agentic = ["bounded_agent", "agent_orchestrator"].includes(executionMode);
   const dependencies = resolvedSkill?.definition?.dependencies ?? [];
+  const promptTool = resolvedSkill?.definition?.executionRef?.capabilityId?.startsWith("prompt-") === true;
+  const toolActions = promptTool
+    ? [...new Set(resolvedSkill?.toolActions ?? [])].sort(compareId)
+    : [];
   return {
     executionMode,
-    isolation: agentic ? "container" : "process",
+    isolation: agentic && !promptTool ? "container" : "process",
     limits: executionLimitsFor(node, executionMode, modelRoute),
     capabilities: executionMode === "model_call" ? {
       toolAllowlist: [], connectionIds: [], network: false,
       filesystem: "none", externalActions: false,
     } : {
-      toolAllowlist: [],
+      toolAllowlist: toolActions,
       connectionIds: dependencies
         .filter((entry) => entry.kind === "connection" && entry.required)
         .map((entry) => entry.id)
@@ -327,7 +337,6 @@ const canonicalNode = (node) => {
 const canonicalSkillSnapshot = (resolved) => ({
   skillId: resolved.definition.skillId,
   version: resolved.definition.version,
-  status: resolved.definition.status,
   executionRef: clone(resolved.definition.executionRef),
   readiness: {
     ...clone(resolved.definition.readiness),
@@ -983,7 +992,6 @@ export function compileWorkflowV1(revision, options) {
       });
     } else {
       if (
-        resolved.definition.status !== "ready" ||
         resolved.definition.readiness.status !== "ready" ||
         resolved.definition.readiness.diagnostics.some(
           (entry) => entry.severity === "error",
@@ -1012,6 +1020,16 @@ export function compileWorkflowV1(revision, options) {
         reasons.push(resolved.piReadiness?.reason ?? "PI is not ready.");
         addBlocked({
           code: "pi_not_ready",
+          message: reasons.at(-1),
+          nodeId: node.nodeId,
+          field: `graph.nodes.${node.nodeId}.skillRef`,
+        });
+      }
+      if (resolved.definition.executionRef?.executionMode === "orchestrator"
+        && !Array.isArray(resolved.definition.executionRef.allowedChildren)) {
+        reasons.push("The orchestrator Skill does not declare its allowed child roles.");
+        addBlocked({
+          code: "orchestrator_allowed_children_required",
           message: reasons.at(-1),
           nodeId: node.nodeId,
           field: `graph.nodes.${node.nodeId}.skillRef`,
@@ -1179,6 +1197,26 @@ export function compileWorkflowV1(revision, options) {
         nodeId,
         field: `graph.nodes.${nodeId}.configuration.modelProfileId`,
         recoveryAction: "Select an authorized ready model that supports the required capability.",
+      });
+    }
+  }
+
+  for (const nodeId of orderedSteps) {
+    const node = nodeById.get(nodeId);
+    if (node.kind !== "Skill") continue;
+    const resolvedSkill = resolvedSkills.find(
+      (entry) => skillKey(entry.definition) === skillKey(node.skillRef),
+    );
+    if (resolvedSkill?.definition?.risk?.externalAction !== true) continue;
+    const hasDirectReviewGate = [...predecessors.get(nodeId)]
+      .some((predecessorId) => nodeById.get(predecessorId)?.kind === "ReviewGate");
+    if (!hasDirectReviewGate) {
+      addBlocked({
+        code: "external_action_review_gate_required",
+        message: "A Skill with external write access must directly depend on a Review Gate.",
+        nodeId,
+        field: `graph.nodes.${nodeId}`,
+        recoveryAction: "Place a required Review Gate immediately before this Skill.",
       });
     }
   }

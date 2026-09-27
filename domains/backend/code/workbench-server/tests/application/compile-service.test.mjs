@@ -6,9 +6,19 @@ import {
   createExecutionResolver,
   createWorkbenchApplication,
 } from "../../src/application/workbench-application.mjs";
+import { connectionApprovalSnapshot } from "../../src/connections/workspace-connection-service.mjs";
 import { makeResolver, makeRevision } from "../compiler/fixtures.mjs";
 
 function withIdempotency(store) {
+  store.getWorkflow ??= async (workflowId) => ({
+    workflow: {
+      workflowId,
+      workspaceId: "workspace-local",
+      ownerId: "user-local",
+      visibility: "private",
+    },
+    etag: `"${workflowId}"`,
+  });
   const records = new Map();
   store.runIdempotentMutation = async ({ scope, key, request }, mutation) => {
     const id = scope + ":" + key;
@@ -29,6 +39,52 @@ function withIdempotency(store) {
   return store;
 }
 
+const publishedVersionFromDefinition = (definition) => ({
+  schemaVersion: "workbench-v1",
+  skillVersionId: `skill-version-${definition.skillId}-${definition.version}`,
+  skillId: definition.skillId,
+  workspaceId: "workspace-local",
+  version: definition.version,
+  name: definition.name,
+  description: definition.description,
+  category: definition.category,
+  inputSchema: structuredClone(definition.inputSchema),
+  outputSchema: structuredClone(definition.outputSchema),
+  risk: structuredClone(definition.risk),
+  dependencies: structuredClone(definition.dependencies),
+  validation: {
+    validationId: `validation-${definition.skillId}-${definition.version}`,
+    status: "passed",
+    diagnostics: [],
+    testedAt: definition.updatedAt,
+  },
+  executionRef: structuredClone(definition.executionRef),
+  publishedBy: "user-local",
+  publishedAt: definition.updatedAt,
+});
+
+const governedSkillRepositories = (definitionFor) => ({
+  skillAssets: {
+    async get(skillId) {
+      const version = publishedVersionFromDefinition(definitionFor(skillId, "1.0.0"));
+      return {
+        skillId,
+        workspaceId: "workspace-local",
+        ownerId: "user-local",
+        visibility: "private",
+        lifecycle: "published",
+        latestPublishedVersionId: version.skillVersionId,
+      };
+    },
+  },
+  skillVersions: {
+    async getBySkillRef(skillId, version) {
+      return publishedVersionFromDefinition(definitionFor(skillId, version));
+    },
+  },
+  skills: { async get() { throw new Error("legacy_skill_definition_must_not_be_used"); } },
+});
+
 test("compile prefetches SkillDefinition and runtime probe, then persists only server-derived readiness", async () => {
   const revision = makeRevision();
   const resolver = makeResolver();
@@ -37,7 +93,9 @@ test("compile prefetches SkillDefinition and runtime probe, then persists only s
     async connect() {},
     repositories: {
       workflowRevisions: { async get() { return structuredClone(revision); } },
-      skills: { async get(skillId, version) { return resolver.resolveSkill({ skillId, version }).definition; } },
+      ...governedSkillRepositories((skillId, version) => (
+        resolver.resolveSkill({ skillId, version }).definition
+      )),
       compileResults: { async insert(value) { persisted.results.push(value); return value; } },
       executionPlans: { async insert(planId, value) { persisted.plans.push({ planId, value }); return value; } },
       workflows: { async updateCompileSummary(workflowId, summary) { persisted.workflow = { workflowId, summary }; } },
@@ -95,7 +153,7 @@ test("application compile freezes the async Catalog route into the immutable pla
     async connect() {},
     repositories: {
       workflowRevisions: { async get() { return structuredClone(revision); } },
-      skills: { async get(skillId, version) { return definitionFor(skillId, version); } },
+      ...governedSkillRepositories(definitionFor),
       compileResults: { async insert(value) { return value; } },
       executionPlans: {
         async insert(_planId, value) { persisted.plans.push(structuredClone(value)); return value; },
@@ -108,19 +166,21 @@ test("application compile freezes the async Catalog route into the immutable pla
     store,
     agentRuntime: { async probeSkill() { return { status: "ready", ready: true, code: "ready" }; } },
     modelCatalog: {
-      async getWorkspacePolicy() {
+      async getWorkspacePolicy(workspaceId, context) {
+        assert.equal(context?.userId, "user-local");
         return {
-          defaultProfileIdsByCapability: { structured_output: "model-profile-controller" },
+          defaultProfileIdsByCapability: { tool_calling: "model-profile-controller" },
           workflowFallbackAllowed: false,
         };
       },
       async resolveCurrentProfile(input) {
+        assert.equal(input.userId, "user-local");
         seen.push(structuredClone(input));
         return {
           profile: { profileId: input.profileId },
           revision: {
             revisionId: "model-revision-controller-1",
-            capabilities: ["chat", "tool_calling", "structured_output"],
+            capabilities: ["chat", "tool_calling"],
             protocol: "openai_compatible_chat",
             limits: { kind: "chat", maxInputTokens: 128_000, maxOutputTokens: 8_192 },
           },
@@ -139,7 +199,7 @@ test("application compile freezes the async Catalog route into the immutable pla
 
   assert.equal(result.status, "ready", JSON.stringify(result.warnings));
   assert.equal(seen.length, 1);
-  assert.deepEqual(seen[0].capabilities, ["chat", "tool_calling", "structured_output"]);
+  assert.deepEqual(seen[0].capabilities, ["chat", "tool_calling"]);
   const step = result.executionPlan.steps.find((item) => item.kind === "Skill");
   assert.equal(step.executionMode, "bounded_agent");
   assert.equal(step.modelProfileRevisionId, "model-revision-controller-1");
@@ -160,7 +220,7 @@ test("application compile records an unavailable Catalog revision as blocked", a
     async connect() {},
     repositories: {
       workflowRevisions: { async get() { return structuredClone(revision); } },
-      skills: { async get(skillId, version) { return definitionFor(skillId, version); } },
+      ...governedSkillRepositories(definitionFor),
       compileResults: { async insert(value) { return value; } },
       executionPlans: { async insert() { throw new Error("blocked_plan_must_not_persist"); } },
       workflows: { async updateCompileSummary(_workflowId, summary) { store.status = summary.status; } },
@@ -171,7 +231,7 @@ test("application compile records an unavailable Catalog revision as blocked", a
     agentRuntime: { async probeSkill() { return { status: "ready", ready: true, code: "ready" }; } },
     modelCatalog: {
       async getWorkspacePolicy() {
-        return { defaultProfileIdsByCapability: { structured_output: "model-profile-controller" } };
+        return { defaultProfileIdsByCapability: { tool_calling: "model-profile-controller" } };
       },
       async resolveCurrentProfile() {
         const error = new Error("credential missing");
@@ -198,7 +258,9 @@ test("compile blocks a Skill when the runtime probe is unavailable even when sto
     async connect() {},
     repositories: {
       workflowRevisions: { async get() { return structuredClone(revision); } },
-      skills: { async get(skillId, version) { return resolver.resolveSkill({ skillId, version }).definition; } },
+      ...governedSkillRepositories((skillId, version) => (
+        resolver.resolveSkill({ skillId, version }).definition
+      )),
       compileResults: { async insert(value) { return value; } },
       executionPlans: { async insert() { throw new Error("must not persist blocked plan"); } },
       workflows: { async updateCompileSummary(_workflowId, summary) { store.derivedStatus = summary.status; } },
@@ -247,6 +309,19 @@ test("compile prefers an immutable published SkillVersion over the mutable compa
     repositories: {
       workflowRevisions: { async get() { return structuredClone(revision); } },
       skillVersions: { async getBySkillRef(skillId, version) { return structuredClone(publishedVersion({ skillId, version })); } },
+      skillAssets: {
+        async get(skillId) {
+          const version = publishedVersion({ skillId, version: "1" });
+          return {
+            skillId,
+            workspaceId: "workspace-local",
+            ownerId: "user-local",
+            visibility: "private",
+            lifecycle: "published",
+            latestPublishedVersionId: version.skillVersionId,
+          };
+        },
+      },
       skills: { async get() { throw new Error("mutable_catalog_must_not_be_used"); } },
       compileResults: { async insert(value) { return value; } },
       executionPlans: { async insert() { return null; } },
@@ -267,6 +342,37 @@ test("compile prefers an immutable published SkillVersion over the mutable compa
   assert.equal(result.executionPlan.pinnedSkills.length, 1);
 });
 
+test("compile never falls back to a legacy SkillDefinition without a governed asset", async () => {
+  const revision = makeRevision();
+  let legacyRead = false;
+  const store = withIdempotency({
+    async connect() {},
+    repositories: {
+      workflowRevisions: { async get() { return structuredClone(revision); } },
+      skillAssets: { async get() { return null; } },
+      skillVersions: { async getBySkillRef() { throw new Error("version_lookup_must_not_run_without_asset"); } },
+      skills: { async get() { legacyRead = true; return {}; } },
+      compileResults: { async insert() { throw new Error("compile_result_must_not_persist"); } },
+      executionPlans: { async insert() { throw new Error("execution_plan_must_not_persist"); } },
+      workflows: { async updateCompileSummary() { throw new Error("workflow_must_not_update"); } },
+    },
+  });
+  const application = createWorkbenchApplication({
+    store,
+    agentRuntime: { async probeSkill() { return { status: "ready", ready: true }; } },
+  });
+
+  await assert.rejects(
+    () => application.compileWorkflow({
+      workflowId: revision.workflowId,
+      idempotencyKey: "compile-legacy-definition-denied",
+      request: { data: { workflowRevisionId: revision.revisionId } },
+    }),
+    (error) => error?.code === "skill_not_found",
+  );
+  assert.equal(legacyRead, false);
+});
+
 test("execution resolver returns only the saved revision, latest ready plan, and pinned Skill versions", async () => {
   const revision = makeRevision();
   const definition = makeResolver().resolveSkill({ skillId: "skill-a", version: "1" }).definition;
@@ -274,6 +380,29 @@ test("execution resolver returns only the saved revision, latest ready plan, and
     workflowId: revision.workflowId,
     workflowRevisionId: revision.revisionId,
     pinnedSkills: [{ skillId: definition.skillId, version: definition.version }],
+    steps: [{
+      capabilities: {
+        connectionIds: ["lark.calendar.read"],
+      },
+    }],
+  };
+  const currentConnection = {
+    connectionId: "connection-calendar",
+    workspaceId: "workspace-local",
+    revision: 7,
+    capabilityKey: "lark.calendar.read",
+    driverKey: "lark",
+    credentialState: "bound",
+    credentialBindingFingerprint: `sha256:${"a".repeat(64)}`,
+    driverBackend: "production",
+    status: "connected",
+    validation: {
+      status: "valid",
+      principal: "calendar-account-1",
+      scopes: ["calendar:read"],
+      effects: ["read"],
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    },
   };
   let connected = false;
   const store = {
@@ -281,16 +410,25 @@ test("execution resolver returns only the saved revision, latest ready plan, and
     repositories: {
       workflowRevisions: { async get() { return revision; } },
       compileResults: { async getLatest() { return { status: "ready", executionPlan }; } },
-      skills: { async get() { return definition; } },
+      skillVersions: {
+        async getBySkillRef() { return publishedVersionFromDefinition(definition); },
+      },
+      skills: { async get() { throw new Error("legacy_skill_definition_must_not_be_used"); } },
       workflows: { async getInternal() { return { workspaceId: "workspace-local" }; } },
+      connections: {
+        async get(connectionId, { workspaceId }) {
+          assert.equal(connectionId, "connection-calendar");
+          assert.equal(workspaceId, "workspace-local");
+          return structuredClone(currentConnection);
+        },
+      },
       connectionBindings: {
         async listByTarget({ workspaceId, targetKind, targetId }) {
           assert.equal(workspaceId, "workspace-local");
           assert.equal(targetKind, "workflow_revision");
           assert.equal(targetId, revision.revisionId);
           return [
-            { connectionId: "connection-calendar" },
-            { connectionId: "connection-calendar" },
+            { requirementId: "lark.calendar.read", connectionId: "connection-calendar" },
           ];
         },
       },
@@ -304,10 +442,13 @@ test("execution resolver returns only the saved revision, latest ready plan, and
   assert.equal(connected, true);
   assert.equal(resolved.revision.revisionId, revision.revisionId);
   assert.deepEqual(resolved.compileResult.executionPlan, executionPlan);
-  assert.deepEqual(resolved.skills.get(`${definition.skillId}:${definition.version}`), {
-    definition,
-    executionRef: definition.executionRef,
-  });
+  const resolvedSkill = resolved.skills.get(`${definition.skillId}:${definition.version}`);
+  assert.equal(resolvedSkill.definition.skillId, definition.skillId);
+  assert.equal(resolvedSkill.definition.version, definition.version);
+  assert.deepEqual(resolvedSkill.executionRef, definition.executionRef);
+  assert.deepEqual(resolved.connectionBindings, [connectionApprovalSnapshot(currentConnection, {
+    requirementId: "lark.calendar.read",
+  })]);
   assert.deepEqual(resolved.connectionIds, ["connection-calendar"]);
 });
 

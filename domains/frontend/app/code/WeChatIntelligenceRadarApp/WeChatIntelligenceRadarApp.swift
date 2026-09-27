@@ -9,10 +9,12 @@ final class WeChatIntelligenceRadarApp: NSObject, NSApplicationDelegate {
     private static let displayName = "looloomi"
     private static var retainedDelegate: WeChatIntelligenceRadarApp?
     private let uiSmokeCheck: Bool
+    private let legacyClientEnabled: Bool
     private var window: NSWindow?
 
-    init(uiSmokeCheck: Bool = false) {
+    init(uiSmokeCheck: Bool = false, legacyClientEnabled: Bool = false) {
         self.uiSmokeCheck = uiSmokeCheck
+        self.legacyClientEnabled = legacyClientEnabled
         super.init()
     }
 
@@ -38,146 +40,6 @@ final class WeChatIntelligenceRadarApp: NSObject, NSApplicationDelegate {
                 exit(0)
             } catch {
                 print("agent_runtime_contracts=fail \(error.localizedDescription)")
-                exit(1)
-            }
-        }
-        if CommandLine.arguments.contains("--loopops-acceptance-check") {
-            do {
-                let report = try LoopOpsAcceptanceHarness.run()
-                print("loopops_acceptance=pass")
-                for line in report.summaryLines {
-                    print("loopops_acceptance_\(line)")
-                }
-                print("loopops_acceptance_run_ids=\(report.runIDs.joined(separator: ","))")
-                print("loopops_acceptance_contract_ids=\(report.contractIDs.joined(separator: ","))")
-                print("loopops_acceptance_chat_scope_ids=\(report.chatScopeIDs.joined(separator: ","))")
-                print("loopops_acceptance_ledgers=\(report.ledgerCount)")
-                print("loopops_acceptance_review_packets=\(report.reviewPacketCount)")
-                print("loopops_acceptance_share_safe_logs=\(report.shareSafeLogCount)")
-                exit(0)
-            } catch {
-                print("loopops_acceptance=fail \(error.localizedDescription)")
-                exit(1)
-            }
-        }
-        if CommandLine.arguments.contains("--loopops-action-check") {
-            do {
-                let report = try LoopOpsAcceptanceHarness.runActionChecks()
-                print("loopops_action=pass")
-                for line in report.summaryLines {
-                    print("loopops_action_\(line)")
-                }
-                print("loopops_action_row_run_contract_id=\(report.rowRunContractID)")
-                print("loopops_action_saved_contract_id=\(report.savedContractID)")
-                print("loopops_action_skill_stack_id=\(report.skillStackID)")
-                print("loopops_action_knowledge_source_id=\(report.knowledgeSourceID)")
-                print("loopops_action_tool_draft_id=\(report.toolDraftID)")
-                print("loopops_action_run_chat_scope_id=\(report.runChatScopeID)")
-                print("loopops_action_selected_run_result_id=\(report.selectedRunResultID)")
-                print("loopops_action_selected_run_chat_scope_id=\(report.selectedRunChatScopeID)")
-                exit(0)
-            } catch {
-                print("loopops_action=fail \(error.localizedDescription)")
-                exit(1)
-            }
-        }
-        if CommandLine.arguments.contains("--loopops-ui-action-check") {
-            do {
-                let report = try LoopOpsAcceptanceHarness.runUIActionChecks()
-                print("loopops_ui_action=pass")
-                for line in report.summaryLines {
-                    print("loopops_ui_action_\(line)")
-                }
-                print("loopops_ui_action_required_identifier_count=\(report.requiredIdentifierCount)")
-                print("loopops_ui_action_dynamic_identifier_count=\(report.dynamicIdentifierCount)")
-                print("loopops_ui_action_action_summary_count=\(report.actionSummaryCount)")
-                exit(0)
-            } catch {
-                print("loopops_ui_action=fail \(error.localizedDescription)")
-                exit(1)
-            }
-        }
-        if CommandLine.arguments.contains("--loopops-interaction-coverage-check") {
-            do {
-                let report = try LoopOpsAcceptanceHarness.runInteractionCoverageCheck()
-                print("loopops_interaction_coverage=pass")
-                for line in report.summaryLines {
-                    print("loopops_interaction_coverage_\(line)")
-                }
-                print("loopops_interaction_coverage_item_count=\(report.itemCount)")
-                print("loopops_interaction_coverage_anchored_count=\(report.anchoredCount)")
-                print("loopops_interaction_coverage_state_backed_count=\(report.stateBackedCount)")
-                print("loopops_interaction_coverage_no_system_permission_count=\(report.noSystemPermissionCount)")
-                print("loopops_interaction_coverage_native_appkit_click_verified_count=\(report.nativeAppKitClickVerifiedCount)")
-                print("loopops_interaction_coverage_native_appkit_click_gap_count=\(report.nativeAppKitClickGapCount)")
-                exit(0)
-            } catch {
-                print("loopops_interaction_coverage=fail \(error.localizedDescription)")
-                exit(1)
-            }
-        }
-        if CommandLine.arguments.contains("--loopops-interaction-replay-check") {
-            do {
-                let report = try LoopOpsAcceptanceHarness.runInteractionReplayCheck()
-                print("loopops_interaction_replay=pass")
-                for line in report.summaryLines {
-                    print("loopops_interaction_replay_\(line)")
-                }
-                print("loopops_interaction_replay_step_count=\(report.stepCount)")
-                print("loopops_interaction_replay_verified_count=\(report.replayVerifiedCount)")
-                print("loopops_interaction_replay_state_mutation_count=\(report.stateMutationVerifiedCount)")
-                print("loopops_interaction_replay_no_system_permission_count=\(report.noSystemPermissionCount)")
-                print("loopops_interaction_replay_native_appkit_click_verified_count=\(report.nativeAppKitClickVerifiedCount)")
-                print("loopops_interaction_replay_native_appkit_click_gap_count=\(report.nativeAppKitClickGapCount)")
-                for (index, step) in report.steps.enumerated() {
-                    print("loopops_interaction_replay_step_\(index + 1)=\(step.surface)|\(step.action)|\(step.interactionID)|before:\(step.beforeState)|after:\(step.afterState)")
-                }
-                exit(0)
-            } catch {
-                print("loopops_interaction_replay=fail \(error.localizedDescription)")
-                exit(1)
-            }
-        }
-        if CommandLine.arguments.contains("--loopops-native-activation-check") {
-            do {
-                let report = try LoopOpsNativeActivationHarness.run()
-                print("loopops_native_activation=pass")
-                for line in report.summaryLines {
-                    print("loopops_native_activation_\(line)")
-                }
-                print("loopops_native_activation_target_count=\(report.targetCount)")
-                print("loopops_native_activation_activated_count=\(report.activatedCount)")
-                print("loopops_native_activation_state_backed_count=\(report.stateBackedCount)")
-                print("loopops_native_activation_no_system_permission_count=\(report.noSystemPermissionCount)")
-                print("loopops_native_activation_native_appkit_click_verified_count=\(report.nativeAppKitClickVerifiedCount)")
-                for target in report.targets {
-                    print("loopops_native_activation_target=\(target.surface)|\(target.interactionID)|\(target.actionEvidence)")
-                }
-                exit(0)
-            } catch {
-                print("loopops_native_activation=fail \(error.localizedDescription)")
-                exit(1)
-            }
-        }
-        if CommandLine.arguments.contains("--loopops-native-visual-capture") {
-            do {
-                let report = try LoopOpsNativeVisualHarness.run()
-                print("loopops_native_visual=pass")
-                print("loopops_native_visual_capture_id=\(report.captureID)")
-                print("loopops_native_visual_output_directory=\(report.outputDirectory)")
-                print("loopops_native_visual_manifest=\(report.manifestPath)")
-                print("loopops_native_visual_markdown=\(report.markdownPath)")
-                print("loopops_native_visual_capture_count=\(report.captureCount)")
-                print("loopops_native_visual_nonblank_count=\(report.nonBlankCount)")
-                print("loopops_native_visual_no_system_permissions=\(report.noSystemPermissions)")
-                print("loopops_native_visual_external_ui_automation=\(report.externalUIAutomation)")
-                print("loopops_native_visual_native_appkit_clicks_verified=\(report.nativeAppKitClicksVerified)")
-                for capture in report.captures {
-                    print("loopops_native_visual_capture=\(capture.id)|\(capture.title)|\(capture.workspace)|\(capture.file)|bytes=\(capture.bytes)|sampled_colors=\(capture.sampledColorCount)")
-                }
-                exit(0)
-            } catch {
-                print("loopops_native_visual=fail \(error.localizedDescription)")
                 exit(1)
             }
         }
@@ -219,12 +81,17 @@ final class WeChatIntelligenceRadarApp: NSObject, NSApplicationDelegate {
         }
 
         let uiSmokeCheck = CommandLine.arguments.contains("--ui-smoke-check")
+        let legacyClientEnabled = uiSmokeCheck
+            || ProcessInfo.processInfo.environment["LOOLOOMI_ENABLE_LEGACY_NATIVE_CLIENT"] == "1"
         if uiSmokeCheck {
             UserDefaults.standard.set(false, forKey: "minimalWorkbench.agentRailCollapsed")
             UserDefaults.standard.set(false, forKey: "minimalWorkbench.sidebarCollapsed")
         }
         let application = NSApplication.shared
-        let delegate = WeChatIntelligenceRadarApp(uiSmokeCheck: uiSmokeCheck)
+        let delegate = WeChatIntelligenceRadarApp(
+            uiSmokeCheck: uiSmokeCheck,
+            legacyClientEnabled: legacyClientEnabled
+        )
         retainedDelegate = delegate
         application.delegate = delegate
         application.setActivationPolicy(.regular)
@@ -250,7 +117,9 @@ final class WeChatIntelligenceRadarApp: NSObject, NSApplicationDelegate {
             return
         }
 
-        let rootView = DashboardView(initialWorkspace: .home)
+        let rootView = legacyClientEnabled
+            ? AnyView(DashboardView(initialWorkspace: .home))
+            : AnyView(LegacyNativeClientDisabledView())
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1180, height: 760),
@@ -564,5 +433,23 @@ final class WeChatIntelligenceRadarApp: NSObject, NSApplicationDelegate {
             print("ui_smoke=failed")
             exit(1)
         }
+    }
+}
+
+private struct LegacyNativeClientDisabledView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("历史 Swift 客户端已停用")
+                .font(.system(size: 26, weight: .bold))
+            Text("请使用 Web Product API 工作台。此历史参考程序不会连接 legacy Agent daemon，也不会读取 daemon token。")
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("开发者如需运行界面回归，请显式设置 LOOLOOMI_ENABLE_LEGACY_NATIVE_CLIENT=1；这不会启用旧 daemon 控制链。")
+                .font(.system(size: 12))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(36)
+        .frame(maxWidth: 640, maxHeight: .infinity, alignment: .leading)
     }
 }

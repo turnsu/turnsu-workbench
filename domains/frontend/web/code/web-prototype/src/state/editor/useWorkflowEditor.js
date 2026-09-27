@@ -10,6 +10,7 @@ import {
   persistEditorDraft,
   recoverLegacyOwnedWorkflowDraft,
 } from "./index.js";
+import { editorRevisionSyncKind } from "./editorState.js";
 
 let legacyRecoveryRead = false;
 
@@ -45,14 +46,11 @@ export function useWorkflowEditor(revision, etag) {
 
   useEffect(() => {
     if (!revision?.revisionId || !revision?.workflowId) return;
-    const changedRevision = !state
-      || state.workflowId !== revision.workflowId
-      || state.baseRevision.revisionId !== revision.revisionId;
-    const refreshedCleanEtag = !state?.dirty && Boolean(etag) && state?.serverEtag !== etag;
-    if (!changedRevision && !refreshedCleanEtag) return;
+    const sync = editorRevisionSyncKind(state, revision, etag);
+    if (sync === "ignore") return;
     const next = createEditorState(revision, { etag });
-    const draft = recoveredDraft(revision, etag);
-    dispatch({ type: EDITOR_ACTIONS.LOAD_REVISION, revision, etag });
+    const draft = sync === "replace" ? recoveredDraft(revision, etag) : null;
+    dispatch({ type: EDITOR_ACTIONS.SYNC_REVISION, revision, etag });
     if (draft) dispatch({ type: EDITOR_ACTIONS.REPLACE_DRAFT, draft: { ...next.draft, ...draft } });
   }, [revision, etag, state]);
 

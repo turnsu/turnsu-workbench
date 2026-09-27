@@ -9,6 +9,66 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./common": {
+      "types": "./dist/common.d.ts",
+      "import": "./dist/common.js"
+    },
+    "./endpoint-core": {
+      "types": "./dist/endpoint-core.d.ts",
+      "import": "./dist/endpoint-core.js"
+    },
+    "./value": {
+      "types": "./dist/value.d.ts",
+      "import": "./dist/value.js"
+    },
+    "./workspace-http": {
+      "types": "./dist/workspace-http.d.ts",
+      "import": "./dist/workspace-http.js"
+    },
+    "./workspace-role": {
+      "types": "./dist/workspace-role.d.ts",
+      "import": "./dist/workspace-role.js"
+    },
+    "./auth-http": {
+      "types": "./dist/auth-http.d.ts",
+      "import": "./dist/auth-http.js"
+    },
+    "./readiness-http": {
+      "types": "./dist/readiness-http.d.ts",
+      "import": "./dist/readiness-http.js"
+    },
+    "./inbox-http": {
+      "types": "./dist/inbox-http.d.ts",
+      "import": "./dist/inbox-http.js"
+    },
+    "./model-http": {
+      "types": "./dist/model-http.d.ts",
+      "import": "./dist/model-http.js"
+    },
+    "./work-items-http": {
+      "types": "./dist/work-items-http.d.ts",
+      "import": "./dist/work-items-http.js"
+    },
+    "./automation-http": {
+      "types": "./dist/automation-http.d.ts",
+      "import": "./dist/automation-http.js"
+    },
+    "./devices": {
+      "types": "./dist/devices.d.ts",
+      "import": "./dist/devices.js"
+    },
+    "./devices-http": {
+      "types": "./dist/devices-http.d.ts",
+      "import": "./dist/devices-http.js"
+    },
+    "./scope-http": {
+      "types": "./dist/scope-http.d.ts",
+      "import": "./dist/scope-http.js"
+    },
+    "./runs-http": {
+      "types": "./dist/runs-http.d.ts",
+      "import": "./dist/runs-http.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -16,8 +76,8 @@
     "examples"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "test": "npm run build --silent && node --test tests/*.test.mjs"
+    "build": "../../../../.tooling/node/bin/node node_modules/typescript/bin/tsc -p tsconfig.json",
+    "test": "npm run build --silent && ../../../../.tooling/node/bin/node --test tests/*.test.mjs"
   },
   "engines": {
     "node": ">=22.19.0"

@@ -24,7 +24,7 @@ const payload = (overrides = {}) => ({
   },
   evidenceRequirements: [],
   metadata: {},
-  runtimeVersions: { pi: "0.80.7", subagent: "0.4.8", workflow: "0.8.1" },
+  runtimeVersions: { pi: "0.85.1", subagent: "0.4.8", workflow: "0.10.1" },
   gateway: { transport: "stdio-jsonl-v1", capabilityLeaseId: "lease-worker-a" },
   ...overrides,
 });
@@ -59,6 +59,22 @@ test("container Pi Worker uses the Gateway model and returns schema-checked JSON
   ]);
 });
 
+test("container Pi Worker tolerates a long private agent directory when binding its Unix Gateway socket", async (t) => {
+  const calls = [];
+  const runtime = await tempRuntime(t);
+  const rpc = {
+    async call(message) {
+      calls.push(message);
+      return { text: JSON.stringify({ response: "Long socket path recovered." }) };
+    },
+    async sendEvent() {},
+  };
+  const agentDir = join(runtime.cwd, "very-long-private-agent-directory-name-for-unix-socket-regression", "nested", "pi-agent");
+  const result = await runContainerPiWorker(payload(), rpc, { ...runtime, agentDir });
+  assert.equal(result.status, "completed");
+  assert.equal(calls[0]?.operation, "model");
+});
+
 test("container Pi Worker exposes only allowlisted tools and routes execution through the Gateway", async (t) => {
   const calls = [];
   let modelCall = 0;
@@ -85,6 +101,35 @@ test("container Pi Worker exposes only allowlisted tools and routes execution th
   assert.equal(result.usage.steps, 3);
   assert.equal(result.usage.modelRequests, 2);
   assert.deepEqual(result.output, { response: "Used one governed tool." });
+});
+
+test("container Pi Worker truncates oversized governed Tool results before model context", async (t) => {
+  const calls = [];
+  let modelCall = 0;
+  const rpc = {
+    async call(message) {
+      calls.push(message);
+      if (message.operation === "tool") return { body: "x".repeat(10_000) };
+      modelCall += 1;
+      if (modelCall === 1) {
+        return {
+          content: [{ type: "toolCall", id: "tool-call-budget", name: "search", arguments: {} }],
+          stopReason: "toolUse",
+        };
+      }
+      return { text: JSON.stringify({ response: "Budget enforced." }) };
+    },
+    async sendEvent() {},
+  };
+  const result = await runContainerPiWorker(payload({
+    limits: { ...payload().limits, maxToolResultChars: 1_024 },
+    capabilities: { toolAllowlist: ["search"], connectionIds: [], network: false, filesystem: "none", externalActions: false },
+  }), rpc, await tempRuntime(t));
+  assert.deepEqual(result.output, { response: "Budget enforced." });
+  const secondModelContext = JSON.stringify(calls.filter((call) => call.operation === "model")[1].input.context);
+  assert.equal(secondModelContext.includes("truncated"), true);
+  assert.equal(secondModelContext.includes("originalChars"), true);
+  assert.equal(secondModelContext.includes("x".repeat(2_000)), false);
 });
 
 test("container Pi Worker rejects a model result that does not match the product result schema", async (t) => {

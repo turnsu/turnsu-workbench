@@ -1,6 +1,7 @@
 # Backend Domain
 
-Backend owns product data services, storage, daemon/API boundaries, and runtime integration that are not part of agent reasoning itself.
+Backend owns the cloud Product API, PostgreSQL authority, operational boundaries and runtime
+integration that are not part of Agent reasoning itself.
 
 ## Documents
 
@@ -11,11 +12,11 @@ Backend owns product data services, storage, daemon/API boundaries, and runtime 
 
 ## Backend Responsibilities
 
-- Runtime bridge between UI and agent/runtime processes.
-- Product read/write models used by App and future Web.
-- Local JSON stores and persistence adapters.
-- Daemon lifecycle, HTTP/SSE boundary, auth/path/process concerns.
-- WeChat, market, runtime, and artifact data adapters where they serve product state.
+- Runtime bridge between clients and governed Workers.
+- Product read/write models used by Web, Desktop, connectors and schedulers.
+- PostgreSQL migrations, adapters, readiness, backup and restore.
+- HTTP/JSON/SSE boundary, authentication, authorization and process lifecycle.
+- Runtime, Connection and Artifact adapters where they serve Product state.
 - Backend-safe normalization for frontend read models.
 
 ## Not Backend
@@ -28,12 +29,5 @@ Backend owns product data services, storage, daemon/API boundaries, and runtime 
 
 ## Current Main Sources
 
-Backend code is currently split across Swift `Services`, `runtime/`, selected `scripts/`, and selected Node daemon files inside `domains/agent/code/agent-runtime`.
-
-The active Product API and single-machine operational runtime are under
+The active Product API and operational runtime are under
 `domains/backend/code/workbench-server` and `domains/backend/operations/local`.
-
-## Migrated Docs
-
-- Backend architecture notes: [documents/architecture/](documents/architecture/)
-- Backend plans and handoffs: [documents/plan/](documents/plan/)

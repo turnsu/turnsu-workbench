@@ -5,7 +5,9 @@ import { workbenchApi } from "../../api/client.js";
 import { workbenchKeys } from "../../api/queryKeys.js";
 import {
   createRunStreamState,
+  isRunTerminalEvent,
   runEventReceived,
+  runEventRequiresReadModelRefresh,
   runReadModelRefreshed,
   runStreamConnected,
   runStreamConnectionStarted,
@@ -42,12 +44,12 @@ export function useRunStream(runId) {
       })),
       onEvent: (event) => {
         dispatch(runEventReceived(event));
-        const terminal = ["run.completed", "run.failed", "run.cancelled"].includes(event.type);
+        const terminal = isRunTerminalEvent(event.type);
         if (terminal) {
           source?.close();
           queryClient.invalidateQueries({ queryKey: workbenchKeys.runs(event.workflowId) });
         }
-        if (["review.requested", "run.paused", "run.completed", "run.failed", "run.cancelled"].includes(event.type)) {
+        if (runEventRequiresReadModelRefresh(event.type)) {
           queryClient.invalidateQueries({ queryKey: workbenchKeys.run(runId) })
             .finally(() => dispatch(runReadModelRefreshed(runId)));
         }

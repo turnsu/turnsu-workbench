@@ -43,32 +43,35 @@ export function ImageComposer({
         disabled={disabled || busy}
         data-testid={`${testId}.prompt`}
       />
-      {imageSupport?.negativePrompt !== false ? (
-        <TextInput
-          label={labels.negativePrompt || "Avoid (optional)"}
-          hiddenLabel={false}
-          value={value?.negativePrompt || ""}
-          onChange={(next) => update("negativePrompt", next)}
-          maxLength={10000}
-          disabled={disabled || busy}
-          width="100%"
-          data-testid={`${testId}.negative-prompt`}
-        />
-      ) : null}
-      <div className="imageComposerFields">
-        <label>
-          <span>{labels.aspectRatio || "Aspect ratio"}</span>
-          <select value={value?.aspectRatio || "1:1"} onChange={(event) => update("aspectRatio", event.target.value)} disabled={disabled || busy}>
-            {aspectRatios.map((ratio) => <option value={ratio} key={ratio}>{ratio}</option>)}
-          </select>
-        </label>
-        <label>
-          <span>{labels.outputFormat || "Format"}</span>
-          <select value={value?.outputFormat || "png"} onChange={(event) => update("outputFormat", event.target.value)} disabled={disabled || busy}>
-            {outputFormats.map((format) => <option value={format} key={format}>{format.toUpperCase()}</option>)}
-          </select>
-        </label>
-        {imageSupport?.seed !== false ? (
+      <details className="imageComposerAdvanced">
+        <summary>{labels.advanced || "Advanced image settings"}</summary>
+        <div className="imageComposerAdvancedContent">
+          {imageSupport?.negativePrompt !== false ? (
+            <TextInput
+              label={labels.negativePrompt || "Avoid (optional)"}
+              hiddenLabel={false}
+              value={value?.negativePrompt || ""}
+              onChange={(next) => update("negativePrompt", next)}
+              maxLength={10000}
+              disabled={disabled || busy}
+              width="100%"
+              data-testid={`${testId}.negative-prompt`}
+            />
+          ) : null}
+          <div className="imageComposerFields">
+            <label>
+              <span>{labels.aspectRatio || "Aspect ratio"}</span>
+              <select value={value?.aspectRatio || "1:1"} onChange={(event) => update("aspectRatio", event.target.value)} disabled={disabled || busy}>
+                {aspectRatios.map((ratio) => <option value={ratio} key={ratio}>{ratio}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>{labels.outputFormat || "Format"}</span>
+              <select value={value?.outputFormat || "png"} onChange={(event) => update("outputFormat", event.target.value)} disabled={disabled || busy}>
+                {outputFormats.map((format) => <option value={format} key={format}>{format.toUpperCase()}</option>)}
+              </select>
+            </label>
+            {imageSupport?.seed !== false ? (
           <label>
             <span>{labels.seed || "Seed (optional)"}</span>
             <input
@@ -83,8 +86,10 @@ export function ImageComposer({
               data-testid={`${testId}.seed`}
             />
           </label>
-        ) : null}
-      </div>
+            ) : null}
+          </div>
+        </div>
+      </details>
       <div className="modelComposerActions">
         <small>{labels.governedHint || "Images are saved as workspace artifacts."}</small>
         <Button type="submit" variant="primary" icon={<ImagePlus size={15} />} disabled={!ready} data-testid={`${testId}.submit`}>

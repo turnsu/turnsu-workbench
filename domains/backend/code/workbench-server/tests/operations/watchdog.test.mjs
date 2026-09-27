@@ -10,7 +10,7 @@ test("watchdog persists bounded state, alerts on third consecutive failure, and 
   const statePath = `${root}/state/watchdog.json`;
   const alerts = [];
   const failed = () => ({ status: "not_ready", checks: [
-    { name: "mongo", ok: false, secret: "must-not-persist" },
+    { name: "postgres", ok: false, secret: "must-not-persist" },
     { name: "invalid-name!", ok: false },
   ] });
   for (let index = 0; index < 3; index += 1) {
@@ -24,7 +24,7 @@ test("watchdog persists bounded state, alerts on third consecutive failure, and 
   const persisted = JSON.parse(await readFile(statePath, "utf8"));
   assert.equal(persisted.consecutiveFailures, 3);
   assert.equal(persisted.alertActive, true);
-  assert.deepEqual(persisted.failedChecks, ["mongo"]);
+  assert.deepEqual(persisted.failedChecks, ["postgres"]);
   assert.equal(JSON.stringify(persisted).includes("must-not-persist"), false);
   assert.equal(alerts.length, 1);
   assert.equal((await stat(statePath)).mode & 0o077, 0);

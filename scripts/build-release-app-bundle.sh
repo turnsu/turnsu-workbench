@@ -2,6 +2,11 @@
 # Build an OPTIMIZED release .app bundle (smaller, faster than debug).
 set -euo pipefail
 
+if [[ "${LOOLOOMI_ENABLE_LEGACY_NATIVE_CLIENT:-0}" != "1" ]]; then
+  echo "legacy_native_client_disabled: the current product uses the Product API + web frontend; this Swift bundle is historical test-only" >&2
+  exit 64
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 

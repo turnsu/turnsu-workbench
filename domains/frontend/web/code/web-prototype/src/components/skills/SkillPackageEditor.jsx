@@ -6,56 +6,38 @@ import { Button } from "../shared/Button.jsx";
 import { Section } from "../shared/Section.jsx";
 import { StatusPill } from "../shared/StatusPill.jsx";
 
-const REQUIRED_FILES = ["SKILL.md", "scripts/main.py", "skill.runtime.json"];
-
-function defaultFiles(draft) {
-  const slug = String(draft?.name || "new-skill")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "") || "new-skill";
-  return [
-    {
-      path: "SKILL.md",
-      kind: "instructions",
-      content: `---\nname: ${slug}\ndescription: ${draft?.description || "Describe what this Skill does."}\ncompatibility: Local only\ndisable-model-invocation: true\n---\n\n# ${draft?.name || "New Skill"}\n\nDescribe the steps this Skill should follow.\n`,
-    },
-    {
-      path: "scripts/main.py",
-      kind: "executable",
-      content: "import json\nimport sys\n\npayload = json.load(sys.stdin)\nprint(json.dumps({\"result\": payload}, ensure_ascii=False))\n",
-    },
-    {
-      path: "skill.runtime.json",
-      kind: "runtime_manifest",
-      content: `${JSON.stringify({
-        runtime: "python3.12",
-        entrypoint: "scripts/main.py",
-        protocol: { stdin: "json", stdout: "json" },
-        permissions: {
-          network: false,
-          connections: [],
-          externalActions: false,
-          filesystem: "scratch-only",
-        },
-      }, null, 2)}\n`,
-    },
-  ];
+function runtimeFromFiles(files = []) {
+  const source = files.find((file) => file.path === "skill.runtime.json")?.content;
+  try {
+    const runtime = JSON.parse(source || "{}");
+    return typeof runtime.runtime === "string"
+      && typeof runtime.entrypoint === "string"
+      && runtime.entrypoint.length > 0
+      ? runtime
+      : null;
+  } catch {
+    return null;
+  }
 }
 
-function normalizeFiles(files = [], draft) {
-  const normalized = files
-    .filter((file) => REQUIRED_FILES.includes(file.path))
-    .map((file) => ({
-      path: file.path,
-      kind: file.kind || (file.path === "SKILL.md" ? "instructions" : file.path === "skill.runtime.json" ? "runtime_manifest" : "executable"),
-      content: file.content || "",
-    }));
-  const byPath = new Map(normalized.map((file) => [file.path, file]));
-  for (const fallback of defaultFiles(draft)) {
-    if (!byPath.has(fallback.path)) byPath.set(fallback.path, fallback);
-  }
-  return REQUIRED_FILES.map((path) => byPath.get(path));
+function packagePaths(files = []) {
+  return files.map((file) => file.path);
+}
+
+function fileKind(file) {
+  if (file.kind) return file.kind;
+  if (file.path === "SKILL.md") return "instructions";
+  if (file.path === "skill.runtime.json") return "runtime_manifest";
+  if (file.path.startsWith("scripts/")) return "executable";
+  return "other";
+}
+
+function normalizeFiles(files = []) {
+  return files.map((file) => ({
+    path: file.path,
+    kind: fileKind(file),
+    content: file.content || "",
+  }));
 }
 
 function hasRequiredFrontmatter(content) {
@@ -90,7 +72,7 @@ export function SkillPackageEditor({ workspace, draft, mode }) {
   const packageQuery = useSkillDraftPackageQuery(draft?.skillId, draft?.skillDraftId, Boolean(draft));
   const [files, setFiles] = useState([]);
   const [baseline, setBaseline] = useState([]);
-  const [selectedPath, setSelectedPath] = useState(mode === "instructions" ? "SKILL.md" : "scripts/main.py");
+  const [selectedPath, setSelectedPath] = useState(mode === "instructions" ? "SKILL.md" : "");
   const [permissionAcknowledged, setPermissionAcknowledged] = useState(false);
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState(null);
@@ -101,7 +83,7 @@ export function SkillPackageEditor({ workspace, draft, mode }) {
   const [reloading, setReloading] = useState(false);
 
   const serverFiles = useMemo(() => {
-    return normalizeFiles(packageQuery.data?.data?.files || [], draft);
+    return normalizeFiles(packageQuery.data?.data?.files || []);
   }, [packageQuery.data?.data?.revision, draft?.skillDraftId, draft?.revision]);
 
   useEffect(() => {
@@ -115,8 +97,11 @@ export function SkillPackageEditor({ workspace, draft, mode }) {
   }, [serverFiles]);
 
   useEffect(() => {
-    setSelectedPath(mode === "instructions" ? "SKILL.md" : "scripts/main.py");
-  }, [mode]);
+    const runtime = runtimeFromFiles(serverFiles);
+    setSelectedPath(mode === "instructions"
+      ? "SKILL.md"
+      : runtime?.entrypoint || serverFiles.find((file) => file.path !== "SKILL.md")?.path || "SKILL.md");
+  }, [mode, serverFiles]);
 
   if (!draft) {
     const skill = workspace.selectedManagedSkill;
@@ -157,10 +142,13 @@ export function SkillPackageEditor({ workspace, draft, mode }) {
 
   const selected = files.find((file) => file.path === selectedPath) || files[0];
   const instruction = files.find((file) => file.path === "SKILL.md")?.content || "";
-  const script = files.find((file) => file.path === "scripts/main.py")?.content || "";
-  const runtimeManifest = files.find((file) => file.path === "skill.runtime.json")?.content || "";
+  const requiredFiles = packagePaths(files);
+  const runtimeManifestFile = files.find((file) => file.path === "skill.runtime.json");
+  const runtime = runtimeFromFiles(files);
+  const script = runtime ? files.find((file) => file.path === runtime.entrypoint)?.content || "" : "";
   const dirty = JSON.stringify(files) !== JSON.stringify(baseline);
-  const valid = hasRequiredFrontmatter(instruction) && script.trim().length > 0 && runtimeManifest.trim().length > 0;
+  const validRuntime = !runtimeManifestFile || Boolean(runtime && script.trim());
+  const valid = hasRequiredFrontmatter(instruction) && validRuntime;
 
   function updateSelected(content) {
     setFiles((current) => current.map((file) => file.path === selected.path ? { ...file, content } : file));
@@ -191,9 +179,10 @@ export function SkillPackageEditor({ workspace, draft, mode }) {
     try {
       const snapshot = await workspace.loadLatestSkillPackageForConflict();
       if (!snapshot?.etag) return;
-      const latestFiles = normalizeFiles(snapshot.package?.files || [], draft);
+      const latestFiles = normalizeFiles(snapshot.package?.files || []);
+      const comparisonPaths = [...new Set([...packagePaths(files), ...packagePaths(latestFiles)])];
       setConflictReview({ ...snapshot, files: latestFiles });
-      setMergeChoices(Object.fromEntries(REQUIRED_FILES.map((path) => [path, "local"])));
+      setMergeChoices(Object.fromEntries(comparisonPaths.map((path) => [path, "local"])));
       setConfirmReload(false);
     } finally {
       setConflictLoading(false);
@@ -202,7 +191,8 @@ export function SkillPackageEditor({ workspace, draft, mode }) {
 
   async function saveConflictSelection() {
     if (!conflictReview?.etag || saving || !permissionAcknowledged) return;
-    const mergedFiles = REQUIRED_FILES.map((path) => {
+    const comparisonPaths = [...new Set([...packagePaths(files), ...packagePaths(conflictReview.files)])];
+    const mergedFiles = comparisonPaths.map((path) => {
       const localFile = files.find((file) => file.path === path);
       const latestFile = conflictReview.files.find((file) => file.path === path);
       return mergeChoices[path] === "latest" ? (latestFile || localFile) : (localFile || latestFile);
@@ -291,7 +281,7 @@ export function SkillPackageEditor({ workspace, draft, mode }) {
             </div>
           </header>
           <div className="skillPackageConflictFiles">
-            {REQUIRED_FILES.map((path) => {
+            {[...new Set([...requiredFiles, ...packagePaths(conflictReview.files)])].map((path) => {
               const localFile = files.find((file) => file.path === path);
               const latestFile = conflictReview.files.find((file) => file.path === path);
               const changed = (localFile?.content || "") !== (latestFile?.content || "");
@@ -394,7 +384,7 @@ export function SkillPackageEditor({ workspace, draft, mode }) {
         </div>
         <div id="skill-package-editor-help" className="skillPackageHelp">
           {!hasRequiredFrontmatter(instruction) ? <p className="formError">{t("skillPackage.frontmatterMissing")}</p> : null}
-          {!script.trim() ? <p className="formError">{t("skillPackage.scriptMissing")}</p> : null}
+          {runtimeManifestFile && (!runtime || !script.trim()) ? <p className="formError">{t("skillPackage.scriptMissing")}</p> : null}
           <p className="muted">{t("skillPackage.fixedPackageNote")}</p>
         </div>
       </Section>

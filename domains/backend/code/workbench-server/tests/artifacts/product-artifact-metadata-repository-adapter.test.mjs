@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createProductArtifactMetadataRepositoryAdapter } from "../../src/artifacts/index.mjs";
+import { createProductArtifactMetadataRepositoryFixture } from "./product-artifact-metadata-repository-fixture.mjs";
 
 function repositoryFixture() {
   const calls = [];
@@ -15,7 +15,7 @@ function repositoryFixture() {
     async markFailed(artifactId, transition) { calls.push(["markFailed", artifactId, transition]); return { artifactId, state: "failed" }; },
     async delete(artifactId, options) { calls.push(["delete", artifactId, options]); return true; },
   };
-  return { calls, adapter: createProductArtifactMetadataRepositoryAdapter(repository) };
+  return { calls, adapter: createProductArtifactMetadataRepositoryFixture(repository) };
 }
 
 test("product Artifact repository adapter maps the governed metadata port without exposing collections", async () => {
@@ -54,7 +54,7 @@ test("product Artifact repository adapter maps the governed metadata port withou
   ]);
 });
 
-test("product Artifact repository adapter resolves a ProductMongoStore lazily", async () => {
+test("the test-only Artifact fixture resolves an injected repository Store lazily", async () => {
   const { calls, adapter: direct } = repositoryFixture();
   const repository = direct.repository;
   let connects = 0;
@@ -65,7 +65,7 @@ test("product Artifact repository adapter resolves a ProductMongoStore lazily", 
       this.repositories = { productArtifacts: repository };
     },
   };
-  const adapter = createProductArtifactMetadataRepositoryAdapter(store);
+  const adapter = createProductArtifactMetadataRepositoryFixture(store);
   await adapter.get({ workspaceId: "workspace-alpha", artifactId: "artifact-1" });
   assert.equal(connects, 1);
   assert.deepEqual(calls, [["getById", "artifact-1", { workspaceId: "workspace-alpha" }]]);

@@ -1,12 +1,12 @@
 import {
-  AuthStorage,
   createAgentSession,
   DefaultResourceLoader,
   defineTool,
-  ModelRegistry,
+  ModelRuntime,
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import {
   createFauxCore,
   fauxAssistantMessage,
@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { createAgwaSubagentBackend } from "../core/subagents/agwab-subagent-backend.mjs";
 import { createAgwaWorkflowBackend } from "../core/subagents/agwab-workflow-backend.mjs";
 import { startContainerGatewaySupervisor } from "./container-gateway-supervisor.mjs";
+import { runMinimalKernelPiWorker } from "./kernel-pi-worker.mjs";
 
 const PROVIDER = "looloomi-gateway";
 const MODEL_ID = "product-controlled-model";
@@ -35,6 +36,12 @@ const EMPTY_USAGE = Object.freeze({
 
 export async function runContainerPiWorker(payload, rpc, options = {}) {
   validatePayload(payload, rpc);
+  if (payload.agentKernel?.profileRevision === "product-pi-first-party-v1") {
+    return runMinimalKernelPiWorker(payload, rpc, options);
+  }
+  if (payload.agentKernel !== undefined) {
+    throw workerError("agent_kernel_profile_unsupported", "blocked");
+  }
   if (options.directPi === true) return runDirectContainerPiWorker(payload, rpc, options);
   const cwd = options.cwd ?? "/work/output";
   const supervisor = await startContainerGatewaySupervisor({
@@ -43,8 +50,16 @@ export async function runContainerPiWorker(payload, rpc, options = {}) {
     socketRoot: options.agentDir ?? "/tmp",
   });
   const previousWorkflowExtension = process.env.PI_WORKFLOW_SUBAGENT_EXTRA_EXTENSIONS;
+  const previousWorkflowToolBudget = process.env.PI_WORKFLOW_DYNAMIC_TOOL_RESULT_BUDGET_CHARS;
+  const previousProductToolResultBudget = process.env.LOOLOOMI_PRODUCT_TOOL_RESULT_MAX_CHARS;
   const previousPath = process.env.PATH;
   process.env.PI_WORKFLOW_SUBAGENT_EXTRA_EXTENSIONS = PRODUCT_GATEWAY_EXTENSION;
+  process.env.PI_WORKFLOW_DYNAMIC_TOOL_RESULT_BUDGET_CHARS = String(
+    toolResultBudgetChars(payload.limits?.maxToolResultChars),
+  );
+  process.env.LOOLOOMI_PRODUCT_TOOL_RESULT_MAX_CHARS = String(
+    toolResultBudgetChars(payload.limits?.maxToolResultChars),
+  );
   process.env.PATH = `${LOCAL_NODE_BIN}:${previousPath ?? ""}`;
   const request = {
     ...structuredClone(payload),
@@ -109,6 +124,10 @@ export async function runContainerPiWorker(payload, rpc, options = {}) {
   } finally {
     if (previousWorkflowExtension === undefined) delete process.env.PI_WORKFLOW_SUBAGENT_EXTRA_EXTENSIONS;
     else process.env.PI_WORKFLOW_SUBAGENT_EXTRA_EXTENSIONS = previousWorkflowExtension;
+    if (previousWorkflowToolBudget === undefined) delete process.env.PI_WORKFLOW_DYNAMIC_TOOL_RESULT_BUDGET_CHARS;
+    else process.env.PI_WORKFLOW_DYNAMIC_TOOL_RESULT_BUDGET_CHARS = previousWorkflowToolBudget;
+    if (previousProductToolResultBudget === undefined) delete process.env.LOOLOOMI_PRODUCT_TOOL_RESULT_MAX_CHARS;
+    else process.env.LOOLOOMI_PRODUCT_TOOL_RESULT_MAX_CHARS = previousProductToolResultBudget;
     if (previousPath === undefined) delete process.env.PATH;
     else process.env.PATH = previousPath;
     await supervisor.close();
@@ -143,12 +162,14 @@ async function runDirectContainerPiWorker(payload, rpc, {
     tokensPerSecond: 0,
   });
   faux.setResponses(modelCalls);
-  const authStorage = AuthStorage.inMemory();
+  const modelRuntime = await ModelRuntime.create({
+    credentials: new InMemoryCredentialStore(),
+    modelsPath: null,
+  });
   // This value is a non-secret transport marker required by Pi's auth preflight.
   // Provider credentials never enter the container; the product Gateway owns them.
-  authStorage.setRuntimeApiKey(PROVIDER, "stdio-gateway-transport");
-  const modelRegistry = ModelRegistry.inMemory(authStorage);
-  modelRegistry.registerProvider(PROVIDER, {
+  await modelRuntime.setRuntimeApiKey(PROVIDER, "stdio-gateway-transport");
+  modelRuntime.registerProvider(PROVIDER, {
     api: PROVIDER,
     baseUrl: "http://127.0.0.1:1",
     apiKey: "stdio-gateway-transport",
@@ -164,7 +185,7 @@ async function runDirectContainerPiWorker(payload, rpc, {
       maxTokens: 16_384,
     }],
   });
-  const model = modelRegistry.find(PROVIDER, MODEL_ID);
+  const model = modelRuntime.getModel(PROVIDER, MODEL_ID);
   if (!model) throw workerError("agent_gateway_model_unavailable", "blocked");
 
   const resourceLoader = new DefaultResourceLoader({
@@ -179,8 +200,7 @@ async function runDirectContainerPiWorker(payload, rpc, {
   const { session } = await createAgentSession({
     cwd,
     agentDir,
-    authStorage,
-    modelRegistry,
+    modelRuntime,
     model,
     thinkingLevel: "off",
     resourceLoader,
@@ -213,6 +233,14 @@ async function runDirectContainerPiWorker(payload, rpc, {
       output,
       summary: summaryFor(output),
       evidence: [],
+      workerTranscript: {
+        mediaType: "application/json",
+        content: JSON.stringify({
+          schemaVersion: "worker-transcript-v1",
+          backend: "pi-direct",
+          messages: session.messages,
+        }),
+      },
       usage: {
         steps: counters.steps,
         modelRequests: counters.modelRequests,
@@ -222,7 +250,7 @@ async function runDirectContainerPiWorker(payload, rpc, {
     };
   } finally {
     await Promise.resolve(session.dispose?.()).catch(() => {});
-    modelRegistry.unregisterProvider(PROVIDER);
+    modelRuntime.unregisterProvider(PROVIDER);
   }
 }
 
@@ -234,7 +262,10 @@ function gatewayTool(payload, rpc, toolId, counters) {
     parameters: Type.Object({}, { additionalProperties: true }),
     execute: async (_toolCallId, params) => {
       counters.steps += 1;
-      const result = await rpc.call(gatewayMessage(payload, "tool", { toolId, input: structuredClone(params) }));
+      const result = boundedToolResult(
+        await rpc.call(gatewayMessage(payload, "tool", { toolId, input: structuredClone(params) })),
+        toolResultBudgetChars(payload.limits?.maxToolResultChars),
+      );
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
         details: { status: "completed" },
@@ -368,6 +399,22 @@ function workerError(code, status) {
 
 function nonnegative(value) {
   return Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function toolResultBudgetChars(value) {
+  return Number.isSafeInteger(value) && value >= 1_024 && value <= 4_000_000
+    ? value
+    : 320_000;
+}
+
+function boundedToolResult(value, maximum) {
+  const text = JSON.stringify(value);
+  if (Buffer.byteLength(text, "utf8") <= maximum) return value;
+  return {
+    truncated: true,
+    originalChars: text.length,
+    preview: text.slice(0, Math.max(0, maximum - 256)),
+  };
 }
 
 function byteLength(value) {

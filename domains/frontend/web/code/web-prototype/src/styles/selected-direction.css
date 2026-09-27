@@ -795,3 +795,345 @@
   .teamAssetRow,
   .rowMoreAction { transition: none; }
 }
+
+/* M5 creation entry: intent first, internal representations second. */
+.createLoopShell.entryMode,
+.createLoopShell.workflowMode {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto;
+  min-height: 0;
+}
+
+.createLoopEntry {
+  display: grid;
+  gap: 24px;
+  width: min(100%, 900px);
+  margin: 0 auto;
+  padding: clamp(24px, 5vw, 56px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.createLoopEntryHeading {
+  display: grid;
+  gap: 7px;
+  max-width: 680px;
+}
+
+.createLoopEntryHeading h2,
+.createLoopEntryHeading p {
+  margin: 0;
+}
+
+.createLoopEntryHeading h2 {
+  font-size: 22px;
+}
+
+.createLoopEntryHeading p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.createLoopEntryPrimary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.createLoopEntryPrimary > button {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-height: 150px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.createLoopEntryPrimary > button:first-child {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+}
+
+.createLoopEntryPrimary > button:hover,
+.createLoopEntryPrimary > button:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgb(37 99 235 / 10%);
+}
+
+.createLoopEntryPrimary > button > span:last-child,
+.createLoopAdvancedStarts button > span {
+  display: grid;
+  gap: 7px;
+}
+
+.createLoopEntryPrimary strong {
+  font-size: 16px;
+}
+
+.createLoopEntryPrimary small,
+.createLoopAdvancedStarts small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.createLoopEntryIcon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--accent);
+}
+
+.createLoopAdvancedStarts {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.createLoopAdvancedStarts summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.createLoopAdvancedStarts > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.createLoopAdvancedStarts button {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.createLoopSelectedMode {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.createLoopSelectedMode button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.createLoopPageV2 .createLoopShell.workflowMode .createLoopWorkspace {
+  grid-column: 1;
+  grid-row: auto;
+  border: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
+}
+
+.createLoopShell.workflowMode .createLoopFooter {
+  grid-column: 1;
+}
+
+@media (max-width: 720px) {
+  .createLoopEntry {
+    padding: 20px;
+  }
+
+  .createLoopEntryPrimary,
+  .createLoopAdvancedStarts > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.skillWizardProgress {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin: 4px 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.skillWizardProgress li {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.skillWizardProgress li > span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 10px;
+}
+
+.skillWizardProgress li > small {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.skillWizardProgress li.active,
+.skillWizardProgress li.complete {
+  color: var(--accent);
+}
+
+.skillWizardProgress li.active > span,
+.skillWizardProgress li.complete > span {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.skillDefinitionWizard {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 360px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+}
+
+.skillWizardHeading {
+  display: grid;
+  gap: 5px;
+}
+
+.skillWizardHeading h3,
+.skillWizardHeading p {
+  margin: 0;
+}
+
+.skillWizardHeading h3 {
+  font-size: 17px;
+}
+
+.skillWizardHeading p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.skillTypeRedirects {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.skillTypeRedirects button {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.skillTypeRedirects small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.skillRuntimeDecision,
+.skillDraftPreview,
+.skillDraftReview {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.skillRuntimeDecision p,
+.skillRuntimeDecision small,
+.skillDraftReview p {
+  margin: 0;
+}
+
+.skillRuntimeDecision p,
+.skillRuntimeDecision small,
+.skillDraftReview p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.skillDraftPreview dl {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.skillDraftPreview dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12px;
+}
+
+.skillDraftPreview dt {
+  color: var(--muted);
+}
+
+.skillDraftPreview dd {
+  margin: 0;
+}
+
+.skillDraftPreview ul,
+.skillDraftReview ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .skillWizardProgress {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .skillTypeRedirects {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1,4 +1,8 @@
+import { createHash } from "node:crypto";
+
 const MAX_FRAME_BYTES = 4 * 1024 * 1024;
+const MAX_TRANSCRIPT_BYTES = 4 * 1024 * 1024;
+const TRANSCRIPT_CHUNK_BYTES = 256 * 1024;
 
 export class ContainerWorkerProtocol {
   constructor({ input = process.stdin, output = process.stdout } = {}) {
@@ -62,6 +66,34 @@ export class ContainerWorkerProtocol {
 
   sendResult(result) {
     return this.#send({ kind: "result", result });
+  }
+
+  async sendTranscript({ mediaType, content } = {}) {
+    if (!["application/json", "application/x-ndjson", "text/plain"].includes(mediaType)
+      || typeof content !== "string") {
+      throw protocolError("container_worker_transcript_invalid");
+    }
+    const bytes = Buffer.from(content, "utf8");
+    if (bytes.byteLength < 1 || bytes.byteLength > MAX_TRANSCRIPT_BYTES) {
+      throw protocolError("container_worker_transcript_too_large");
+    }
+    const contentHash = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+    await this.#send({
+      kind: "transcript_start",
+      mediaType,
+      byteLength: bytes.byteLength,
+      contentHash,
+    });
+    let sequence = 0;
+    for (let offset = 0; offset < bytes.byteLength; offset += TRANSCRIPT_CHUNK_BYTES) {
+      sequence += 1;
+      await this.#send({
+        kind: "transcript_chunk",
+        sequence,
+        bytesBase64: bytes.subarray(offset, offset + TRANSCRIPT_CHUNK_BYTES).toString("base64"),
+      });
+    }
+    await this.#send({ kind: "transcript_end", chunks: sequence });
   }
 
   dispose() {

@@ -1,11 +1,14 @@
 # SkillOS / LoopOS 后端架构实施计划
 
 - 日期：2026-08-01
-- 状态：**待开发执行；基于同日交叉审查修订架构**
+- 状态：**Iterations 0–6 已在当前工作树实现并通过本地纵向 Gate；生产发布仍为 NO-GO**
 - 权威架构：`wiki/architecture/2026-08-01-skillos-loopos-backend-architecture.md`
 - 代码范围：`domains/backend`、`domains/agent`；只有契约需要时才触及前端 API client/read model，不在本计划重做 M5 视觉
 - 运行范围：单机 Product-owned 调度，不引入外部 MQ 或真实远程设备
 - 依赖基线：PI SDK 0.83.0、pi-workflow 0.10.1、pi-subagent 0.4.8；只允许 `headless`
+- 实施与验证记录：`wiki/qa/2026-08-01-skillos-loopos-iterations-0-6-implementation-review.md`
+
+> 本文下方保留原实施拆解作为追溯清单。“已实现”不等于“可生产发布”；外部 Provider、真实 Connection credential、认证生产 Mongo、供应链/CVE、冷启容量、升级/回滚和当前构建的人工视觉验收仍是独立门禁。
 
 ## 0. 开发护栏
 

@@ -242,8 +242,7 @@ async function normalizeProviderResponse(response, input, provider) {
 
 function normalizedSeed(value, requestedSeed) {
   if (value === null || value === undefined || value === "") {
-    if (Number.isSafeInteger(requestedSeed) && requestedSeed > 0) return requestedSeed;
-    throw providerError("provider_response_invalid");
+    return Number.isSafeInteger(requestedSeed) ? requestedSeed : null;
   }
   const parsed = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value;
   if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 4_294_967_294) {

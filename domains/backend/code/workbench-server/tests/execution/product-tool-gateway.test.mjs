@@ -26,6 +26,9 @@ async function fixture({
   observer = null,
   metadata = {},
   modelExecutor = null,
+  toolExecutor = null,
+  executionCapabilities = capabilities,
+  actor = null,
 } = {}) {
   const persistence = new InMemoryExecutionPersistence();
   const pinnedMetadata = {
@@ -35,8 +38,10 @@ async function fixture({
     ...metadata,
   };
   const request = {
+    actor,
     limits: { maxModelRequests, maxSteps, maxOutputBytes: 10_000 },
     metadata: pinnedMetadata,
+    controller: { kind: "workflow_run", controllerId: "run-1", fence: 1 },
   };
   await persistence.createInvocation({
     invocationId: "invocation-a",
@@ -54,7 +59,7 @@ async function fixture({
     attemptId: "attempt-a",
     workspaceId: "workspace-a",
     status: "active",
-    capabilities,
+    capabilities: executionCapabilities,
     expiresAt: "2026-07-16T13:00:00.000Z",
   });
   await persistence.markRunning("invocation-a", "attempt-a", NOW);
@@ -70,7 +75,7 @@ async function fixture({
         actualModelRevisionId: input.modelProfileRevisionId,
       };
     }),
-    toolExecutor: async (input) => { calls.push({ kind: "tool", input }); return { items: ["result"] }; },
+    toolExecutor: toolExecutor ?? (async (input) => { calls.push({ kind: "tool", input }); return { items: ["result"] }; }),
     observer,
   });
   const binding = { invocationId: "invocation-a", attemptId: "attempt-a", capabilityLeaseId: "lease-a" };
@@ -80,22 +85,37 @@ async function fixture({
     attemptId: binding.attemptId,
     capabilityLeaseId: binding.capabilityLeaseId,
     toolId: "search",
+    connectionId: "connection-a",
     input: { query: "safe" },
     ...overrides,
   });
   return { persistence, gateway, binding, message, calls };
 }
 
+test("private material tool uses Product actor identity and rejects external connection claims", async () => {
+  const { gateway, binding, message, calls } = await fixture({ maxSteps: 5,
+    actor: { userId: "alice" },
+    executionCapabilities: { ...capabilities, toolAllowlist: ["turnsu_materials"], connectionIds: [] } });
+  await gateway.handle(message({ toolId: "turnsu_materials", connectionId: undefined,
+    actor: { userId: "bob" }, input: { action: "list" } }), binding);
+  assert.deepEqual(calls[0].input.actor, { userId: "alice" });
+  await assert.rejects(gateway.handle(message({ toolId: "turnsu_materials", input: { action: "list" } }), binding),
+    { code: "gateway_connection_forbidden" });
+  await assert.rejects(gateway.handle(message({ toolId: "turnsu_materials", connectionId: undefined, externalAction: true }), binding),
+    { code: "gateway_external_action_forbidden" });
+});
+
 test("Gateway holds Provider and Tool execution while enforcing lease and allowlists", async () => {
   const { gateway, binding, message, calls } = await fixture({ maxSteps: 8 });
   assert.deepEqual(await gateway.handle(message(), binding), { items: ["result"] });
-  assert.equal(calls[0].input.connectionId, null);
+  assert.equal(calls[0].input.connectionId, "connection-a");
   assert.deepEqual(await gateway.handle(message({ operation: "model", toolId: undefined }), binding), {
     text: "model result",
     requestedModelRevisionId: "model-revision-default",
     actualModelRevisionId: "model-revision-default",
   });
   await assert.rejects(gateway.handle(message({ toolId: "shell" }), binding), { code: "gateway_tool_forbidden" });
+  await assert.rejects(gateway.handle(message({ connectionId: undefined }), binding), { code: "gateway_connection_forbidden" });
   await assert.rejects(gateway.handle(message({ connectionId: "connection-b" }), binding), { code: "gateway_connection_forbidden" });
   assert.equal(JSON.stringify(calls).includes("secret"), false);
 });
@@ -168,20 +188,222 @@ test("Gateway rejects expired/revoked leases, model over-budget, and child escal
   );
 });
 
+test("Gateway independently rejects unsafe nested Lark results", async () => {
+  const larkCapabilities = {
+    ...capabilities,
+    toolAllowlist: ["lark.task.create"],
+    externalActions: true,
+  };
+  const { gateway, binding, message } = await fixture({
+    executionCapabilities: larkCapabilities,
+    toolExecutor: async () => ({
+      status: "succeeded",
+      action: "lark.task.create",
+      effect: "write",
+      output: {
+        taskId: "task-1",
+        debug: [{ providerPayload: { value: "not-safe" } }],
+      },
+      externalRef: { provider: "lark", resourceType: "task", id: "task-1" },
+      receipt: {
+        receiptId: "lark-effect:gateway-task-1",
+        externalRef: { provider: "lark", resourceType: "task", id: "task-1" },
+      },
+    }),
+  });
+
+  await assert.rejects(
+    gateway.handle(message({
+      toolId: "lark.task.create",
+      externalAction: true,
+      effectId: "gateway-task-1",
+    }), binding),
+    { code: "lark_tool_output_forbidden", status: "failed" },
+  );
+});
+
+test("Gateway returns only the Lark action product projection", async () => {
+  const larkCapabilities = {
+    ...capabilities,
+    toolAllowlist: ["lark.task.create"],
+    externalActions: true,
+  };
+  const { gateway, binding, message } = await fixture({
+    executionCapabilities: larkCapabilities,
+    toolExecutor: async () => ({
+      status: "succeeded",
+      action: "lark.task.create",
+      effect: "write",
+      output: { taskId: "task-1", upstream_debug: "drop-this" },
+      externalRef: { provider: "lark", resourceType: "task", id: "task-1" },
+      receipt: {
+        receiptId: "lark-effect:gateway-task-1",
+        provider_debug: "drop-this-too",
+        externalRef: { provider: "lark", resourceType: "task", id: "task-1" },
+      },
+    }),
+  });
+
+  const result = await gateway.handle(message({
+    toolId: "lark.task.create",
+    externalAction: true,
+    effectId: "gateway-task-1",
+  }), binding);
+  assert.deepEqual(result.output, { taskId: "task-1" });
+  assert.deepEqual(Object.keys(result.receipt).sort(), ["action", "effect", "externalRef", "receiptId"]);
+  assert.equal(JSON.stringify(result).includes("drop-this"), false);
+});
+
+test("Gateway reconciles only the exact pinned effect receipt under the active capability lease", async () => {
+  const recovery = {
+    schemaVersion: "workbench-effect-recovery-v1",
+    effectId: "effect-gateway-recovery-1",
+    action: "lark.task.create",
+    connectionId: "connection-a",
+    requirementId: "lark.task",
+    approvalFingerprint: `sha256:${"a".repeat(64)}`,
+    credentialBindingFingerprint: `sha256:${"b".repeat(64)}`,
+    driverBackend: "production",
+    sourceInvocationId: "invocation-original",
+    sourceAttemptId: "attempt-original",
+  };
+  let ordinaryToolCalls = 0;
+  const toolExecutor = Object.assign(
+    async () => { ordinaryToolCalls += 1; },
+    {
+      async reconcileEffect({ workspaceId, effectId }) {
+        assert.equal(workspaceId, "workspace-a");
+        assert.equal(effectId, recovery.effectId);
+        return {
+          ...recovery,
+          status: "succeeded",
+          invocationId: recovery.sourceInvocationId,
+          attemptId: recovery.sourceAttemptId,
+          controllerId: "run-1",
+          nodeId: "node-task",
+          output: { taskId: "task-1" },
+          externalRef: { provider: "lark", resourceType: "task", id: "task-1" },
+          receipt: {
+            receiptId: `lark-effect:${recovery.effectId}`,
+            action: recovery.action,
+            effect: "write",
+            externalRef: { provider: "lark", resourceType: "task", id: "task-1" },
+          },
+        };
+      },
+    },
+  );
+  const { gateway, binding } = await fixture({
+    toolExecutor,
+    executionCapabilities: {
+      ...capabilities,
+      toolAllowlist: [recovery.action],
+      externalActions: true,
+    },
+    metadata: {
+      outerNodeId: "node-task",
+      effectRecovery: recovery,
+      connectionSnapshots: [{
+        connectionId: recovery.connectionId,
+        requirementId: recovery.requirementId,
+        approvalFingerprint: recovery.approvalFingerprint,
+        credentialBindingFingerprint: recovery.credentialBindingFingerprint,
+        driverBackend: recovery.driverBackend,
+      }],
+    },
+  });
+
+  const result = await gateway.recoverEffect({
+    ...binding,
+    effectRecovery: recovery,
+  }, binding);
+  assert.equal(result.effectId, recovery.effectId);
+  assert.deepEqual(result.output, { taskId: "task-1" });
+  assert.equal(ordinaryToolCalls, 0);
+  await assert.rejects(
+    gateway.recoverEffect({
+      ...binding,
+      effectRecovery: { ...recovery, action: "lark.task.update" },
+    }, binding),
+    { code: "gateway_effect_recovery_lineage_invalid" },
+  );
+});
+
+test("Gateway leaves a pinned effect outcome unknown when its executor has no reconciliation driver", async () => {
+  const recovery = {
+    schemaVersion: "workbench-effect-recovery-v1",
+    effectId: "effect-gateway-recovery-2",
+    action: "lark.task.create",
+    connectionId: "connection-a",
+    requirementId: "lark.task",
+    approvalFingerprint: `sha256:${"c".repeat(64)}`,
+    credentialBindingFingerprint: `sha256:${"d".repeat(64)}`,
+    driverBackend: "production",
+    sourceInvocationId: "invocation-original",
+    sourceAttemptId: "attempt-original",
+  };
+  let ordinaryToolCalls = 0;
+  const { gateway, binding } = await fixture({
+    toolExecutor: async () => { ordinaryToolCalls += 1; },
+    executionCapabilities: {
+      ...capabilities,
+      toolAllowlist: [recovery.action],
+      externalActions: true,
+    },
+    metadata: {
+      outerNodeId: "node-task",
+      effectRecovery: recovery,
+      connectionSnapshots: [{
+        connectionId: recovery.connectionId,
+        requirementId: recovery.requirementId,
+        approvalFingerprint: recovery.approvalFingerprint,
+        credentialBindingFingerprint: recovery.credentialBindingFingerprint,
+        driverBackend: recovery.driverBackend,
+      }],
+    },
+  });
+
+  await assert.rejects(
+    gateway.recoverEffect({ ...binding, effectRecovery: recovery }, binding),
+    { code: "gateway_effect_recovery_unavailable", status: "effect_outcome_unknown" },
+  );
+  assert.equal(ordinaryToolCalls, 0);
+});
+
+test("Gateway retains actual provider usage across calls and stdio closure", async () => {
+  const { gateway, binding, message } = await fixture({
+    maxModelRequests: 2,
+    modelExecutor: async (input) => ({
+      text: "result",
+      requestedModelRevisionId: input.modelProfileRevisionId,
+      actualModelRevisionId: input.modelProfileRevisionId,
+      usage: { inputTokens: 120, outputTokens: 30, totalTokens: 150, costUsdMicros: 40 },
+    }),
+  });
+  const session = await new StdioToolGatewayServer({ gateway }).open(binding);
+  await session.handle(message({ operation: "model", input: { usage: { totalTokens: 1 } } }));
+  await session.handle(message({ operation: "model" }));
+  assert.deepEqual(session.snapshot().usage, {
+    steps: 2, modelRequests: 2, inputTokens: 240, outputTokens: 60,
+    totalTokens: 300, costUsdMicros: 80, imageCount: 0,
+  });
+  await session.close();
+  assert.equal(session.snapshot().usage.totalTokens, 300);
+});
+
 test("stdio Gateway session is process-bound and releases invocation usage on close", async () => {
   const { gateway, binding, message } = await fixture({ maxModelRequests: 1, maxSteps: 2 });
   const server = new StdioToolGatewayServer({ gateway });
   const session = await server.open(binding);
   assert.equal((await session.handle(message({ operation: "model", toolId: undefined }))).text, "model result");
-  assert.deepEqual(session.snapshot(), {
+  const expectedSnapshot = {
     requestedModelRevisionId: "model-revision-default",
     actualModelRevisionId: "model-revision-default",
-  });
+    usage: { steps: 1, modelRequests: 1, inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsdMicros: 0, imageCount: 0 },
+  };
+  assert.deepEqual(session.snapshot(), expectedSnapshot);
   await session.close();
-  assert.deepEqual(session.snapshot(), {
-    requestedModelRevisionId: "model-revision-default",
-    actualModelRevisionId: "model-revision-default",
-  });
+  assert.deepEqual(session.snapshot(), expectedSnapshot);
   await assert.rejects(async () => session.handle(message()), { code: "gateway_session_closed" });
 
   const next = await server.open(binding);

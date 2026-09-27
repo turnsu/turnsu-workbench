@@ -417,14 +417,6 @@ p {
   font-size: 12px;
 }
 
-.hiddenTestButton {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-
 .workspaceBody {
   min-width: 0;
   min-height: 0;
@@ -1207,6 +1199,72 @@ p {
 .skillTestForm {
   display: grid;
   gap: 12px;
+}
+
+.skillMaterialBindings {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.skillMaterialBindings legend {
+  padding: 0 6px;
+  color: var(--text);
+  font-weight: 650;
+}
+
+.skillMaterialBinding {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.skillMaterialBinding label {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.skillMaterialBinding select,
+.skillMaterialBinding input[type="file"] {
+  width: 100%;
+  min-width: 0;
+}
+
+.skillMaterialStatus {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.skillMaterialStatus span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skillMaterialStatus small {
+  color: var(--muted);
+}
+
+.skillMaterialStatus-failed small {
+  color: var(--danger);
+}
+
+.skillMaterialStatus button {
+  margin-left: auto;
 }
 
 .formError {
@@ -2461,23 +2519,81 @@ p {
 .imageComposerFields input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .modelPicker > small { color: var(--muted); line-height: 1.4; }
 .modelPicker .modelPickerHistory { color: var(--warning-text, #8a5600); }
+.modelSwitch { position: relative; min-width: 0; }
+.modelSwitchTrigger { display: inline-flex; align-items: center; min-height: 34px; max-width: 100%; gap: 6px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; }
+.modelSwitchTrigger:hover:not(:disabled) { border-color: var(--accent); }
+.modelSwitchTrigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.modelSwitchTrigger:disabled { cursor: not-allowed; opacity: .62; }
+.modelSwitchTrigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modelSwitchTrigger > small { color: var(--muted); white-space: nowrap; }
+.modelSwitchPopover { position: absolute; z-index: 30; top: calc(100% + 8px); right: 0; display: grid; min-width: min(340px, calc(100vw - 32px)); max-width: 360px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: 0 16px 36px rgb(15 23 42 / 18%); }
+.modelSwitchPopover section { display: grid; gap: 2px; padding: 4px 0; }
+.modelSwitchPopover h4 { margin: 5px 8px 3px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.modelSwitchPopover button { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+.modelSwitchPopover button:hover:not(:disabled), .modelSwitchPopover button.selected { background: var(--surface-selected); }
+.modelSwitchPopover button:disabled { cursor: not-allowed; opacity: .55; }
+.modelSwitchPopover strong, .modelSwitchPopover small { display: block; }
+.modelSwitchPopover small, .modelSwitchPopover p { color: var(--muted); font-size: 11px; }
+.modelSwitchPopover em { color: var(--warning-text, #8a5600); font-size: 10px; font-style: normal; }
+.modelSwitchPopover .modelSwitchReason { color: var(--danger); }
+.modelSwitchPopover > p { margin: 6px 8px 2px; line-height: 1.4; }
+.modelSwitchFeedback { display: block; max-width: 320px; margin-top: 5px; color: var(--danger); font-size: 11px; line-height: 1.4; }
 .modelComposer { display: grid; gap: 12px; }
 .modelComposerActions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .modelComposerActions > small { color: var(--muted); font-size: 11px; }
 .imageComposerFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .imageComposerFields label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; }
+.imageComposerAdvanced { border: 1px solid var(--line); border-radius: 7px; }
+.imageComposerAdvanced > summary { padding: 9px 10px; color: var(--muted); font-size: 12px; cursor: pointer; }
+.imageComposerAdvancedContent { display: grid; gap: 12px; padding: 0 10px 12px; }
 
 .mainAgentPage { min-height: calc(100vh - 80px); }
 .mainAgentHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 28px 30px 22px; border-bottom: 1px solid var(--line); }
 .mainAgentHeader h1 { margin: 5px 0 7px; font-size: 24px; }
 .mainAgentHeader > div > p:last-child { max-width: 700px; margin: 0; color: var(--muted); }
 .mainAgentHeader .objectKicker { display: flex; align-items: center; gap: 6px; }
-.mainAgentLayout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 640px; }
+.mainAgentHeaderActions { display: flex; align-items: center; gap: 10px; }
+.mainAgentLayout { display: grid; grid-template-rows: minmax(440px, 1fr) auto; min-height: 640px; }
+.mainAgentWorkspace { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; }
+.mainAgentWorkspace.drawerOpen { grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); }
 .mainAgentConversation { min-width: 0; padding: 24px 30px 36px; }
-.mainAgentComposerPanel { display: grid; align-content: start; gap: 18px; padding: 24px 22px; border-left: 1px solid var(--line); background: var(--surface-subtle, var(--surface)); }
+.mainAgentComposerPanel { display: grid; gap: 14px; padding: 18px clamp(16px, 4vw, 72px) 24px; border-top: 1px solid var(--line); background: var(--surface-subtle, var(--surface)); }
+.agentTaskComposer { display: grid; gap: 12px; width: min(100%, 940px); margin: 0 auto; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: 0 10px 30px rgb(15 23 42 / 7%); }
+.agentTaskComposer textarea { min-height: 84px; border: 0; background: transparent; box-shadow: none; resize: vertical; }
+.agentTaskComposer textarea:focus { outline: 0; box-shadow: none; }
+.agentTaskComposerActions { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; }
+.agentTaskComposerTools,
+.agentTaskComposerSubmit { display: flex; align-items: center; gap: 10px; }
+.agentTaskComposerTools .segmentedControl { min-width: min(220px, 100%); }
+.agentTaskComposerSubmit > small { color: var(--muted); font-size: 11px; }
+.agentComposerField { display: grid; gap: 6px; color: var(--text); font-size: 12px; font-weight: 600; }
+.agentDetailsDrawer { display: grid; align-content: start; gap: 0; border-left: 1px solid var(--line); background: var(--surface-subtle); }
+.agentDetailsDrawer section { display: grid; gap: 10px; padding: 18px; border-bottom: 1px solid var(--line); }
+.agentDetailsDrawer h2,
+.agentDetailsDrawer p { margin: 0; }
+.agentDetailsDrawer h2 { font-size: 13px; }
+.agentDetailsDrawer p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.agentDetailsDrawer dl { display: grid; gap: 8px; margin: 0; }
+.agentDetailsDrawer dl > div { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+.agentDetailsDrawer dt { color: var(--muted); }
+.agentDetailsDrawer dd { margin: 0; text-align: right; }
+.agentDrawerArtifacts { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.agentDrawerArtifacts li { display: grid; gap: 2px; padding-top: 8px; border-top: 1px solid var(--line); }
+.agentDrawerArtifacts strong { overflow: hidden; color: var(--text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.agentDrawerArtifacts small { color: var(--muted); font-size: 10px; }
 .agentEmptyState { display: grid; justify-items: center; gap: 8px; max-width: 480px; margin: 100px auto; text-align: center; }
 .agentEmptyState h2 { margin: 6px 0 0; font-size: 18px; }
 .agentEmptyState p { margin: 0; color: var(--muted); line-height: 1.5; }
+.agentEmptyExamples { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 10px; }
+.agentEmptyExamples button { padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; }
+.agentEmptyExamples button:hover { border-color: var(--accent); color: var(--accent); }
+.agentRecentWork { display: grid; gap: 6px; width: min(100%, 420px); margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); text-align: left; }
+.agentRecentWork > strong { color: var(--muted); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.agentRecentWork button { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.agentRecentWork button:hover span { color: var(--accent); }
+.agentRecentWork small { color: var(--muted); font-size: 10px; text-transform: capitalize; }
+.agentRecentWorkFailure { display: flex; align-items: center; justify-content: center; gap: 10px; width: min(100%, 420px); margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.agentRecentWorkFailure button { border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; }
 .agentTurnList { display: grid; gap: 16px; margin: 0; padding: 0; list-style: none; }
 .agentTurn { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
 .agentTurnRequest { display: flex; align-items: flex-start; gap: 9px; padding: 12px 14px; background: var(--surface-selected); }
@@ -2515,14 +2631,21 @@ p {
 .creatorAgentHistory small { margin-top: 3px; color: var(--muted); font-size: 11px; }
 
 @media (max-width: 900px) {
-  .mainAgentLayout { grid-template-columns: minmax(0, 1fr); }
-  .mainAgentComposerPanel { border-top: 1px solid var(--line); border-left: 0; }
+  .mainAgentLayout { grid-template-rows: minmax(400px, 1fr) auto; }
+  .mainAgentWorkspace.drawerOpen { grid-template-columns: minmax(0, 1fr); }
+  .agentDetailsDrawer { border-top: 1px solid var(--line); border-left: 0; }
 }
 
 @media (max-width: 560px) {
   .mainAgentHeader,
   .mainAgentConversation { padding-right: 16px; padding-left: 16px; }
+  .mainAgentHeader { align-items: stretch; flex-direction: column; }
+  .mainAgentHeaderActions { justify-content: space-between; }
   .mainAgentComposerPanel { padding: 18px 16px; }
+  .agentTaskComposerActions,
+  .agentTaskComposerTools,
+  .agentTaskComposerSubmit { align-items: stretch; flex-direction: column; }
+  .agentTaskComposerSubmit > small { display: none; }
   .imageComposerFields,
   .modelSettingsGrid { grid-template-columns: minmax(0, 1fr); }
 }
@@ -3449,6 +3572,103 @@ p {
   outline: 0;
 }
 
+.runMaterialBindings {
+  display: grid;
+  gap: 12px;
+}
+
+.runMaterialBinding {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-subtle);
+}
+
+.runMaterialBinding > p,
+.runMaterialHeading span,
+.runMaterialStatus small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.runMaterialHeading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.runMaterialControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 0.7fr);
+  gap: 10px;
+}
+
+.runMaterialControls select,
+.runMaterialUpload {
+  min-height: 38px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--control);
+  color: var(--text);
+}
+
+.runMaterialControls select {
+  min-width: 0;
+  padding: 7px 9px;
+}
+
+.runMaterialUpload {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.runMaterialUpload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.runMaterialStatus {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.runMaterialStatus > span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runMaterialStatus button {
+  display: inline-grid;
+  place-items: center;
+  padding: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.runMaterialStatus-failed,
+.runMaterialStatus-failed small {
+  color: var(--danger);
+}
+
 .preflightRows {
   border-top: 1px solid var(--line);
 }
@@ -3648,37 +3868,6 @@ p {
 .librarySearch:focus-within {
   box-shadow: var(--focus-ring);
   border-color: var(--accent);
-}
-
-.dialogLayer {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: color-mix(in srgb, var(--text) 28%, transparent);
-}
-
-.dialogPanel {
-  width: min(620px, 100%);
-  max-height: min(760px, calc(100vh - 48px));
-  overflow: auto;
-  padding: 22px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: 0 20px 56px color-mix(in srgb, var(--text) 18%, transparent);
-}
-
-.dialogPanel > h2 {
-  margin: 0 0 16px;
-  font-size: 20px;
-}
-
-.dialogPanel > .buttonRow {
-  justify-content: flex-end;
-  margin-top: 18px;
 }
 
 .loopImportFlow,
@@ -5377,6 +5566,14 @@ p {
     grid-column: auto;
   }
 
+  .skillMaterialBinding {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .skillMaterialStatus {
+    grid-column: auto;
+  }
+
   .skillPackageWorkspace {
     grid-template-columns: 1fr;
   }
@@ -5545,8 +5742,15 @@ p {
   .objectDefinitionList,
   .objectPropertyGrid,
   .preflightFacts,
-  .preflightInputs {
+  .preflightInputs,
+  .runMaterialControls {
     grid-template-columns: 1fr;
+  }
+
+  .runMaterialHeading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
   }
 
   .objectDefinitionList > div {
@@ -5648,28 +5852,11 @@ p {
     flex-direction: column;
   }
 
-  .dialogLayer {
-    align-items: end;
-    padding: 0;
-  }
-
-  .dialogPanel {
-    width: 100%;
-    max-height: calc(100dvh - 20px);
-    padding: 18px 14px max(18px, env(safe-area-inset-bottom));
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    border-radius: 8px 8px 0 0;
-  }
-
-  .dialogPanel > .buttonRow,
   .connectionBlockingState {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .dialogPanel > .buttonRow > *,
   .connectionBlockingState > * {
     width: 100%;
   }

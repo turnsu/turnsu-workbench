@@ -46,7 +46,75 @@ const CASES = Object.freeze([
   },
 ]);
 
-test("runTests verifies one promoted package, executes ordered cases sequentially, and persists contract-safe records", async () => {
+async function runAcceptedTests(harness, input) {
+  const records = [];
+  for (let index = 0; index < input.testCases.length; index += 1) {
+    const request = {
+      ...input,
+      testCases: [input.testCases[index]],
+      testRunIds: [input.testRunIds[index]],
+      resolvedMaterialsByTestCase: [input.resolvedMaterialsByTestCase?.[index] ?? []],
+    };
+    await harness.service.acceptTestRun(request);
+    await harness.service.startAcceptedTestRun({
+      workspaceId: request.workspaceId,
+      testRunId: request.testRunIds[0],
+    });
+    records.push(await completeAcceptedTest(harness, request));
+  }
+  return records;
+}
+
+async function completeAcceptedTest(harness, request) {
+  const prepared = await harness.service.prepareAcceptedTest(request);
+  let result;
+  let failure;
+  let timedOut = false;
+  let callerCancelled = request.signal?.aborted === true;
+  if (!callerCancelled) {
+    const controller = new AbortController();
+    const onCallerAbort = () => {
+      callerCancelled = true;
+      controller.abort(request.signal?.reason);
+    };
+    request.signal?.addEventListener("abort", onCallerAbort, { once: true });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort(executorError("skill_execution_timed_out"));
+    }, 5);
+    try {
+      result = await harness.execute({
+        workspaceId: request.workspaceId,
+        objectId: request.objectId,
+        objectHash: request.objectHash,
+        packageHash: request.packageHash,
+        inspection: structuredClone(prepared.inspection),
+        input: structuredClone(request.testCases[0].input),
+        materials: (request.resolvedMaterialsByTestCase?.[0] ?? []).map((material) => structuredClone(material)),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      failure = error;
+    } finally {
+      clearTimeout(timer);
+      request.signal?.removeEventListener("abort", onCallerAbort);
+    }
+  }
+  const outcome = harness.service.classifyAcceptedTestOutcome(request, {
+    result,
+    failure,
+    timedOut,
+    callerCancelled,
+    startedAt: prepared.startedAt,
+  });
+  return harness.service.settleAcceptedTestRun({
+    workspaceId: request.workspaceId,
+    testRunId: request.testRunIds[0],
+    outcome,
+  });
+}
+
+test("accepted Skill tests execute ordered cases sequentially and persist contract-safe records", async () => {
   const activeExecutions = { count: 0, maximum: 0 };
   const executorCalls = [];
   const harness = makeHarness({
@@ -60,7 +128,7 @@ test("runTests verifies one promoted package, executes ordered cases sequentiall
     },
   });
 
-  const records = await harness.service.runTests({
+  const records = await runAcceptedTests(harness, {
     ...BASE,
     testCases: CASES,
     testRunIds: ["test-run-1", "test-run-2"],
@@ -69,11 +137,12 @@ test("runTests verifies one promoted package, executes ordered cases sequentiall
   assert.deepEqual(records.map((record) => record.testRunId), ["test-run-1", "test-run-2"]);
   assert.deepEqual(records.map((record) => record.status), ["passed", "passed"]);
   assert.equal(activeExecutions.maximum, 1);
-  assert.equal(harness.loaderCalls.length, 1);
+  assert.equal(harness.loaderCalls.length, 2);
   assert.deepEqual(executorCalls.map((call) => call.input), [{ value: 1 }, { value: 2 }]);
   assert.deepEqual(Object.keys(executorCalls[0]).sort(), [
     "input",
     "inspection",
+    "materials",
     "objectHash",
     "objectId",
     "packageHash",
@@ -105,17 +174,50 @@ test("runTests verifies one promoted package, executes ordered cases sequentiall
   assert.equal(harness.persistence.testRuns.size, 2);
 });
 
-test("runTests fails closed on package substitution and stale package inspection", async (t) => {
+test("accepted Skill tests advance queued to running to one fenced terminal result", async () => {
+  const harness = makeHarness();
+  const input = {
+    ...BASE,
+    testCases: [CASES[0]],
+    testRunIds: ["test-run-governed"],
+  };
+
+  const accepted = await harness.service.acceptTestRun(input);
+  assert.equal(accepted.status, "queued");
+  assert.equal(accepted.startedAt, null);
+  assert.equal(accepted.completedAt, null);
+
+  const running = await harness.service.startAcceptedTestRun({
+    workspaceId: BASE.workspaceId,
+    testRunId: accepted.testRunId,
+  });
+  assert.equal(running.status, "running");
+  assert.equal(running.startedAt, STARTED_AT);
+
+  const completed = await completeAcceptedTest(harness, input);
+  assert.equal(completed.status, "passed");
+  assert.equal(completed.startedAt, STARTED_AT);
+  assert.equal(completed.completedAt, COMPLETED_AT);
+  assert.deepEqual(completed.outputPreview, { doubled: 2 });
+  assert.equal(contracts.Check(contracts.SkillTestRunSchema, completed), true);
+
+  await assertRejectsCode(
+    completeAcceptedTest(harness, input),
+    "skill_test_transition_conflict",
+  );
+});
+
+test("accepted Skill tests fail closed on package substitution and stale package inspection", async (t) => {
   await t.test("object bytes substitution", async () => {
     const harness = makeHarness({
       loadedPackage: { bytes: Buffer.from("substituted", "utf8") },
     });
     await assertRejectsCode(
-      harness.service.runTests({ ...BASE, testCases: [CASES[0]], testRunIds: ["test-substituted"] }),
+      runAcceptedTests(harness, { ...BASE, testCases: [CASES[0]], testRunIds: ["test-substituted"] }),
       "skill_package_substituted",
     );
     assert.equal(harness.executorCalls.length, 0);
-    assert.equal(harness.persistence.testRuns.size, 0);
+    assert.equal(harness.persistence.testRuns.size, 1);
   });
 
   await t.test("stale inspection hash", async () => {
@@ -123,17 +225,17 @@ test("runTests fails closed on package substitution and stale package inspection
       loadedPackage: { inspection: { contentHash: OTHER_HASH } },
     });
     await assertRejectsCode(
-      harness.service.runTests({ ...BASE, testCases: [CASES[0]], testRunIds: ["test-stale"] }),
+      runAcceptedTests(harness, { ...BASE, testCases: [CASES[0]], testRunIds: ["test-stale"] }),
       "skill_package_hash_mismatch",
     );
     assert.equal(harness.executorCalls.length, 0);
-    assert.equal(harness.persistence.testRuns.size, 0);
+    assert.equal(harness.persistence.testRuns.size, 1);
   });
 });
 
-test("runTests uses exact whole-output assertions", async () => {
+test("accepted Skill tests use exact whole-output assertions", async () => {
   const harness = makeHarness({ execute: async () => ({ doubled: 2, extra: true }) });
-  const [record] = await harness.service.runTests({
+  const [record] = await runAcceptedTests(harness, {
     ...BASE,
     testCases: [CASES[0]],
     testRunIds: ["test-output-mismatch"],
@@ -151,7 +253,7 @@ test("trusted executor policy is copied at construction and never read from Skil
   executorPolicy.isolated = false;
   executorPolicy.networkDenied = false;
 
-  const [record] = await harness.service.runTests({
+  const [record] = await runAcceptedTests(harness, {
     ...BASE,
     testCases: [CASES[0]],
     testRunIds: ["test-frozen-policy"],
@@ -167,7 +269,7 @@ test("trusted executor policy is copied at construction and never read from Skil
   });
 });
 
-test("runTests maps blocked, timeout, cancellation, and invalid executor output to product statuses", async (t) => {
+test("accepted Skill tests map blocked, timeout, cancellation, and invalid executor output to product statuses", async (t) => {
   const scenarios = [
     {
       name: "blocked",
@@ -198,7 +300,7 @@ test("runTests maps blocked, timeout, cancellation, and invalid executor output 
   for (const scenario of scenarios) {
     await t.test(scenario.name, async () => {
       const harness = makeHarness({ execute: scenario.execute });
-      const [record] = await harness.service.runTests({
+      const [record] = await runAcceptedTests(harness, {
         ...BASE,
         testCases: [CASES[0]],
         testRunIds: [`test-${scenario.name.replaceAll(" ", "-")}`],
@@ -217,7 +319,7 @@ test("runTests maps blocked, timeout, cancellation, and invalid executor output 
         signal.addEventListener("abort", () => reject(executorError("skill_execution_cancelled")), { once: true });
       }),
     });
-    const [record] = await harness.service.runTests({
+    const [record] = await runAcceptedTests(harness, {
       ...BASE,
       testCases: [{ ...CASES[0], timeoutSeconds: 1 }],
       testRunIds: ["test-domain-timeout"],
@@ -230,7 +332,7 @@ test("runTests maps blocked, timeout, cancellation, and invalid executor output 
     const controller = new AbortController();
     controller.abort();
     const harness = makeHarness();
-    const [record] = await harness.service.runTests({
+    const [record] = await runAcceptedTests(harness, {
       ...BASE,
       testCases: [CASES[0]],
       testRunIds: ["test-caller-cancelled"],
@@ -244,7 +346,7 @@ test("runTests maps blocked, timeout, cancellation, and invalid executor output 
 
 test("createValidation passes only exact persisted passed runs with safe runtime attestations", async () => {
   const harness = makeHarness();
-  await harness.service.runTests({
+  await runAcceptedTests(harness, {
     ...BASE,
     testCases: CASES,
     testRunIds: ["test-valid-1", "test-valid-2"],
@@ -278,7 +380,7 @@ test("createValidation passes only exact persisted passed runs with safe runtime
   assert.equal(contracts.Check(contracts.SkillValidationRecordSchema, validation), true);
   assertProductSafe(validation);
   assert.equal(harness.persistence.validations.size, 1);
-  assert.equal(harness.loaderCalls.length, 2);
+  assert.equal(harness.loaderCalls.length, 3);
 });
 
 test("createValidation rejects missing acknowledgement and records failed or blocked evidence safely", async (t) => {
@@ -335,7 +437,7 @@ test("createValidation rejects missing acknowledgement and records failed or blo
       const harness = makeHarness();
       const testRunId = scenario.testRunId ?? `test-evidence-${index}`;
       if (!scenario.testRunId) {
-        await harness.service.runTests({
+        await runAcceptedTests(harness, {
           ...BASE,
           testCases: [CASES[0]],
           testRunIds: [testRunId],
@@ -359,7 +461,7 @@ test("immutable IDs reject duplicate references and replay without executing or 
   const harness = makeHarness();
 
   await assertRejectsCode(
-    harness.service.runTests({
+    harness.service.acceptTestRun({
       ...BASE,
       testCases: CASES,
       testRunIds: ["test-duplicate", "test-duplicate"],
@@ -368,13 +470,13 @@ test("immutable IDs reject duplicate references and replay without executing or 
   );
   assert.equal(harness.executorCalls.length, 0);
 
-  await harness.service.runTests({
+  await runAcceptedTests(harness, {
     ...BASE,
     testCases: [CASES[0]],
     testRunIds: ["test-immutable"],
   });
   await assertRejectsCode(
-    harness.service.runTests({
+    harness.service.acceptTestRun({
       ...BASE,
       testCases: [CASES[0]],
       testRunIds: ["test-immutable"],
@@ -411,14 +513,14 @@ test("immutable IDs reject duplicate references and replay without executing or 
 test("test case count and exact assertion inputs are bounded before package loading", async () => {
   const harness = makeHarness();
   await assertRejectsCode(
-    harness.service.runTests({
+    harness.service.acceptTestRun({
       ...BASE,
       testCases: Array.from({ length: 21 }, () => CASES[0]),
       testRunIds: Array.from({ length: 21 }, (_, index) => `test-${index}`),
     }),
     "skill_test_cases_invalid",
   );
-  const [withoutExactAssertion] = await harness.service.runTests({
+  const [withoutExactAssertion] = await runAcceptedTests(harness, {
     ...BASE,
     testCases: [{ ...CASES[0], expectedOutput: undefined }],
     testRunIds: ["test-no-assertion"],
@@ -452,22 +554,18 @@ function makeHarness({ execute, loadedPackage = {}, executorPolicy = safeRuntime
       };
     },
   };
-  const isolatedExecutor = {
-    async execute(request) {
+  const executeTest = async (request) => {
       executorCalls.push(request);
       return execute ? execute(request) : { doubled: request.input.value * 2 };
-    },
   };
   return {
     service: createSkillValidationService({
       packageLoader,
-      isolatedExecutor,
       persistence,
       executorPolicy,
       clock: sequenceClock(),
-      setTimer: (callback) => setTimeout(callback, 5),
-      clearTimer: clearTimeout,
     }),
+    execute: executeTest,
     persistence,
     loaderCalls,
     executorCalls,
@@ -487,6 +585,23 @@ class MemoryPersistence {
     const stored = structuredClone(entry);
     this.testRuns.set(entry.record.testRunId, stored);
     return structuredClone(stored);
+  }
+
+  async transitionTestRun({ testRunId, expectedStatuses, patch }) {
+    const stored = this.testRuns.get(testRunId);
+    if (!stored || !expectedStatuses.includes(stored.record.status)) return null;
+    stored.record = {
+      ...stored.record,
+      ...structuredClone(patch),
+      testRunId: stored.record.testRunId,
+      workspaceId: stored.record.workspaceId,
+      skillId: stored.record.skillId,
+      skillDraftId: stored.record.skillDraftId,
+      packageHash: stored.record.packageHash,
+      contentHash: stored.record.contentHash,
+      testCase: stored.record.testCase,
+    };
+    return structuredClone(stored.record);
   }
 
   async getValidation({ validationId }) {
@@ -543,3 +658,16 @@ function assertProductSafe(value) {
     assert.equal(serialized.includes(forbidden), false, `record exposed ${forbidden}`);
   }
 }
+
+
+test("persisted provider failures retain actionable diagnostics without exposing raw errors", () => {
+  const harness = makeHarness();
+  const result = harness.service.classifyPersistedAcceptedTestOutcome({
+    workspaceId: BASE.workspaceId, skillId: BASE.skillId, skillDraftId: BASE.draftId,
+    testRunId: "test-model-request", testCase: CASES[0],
+  }, { failure: Object.assign(new Error("private provider body"), { code: "provider_request_invalid" }) });
+  assert.equal(result.status, "failed");
+  assert.equal(result.diagnostics[0].code, "provider_request_invalid");
+  assert.match(result.diagnostics[0].message, /request format/);
+  assert.equal(JSON.stringify(result).includes("private provider body"), false);
+});

@@ -14,6 +14,18 @@ function fixture({ resolveFailure = null } = {}) {
   const store = {
     async connect() {},
     async authorizeWorkspace(input) { calls.push({ kind: "authorize", input }); },
+    async getSkillDraft({ skillId, draftId, workspaceId }) {
+      return {
+        skill: {
+          skillId,
+          workspaceId,
+          ownerId: "user-a",
+          visibility: "private",
+          currentDraftId: draftId,
+        },
+        draft: { ...structuredClone(draft), skillId, skillDraftId: draftId },
+      };
+    },
     async replaceSkillDraftPackage(input) {
       calls.push({ kind: "replace", input });
       return { draft: structuredClone(draft) };
@@ -100,4 +112,48 @@ test("application never mutates a draft when promoted upload resolution fails", 
     (error) => error?.code === "skill_package_not_promoted",
   );
   assert.equal(calls.some((call) => call.kind === "replace"), false);
+});
+
+test("creating a Skill cannot consume another principal's promoted upload by known ID", async () => {
+  let createCalls = 0;
+  const store = {
+    async connect() {},
+    async authorizeWorkspace() { return { role: "member" }; },
+    async createSkill() {
+      createCalls += 1;
+      throw new Error("create_must_not_run");
+    },
+    repositories: {
+      uploads: {
+        async get() {
+          return {
+            uploadId: "upload-alice",
+            workspaceId: "workspace-a",
+            requestedBy: "user-alice",
+            state: "promoted",
+            inspection: { status: "passed" },
+          };
+        },
+      },
+    },
+  };
+  const application = createWorkbenchApplication({ store });
+
+  await assert.rejects(
+    () => application.createSkill({
+      idempotencyKey: "bob-known-upload",
+      request: {
+        schemaVersion: "workbench-api-v1",
+        data: {
+          name: "Foreign package",
+          description: "Must not be created.",
+          category: "test",
+          uploadId: "upload-alice",
+        },
+      },
+      auth: { userId: "user-bob", activeWorkspaceId: "workspace-a" },
+    }),
+    (error) => error?.code === "skill_upload_not_ready",
+  );
+  assert.equal(createCalls, 0);
 });

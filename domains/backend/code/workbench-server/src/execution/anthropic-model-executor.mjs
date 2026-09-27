@@ -2,7 +2,7 @@ import { ModelProviderError } from "./openai-compatible-model-executor.mjs";
 
 const DEFAULT_TIMEOUT_MS = 90_000;
 const DEFAULT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
-const CHAT_CAPABILITIES = Object.freeze(["chat", "tool_calling", "structured_output"]);
+const CHAT_CAPABILITIES = Object.freeze(["chat", "tool_calling", "structured_output", "image_input"]);
 
 export function createAnthropicModelExecutor({
   baseUrl = "https://api.anthropic.com",
@@ -133,13 +133,14 @@ function providerRequest(input, model) {
 }
 
 function normalizeTool(tool) {
-  if (!isPlainObject(tool) || typeof tool.name !== "string" || tool.name.length < 1 || !isPlainObject(tool.parameters)) {
+  const parameters = tool?.inputSchema ?? tool?.parameters;
+  if (!isPlainObject(tool) || typeof tool.name !== "string" || tool.name.length < 1 || !isPlainObject(parameters)) {
     throw providerError("provider_request_invalid");
   }
   return {
     name: tool.name,
     description: typeof tool.description === "string" ? tool.description.slice(0, 4000) : "",
-    input_schema: structuredClone(tool.parameters),
+    input_schema: structuredClone(parameters),
     ...(tool.strict === true ? { strict: true } : {}),
   };
 }
@@ -148,7 +149,9 @@ function normalizeMessage(message) {
   if (!isPlainObject(message) || typeof message.role !== "string") throw providerError("provider_request_invalid");
   if (message.role === "user") return { role: "user", content: textBlocks(message.content) };
   if (message.role === "assistant") {
-    const blocks = Array.isArray(message.content) ? message.content : [];
+    const blocks = typeof message.content === "string"
+      ? [{ type: "text", text: message.content }]
+      : Array.isArray(message.content) ? message.content : [];
     return {
       role: "assistant",
       content: blocks.map((item) => {
@@ -181,8 +184,38 @@ function normalizeMessage(message) {
 }
 
 function textBlocks(content) {
-  const text = textContent(content);
-  return text ? [{ type: "text", text }] : [];
+  if (typeof content === "string") return content ? [{ type: "text", text: content }] : [];
+  if (!Array.isArray(content) || content.length === 0) throw providerError("provider_request_invalid");
+  return content.map((item) => {
+    if (item?.type === "text" && typeof item.text === "string" && item.text.length > 0) {
+      return { type: "text", text: item.text };
+    }
+    if (item?.type === "image") {
+      const image = validImagePart(item);
+      return {
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: image.mediaType,
+          data: image.dataBase64,
+        },
+      };
+    }
+    throw providerError("provider_request_invalid");
+  });
+}
+
+function validImagePart(item) {
+  if (
+    !["image/png", "image/jpeg", "image/webp"].includes(item?.mediaType) ||
+    typeof item?.dataBase64 !== "string" ||
+    item.dataBase64.length < 1 ||
+    item.dataBase64.length > 22_369_624 ||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(item.dataBase64)
+  ) {
+    throw providerError("provider_request_invalid");
+  }
+  return item;
 }
 
 function textContent(content) {

@@ -60,6 +60,154 @@
   line-height: 1.45;
 }
 
+.skillDefinitionWizard {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.skillDefinitionWizard > label,
+.skillCreateSmoke > label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.skillCreateRuntimeNote {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.skillCreateSmoke {
+  display: grid;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.skillCreateSmoke summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.skillCreateSmoke small {
+  line-height: 1.45;
+}
+
+.createLoopEntryPage {
+  display: grid;
+  gap: 22px;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 30px;
+}
+
+.createLoopEntryChoices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.createLoopEntryChoices > button {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  min-height: 130px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  text-align: left;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.createLoopEntryChoices > button:hover,
+.createLoopEntryChoices > button:focus-visible {
+  border-color: var(--accent);
+  background: var(--surface-subtle);
+}
+
+.createLoopEntryChoices span {
+  display: grid;
+  gap: 6px;
+}
+
+.createLoopEntryChoices strong { font-size: 15px; }
+.createLoopEntryChoices small { color: var(--muted); line-height: 1.45; }
+
+.createLoopAdvancedEntry {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.createLoopAdvancedEntry summary { cursor: pointer; }
+
+.createLoopAdvancedEntry > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.createLoopAdvancedEntry button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .createLoopEntryPage { padding: 20px; }
+  .createLoopEntryChoices { grid-template-columns: 1fr; }
+}
+
+.serverSkillImport {
+  display: grid;
+  gap: 10px;
+}
+
+.serverSkillCandidates {
+  display: grid;
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.serverSkillCandidates > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.serverSkillCandidates > label:last-child {
+  border-bottom: 0;
+}
+
+.serverSkillCandidates > label > span {
+  display: grid;
+  gap: 2px;
+}
+
+.serverSkillCandidates small {
+  color: var(--muted);
+}
+
 .lifecycleViewToggle {
   display: inline-flex;
   align-items: center;

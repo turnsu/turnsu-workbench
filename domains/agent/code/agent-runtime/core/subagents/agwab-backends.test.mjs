@@ -36,7 +36,26 @@ test("pi-subagent adapter uses the public API, fixed authority, and product-safe
   assert.deepEqual(calls[0].tools, ["read"]);
   assert.equal(calls[0].agentScope, "global");
   assert.deepEqual(calls[0].extensions, []);
+  assert.deepEqual(calls[0].toolResultBudget, { maxTotalChars: 320_000 });
   assert.equal(JSON.stringify(result).includes("/sandbox"), false);
+});
+
+test("pi-subagent adapter forwards the Product-owned tool result budget", async () => {
+  const calls = [];
+  const backend = createAgwaSubagentBackend({
+    cwd: "/sandbox",
+    providerProbe: async () => ({ ready: true, model: "test/model" }),
+    api: {
+      async runSubagent(input) { calls.push(input); return { runId: "run-budget", status: "completed" }; },
+      async getSubagentLogs() { return { logText: { output: "{}" }, metadata: {} }; },
+      async interruptSubagent() {},
+      async reconcileSubagentRun() {},
+    },
+  });
+  await backend.execute({ request: request({
+    limits: { ...request().limits, maxToolResultChars: 1_024 },
+  }) });
+  assert.deepEqual(calls[0].toolResultBudget, { maxTotalChars: 1_024 });
 });
 
 test("pi-subagent adapter blocks explicitly when provider configuration is absent", async () => {
@@ -44,6 +63,13 @@ test("pi-subagent adapter blocks explicitly when provider configuration is absen
   await assert.rejects(
     () => backend.execute({ request: request() }),
     (error) => error?.code === "provider_unavailable" && error?.status === "blocked",
+  );
+});
+
+test("pi-subagent adapter rejects the unsupported inline backend without fallback", () => {
+  assert.throws(
+    () => createAgwaSubagentBackend({ cwd: "/sandbox", backend: "inline" }),
+    (error) => error?.message === "agwab_subagent_inline_backend_unsupported",
   );
 });
 
@@ -71,7 +97,12 @@ test("pi-workflow adapter keeps the outer graph immutable and exposes dynamic ch
   });
   const result = await backend.execute({ request: request({
     limits: { timeoutMs: 5000, maxSteps: 8, maxModelRequests: 4, maxChildren: 2 },
-    metadata: { model: "test/model", outerNodeId: "node-agent", allowReusableProposal: true },
+    metadata: {
+      model: "test/model",
+      outerNodeId: "node-agent",
+      allowReusableProposal: true,
+      admittedChildConcurrency: 2,
+    },
     resultSchema: {
       type: "object", properties: { brief: { type: "string" } },
       required: ["brief"], additionalProperties: false,
@@ -84,6 +115,7 @@ test("pi-workflow adapter keeps the outer graph immutable and exposes dynamic ch
   assert.equal(result.nextLoopProposal.kind, "loop_revision_proposal");
   assert.deepEqual(result.output, { brief: "approved" });
   assert.equal(calls[0].options.runtimeOverrides.worktreePolicy, "off");
+  assert.equal(calls[0].options.runtimeOverrides.maxConcurrency, 2);
   assert.equal(JSON.stringify(result).includes("/sandbox"), false);
 });
 

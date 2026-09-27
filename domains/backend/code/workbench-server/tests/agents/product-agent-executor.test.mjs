@@ -70,6 +70,17 @@ test("Main Agent turns always dispatch through one bounded container worker", as
         requestedModelRevisionId: "model-revision-chat-1",
         actualModelRevisionId: "model-revision-chat-1",
         artifactRefs: [],
+        usage: {
+          steps: 2,
+          modelRequests: 1,
+          inputBytes: 128,
+          outputBytes: 64,
+          imageCount: 0,
+          costUsdMicros: 250,
+          inputTokens: 120,
+          outputTokens: 30,
+          totalTokens: 150,
+        },
         summary: "Agent completed.",
       }];
     },
@@ -91,14 +102,25 @@ test("Main Agent turns always dispatch through one bounded container worker", as
     requestedModelRevisionId: "model-revision-chat-1",
     actualModelRevisionId: "model-revision-chat-1",
     artifactRefs: [],
+    usage: {
+      steps: 2,
+      modelRequests: 1,
+      inputBytes: 128,
+      outputBytes: 64,
+      imageCount: 0,
+      costUsdMicros: 250,
+      inputTokens: 120,
+      outputTokens: 30,
+      totalTokens: 150,
+    },
   });
 });
 
-test("Module Agent output is persisted as a proposal and never mutates the canonical object", async () => {
+test("Module Agent output is prepared for atomic proposal settlement and never mutates the canonical object", async () => {
   const created = [];
   const executor = createProductAgentExecutor({
     proposalService: {
-      async createFromAgent(value) {
+      async prepareFromAgent(value) {
         created.push(value);
         return { proposalId: "agent-proposal-alpha" };
       },
@@ -175,4 +197,42 @@ test("interactive Agent execution rejects an unexpected cross-revision fallback"
       }];
     },
   }), { code: "product_agent_model_route_unverified" });
+});
+
+test("Module Agent cancellation prevents proposal preparation after its worker returns", async () => {
+  let prepared = false;
+  const controller = new AbortController();
+  const executor = createProductAgentExecutor({
+    proposalService: {
+      async prepareFromAgent() {
+        prepared = true;
+        return { proposalId: "proposal-too-late" };
+      },
+    },
+  });
+  await assert.rejects(executor.execute({
+    session: moduleSession,
+    turn: turn(moduleSession),
+    messages: [],
+    signal: controller.signal,
+    async runWorkers() {
+      controller.abort();
+      return [{
+        status: "completed",
+        requestedModelRevisionId: "model-revision-chat-1",
+        actualModelRevisionId: "model-revision-chat-1",
+        artifactRefs: [],
+        output: {
+          response: "Too late.",
+          proposal: {
+            summary: "Too late.",
+            operations: [{ op: "replace", path: "/definition/goal", value: "late" }],
+            evidenceRefs: [],
+            validationResult: { status: "passed", diagnostics: [] },
+          },
+        },
+      }];
+    },
+  }), { code: "agent_turn_cancelled" });
+  assert.equal(prepared, false);
 });

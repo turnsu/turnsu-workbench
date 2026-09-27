@@ -6,6 +6,29 @@ import {
   createModelService,
 } from "../../src/execution/index.mjs";
 
+test("prompt Skill model selection retains its requesting user's scope and capability requirements", async () => {
+  const seen = [];
+  const catalog = {
+    async listProfiles() { return []; },
+    async getWorkspacePolicy(workspaceId, options) {
+      seen.push({ workspaceId, ...options });
+      return { defaultProfileIdsByCapability: { chat: "alice-chat" } };
+    },
+    async resolveCurrentProfile(options) {
+      seen.push(options);
+      if (options.userId !== "alice") throw new Error("model_profile_not_found");
+      return { profile: { profileId: "alice-chat" }, revision: { revisionId: "alice-chat-v1" } };
+    },
+    async resolveRevision(options) { return this.resolveCurrentProfile(options); },
+  };
+  const service = createModelService({ catalog });
+  const selected = await service.resolveTurnSelection({ workspaceId: "workspace-a", userId: "alice", kind: "interactive", requiredCapabilities: ["chat", "tool_calling"] });
+  assert.equal(selected.modelProfileRevisionId, "alice-chat-v1");
+  assert.deepEqual(seen[0], { workspaceId: "workspace-a", userId: "alice" });
+  assert.deepEqual(seen[1], { profileId: "alice-chat", workspaceId: "workspace-a", userId: "alice", capabilities: ["chat", "tool_calling"], requireReady: true });
+  await assert.rejects(service.resolveTurnSelection({ workspaceId: "workspace-a", userId: "bob", explicitRevisionId: "alice-chat-v1", requiredCapabilities: ["chat"] }), /model_profile_not_found/);
+});
+
 function modelInput(text = "Hello") {
   return {
     context: {
@@ -92,6 +115,40 @@ test("ModelService applies an explicit fallback chain and reports every safe att
     { phase: "completed", profileId: "backup", fallback: true },
   ]);
   assert.equal(JSON.stringify(events).includes("secret"), false);
+});
+
+test("ModelService resolves a PostgreSQL revision through its opaque SecretBinding id", async () => {
+  const credentialRefs = [];
+  const credentialContexts = [];
+  const revision = {
+    revisionId: "pg-model-revision-1", profileId: "pg-model", provider: "openai",
+    protocol: "openai_compatible_chat", providerModelId: "gpt-test", capabilities: ["chat"],
+    limits: {}, secretBindingId: "secret-binding-pg-model-1",
+  };
+  const catalog = {
+    async listProfiles() { return []; },
+    async resolveRevision() { return { profile: { profileId: "pg-model" }, revision, readiness: { state: "ready" } }; },
+    async resolveCurrentProfile() { return { profile: { profileId: "pg-model" }, revision, readiness: { state: "ready" } }; },
+  };
+  const service = createModelService({
+    catalog,
+    credentialResolver: { async resolve(reference, context) {
+      credentialRefs.push(reference);
+      credentialContexts.push(context);
+      return "server-only-api-key";
+    } },
+    fetchImpl: async () => completion("PG_SECRET_BINDING_OK"),
+  });
+  const result = await service({
+    input: modelInput(), modelProfileRevisionId: revision.revisionId,
+    fallbackModelProfileRevisionIds: [], capability: "chat",
+    invocationId: "invocation-pg-model-1", attemptId: "attempt-pg-model-1", workspaceId: "workspace-pg-model",
+  });
+  assert.equal(result.content[0].text, "PG_SECRET_BINDING_OK");
+  assert.deepEqual(credentialRefs, ["secret-binding-pg-model-1"]);
+  assert.equal(credentialContexts[0].workspaceId, "workspace-pg-model");
+  assert.equal(credentialContexts[0].revision.revisionId, revision.revisionId);
+  assert.equal(JSON.stringify(result).includes("server-only-api-key"), false);
 });
 
 test("legacy WORKBENCH_MODEL configuration remains one compatibility profile", () => {

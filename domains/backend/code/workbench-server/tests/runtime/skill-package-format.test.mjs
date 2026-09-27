@@ -7,6 +7,7 @@ import {
   hashSkillPackageObject,
   objectIdForSkillPackage,
   parseSkillPackage,
+  parseSkillRuntimeManifest,
   SkillPackageFormatError,
 } from "../../src/skills/index.mjs";
 
@@ -15,6 +16,13 @@ const script = "import json, sys\njson.dump(json.load(sys.stdin), sys.stdout)\n"
 const runtimeManifest = `${JSON.stringify({
   runtime: "python3.12",
   entrypoint: "scripts/main.py",
+  protocol: { stdin: "json", stdout: "json" },
+  permissions: { network: false, connections: [], externalActions: false, filesystem: "scratch-only" },
+}, null, 2)}\n`;
+const nodeScript = "const input = await new Response(process.stdin).json();\nprocess.stdout.write(JSON.stringify(input));\n";
+const nodeRuntimeManifest = `${JSON.stringify({
+  runtime: "nodejs20-typescript",
+  entrypoint: "scripts/main.ts",
   protocol: { stdin: "json", stdout: "json" },
   permissions: { network: false, connections: [], externalActions: false, filesystem: "scratch-only" },
 }, null, 2)}\n`;
@@ -79,6 +87,45 @@ test("V1 parser rejects non-canonical, duplicate, and expanded executable packag
     () => assertExecutableSkillPackage(expanded),
     (error) => error instanceof SkillPackageFormatError && error.code === "skill_package_contract_unsupported",
   );
+});
+
+test("V1 executable packages support the governed Node.js 20 TypeScript runtime", () => {
+  const files = parseSkillPackage(formatSkillPackage([
+    { path: "SKILL.md", content: skill },
+    { path: "skill.runtime.json", content: nodeRuntimeManifest },
+    { path: "scripts/main.ts", content: nodeScript },
+  ]));
+
+  assert.doesNotThrow(() => assertExecutableSkillPackage(files));
+  assert.equal(files.find((file) => file.path === "scripts/main.ts").content.toString("utf8"), nodeScript);
+});
+
+test("runtime manifests persist bounded Product-owned timeout and memory choices", () => {
+  const parsed = parseSkillRuntimeManifest(JSON.stringify({
+    runtime: "nodejs20-typescript",
+    entrypoint: "scripts/main.ts",
+    protocol: { stdin: "json", stdout: "json" },
+    permissions: { network: false, connections: [], externalActions: false, filesystem: "scratch-only" },
+    limits: { timeoutSeconds: 45, memoryMiB: 256 },
+  }));
+  assert.deepEqual(parsed.limits, { timeoutSeconds: 45, memoryMiB: 256 });
+
+  for (const limits of [
+    { timeoutSeconds: 0, memoryMiB: 256 },
+    { timeoutSeconds: 45, memoryMiB: 65 },
+    { timeoutSeconds: 121, memoryMiB: 512 },
+  ]) {
+    assert.throws(
+      () => parseSkillRuntimeManifest(JSON.stringify({
+        runtime: "nodejs20-typescript",
+        entrypoint: "scripts/main.ts",
+        protocol: { stdin: "json", stdout: "json" },
+        permissions: { network: false, connections: [], externalActions: false, filesystem: "scratch-only" },
+        limits,
+      })),
+      (error) => error instanceof SkillPackageFormatError && error.code === "skill_runtime_manifest_invalid",
+    );
+  }
 });
 
 test("executable package runtime manifests reject unknown, duplicate, and unsupported fields", () => {

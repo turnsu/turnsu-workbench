@@ -241,12 +241,12 @@ test("typed Chat and image inputs/results reject provider extras and raw image c
   }
 });
 
-test("Agent Turn requests discriminate execution kind and require an immutable revision", () => {
+test("Agent Turn requests accept only a product model profile while the server pins its revision", () => {
   const agentMessage = {
     schemaVersion: "workbench-api-v1",
     data: {
       kind: "agent_message",
-      modelProfileRevisionId: chatRevision.revisionId,
+      modelProfileId: chatRevision.profileId,
       input: { message: "Improve the workflow completion criteria." },
     },
   };
@@ -254,16 +254,20 @@ test("Agent Turn requests discriminate execution kind and require an immutable r
     schemaVersion: "workbench-api-v1",
     data: {
       kind: "model_task",
-      modelProfileRevisionId: stabilityRevision.revisionId,
+      modelProfileId: stabilityRevision.profileId,
       input: { task: "image_generation", ...imageInput },
     },
   };
   assert.equal(contracts.Check(contracts.CreateAgentTurnRequestSchema, agentMessage), true);
   assert.equal(contracts.Check(contracts.CreateAgentTurnRequestSchema, modelTask), true);
 
-  const missingRevision = structuredClone(agentMessage);
-  delete missingRevision.data.modelProfileRevisionId;
-  assert.equal(contracts.Check(contracts.CreateAgentTurnRequestSchema, missingRevision), false);
+  const missingProfile = structuredClone(agentMessage);
+  delete missingProfile.data.modelProfileId;
+  assert.equal(contracts.Check(contracts.CreateAgentTurnRequestSchema, missingProfile), false);
+  assert.equal(contracts.Check(contracts.CreateAgentTurnRequestSchema, {
+    ...agentMessage,
+    data: { ...agentMessage.data, modelProfileRevisionId: chatRevision.revisionId },
+  }), false);
   assert.equal(contracts.Check(contracts.CreateAgentTurnRequestSchema, {
     ...modelTask,
     data: { ...modelTask.data, kind: "agent_message" },
@@ -282,6 +286,10 @@ test("Session model mutation is preference-only and current Turn reads expose pi
     userId: "user-1",
     workspaceId: "workspace-1",
     scope: { kind: "main" },
+    title: "Review the launch plan",
+    source: { kind: "manual" },
+    taskStatus: "idle",
+    archived: false,
     status: "active",
     lastUsedModelProfileId: "model-profile-chat",
     modelPreferenceState: "preference_only",

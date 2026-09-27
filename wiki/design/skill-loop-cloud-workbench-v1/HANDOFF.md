@@ -7,6 +7,16 @@
 - Product requirements: [PRD index](../../prd/README.md)
 - Architecture source: [Current System Architecture](../../architecture/CURRENT_SYSTEM_ARCHITECTURE.md)
 
+> **M5 authority update (2026-07-28):** this handoff remains historical background for Loop
+> lifecycle and Builder frames. Its older statements that exclude a general Agent landing page or
+> freeze three primary navigation items—and its dedicated Run preflight/result route as the main
+> execution path—are superseded by the [M5 design package](m5/README.md). The July 25 rebuild
+> document is retained only as a decision-history source. The current Agent, ModelSwitch, Skill,
+> Loop, Library, mobile and recovery-state closure lives in that M5 package. The 55 screen IDs are
+> an automated coverage inventory; human
+> visual review is limited to the representative key-frame set and is recorded separately from the
+> machine capture manifest using `screenId + contentHash + reviewedAt + verdict`.
+
 ## 1. Current Decision
 
 Update on 2026-07-10: the next iteration selected the
@@ -16,8 +26,9 @@ Loops management direction. Its complete Loop route and interaction model are do
 with visual states in the [key-frame index](key-frames/README.md).
 
 The selected frame is intentionally not the whole product. The board manages lifecycle and quick
-actions; dedicated routes own creation, object overview, Definition, Outline, Canvas, Run preflight,
-review, completed result, publication, and team update. The remaining Skill lifecycle, responsive,
+actions; dedicated routes own creation, object overview, Definition, Outline, Canvas, publication,
+and team update. Run preflight/result routes remain compatibility surfaces only; the M5 primary
+run path creates a Product Agent task and reads its result in Agent. The remaining Skill lifecycle, responsive,
 theme, localization, and standard error-state frames are listed in the key-frame index and remain
 required before full V1 design acceptance.
 
@@ -91,8 +102,8 @@ Keep from it:
 
 ## 3. Product Positioning To Preserve
 
-The product is not a generic Agent platform, monitoring console, workflow database, or graph demo.
-It is a cloud workbench for Skill and Loop assets.
+The product is not a provider/ops console, workflow database, or graph demo. It is a cloud
+workbench for Skill and Loop assets with a governed general Agent task entry.
 
 Primary objects:
 
@@ -104,6 +115,7 @@ Primary objects:
 
 Primary navigation should remain focused:
 
+- Agent
 - Skills
 - Loops
 - Team library
@@ -150,7 +162,8 @@ The next design should fix these hierarchy problems:
 - Do not make every action a button. Use explicit primary actions, quiet secondary actions,
   menus, and contextual footers.
 - Do not hide create/upload/publish in secondary corners; these are core product tasks.
-- Do not make chat the product. Assistant proposes changes; users confirm and own the Loop.
+- Agent chat may be the task landing page. It still cannot silently create, modify or publish
+  Skill/Loop objects; object changes remain proposals users confirm.
 
 ## 6. Recommended Direction For Main Thread
 

@@ -10,14 +10,21 @@ import {
   MergeConflictIdSchema,
   ModelProfileIdSchema,
   ModelProfileRevisionIdSchema,
+  ProductCommandIdSchema,
   ProposalIdSchema,
+  RunIdSchema,
   JsonValueSchema,
   UtcTimestampSchema,
   UserIdSchema,
   WorkspaceIdSchema,
+  WorkflowIdSchema,
+  WorkflowRevisionIdSchema,
   WorkbenchSchemaVersionSchema,
+  WorkItemIdSchema,
+  WorkItemContinuationIdSchema,
 } from "./common.js";
 import { ArtifactRefSchema } from "./artifacts.js";
+import { AttachmentRefSchema } from "./attachments.js";
 import {
   ImageGenerationInputSchema,
   ImageGenerationResultSchema,
@@ -26,6 +33,13 @@ import { strictObject, stringEnum } from "./schema.js";
 
 export const AgentDefinitionKindSchema = stringEnum(["main", "module"]);
 export const AgentObjectKindSchema = stringEnum(["skill_draft", "workflow"]);
+export const AgentBranchStatusSchema = stringEnum([
+  "active",
+  "conflicting",
+  "merged",
+  "rejected",
+  "closed",
+]);
 export const AgentTurnKindSchema = stringEnum(["agent_message", "model_task"]);
 
 export const AgentDefinitionSchema = strictObject(
@@ -52,6 +66,43 @@ export const AgentSessionScopeSchema = Type.Union([
   }),
 ]);
 
+export const AgentBranchSchema = strictObject(
+  {
+    schemaVersion: WorkbenchSchemaVersionSchema,
+    branchId: AgentBranchIdSchema,
+    userId: UserIdSchema,
+    workspaceId: WorkspaceIdSchema,
+    objectKind: AgentObjectKindSchema,
+    objectId: Type.String({ minLength: 1, maxLength: 128 }),
+    baseVersionId: Type.String({ minLength: 1, maxLength: 128 }),
+    status: AgentBranchStatusSchema,
+    createdAt: UtcTimestampSchema,
+    updatedAt: UtcTimestampSchema,
+  },
+  { $id: "AgentBranch" },
+);
+
+export const AgentTaskStatusSchema = stringEnum([
+  "idle",
+  "queued",
+  "running",
+  "waiting_review",
+  "completed",
+  "failed",
+  "cancelled",
+  "blocked",
+]);
+
+export const AgentTaskSourceSchema = Type.Union([
+  strictObject({ kind: Type.Literal("manual") }),
+  strictObject({
+    kind: Type.Literal("loop_run"),
+    workflowId: WorkflowIdSchema,
+    workflowRevisionId: WorkflowRevisionIdSchema,
+    runId: RunIdSchema,
+  }),
+]);
+
 export const AgentSessionSchema = strictObject(
   {
     schemaVersion: WorkbenchSchemaVersionSchema,
@@ -60,10 +111,19 @@ export const AgentSessionSchema = strictObject(
     userId: UserIdSchema,
     workspaceId: WorkspaceIdSchema,
     scope: AgentSessionScopeSchema,
+    title: Type.String({ minLength: 1, maxLength: 200 }),
+    source: AgentTaskSourceSchema,
+    workItemContext: Type.Optional(strictObject({
+      workItemId: WorkItemIdSchema,
+      continuationId: WorkItemContinuationIdSchema,
+    })),
+    taskStatus: AgentTaskStatusSchema,
+    archived: Type.Boolean(),
     status: stringEnum(["active", "closed"]),
     lastUsedModelProfileId: Type.Union([ModelProfileIdSchema, Type.Null()]),
     modelPreferenceState: stringEnum(["preference_only", "legacy_unpinned"]),
     activeTurnId: Type.Union([AgentTurnIdSchema, Type.Null()]),
+    sessionEpoch: Type.Optional(Type.Integer({ minimum: 1 })),
     createdAt: UtcTimestampSchema,
     updatedAt: UtcTimestampSchema,
   },
@@ -80,7 +140,14 @@ export const AgentTurnStatusSchema = stringEnum([
 ]);
 
 export const AgentMessageTurnInputSchema = strictObject({
-  message: Type.String({ minLength: 1, maxLength: 20_000 }),
+  message: Type.String({ maxLength: 20_000 }),
+  attachments: Type.Optional(
+    Type.Array(AttachmentRefSchema, {
+      minItems: 1,
+      maxItems: 8,
+      uniqueItems: true,
+    }),
+  ),
 });
 
 export const ImageGenerationModelTaskInputSchema = strictObject({
@@ -93,6 +160,18 @@ export const AgentTurnInputSchema = Type.Union([
   ImageGenerationModelTaskInputSchema,
 ]);
 
+export const AgentTurnUsageSchema = strictObject({
+  steps: Type.Integer({ minimum: 0 }),
+  modelRequests: Type.Integer({ minimum: 0 }),
+  inputBytes: Type.Integer({ minimum: 0 }),
+  outputBytes: Type.Integer({ minimum: 0 }),
+  imageCount: Type.Integer({ minimum: 0, maximum: 16 }),
+  costUsdMicros: Type.Integer({ minimum: 0, maximum: 1_000_000_000_000 }),
+  inputTokens: Type.Optional(Type.Integer({ minimum: 0, maximum: 10_000_000_000 })),
+  outputTokens: Type.Optional(Type.Integer({ minimum: 0, maximum: 10_000_000_000 })),
+  totalTokens: Type.Optional(Type.Integer({ minimum: 0, maximum: 20_000_000_000 })),
+});
+
 export const AgentMessageTurnResultSchema = strictObject({
   kind: Type.Literal("agent_message"),
   response: Type.String({ minLength: 1, maxLength: 20_000 }),
@@ -102,6 +181,7 @@ export const AgentMessageTurnResultSchema = strictObject({
   requestedModelRevisionId: ModelProfileRevisionIdSchema,
   actualModelRevisionId: ModelProfileRevisionIdSchema,
   artifactRefs: Type.Array(ArtifactRefSchema, { uniqueItems: true, maxItems: 256 }),
+  usage: Type.Optional(AgentTurnUsageSchema),
 });
 
 export const ModelTaskTurnResultSchema = strictObject({
@@ -115,6 +195,7 @@ export const ModelTaskTurnResultSchema = strictObject({
     uniqueItems: true,
     maxItems: 16,
   }),
+  usage: Type.Optional(AgentTurnUsageSchema),
 });
 
 export const AgentTurnResultSchema = Type.Union([
@@ -126,6 +207,10 @@ const AgentTurnBaseProperties = {
   schemaVersion: WorkbenchSchemaVersionSchema,
   turnId: AgentTurnIdSchema,
   sessionId: AgentSessionIdSchema,
+  productCommandId: Type.Optional(ProductCommandIdSchema),
+  cancellationCommandId: Type.Optional(ProductCommandIdSchema),
+  sessionEpoch: Type.Optional(Type.Integer({ minimum: 1 })),
+  turnFence: Type.Optional(Type.Integer({ minimum: 1 })),
   sequence: Type.Integer({ minimum: 1 }),
   status: AgentTurnStatusSchema,
   modelRoutingState: Type.Literal("pinned"),
@@ -267,6 +352,7 @@ export const AgentObjectProposalSchema = strictObject({
 });
 
 export type AgentDefinition = Static<typeof AgentDefinitionSchema>;
+export type AgentBranch = Static<typeof AgentBranchSchema>;
 export type AgentSession = Static<typeof AgentSessionSchema>;
 export type AgentTurn = Static<typeof AgentTurnSchema>;
 export type AgentSessionEvent = Static<typeof AgentSessionEventSchema>;

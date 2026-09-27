@@ -1,14 +1,10 @@
 import { Type } from "typebox";
+import { MEETING_ACTION_EXECUTION_REF as FIRST_PARTY_MEETING_ACTION_EXECUTION_REF } from "../../../plugins/src/index.mjs";
 
 export const MEETING_ACTION_EXTRACTOR_SKILL_ID = "meeting-action-extractor";
 export const MEETING_ACTION_EXTRACTOR_INTERNAL_TOOL_NAME = "workflow.meeting.extract_actions";
 
-export const MEETING_ACTION_EXTRACTOR_EXECUTION_REF = Object.freeze({
-  capabilityId: "meeting-action-extractor",
-  taskIntent: "extract_actions",
-  adapterVersion: "1",
-  executionMode: "deterministic",
-});
+export const MEETING_ACTION_EXTRACTOR_EXECUTION_REF = FIRST_PARTY_MEETING_ACTION_EXECUTION_REF;
 
 export const MEETING_ACTION_EXTRACTOR_INPUT_SCHEMA = Type.Object(
   {

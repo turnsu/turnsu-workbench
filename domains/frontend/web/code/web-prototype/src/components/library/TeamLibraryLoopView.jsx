@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
-  CopyPlus,
   Download,
   FileInput,
   Flag,
@@ -44,6 +43,7 @@ export function TeamLibraryLoopView({ workspace }) {
   const installedRelease = releases.find((item) => item.versionId === installation?.pinnedVersionId) || null;
   const installedVersion = installedRelease?.versionLabel || installation?.pinnedVersionId || "-";
   const [reviewUpdate, setReviewUpdate] = useState(false);
+  const [creatingCopy, setCreatingCopy] = useState(false);
   const connectionActions = useTeamConnectionActions(workspace);
   const busy = Boolean(connectionActions.busyAction);
 
@@ -94,13 +94,14 @@ export function TeamLibraryLoopView({ workspace }) {
           <p>{release.description || release.releaseNotes}</p>
         </div>
         <div className="libraryLoopActions">
-          {release.startingPoint ? <Button variant="primary" disabled={workspace.readOnlyWorkspace || busy} title={workspace.readOnlyWorkspace ? t("permissions.readOnlyAction") : undefined} onClick={() => connectionActions.startingPoint(release, t("library.startingPointName", { title: release.title }))} data-testid="loopops.library.starting-point">{t("actions.useStartingPoint")}</Button> : null}
-          <Button variant="secondary" icon={<CopyPlus size={15} />} disabled={workspace.readOnlyWorkspace || busy} title={workspace.readOnlyWorkspace ? t("permissions.readOnlyAction") : undefined} onClick={() => connectionActions.fork(release, t("library.forkName", { title: release.title }))} data-testid="loopops.library.fork">{t("actions.forkLoop")}</Button>
+          <Button variant="primary" icon={<FileInput size={15} />} disabled={workspace.readOnlyWorkspace || busy || creatingCopy}
+            onClick={async () => { setCreatingCopy(true); try { await workspace.useTeamLoop(release.releaseId); } finally { setCreatingCopy(false); } }}
+            data-testid="turnsu.library.use-loop">{t(creatingCopy ? "library.creatingCopy" : "library.useLoop")}</Button>
           {!installation ? <Button variant="secondary" icon={<Download size={15} />} disabled={workspace.readOnlyWorkspace || busy} title={workspace.readOnlyWorkspace ? t("permissions.readOnlyAction") : undefined} onClick={() => connectionActions.install(release)} data-testid="loopops.library.install">{t("actions.install")}</Button> : null}
         </div>
       </header>
 
-      <div className="libraryLoopExplainer"><Info size={16} /><span>{t("library.installExplainer")}</span></div>
+      <div className="libraryLoopExplainer"><Info size={16} /><span>{t("library.useLoopExplainer")}</span></div>
 
       {release.canAdopt ? (
         <div className="libraryUpdateBanner">
@@ -134,7 +135,18 @@ export function TeamLibraryLoopView({ workspace }) {
             <div className="updateImpactNote"><Info size={16} /><span>{t("library.updateImpact")}</span></div>
             <div className="updateReviewActions">
               <Button variant="secondary" disabled={Boolean(busy)} onClick={() => setReviewUpdate(false)}>{t("actions.keepCurrentVersion")}</Button>
-              <Button variant="primary" icon={<RefreshCw size={15} />} disabled={workspace.readOnlyWorkspace || busy} title={workspace.readOnlyWorkspace ? t("permissions.readOnlyAction") : undefined} onClick={() => connectionActions.update(release, () => setReviewUpdate(false))} data-testid="loopops.library.apply-update">{t("actions.updateInstalledVersion")}</Button>
+              <Button
+                variant="primary"
+                icon={<RefreshCw size={15} />}
+                disabled={workspace.readOnlyWorkspace || busy}
+                title={workspace.readOnlyWorkspace ? t("permissions.readOnlyAction") : undefined}
+                onClick={() => connectionActions.update(release, (result) => {
+                  workspace.navigateToPath(`/library?updateDraftId=${encodeURIComponent(result.data.updateDraftId)}`);
+                })}
+                data-testid="loopops.library.apply-update"
+              >
+                {t("actions.updateInstalledVersion")}
+              </Button>
             </div>
             <p className="safeVersionNote"><LockKeyhole size={14} /> {t("library.currentVersionSafe")}</p>
           </aside>

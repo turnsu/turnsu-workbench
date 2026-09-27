@@ -40,7 +40,7 @@ test("Anthropic driver declares Messages capabilities, uses native tools, and no
   });
   const result = await executor(modelInput());
   assert.equal(executor.protocol, "anthropic_messages");
-  assert.deepEqual(executor.capabilities, ["chat", "tool_calling", "structured_output"]);
+  assert.deepEqual(executor.capabilities, ["chat", "tool_calling", "structured_output", "image_input"]);
   assert.equal(executor.structuredOutput.wireField, "output_config.format");
   assert.equal(calls[0].url, "https://api.anthropic.com/v1/messages");
   assert.equal(calls[0].options.headers["x-api-key"], "anthropic-secret");
@@ -63,7 +63,15 @@ test("Gemini driver declares generateContent capabilities, uses native tools, an
       calls.push({ url: String(url), options });
       return new Response(JSON.stringify({
         candidates: [{
-          content: { parts: [{ text: "Checking" }, { functionCall: { name: "lookup", args: { query: "safe" } } }] },
+          content: {
+            parts: [
+              { text: "Checking" },
+              {
+                functionCall: { name: "lookup", args: { query: "safe" } },
+                thoughtSignature: "opaque-thought-signature",
+              },
+            ],
+          },
           finishReason: "STOP",
         }],
         usageMetadata: { promptTokenCount: 8, candidatesTokenCount: 3, cachedContentTokenCount: 1 },
@@ -72,7 +80,7 @@ test("Gemini driver declares generateContent capabilities, uses native tools, an
   });
   const result = await executor(modelInput());
   assert.equal(executor.protocol, "gemini_generate_content");
-  assert.deepEqual(executor.capabilities, ["chat", "tool_calling", "structured_output"]);
+  assert.deepEqual(executor.capabilities, ["chat", "tool_calling", "structured_output", "image_input"]);
   assert.equal(executor.structuredOutput.wireField, "generationConfig.responseJsonSchema");
   assert.equal(calls[0].url, "https://generativelanguage.googleapis.com/v1beta/models/gemini-test:generateContent");
   assert.equal(calls[0].options.headers["x-goog-api-key"], "gemini-secret");
@@ -80,10 +88,183 @@ test("Gemini driver declares generateContent capabilities, uses native tools, an
   assert.equal(body.systemInstruction.parts[0].text, "Use governed tools only.");
   assert.equal(body.tools[0].functionDeclarations[0].name, "lookup");
   assert.deepEqual(result.content[1], {
-    type: "toolCall", id: "gemini-tool-1", name: "lookup", arguments: { query: "safe" },
+    type: "toolCall",
+    id: "gemini-tool-1",
+    name: "lookup",
+    arguments: { query: "safe" },
+    thoughtSignature: "opaque-thought-signature",
   });
-  assert.deepEqual(result.toolCalls, [{ id: "gemini-tool-1", name: "lookup", arguments: { query: "safe" } }]);
+  assert.deepEqual(result.toolCalls, [{
+    id: "gemini-tool-1",
+    name: "lookup",
+    arguments: { query: "safe" },
+    thoughtSignature: "opaque-thought-signature",
+  }]);
   assert.deepEqual(result.usage, { input: 8, output: 3, cacheRead: 1, cacheWrite: 0 });
+});
+
+test("Chat drivers preserve assistant string history and Gemini tool thought signatures", async () => {
+  const captured = {};
+  const historyInput = {
+    input: {
+      context: {
+        messages: [
+          { role: "user", content: "First question" },
+          { role: "assistant", content: "Earlier answer" },
+          { role: "user", content: "Follow up" },
+        ],
+        tools: [],
+      },
+    },
+  };
+  const openai = createOpenAICompatibleModelExecutor({
+    baseUrl: "https://provider.example/v1",
+    apiKey: "secret",
+    model: "openai-history",
+    fetchImpl: async (_url, options) => {
+      captured.openai = JSON.parse(options.body);
+      return new Response(JSON.stringify({
+        choices: [{ finish_reason: "stop", message: { content: "ok" } }],
+      }), { status: 200 });
+    },
+  });
+  const anthropic = createAnthropicModelExecutor({
+    apiKey: "secret",
+    model: "anthropic-history",
+    fetchImpl: async (_url, options) => {
+      captured.anthropic = JSON.parse(options.body);
+      return new Response(JSON.stringify({
+        content: [{ type: "text", text: "ok" }],
+        stop_reason: "end_turn",
+      }), { status: 200 });
+    },
+  });
+  const geminiBodies = [];
+  const gemini = createGeminiModelExecutor({
+    apiKey: "secret",
+    model: "gemini-history",
+    fetchImpl: async (_url, options) => {
+      geminiBodies.push(JSON.parse(options.body));
+      return new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: "ok" }] }, finishReason: "STOP" }],
+      }), { status: 200 });
+    },
+  });
+  await Promise.all([openai(historyInput), anthropic(historyInput), gemini(historyInput)]);
+  assert.equal(captured.openai.messages[1].content, "Earlier answer");
+  assert.deepEqual(captured.anthropic.messages[1].content, [{
+    type: "text",
+    text: "Earlier answer",
+  }]);
+  assert.deepEqual(geminiBodies[0].contents[1].parts, [{ text: "Earlier answer" }]);
+
+  await gemini({
+    input: {
+      context: {
+        messages: [
+          { role: "user", content: "Use the tool" },
+          {
+            role: "assistant",
+            content: [{
+              type: "toolCall",
+              id: "call-1",
+              name: "lookup",
+              arguments: { query: "safe" },
+              thoughtSignature: "opaque-thought-signature",
+            }],
+          },
+          { role: "tool", toolCallId: "call-1", content: "{\"ok\":true}" },
+        ],
+        tools: [{
+          name: "lookup",
+          parameters: { type: "object", properties: {} },
+        }],
+      },
+    },
+  });
+  assert.equal(
+    geminiBodies[1].contents[1].parts[0].thoughtSignature,
+    "opaque-thought-signature",
+  );
+});
+
+test("vision-capable chat drivers translate governed image parts into provider-native request shapes", async () => {
+  const imageMessage = {
+    input: {
+      context: {
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: "Describe this image." },
+            { type: "image", mediaType: "image/png", dataBase64: "aW1hZ2U=" },
+          ],
+        }],
+        tools: [],
+      },
+      options: { maxTokens: 100 },
+    },
+  };
+  const captured = {};
+  const openai = createOpenAICompatibleModelExecutor({
+    baseUrl: "https://provider.example/v1",
+    apiKey: "secret",
+    model: "vision-openai",
+    fetchImpl: async (_url, options) => {
+      captured.openai = JSON.parse(options.body);
+      return new Response(JSON.stringify({
+        choices: [{ finish_reason: "stop", message: { content: "ok" } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }), { status: 200 });
+    },
+  });
+  const anthropic = createAnthropicModelExecutor({
+    apiKey: "secret",
+    model: "vision-anthropic",
+    fetchImpl: async (_url, options) => {
+      captured.anthropic = JSON.parse(options.body);
+      return new Response(JSON.stringify({
+        content: [{ type: "text", text: "ok" }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }), { status: 200 });
+    },
+  });
+  const gemini = createGeminiModelExecutor({
+    apiKey: "secret",
+    model: "vision-gemini",
+    fetchImpl: async (_url, options) => {
+      captured.gemini = JSON.parse(options.body);
+      return new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: "ok" }] }, finishReason: "STOP" }],
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+      }), { status: 200 });
+    },
+  });
+
+  await Promise.all([
+    openai(imageMessage),
+    anthropic(imageMessage),
+    gemini(imageMessage),
+  ]);
+
+  assert.deepEqual(captured.openai.messages[0].content[1], {
+    type: "image_url",
+    image_url: { url: "data:image/png;base64,aW1hZ2U=" },
+  });
+  assert.deepEqual(captured.anthropic.messages[0].content[1], {
+    type: "image",
+    source: {
+      type: "base64",
+      media_type: "image/png",
+      data: "aW1hZ2U=",
+    },
+  });
+  assert.deepEqual(captured.gemini.contents[0].parts[1], {
+    inlineData: {
+      mimeType: "image/png",
+      data: "aW1hZ2U=",
+    },
+  });
 });
 
 test("Chat drivers translate JSON Schema constraints and normalize structured output", async (t) => {

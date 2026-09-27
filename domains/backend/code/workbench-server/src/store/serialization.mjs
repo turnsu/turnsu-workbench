@@ -72,13 +72,24 @@ export const withoutFields = (document, fields = []) => {
   );
 };
 
-export const withoutMongoId = (document) => withoutFields(document);
 export const withoutWorkflowInternals = (document) =>
   withoutFields(document, ["revisionNumber", "writeVersion"]);
 export const withoutSkillInternals = (document) =>
   withoutFields(document, ["workspaceId", "ownerId", "lifecycle"]);
 export const withoutRunInternals = (document) =>
-  withoutFields(document, ["eventSequence", "executionPlanSnapshot", "executionSnapshot", "agentFinalReadModel"]);
+  withoutFields(document, [
+    "eventSequence",
+    "executionPlanSnapshot",
+    "executionSnapshot",
+    "agentFinalReadModel",
+    "skillMaterialBindings",
+    "stateModelVersion",
+    "stateEventSequence",
+    "stateHash",
+    "creationCommandId",
+    "workspaceId",
+    "requestedBy",
+  ]);
 export const withoutNodeRunInternals = (document) =>
   withoutFields(document, ["executionInput", "executionOutput"]);
 export const withoutExecutionPlanInternals = (document) =>

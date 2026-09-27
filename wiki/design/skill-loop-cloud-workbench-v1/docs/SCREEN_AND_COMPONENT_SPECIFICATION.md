@@ -5,7 +5,7 @@
 ### Sidebar
 
 - Workspace switcher at top.
-- Primary items: Skills, Loops, Team library.
+- Primary items: Agent, Skills, Loops, Team library.
 - Create button remains visible without competing with navigation.
 - Recent objects may appear below a divider, maximum five, and never replace primary items.
 - User/workspace settings live at the bottom.
@@ -336,7 +336,7 @@ Use and extend the local design-system wrapper:
 - FileTree, UploadDropzone
 - StepRow, WorkflowNode, Port, Edge
 - Timeline, ReviewPanel, ResultViewer
-- ChatComposer, ProposalReview
+- TaskComposer (shared text/image modes), ModelSwitch, ProposalReview
 
 All primitives receive English/Chinese labels, keyboard states, loading/disabled behavior, and
 stable dimensions before feature-specific styling.

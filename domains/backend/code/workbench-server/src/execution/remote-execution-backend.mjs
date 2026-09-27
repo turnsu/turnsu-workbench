@@ -62,6 +62,10 @@ export function createRemoteExecutionBackend({ transport, maxResumeAttempts = 2 
       const dispatched = await translateUnavailable(() => transport.dispatch({
         request: remoteRequestEnvelope(request),
         lease: remoteLeaseEnvelope(lease),
+        // Device selection is Product-control-plane data, not Worker input.
+        // A remote transport may use it to select an already-authorized
+        // endpoint, but the endpoint receives only remoteRequestEnvelope().
+        dispatchContext: remoteDispatchContext(request),
         signal,
       }));
       let remoteExecutionId = validateRemoteExecutionId(dispatched?.remoteExecutionId);
@@ -230,6 +234,19 @@ function remoteLeaseEnvelope(lease) {
     status: lease.status,
     capabilities: structuredClone(lease.capabilities),
     expiresAt: lease.expiresAt,
+  };
+}
+
+function remoteDispatchContext(request) {
+  return {
+    workspaceId: request.workspaceId,
+    ownerUserId: typeof request.actor?.userId === "string" ? request.actor.userId : null,
+    capacityLeaseId: typeof request.capacityAuthority?.capacityLeaseId === "string"
+      ? request.capacityAuthority.capacityLeaseId
+      : null,
+    capacityFence: Number.isInteger(request.capacityAuthority?.fence)
+      ? request.capacityAuthority.fence
+      : null,
   };
 }
 

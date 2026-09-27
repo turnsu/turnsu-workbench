@@ -6,12 +6,28 @@ import {
   SKILL_RUNTIME_MANIFEST_PATH,
   SkillPackageFormatError,
 } from "../skills/skill-package-format.mjs";
+import { normalizeAcceptedMaterialMediaTypes } from "../attachments/material-media-types.mjs";
+import { projectLarkToolDeclaration } from "../tools/lark-tool-policy.mjs";
 import { parseYamlDocument } from "./yaml-parser.mjs";
 
 const MAX_FILE_COUNT = 256;
 const MAX_PACKAGE_BYTES = 8 * 1024 * 1024;
 const MAX_FILE_BYTES = 1024 * 1024;
-const ALLOWED_FRONTMATTER = new Set(["name", "description", "compatibility", "disable-model-invocation"]);
+const ALLOWED_FRONTMATTER = new Set([
+  "name",
+  "version",
+  "description",
+  "compatibility",
+  "license",
+  "allowed-tools",
+  "disable-model-invocation",
+  "metadata",
+  "inputs",
+  "outputs",
+  "tools",
+  "dependencies",
+]);
+const INTERFACE_TYPES = new Set(["string", "number", "boolean", "json", "markdown", "file"]);
 const EXECUTABLE_EXTENSION = /\.(?:cjs|js|mjs|py|sh|ts)$/i;
 const SECRET_PATTERNS = [
   /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----/i,
@@ -160,16 +176,166 @@ function inspectSkillFrontmatter(file, diagnostics) {
   if (Object.hasOwn(entries, "compatibility") && typeof entries.compatibility !== "string") {
     diagnostics.push(diagnostic("skill_frontmatter_invalid", "error", "SKILL.md compatibility must be text.", file.path));
   }
+  // Standard author metadata stays in the original SKILL.md bytes. In
+  // particular allowed-tools must never become a Product authorization grant.
+  for (const key of ["license", "allowed-tools"]) {
+    if (Object.hasOwn(entries, key) && typeof entries[key] !== "string") {
+      diagnostics.push(diagnostic("skill_frontmatter_invalid", "error", `SKILL.md ${key} must be text.`, file.path));
+    }
+  }
   if (Object.hasOwn(entries, "disable-model-invocation")
     && typeof entries["disable-model-invocation"] !== "boolean") {
     diagnostics.push(diagnostic("skill_frontmatter_invalid", "error", "disable-model-invocation must be a boolean.", file.path));
   }
+  if (Object.hasOwn(entries, "version")
+    && (typeof entries.version !== "string" || entries.version.length === 0 || entries.version.length > 64)) {
+    diagnostics.push(diagnostic("skill_frontmatter_invalid", "error", "SKILL.md version must be bounded text.", file.path));
+  }
+  const inputs = inspectInterface(entries.inputs, "input", diagnostics, file.path);
+  const outputs = inspectInterface(entries.outputs, "output", diagnostics, file.path);
+  const dependencies = inspectDependencies(entries.dependencies, entries.metadata, diagnostics, file.path);
+  const tools = inspectTools(entries.tools, entries.name, diagnostics, file.path);
   return Object.freeze({
     name: typeof entries.name === "string" ? entries.name : null,
     description: typeof entries.description === "string" ? entries.description : null,
     compatibility: typeof entries.compatibility === "string" ? entries.compatibility : null,
     disableModelInvocation: entries["disable-model-invocation"] === true,
+    ...(typeof entries.version === "string" ? { version: entries.version } : {}),
+    ...(inputs.length > 0 ? { inputs: Object.freeze(inputs) } : {}),
+    ...(outputs.length > 0 ? { outputs: Object.freeze(outputs) } : {}),
+    ...(tools.length > 0 ? { tools: Object.freeze(tools) } : {}),
+    ...(dependencies.length > 0 ? { dependencies: Object.freeze(dependencies) } : {}),
   });
+}
+
+function inspectInterface(value, kind, diagnostics, path) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 64) {
+    diagnostics.push(diagnostic("skill_interface_invalid", "error", `SKILL.md ${kind}s must be a bounded list.`, path));
+    return [];
+  }
+  const names = new Set();
+  const normalized = [];
+  for (const entry of value) {
+    const allowed = kind === "input"
+      ? new Set(["name", "title", "type", "required", "description", "acceptedMediaTypes"])
+      : new Set(["name", "type", "description"]);
+    let acceptedMediaTypes = null;
+    try {
+      if (entry?.type === "file") {
+        acceptedMediaTypes = normalizeAcceptedMaterialMediaTypes(entry.acceptedMediaTypes);
+      } else if (entry?.acceptedMediaTypes !== undefined) {
+        throw new TypeError("skill_material_media_types_invalid");
+      }
+    } catch {
+      acceptedMediaTypes = null;
+    }
+    if (
+      !isPlainObject(entry)
+      || Object.keys(entry).some((key) => !allowed.has(key))
+      || typeof entry.name !== "string"
+      || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(entry.name)
+      || names.has(entry.name)
+      || !INTERFACE_TYPES.has(entry.type)
+      || (entry.description !== undefined
+        && (typeof entry.description !== "string" || entry.description.length === 0 || entry.description.length > 1000))
+      || (entry.title !== undefined
+        && (typeof entry.title !== "string" || entry.title.length === 0 || entry.title.length > 200))
+      || (kind === "input" && entry.required !== undefined && typeof entry.required !== "boolean")
+      || (entry.type === "file" && acceptedMediaTypes === null)
+    ) {
+      diagnostics.push(diagnostic("skill_interface_invalid", "error", `SKILL.md contains an invalid ${kind} declaration.`, path));
+      continue;
+    }
+    names.add(entry.name);
+    normalized.push(Object.freeze({
+      name: entry.name,
+      type: entry.type,
+      ...(kind === "input" ? { required: entry.required === true } : {}),
+      ...(entry.title ? { title: entry.title } : {}),
+      ...(entry.description ? { description: entry.description } : {}),
+      ...(entry.type === "file" ? { acceptedMediaTypes: Object.freeze(acceptedMediaTypes) } : {}),
+    }));
+  }
+  return normalized;
+}
+
+function inspectDependencies(value, metadata, diagnostics, path) {
+  const declared = value === undefined ? [] : value;
+  if (!Array.isArray(declared) || declared.length > 32) {
+    diagnostics.push(diagnostic("skill_dependency_invalid", "error", "SKILL.md dependencies must be a bounded list.", path));
+    return [];
+  }
+  const metadataBins = metadata?.requires?.bins;
+  if (metadata !== undefined && !isPlainObject(metadata)) {
+    diagnostics.push(diagnostic("skill_metadata_invalid", "error", "SKILL.md metadata must be a mapping.", path));
+  }
+  if (isPlainObject(metadata) && JSON.stringify(metadata).length > 16_384) {
+    diagnostics.push(diagnostic("skill_metadata_invalid", "error", "SKILL.md metadata exceeds the product limit.", path));
+  }
+  if (metadata?.requires !== undefined && !isPlainObject(metadata.requires)) {
+    diagnostics.push(diagnostic("skill_metadata_invalid", "error", "SKILL.md metadata requires must be a mapping.", path));
+  }
+  if (
+    metadata?.cliHelp !== undefined
+    && (typeof metadata.cliHelp !== "string" || metadata.cliHelp.length === 0 || metadata.cliHelp.length > 2_000)
+  ) {
+    diagnostics.push(diagnostic("skill_metadata_invalid", "error", "SKILL.md cliHelp must be bounded text.", path));
+  }
+  if (metadataBins !== undefined && (!Array.isArray(metadataBins) || metadataBins.length > 32)) {
+    diagnostics.push(diagnostic("skill_metadata_invalid", "error", "SKILL.md metadata bins must be a bounded list.", path));
+  }
+  const values = [
+    ...declared,
+    ...(Array.isArray(metadataBins) ? metadataBins.map((name) => ({ type: "cli", name })) : []),
+  ];
+  const seen = new Set();
+  const normalized = [];
+  for (const entry of values) {
+    if (
+      !isPlainObject(entry)
+      || Object.keys(entry).some((key) => !["type", "name"].includes(key))
+      || entry.type !== "cli"
+      || typeof entry.name !== "string"
+      || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(entry.name)
+    ) {
+      diagnostics.push(diagnostic("skill_dependency_invalid", "error", "SKILL.md contains an invalid CLI dependency.", path));
+      continue;
+    }
+    const key = `${entry.type}:${entry.name}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(Object.freeze({ type: entry.type, name: entry.name }));
+  }
+  return normalized;
+}
+
+function inspectTools(value, skillName, diagnostics, path) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 32) {
+    diagnostics.push(diagnostic("skill_tool_declaration_invalid", "error", "SKILL.md tools must be a bounded list.", path));
+    return [];
+  }
+  const seen = new Set();
+  const normalized = [];
+  for (const entry of value) {
+    const action = typeof entry === "string"
+      ? entry
+      : isPlainObject(entry) && Object.keys(entry).length === 1 ? entry.action : null;
+    const declaration = projectLarkToolDeclaration(action, skillName);
+    if (!declaration || seen.has(action)) {
+      diagnostics.push(diagnostic(
+        "skill_tool_declaration_invalid",
+        "error",
+        "SKILL.md tools must name an exact product-approved action for this Skill.",
+        path,
+      ));
+      continue;
+    }
+    seen.add(action);
+    normalized.push(Object.freeze(declaration));
+  }
+  return normalized;
 }
 
 function inspectRuntimeManifest({ byPath, diagnostics }) {

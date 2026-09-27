@@ -1,9 +1,10 @@
 const DEFAULT_TIMEOUT_MS = 90_000;
 const DEFAULT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
-const CHAT_CAPABILITIES = Object.freeze(["chat", "tool_calling", "structured_output"]);
+const CHAT_CAPABILITIES = Object.freeze(["chat", "tool_calling", "structured_output", "image_input"]);
 
 const ERROR_DEFAULTS = Object.freeze({
   provider_auth_failed: { status: "blocked", retryable: false },
+  provider_payment_required: { status: "blocked", retryable: false },
   provider_rate_limited: { status: "failed", retryable: true },
   provider_content_rejected: { status: "failed", retryable: false },
   provider_timeout: { status: "timeout", retryable: true },
@@ -151,7 +152,8 @@ function providerRequest(input, model) {
 }
 
 function normalizeTool(tool) {
-  if (!isPlainObject(tool) || typeof tool.name !== "string" || tool.name.length < 1 || !isPlainObject(tool.parameters)) {
+  const parameters = tool?.inputSchema ?? tool?.parameters;
+  if (!isPlainObject(tool) || typeof tool.name !== "string" || tool.name.length < 1 || !isPlainObject(parameters)) {
     throw providerError("provider_request_invalid");
   }
   return {
@@ -159,7 +161,7 @@ function normalizeTool(tool) {
     function: {
       name: tool.name,
       description: typeof tool.description === "string" ? tool.description.slice(0, 4000) : "",
-      parameters: structuredClone(tool.parameters),
+      parameters: structuredClone(parameters),
       ...(tool.strict === true ? { strict: true } : {}),
     },
   };
@@ -167,11 +169,19 @@ function normalizeTool(tool) {
 
 function normalizeInputMessage(message) {
   if (!isPlainObject(message) || typeof message.role !== "string") throw providerError("provider_request_invalid");
-  if (["user", "system"].includes(message.role)) {
-    return { role: message.role, content: textContent(message.content) };
+  if (message.role === "system") {
+    return { role: "system", content: textContent(message.content) };
+  }
+  if (message.role === "user") {
+    return {
+      role: "user",
+      content: normalizeUserContent(message.content),
+    };
   }
   if (message.role === "assistant") {
-    const blocks = Array.isArray(message.content) ? message.content : [];
+    const blocks = typeof message.content === "string"
+      ? [{ type: "text", text: message.content }]
+      : Array.isArray(message.content) ? message.content : [];
     const toolCalls = blocks.filter((item) => item?.type === "toolCall").map((item) => {
       if (typeof item.id !== "string" || typeof item.name !== "string" || !isPlainObject(item.arguments)) {
         throw providerError("provider_request_invalid");
@@ -194,6 +204,41 @@ function normalizeInputMessage(message) {
     return { role: "tool", tool_call_id: toolCallId.slice(0, 256), content: textContent(message.content) };
   }
   throw providerError("provider_request_invalid");
+}
+
+function normalizeUserContent(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content) || content.length === 0) {
+    throw providerError("provider_request_invalid");
+  }
+  return content.map((item) => {
+    if (item?.type === "text" && typeof item.text === "string" && item.text.length > 0) {
+      return { type: "text", text: item.text };
+    }
+    if (item?.type === "image") {
+      const image = validImagePart(item);
+      return {
+        type: "image_url",
+        image_url: {
+          url: `data:${image.mediaType};base64,${image.dataBase64}`,
+        },
+      };
+    }
+    throw providerError("provider_request_invalid");
+  });
+}
+
+function validImagePart(item) {
+  if (
+    !["image/png", "image/jpeg", "image/webp"].includes(item?.mediaType) ||
+    typeof item?.dataBase64 !== "string" ||
+    item.dataBase64.length < 1 ||
+    item.dataBase64.length > 22_369_624 ||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(item.dataBase64)
+  ) {
+    throw providerError("provider_request_invalid");
+  }
+  return item;
 }
 
 function textContent(content) {
@@ -310,6 +355,7 @@ async function providerHttpError(response, maxResponseBytes) {
   const statusCode = Number(response?.status);
   const fingerprint = providerErrorFingerprint(payload);
   if ([401, 403].includes(statusCode)) return providerError("provider_auth_failed");
+  if (statusCode === 402) return providerError("provider_payment_required");
   if (statusCode === 429) return providerError("provider_rate_limited");
   if ([408, 504].includes(statusCode)) return providerError("provider_timeout");
   if (/(content|safety|moderation|policy[_ -]?violation|blocked)/i.test(fingerprint)) {

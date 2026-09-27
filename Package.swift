@@ -2,6 +2,8 @@
 
 import PackageDescription
 
+// Historical Swift reference and contract-test closure only. The current Desktop direction is the
+// TypeScript/Tauri client in the Master PRD; this executable must not become a second control plane.
 let package = Package(
     name: "WeChatIntelligenceRadarMVP",
     platforms: [

@@ -31,9 +31,12 @@ export const WorkflowRunStatusSchema = stringEnum([
   "running",
   "waiting_review",
   "paused",
+  "cancellation_requested",
   "completed",
   "failed",
   "cancelled",
+  "partial",
+  "effect_outcome_unknown",
 ]);
 
 export const NodeRunStatusSchema = stringEnum([
@@ -44,6 +47,8 @@ export const NodeRunStatusSchema = stringEnum([
   "failed",
   "skipped",
   "cancelled",
+  "partial",
+  "effect_outcome_unknown",
 ]);
 
 export const ProductFailureSchema = strictObject({
@@ -148,11 +153,17 @@ export const RunEventTypeSchema = stringEnum([
   "node.progress",
   "node.completed",
   "node.failed",
+  "node.effect_recovery_started",
+  "node.effect_recovery_completed",
+  "node.effect_recovery_unknown",
   "review.requested",
   "run.paused",
+  "run.cancellation_requested",
   "run.completed",
   "run.failed",
   "run.cancelled",
+  "run.partial",
+  "run.effect_outcome_unknown",
 ]);
 
 export const RunEventStatusSchema = stringEnum([
@@ -160,9 +171,12 @@ export const RunEventStatusSchema = stringEnum([
   "running",
   "waiting_review",
   "paused",
+  "cancellation_requested",
   "completed",
   "failed",
   "cancelled",
+  "partial",
+  "effect_outcome_unknown",
   "skipped",
 ]);
 
@@ -171,6 +185,7 @@ export const RunEventSchema = strictObject(
     schemaVersion: RunEventV1SchemaVersionSchema,
     sequence: Type.Integer({ minimum: 1 }),
     eventId: EventIdSchema,
+    sourceStateEventId: Type.Optional(EventIdSchema),
     type: RunEventTypeSchema,
     runId: RunIdSchema,
     workflowId: WorkflowIdSchema,
@@ -199,8 +214,17 @@ export const ReviewPacketSchema = strictObject({
   nodeId: NodeIdSchema,
   title: Type.String({ minLength: 1, maxLength: 200 }),
   summary: Type.String({ minLength: 1, maxLength: 2000 }),
-  items: Type.Array(Type.String({ minLength: 1, maxLength: 1000 })),
+  items: Type.Array(Type.String({ minLength: 1, maxLength: 1000000 })),
+  contentTruncated: Type.Optional(Type.Boolean()),
   canRequestChanges: Type.Boolean(),
+});
+
+export const ReviewRoundSchema = strictObject({
+  reviewId: ReviewDecisionIdSchema,
+  attempt: Type.Integer({ minimum: 1 }),
+  requestedAt: UtcTimestampSchema,
+  packet: ReviewPacketSchema,
+  decision: Type.Union([ReviewDecisionSchema, Type.Null()]),
 });
 
 export const RecoveryActionReadModelSchema = strictObject({
@@ -227,6 +251,8 @@ export const RunReadModelSchema = strictObject(
     finalAnswer: Type.Union([FinalAnswerSchema, Type.Null()]),
     evidenceGaps: Type.Array(EvidenceGapSchema),
     reviewPacket: Type.Union([ReviewPacketSchema, Type.Null()]),
+    reviewRounds: Type.Optional(Type.Array(ReviewRoundSchema, { maxItems: 10 })),
+    olderReviewRounds: Type.Optional(Type.Integer({ minimum: 0 })),
     reviewDecisions: Type.Array(ReviewDecisionSchema),
     failure: Type.Union([ProductFailureSchema, Type.Null()]),
     recoveryActions: Type.Array(RecoveryActionReadModelSchema),

@@ -123,7 +123,7 @@ export class PiBackedAgentRuntime {
       currentNodeSatisfiesDeclaredEngine: nodeSatisfiesPiEngine(process.version),
       initialized: Boolean(this.session),
       initializedAt: this.initializedAt,
-      extensionPath: relative(this.projectRoot, this.piExtensionPath),
+      extensionPath: this.piExtensionPath ? relative(this.projectRoot, this.piExtensionPath) : null,
       extensionPackages: this.discoverExtensionPackages().map((item) => item.id),
       skillPath: relative(this.projectRoot, this.piSkillPath),
       promptPath: relative(this.projectRoot, this.piPromptPath),

@@ -21,6 +21,24 @@ export const SUPPORTED_SKILL_RUNTIME_MANIFEST = Object.freeze({
     filesystem: "scratch-only",
   }),
 });
+export const SUPPORTED_SKILL_RUNTIME_MANIFESTS = Object.freeze({
+  "python3.12": SUPPORTED_SKILL_RUNTIME_MANIFEST,
+  "nodejs20-typescript": Object.freeze({
+    runtime: "nodejs20-typescript",
+    entrypoint: "scripts/main.ts",
+    protocol: Object.freeze({ stdin: "json", stdout: "json" }),
+    permissions: Object.freeze({
+      network: false,
+      connections: Object.freeze([]),
+      externalActions: false,
+      filesystem: "scratch-only",
+    }),
+  }),
+});
+export const DEFAULT_SKILL_RUNTIME_LIMITS = Object.freeze({
+  timeoutSeconds: 30,
+  memoryMiB: 128,
+});
 
 const MAX_ENVELOPE_BYTES = 12 * 1024 * 1024;
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
@@ -92,18 +110,31 @@ export function parseSkillPackage(value, { maxEnvelopeBytes = MAX_ENVELOPE_BYTES
 }
 
 export function assertExecutableSkillPackage(files) {
-  const paths = Array.isArray(files) ? new Set(files.map((file) => file?.path)) : null;
-  if (!Array.isArray(files)
-    || files.length !== EXECUTABLE_SKILL_PATHS.length
-    || paths.size !== EXECUTABLE_SKILL_PATHS.length
-    || EXECUTABLE_SKILL_PATHS.some((path) => !paths.has(path))) {
+  const runtimeFile = Array.isArray(files)
+    ? files.find((file) => file?.path === SKILL_RUNTIME_MANIFEST_PATH)
+    : null;
+  if (!runtimeFile) {
     throw packageError(
       "skill_package_contract_unsupported",
       "This uploaded Skill does not match the supported executable package contract.",
     );
   }
-  const runtimeFile = files.find((file) => file.path === SKILL_RUNTIME_MANIFEST_PATH);
-  parseSkillRuntimeManifest(runtimeFile?.content);
+  const runtimeManifest = parseSkillRuntimeManifest(runtimeFile?.content);
+  const expectedPaths = [
+    "SKILL.md",
+    SKILL_RUNTIME_MANIFEST_PATH,
+    runtimeManifest.entrypoint,
+  ];
+  const paths = Array.isArray(files) ? new Set(files.map((file) => file?.path)) : null;
+  if (!Array.isArray(files)
+    || files.length !== expectedPaths.length
+    || paths.size !== expectedPaths.length
+    || expectedPaths.some((path) => !paths.has(path))) {
+    throw packageError(
+      "skill_package_contract_unsupported",
+      "This uploaded Skill does not match the supported executable package contract.",
+    );
+  }
   return files;
 }
 
@@ -117,21 +148,34 @@ export function parseSkillRuntimeManifest(value) {
       "The uploaded Skill runtime manifest is invalid or unsupported.",
     );
   }
+  const supported = isPlainObject(manifest)
+    ? SUPPORTED_SKILL_RUNTIME_MANIFESTS[manifest.runtime]
+    : null;
+  const limits = manifest?.limits ?? DEFAULT_SKILL_RUNTIME_LIMITS;
   if (!isPlainObject(manifest)
-    || !hasOnlyKeys(manifest, ["runtime", "entrypoint", "protocol", "permissions"])
-    || manifest.runtime !== SUPPORTED_SKILL_RUNTIME_MANIFEST.runtime
-    || manifest.entrypoint !== SUPPORTED_SKILL_RUNTIME_MANIFEST.entrypoint
+    || !supported
+    || !hasOnlyOptionalKeys(manifest, ["runtime", "entrypoint", "protocol", "permissions"], ["limits"])
+    || manifest.entrypoint !== supported.entrypoint
     || !isPlainObject(manifest.protocol)
     || !hasOnlyKeys(manifest.protocol, ["stdin", "stdout"])
-    || manifest.protocol.stdin !== SUPPORTED_SKILL_RUNTIME_MANIFEST.protocol.stdin
-    || manifest.protocol.stdout !== SUPPORTED_SKILL_RUNTIME_MANIFEST.protocol.stdout
+    || manifest.protocol.stdin !== supported.protocol.stdin
+    || manifest.protocol.stdout !== supported.protocol.stdout
     || !isPlainObject(manifest.permissions)
     || !hasOnlyKeys(manifest.permissions, ["network", "connections", "externalActions", "filesystem"])
     || manifest.permissions.network !== false
     || !Array.isArray(manifest.permissions.connections)
     || manifest.permissions.connections.length !== 0
     || manifest.permissions.externalActions !== false
-    || manifest.permissions.filesystem !== SUPPORTED_SKILL_RUNTIME_MANIFEST.permissions.filesystem) {
+    || manifest.permissions.filesystem !== supported.permissions.filesystem
+    || !isPlainObject(limits)
+    || !hasOnlyKeys(limits, ["timeoutSeconds", "memoryMiB"])
+    || !Number.isSafeInteger(limits.timeoutSeconds)
+    || limits.timeoutSeconds < 1
+    || limits.timeoutSeconds > 120
+    || !Number.isSafeInteger(limits.memoryMiB)
+    || limits.memoryMiB < 64
+    || limits.memoryMiB > 512
+    || limits.memoryMiB % 64 !== 0) {
     throw packageError(
       "skill_runtime_manifest_invalid",
       "The uploaded Skill runtime manifest is invalid or unsupported.",
@@ -144,6 +188,10 @@ export function parseSkillRuntimeManifest(value) {
     permissions: Object.freeze({
       ...manifest.permissions,
       connections: Object.freeze([]),
+    }),
+    limits: Object.freeze({
+      timeoutSeconds: limits.timeoutSeconds,
+      memoryMiB: limits.memoryMiB,
     }),
   });
 }
@@ -180,6 +228,12 @@ function hasOnlyKeys(value, expected) {
   const keys = Object.keys(value).sort();
   return keys.length === expected.length
     && [...expected].sort().every((key, index) => key === keys[index]);
+}
+
+function hasOnlyOptionalKeys(value, required, optional) {
+  const keys = Object.keys(value);
+  return required.every((key) => keys.includes(key))
+    && keys.every((key) => required.includes(key) || optional.includes(key));
 }
 
 function packageError(code, message) {

@@ -4,20 +4,26 @@ import {
   AgentBranchIdSchema,
   AgentSessionIdSchema,
   AgentTurnIdSchema,
+  CursorPageRequestSchema,
   ExecutionAttemptIdSchema,
   InvocationIdSchema,
   ModelProfileIdSchema,
   ModelProfileRevisionIdSchema,
+  ProposalIdSchema,
   RunIdSchema,
 } from "./common.js";
+import { AgentSessionQueueReadModelSchema } from "./coordination.js";
 import {
   AgentDefinitionSchema,
   AgentHandoffSchema,
+  AgentObjectProposalSchema,
   AgentObjectKindSchema,
   AgentSessionEventSchema,
   AgentSessionSchema,
+  AgentTaskStatusSchema,
   AgentMessageTurnInputSchema,
   AgentTurnSchema,
+  AgentTurnUsageSchema,
   ImageGenerationModelTaskInputSchema,
 } from "./agents.js";
 import { ArtifactRefSchema } from "./artifacts.js";
@@ -63,21 +69,27 @@ const mutationMetadata = {
 
 export const CreateAgentSessionRequestSchema = MutationRequestEnvelopeSchema(strictObject({
   definitionId: Type.String({ minLength: 1, maxLength: 128 }),
+  title: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   lastUsedModelProfileId: Type.Optional(ModelProfileIdSchema),
   objectKind: Type.Optional(AgentObjectKindSchema),
   objectId: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
   branchId: Type.Optional(AgentBranchIdSchema),
 }), "CreateAgentSessionRequest");
 
+export const UpdateAgentSessionRequestSchema = MutationRequestEnvelopeSchema(strictObject({
+  title: Type.Optional(Type.String({ minLength: 1, maxLength: 200, pattern: "\\S" })),
+  archived: Type.Optional(Type.Boolean()),
+}, { minProperties: 1 }), "UpdateAgentSessionRequest");
+
 export const AgentMessageTurnRequestDataSchema = strictObject({
   kind: Type.Literal("agent_message"),
-  modelProfileRevisionId: ModelProfileRevisionIdSchema,
+  modelProfileId: ModelProfileIdSchema,
   input: AgentMessageTurnInputSchema,
 });
 
 export const ModelTaskTurnRequestDataSchema = strictObject({
   kind: Type.Literal("model_task"),
-  modelProfileRevisionId: ModelProfileRevisionIdSchema,
+  modelProfileId: ModelProfileIdSchema,
   input: ImageGenerationModelTaskInputSchema,
 });
 
@@ -95,15 +107,39 @@ export const CancelAgentTurnRequestSchema = MutationRequestEnvelopeSchema(strict
   reason: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
 }), "CancelAgentTurnRequest");
 
+export const DecideAgentToolApprovalRequestSchema = MutationRequestEnvelopeSchema(strictObject({
+  decision: Type.Union([Type.Literal("approve"), Type.Literal("reject")]),
+}), "DecideAgentToolApprovalRequest");
+
 export const ConfirmAgentHandoffRequestSchema = MutationRequestEnvelopeSchema(strictObject({}), "ConfirmAgentHandoffRequest");
+export const DecideAgentProposalRequestSchema = MutationRequestEnvelopeSchema(strictObject({}), "DecideAgentProposalRequest");
 
 export const AgentDefinitionListResponseSchema = ListResponseEnvelopeSchema(AgentDefinitionSchema, "AgentDefinitionListResponse");
 export const AgentSessionResponseSchema = ResponseEnvelopeSchema(AgentSessionSchema, "AgentSessionResponse");
+export const AgentSessionQueueResponseSchema = ResponseEnvelopeSchema(
+  AgentSessionQueueReadModelSchema,
+  "AgentSessionQueueResponse",
+);
+export const AgentSessionListResponseSchema = ListResponseEnvelopeSchema(AgentSessionSchema, "AgentSessionListResponse");
 export const AgentTurnResponseSchema = ResponseEnvelopeSchema(AgentTurnSchema, "AgentTurnResponse");
 export const AgentTurnListResponseSchema = ListResponseEnvelopeSchema(AgentTurnSchema, "AgentTurnListResponse");
 export const AgentSessionEventListResponseSchema = ListResponseEnvelopeSchema(AgentSessionEventSchema, "AgentSessionEventListResponse");
 export const AgentHandoffListResponseSchema = ListResponseEnvelopeSchema(AgentHandoffSchema, "AgentHandoffListResponse");
 export const AgentHandoffResponseSchema = ResponseEnvelopeSchema(AgentHandoffSchema, "AgentHandoffResponse");
+export const AgentObjectProposalResponseSchema = ResponseEnvelopeSchema(
+  AgentObjectProposalSchema,
+  "AgentObjectProposalResponse",
+);
+export const AgentToolApprovalDecisionResponseSchema = ResponseEnvelopeSchema(strictObject({
+  approvalId: Type.String({ minLength: 1, maxLength: 128 }),
+  status: Type.Union([
+    Type.Literal("approved"),
+    Type.Literal("rejected"),
+    Type.Literal("expired"),
+  ]),
+  resumeTurnId: Type.Optional(AgentTurnIdSchema),
+  commandId: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+}), "AgentToolApprovalDecisionResponse");
 
 export const ExecutionInvocationSummarySchema = strictObject({
   invocationId: InvocationIdSchema,
@@ -114,6 +150,7 @@ export const ExecutionInvocationSummarySchema = strictObject({
   requestedModelRevisionId: Type.Union([ModelProfileRevisionIdSchema, Type.Null()]),
   actualModelRevisionId: Type.Union([ModelProfileRevisionIdSchema, Type.Null()]),
   artifactRefs: Type.Array(ArtifactRefSchema, { uniqueItems: true, maxItems: 256 }),
+  usage: Type.Optional(AgentTurnUsageSchema),
   createdAt: Type.String({ format: "date-time", pattern: "Z$" }),
   startedAt: Type.Union([Type.String({ format: "date-time", pattern: "Z$" }), Type.Null()]),
   finishedAt: Type.Union([Type.String({ format: "date-time", pattern: "Z$" }), Type.Null()]),
@@ -124,8 +161,25 @@ export const ExecutionEventListResponseSchema = ListResponseEnvelopeSchema(Execu
 const AgentSessionPathSchema = strictObject({ sessionId: AgentSessionIdSchema });
 const AgentTurnPathSchema = strictObject({ sessionId: AgentSessionIdSchema, turnId: AgentTurnIdSchema });
 const AgentHandoffPathSchema = strictObject({ sessionId: AgentSessionIdSchema, handoffId: Type.String({ minLength: 1, maxLength: 128 }) });
+const AgentProposalPathSchema = strictObject({
+  sessionId: AgentSessionIdSchema,
+  proposalId: ProposalIdSchema,
+});
+const AgentToolApprovalPathSchema = strictObject({
+  approvalId: Type.String({ minLength: 1, maxLength: 128 }),
+});
 const RunPathSchema = strictObject({ runId: RunIdSchema });
-const AfterQuerySchema = strictObject({ after: Type.Optional(Type.Integer({ minimum: 0 })), limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000 })) });
+const AgentHistoryQuerySchema = strictObject({
+  ...CursorPageRequestSchema.properties,
+  after: Type.Optional(Type.Integer({ minimum: 0 })),
+});
+const AgentSessionListQuerySchema = strictObject({
+  ...CursorPageRequestSchema.properties,
+  definitionId: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+  taskStatus: Type.Optional(AgentTaskStatusSchema),
+  search: Type.Optional(Type.String({ minLength: 1, maxLength: 200, pattern: "\\S" })),
+  archived: Type.Optional(Type.Boolean()),
+});
 
 export const WORKBENCH_V1_AGENT_ENDPOINTS = {
   listAgentDefinitions: {
@@ -148,6 +202,15 @@ export const WORKBENCH_V1_AGENT_ENDPOINTS = {
     requestBodySchema: CreateAgentSessionRequestSchema,
     responseBodySchema: AgentSessionResponseSchema,
   },
+  listAgentSessions: {
+    ...readMetadata,
+    operationId: "listAgentSessions",
+    method: "GET",
+    path: `${WORKBENCH_API_PREFIX}/agent-sessions`,
+    pathParamsSchema: EmptyObjectSchema,
+    querySchema: AgentSessionListQuerySchema,
+    responseBodySchema: AgentSessionListResponseSchema,
+  },
   getAgentSession: {
     ...readMetadata,
     operationId: "getAgentSession",
@@ -156,6 +219,25 @@ export const WORKBENCH_V1_AGENT_ENDPOINTS = {
     pathParamsSchema: AgentSessionPathSchema,
     querySchema: EmptyObjectSchema,
     responseBodySchema: AgentSessionResponseSchema,
+  },
+  updateAgentSession: {
+    ...mutationMetadata,
+    operationId: "updateAgentSession",
+    method: "PATCH",
+    path: `${WORKBENCH_API_PREFIX}/agent-sessions/{sessionId}`,
+    pathParamsSchema: AgentSessionPathSchema,
+    querySchema: EmptyObjectSchema,
+    requestBodySchema: UpdateAgentSessionRequestSchema,
+    responseBodySchema: AgentSessionResponseSchema,
+  },
+  getAgentSessionQueue: {
+    ...readMetadata,
+    operationId: "getAgentSessionQueue",
+    method: "GET",
+    path: `${WORKBENCH_API_PREFIX}/agent-sessions/{sessionId}/queue`,
+    pathParamsSchema: AgentSessionPathSchema,
+    querySchema: CursorPageRequestSchema,
+    responseBodySchema: AgentSessionQueueResponseSchema,
   },
   createAgentTurn: {
     ...mutationMetadata,
@@ -174,7 +256,7 @@ export const WORKBENCH_V1_AGENT_ENDPOINTS = {
     method: "GET",
     path: `${WORKBENCH_API_PREFIX}/agent-sessions/{sessionId}/turns`,
     pathParamsSchema: AgentSessionPathSchema,
-    querySchema: AfterQuerySchema,
+    querySchema: AgentHistoryQuerySchema,
     responseBodySchema: AgentTurnListResponseSchema,
   },
   getAgentTurn: {
@@ -203,7 +285,7 @@ export const WORKBENCH_V1_AGENT_ENDPOINTS = {
     method: "GET",
     path: `${WORKBENCH_API_PREFIX}/agent-sessions/{sessionId}/events`,
     pathParamsSchema: AgentSessionPathSchema,
-    querySchema: AfterQuerySchema,
+    querySchema: AgentHistoryQuerySchema,
     responseBodySchema: AgentSessionEventListResponseSchema,
   },
   listAgentHandoffs: {
@@ -225,6 +307,45 @@ export const WORKBENCH_V1_AGENT_ENDPOINTS = {
     requestBodySchema: ConfirmAgentHandoffRequestSchema,
     responseBodySchema: AgentHandoffResponseSchema,
   },
+  getAgentProposal: {
+    ...readMetadata,
+    operationId: "getAgentProposal",
+    method: "GET",
+    path: `${WORKBENCH_API_PREFIX}/agent-sessions/{sessionId}/proposals/{proposalId}`,
+    pathParamsSchema: AgentProposalPathSchema,
+    querySchema: EmptyObjectSchema,
+    responseBodySchema: AgentObjectProposalResponseSchema,
+  },
+  applyAgentProposal: {
+    ...mutationMetadata,
+    operationId: "applyAgentProposal",
+    method: "POST",
+    path: `${WORKBENCH_API_PREFIX}/agent-sessions/{sessionId}/proposals/{proposalId}/apply`,
+    pathParamsSchema: AgentProposalPathSchema,
+    querySchema: EmptyObjectSchema,
+    requestBodySchema: DecideAgentProposalRequestSchema,
+    responseBodySchema: AgentObjectProposalResponseSchema,
+  },
+  rejectAgentProposal: {
+    ...mutationMetadata,
+    operationId: "rejectAgentProposal",
+    method: "POST",
+    path: `${WORKBENCH_API_PREFIX}/agent-sessions/{sessionId}/proposals/{proposalId}/reject`,
+    pathParamsSchema: AgentProposalPathSchema,
+    querySchema: EmptyObjectSchema,
+    requestBodySchema: DecideAgentProposalRequestSchema,
+    responseBodySchema: AgentObjectProposalResponseSchema,
+  },
+  decideAgentToolApproval: {
+    ...mutationMetadata,
+    operationId: "decideAgentToolApproval",
+    method: "POST",
+    path: `${WORKBENCH_API_PREFIX}/agent-tool-approvals/{approvalId}/decision`,
+    pathParamsSchema: AgentToolApprovalPathSchema,
+    querySchema: EmptyObjectSchema,
+    requestBodySchema: DecideAgentToolApprovalRequestSchema,
+    responseBodySchema: AgentToolApprovalDecisionResponseSchema,
+  },
   listRunInvocations: {
     ...readMetadata,
     operationId: "listRunInvocations",
@@ -240,7 +361,7 @@ export const WORKBENCH_V1_AGENT_ENDPOINTS = {
     method: "GET",
     path: `${WORKBENCH_API_PREFIX}/runs/{runId}/execution-events`,
     pathParamsSchema: RunPathSchema,
-    querySchema: AfterQuerySchema,
+    querySchema: AgentHistoryQuerySchema,
     responseBodySchema: ExecutionEventListResponseSchema,
   },
 } as const satisfies Record<string, WorkbenchEndpointMetadata>;

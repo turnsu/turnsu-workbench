@@ -1,8 +1,12 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { featureStylePlugin } from "./build/feature-style-plugin.mjs";
 
 export default defineConfig({
   base: process.env.LOOP_WORKBENCH_OFFLINE_BUILD === "1" ? "./" : "/",
+  build: {
+    manifest: true,
+  },
   optimizeDeps: {
     include: ["react", "react-dom/client"],
   },
@@ -20,5 +24,5 @@ export default defineConfig({
       clientFiles: ["./src/main.jsx"],
     },
   },
-  plugins: [react()],
+  plugins: [featureStylePlugin(), react()],
 });

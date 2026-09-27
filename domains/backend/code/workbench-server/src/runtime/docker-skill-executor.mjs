@@ -26,16 +26,22 @@ const SAFE_PART = /^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$/;
 export const DOCKER_SKILL_OWNER_LABEL = "com.looloomi.workbench.skill-executor";
 export const DOCKER_SKILL_OWNER_VALUE = "v1";
 export const DOCKER_SKILL_INVOCATION_LABEL = "com.looloomi.workbench.skill-invocation";
+const DOCKER_SKILL_VOLUME_SUFFIX = "-input";
+const DOCKER_SKILL_STAGING_SUFFIX = "-staging";
 const INVOCATION_DIRECTORY_PREFIX = "execution-";
 const INVOCATION_MARKER = ".looloomi-skill-invocation.json";
+const DOCKER_CONTROL_TIMEOUT_MS = 5_000;
+const DOCKER_COPY_TIMEOUT_MS = 30_000;
 const DEFAULT_LIMITS = Object.freeze({
-  timeoutMs: 5_000,
+  // Product policy ceilings. Each package requests a value through the
+  // governed runtime manifest; older packages receive the catalog defaults.
+  timeoutMs: 120_000,
   maxInputBytes: 256 * 1024,
   maxStdoutBytes: 1024 * 1024,
   maxStderrBytes: 64 * 1024,
   maxOutputBytes: 1024 * 1024,
   pids: 64,
-  memoryBytes: 128 * 1024 * 1024,
+  memoryBytes: 512 * 1024 * 1024,
   cpus: 0.5,
   tmpfsBytes: 16 * 1024 * 1024,
 });
@@ -56,7 +62,7 @@ export function createDockerSkillExecutor(options) {
 
 export class DockerSkillExecutor {
   #objectStore;
-  #image;
+  #images;
   #dockerBinary;
   #dockerEnvironment;
   #spawnProcess;
@@ -69,6 +75,7 @@ export class DockerSkillExecutor {
     objectStore,
     image,
     imageDigest,
+    images,
     dockerBinary = "docker",
     dockerEnvironment = defaultDockerEnvironment(),
     spawnProcess = spawn,
@@ -79,7 +86,8 @@ export class DockerSkillExecutor {
   } = {}) {
     if (!objectStore?.read) throw new TypeError("docker_skill_executor_object_store_required");
     const configuredImage = image ?? imageDigest;
-    if (typeof configuredImage !== "string" || !DIGEST_PINNED_CONTAINER_IMAGE.test(configuredImage)) {
+    const configuredImages = normalizeRuntimeImages(images, configuredImage);
+    if (configuredImages.size === 0) {
       throw new TypeError("docker_skill_executor_digest_pinned_image_required");
     }
     if (typeof dockerBinary !== "string" || dockerBinary.length === 0 || typeof spawnProcess !== "function") {
@@ -92,7 +100,7 @@ export class DockerSkillExecutor {
       throw new TypeError("docker_skill_executor_filesystem_dependencies_invalid");
     }
     this.#objectStore = objectStore;
-    this.#image = configuredImage;
+    this.#images = configuredImages;
     this.#dockerBinary = dockerBinary;
     this.#dockerEnvironment = Object.freeze({ ...dockerEnvironment });
     this.#spawnProcess = spawnProcess;
@@ -119,9 +127,14 @@ export class DockerSkillExecutor {
     inspection,
     inspectionSummary,
     input,
+    materials = [],
     signal,
   } = {}) {
     let invocationRoot = null;
+    let containerName = null;
+    let stagingContainerName = null;
+    let inputVolumeName = null;
+    const resourceState = { mainContainer: false, stagingContainer: false, inputVolume: false };
     try {
       throwIfCancelled(signal);
       const requiredObjectHash = objectContentHash ?? objectHash ?? expectedObjectHash;
@@ -135,7 +148,13 @@ export class DockerSkillExecutor {
         inspection: requiredInspection,
         input,
       });
-      const inputBytes = encodeInput(input, this.#limits.maxInputBytes);
+      const checkedMaterials = validateMaterials(materials);
+      if (checkedMaterials.length > 0 && Object.hasOwn(input, "_materials")) {
+        throw new DockerSkillExecutorError(
+          "skill_material_input_reserved",
+          "The _materials input field is reserved by the Skill runtime.",
+        );
+      }
 
       const stored = await this.#objectStore.read({ workspaceId, objectId, signal });
       throwIfCancelled(signal);
@@ -150,27 +169,51 @@ export class DockerSkillExecutor {
 
       await mkdir(this.#tempRoot, { recursive: true, mode: 0o700 });
       invocationRoot = await mkdtemp(join(this.#tempRoot, INVOCATION_DIRECTORY_PREFIX));
-      const containerName = uniqueContainerName(this.#idFactory());
-      const packageRoot = await materializePackage(invocationRoot, files, containerName);
+      containerName = uniqueContainerName(this.#idFactory());
+      stagingContainerName = `${containerName}${DOCKER_SKILL_STAGING_SUFFIX}`;
+      inputVolumeName = `${containerName}${DOCKER_SKILL_VOLUME_SUFFIX}`;
+      const packageRoot = await materializePackage(
+        invocationRoot,
+        files,
+        containerName,
+        inputVolumeName,
+      );
+      const materialInput = await materializeMaterials(invocationRoot, checkedMaterials);
+      const inputBytes = encodeInput(
+        materialInput
+          ? { ...input, _materials: materialInput.manifest }
+          : input,
+        this.#limits.maxInputBytes,
+      );
       throwIfCancelled(signal);
 
       const args = buildDockerSkillArguments({
-        image: this.#image,
+        image: this.#images.get(runtimeManifest.runtime),
         containerName,
-        packageRoot,
+        inputVolumeName,
         runtimeManifest,
-        limits: this.#limits,
+        limits: effectiveRuntimeLimits(this.#limits, runtimeManifest.limits),
+      });
+      const executionLimits = effectiveRuntimeLimits(this.#limits, runtimeManifest.limits);
+      await prepareDockerSkillContainer({
+        dockerControl: this.#dockerControl,
+        createArgs: args,
+        image: this.#images.get(runtimeManifest.runtime),
+        containerName,
+        stagingContainerName,
+        inputVolumeName,
+        packageRoot,
+        materialsRoot: materialInput?.root ?? null,
+        resourceState,
       });
       return await executeDockerProcess({
         dockerBinary: this.#dockerBinary,
         dockerEnvironment: this.#dockerEnvironment,
         spawnProcess: this.#spawnProcess,
-        dockerControl: this.#dockerControl,
-        args,
-        containerName,
+        args: ["container", "start", "--attach", "--interactive", containerName],
         inputBytes,
         signal,
-        limits: this.#limits,
+        limits: executionLimits,
       });
     } catch (failure) {
       if (failure instanceof DockerSkillExecutorError) throw failure;
@@ -178,7 +221,14 @@ export class DockerSkillExecutor {
       if (failure instanceof SkillPackageFormatError) throw blockedError();
       throw blockedError();
     } finally {
-      if (invocationRoot) await cleanupSkillInvocationDirectory(invocationRoot);
+      await cleanupDockerSkillResources({
+        dockerControl: this.#dockerControl,
+        containerName,
+        stagingContainerName,
+        inputVolumeName,
+        invocationRoot,
+        resourceState,
+      });
     }
   }
 
@@ -188,22 +238,48 @@ export class DockerSkillExecutor {
       tempRoot: this.#tempRoot,
     });
   }
+
+  async probeRuntimes() {
+    const results = [];
+    for (const [runtimeId, image] of this.#images.entries()) {
+      try {
+        await requireDockerSuccess(this.#dockerControl, [
+          "image", "inspect", "--format", "{{.Id}}", image,
+        ]);
+        results.push({ runtimeId, available: true, verified: true, reasonCode: "ready" });
+      } catch {
+        results.push({
+          runtimeId,
+          available: false,
+          verified: true,
+          reasonCode: "skill_runtime_image_unavailable",
+        });
+      }
+    }
+    return results;
+  }
 }
 
 export function buildDockerSkillArguments({
   image,
   containerName,
-  packageRoot,
+  inputVolumeName,
   runtimeManifest,
   limits = DEFAULT_LIMITS,
 } = {}) {
-  if (!DIGEST_PINNED_CONTAINER_IMAGE.test(image || "") || !SAFE_PART.test(containerName || "") || typeof packageRoot !== "string") {
+  if (!DIGEST_PINNED_CONTAINER_IMAGE.test(image || "")
+    || !SAFE_PART.test(containerName || "")
+    || !SAFE_PART.test(inputVolumeName || "")) {
     throw new TypeError("docker_skill_executor_arguments_invalid");
   }
   const checkedManifest = parseSkillRuntimeManifest(JSON.stringify(runtimeManifest));
-  const checked = validateLimits({ ...DEFAULT_LIMITS, ...limits });
+  const checked = effectiveRuntimeLimits(
+    validateLimits({ ...DEFAULT_LIMITS, ...limits }),
+    checkedManifest.limits,
+  );
   return [
     ...buildContainerIsolationArguments({
+      operation: "create",
       containerName,
       labels: [
         `${DOCKER_SKILL_OWNER_LABEL}=${DOCKER_SKILL_OWNER_VALUE}`,
@@ -214,11 +290,10 @@ export function buildDockerSkillArguments({
       fileSizeBytes: checked.maxOutputBytes,
       interactive: true,
     }),
-    "--mount", `type=bind,src=${packageRoot},dst=/skill,readonly`,
-    "--workdir", "/skill",
+    "--mount", `type=volume,src=${inputVolumeName},dst=/workspace,readonly`,
+    "--workdir", "/workspace/skill",
     image,
-    checkedManifest.runtime,
-    `/skill/${checkedManifest.entrypoint}`,
+    ...runtimeCommand(checkedManifest, "/workspace/skill"),
   ];
 }
 
@@ -249,11 +324,12 @@ function verifyStoredPackage({ stored, workspaceId, objectId, expectedObjectHash
 }
 
 function isSupportedExecutableInspection(inspection) {
+  const entrypoint = inspection?.manifest?.runtime?.entrypoint;
   return inspection.status === "needs_review"
     && inspection.diagnostics.length === 1
     && inspection.diagnostics[0].code === "executable_content_requires_isolation"
     && inspection.diagnostics[0].severity === "warning"
-    && inspection.diagnostics[0].path === "scripts/main.py";
+    && inspection.diagnostics[0].path === entrypoint;
 }
 
 function inspectionMatches(expected, actual) {
@@ -266,38 +342,173 @@ function inspectionMatches(expected, actual) {
   return true;
 }
 
-async function materializePackage(invocationRoot, files, containerName) {
+async function materializePackage(invocationRoot, files, containerName, inputVolumeName) {
   const root = join(invocationRoot, "package");
   const scripts = join(root, "scripts");
-  await mkdir(root, { mode: 0o700 });
-  await mkdir(scripts, { mode: 0o700 });
   const byPath = new Map(files.map((file) => [file.path, file.content]));
   await writeFile(join(invocationRoot, INVOCATION_MARKER), `${JSON.stringify({
     owner: `${DOCKER_SKILL_OWNER_LABEL}=${DOCKER_SKILL_OWNER_VALUE}`,
     containerName,
+    inputVolumeName,
   })}\n`, { flag: "wx", mode: 0o400 });
+  await mkdir(root, { mode: 0o700 });
+  await mkdir(scripts, { mode: 0o700 });
   await writeFile(join(root, "SKILL.md"), byPath.get("SKILL.md"), { flag: "wx", mode: 0o400 });
   await writeFile(
     join(root, SKILL_RUNTIME_MANIFEST_PATH),
     byPath.get(SKILL_RUNTIME_MANIFEST_PATH),
     { flag: "wx", mode: 0o400 },
   );
-  await writeFile(join(scripts, "main.py"), byPath.get("scripts/main.py"), { flag: "wx", mode: 0o400 });
+  const runtimeManifest = parseSkillRuntimeManifest(byPath.get(SKILL_RUNTIME_MANIFEST_PATH));
+  const entrypointName = basename(runtimeManifest.entrypoint);
+  await writeFile(
+    join(scripts, entrypointName),
+    byPath.get(runtimeManifest.entrypoint),
+    { flag: "wx", mode: 0o400 },
+  );
   await chmod(join(root, "SKILL.md"), 0o444);
   await chmod(join(root, SKILL_RUNTIME_MANIFEST_PATH), 0o444);
-  await chmod(join(scripts, "main.py"), 0o444);
+  await chmod(join(scripts, entrypointName), 0o444);
   await chmod(scripts, 0o555);
   await chmod(root, 0o555);
   return root;
+}
+
+function validateMaterials(materials) {
+  if (!Array.isArray(materials) || materials.length > 32) {
+    throw new DockerSkillExecutorError(
+      "skill_material_bindings_invalid",
+      "Skill materials are invalid.",
+    );
+  }
+  const seen = new Set();
+  let totalBytes = 0;
+  return materials.map((material) => {
+    if (
+      !material
+      || typeof material !== "object"
+      || !SAFE_PART.test(material.materialKey || "")
+      || seen.has(material.materialKey)
+      || !Buffer.isBuffer(material.bytes)
+      || material.bytes.byteLength < 1
+      || material.bytes.byteLength > 16 * 1024 * 1024
+      || !SHA256.test(material.contentHash || "")
+      || typeof material.mediaType !== "string"
+      || material.mediaType.length < 1
+      || material.mediaType.length > 128
+    ) {
+      throw new DockerSkillExecutorError(
+        "skill_material_bindings_invalid",
+        "Skill materials are invalid.",
+      );
+    }
+    seen.add(material.materialKey);
+    totalBytes += material.bytes.byteLength;
+    if (totalBytes > 64 * 1024 * 1024) {
+      throw new DockerSkillExecutorError(
+        "skill_material_limit_exceeded",
+        "Skill materials exceed the execution limit.",
+      );
+    }
+    return {
+      materialKey: material.materialKey,
+      mediaType: material.mediaType,
+      contentHash: material.contentHash,
+      bytes: Buffer.from(material.bytes),
+    };
+  });
+}
+
+async function materializeMaterials(invocationRoot, materials) {
+  if (materials.length === 0) return null;
+  const root = join(invocationRoot, "input");
+  const filesRoot = join(root, "files");
+  await mkdir(root, { mode: 0o700 });
+  await mkdir(filesRoot, { mode: 0o700 });
+  const manifest = [];
+  for (let index = 0; index < materials.length; index += 1) {
+    const material = materials[index];
+    const fileName = `material-${String(index + 1).padStart(3, "0")}.bin`;
+    const hostPath = join(filesRoot, fileName);
+    await writeFile(hostPath, material.bytes, { flag: "wx", mode: 0o400 });
+    await chmod(hostPath, 0o444);
+    manifest.push({
+      materialKey: material.materialKey,
+      mediaType: material.mediaType,
+      contentHash: material.contentHash,
+      path: `/workspace/input/files/${fileName}`,
+      sizeBytes: material.bytes.byteLength,
+    });
+  }
+  await writeFile(
+    join(root, "manifest.json"),
+    `${JSON.stringify({ schemaVersion: "skill-material-input-v1", materials: manifest })}\n`,
+    { flag: "wx", mode: 0o400 },
+  );
+  await chmod(join(root, "manifest.json"), 0o444);
+  await chmod(filesRoot, 0o555);
+  await chmod(root, 0o555);
+  return { root, manifest };
+}
+
+async function prepareDockerSkillContainer({
+  dockerControl,
+  createArgs,
+  image,
+  containerName,
+  stagingContainerName,
+  inputVolumeName,
+  packageRoot,
+  materialsRoot,
+  resourceState,
+}) {
+  if (!isManagedContainerName(containerName)
+    || stagingContainerName !== `${containerName}${DOCKER_SKILL_STAGING_SUFFIX}`
+    || inputVolumeName !== `${containerName}${DOCKER_SKILL_VOLUME_SUFFIX}`
+    || !DIGEST_PINNED_CONTAINER_IMAGE.test(image || "")) {
+    throw blockedError();
+  }
+  const volume = await requireDockerSuccess(dockerControl, [
+    "volume", "create",
+    "--label", `${DOCKER_SKILL_OWNER_LABEL}=${DOCKER_SKILL_OWNER_VALUE}`,
+    "--label", `${DOCKER_SKILL_INVOCATION_LABEL}=${inputVolumeName}`,
+    inputVolumeName,
+  ]);
+  if (volume.stdout.trim() !== inputVolumeName) throw cleanupError();
+  resourceState.inputVolume = true;
+  await inspectOwnedVolume(dockerControl, inputVolumeName);
+
+  await requireDockerSuccess(dockerControl, [
+    "container", "create",
+    "--pull", "never",
+    "--name", stagingContainerName,
+    "--label", `${DOCKER_SKILL_OWNER_LABEL}=${DOCKER_SKILL_OWNER_VALUE}`,
+    "--label", `${DOCKER_SKILL_INVOCATION_LABEL}=${stagingContainerName}`,
+    "--mount", `type=volume,src=${inputVolumeName},dst=/workspace`,
+    image,
+    "true",
+  ]);
+  resourceState.stagingContainer = true;
+  await requireDockerSuccess(dockerControl, [
+    "container", "cp", `${packageRoot}/.`, `${stagingContainerName}:/workspace/skill`,
+  ]);
+  if (materialsRoot) {
+    await requireDockerSuccess(dockerControl, [
+      "container", "cp", `${materialsRoot}/.`, `${stagingContainerName}:/workspace/input`,
+    ]);
+  }
+  await cleanupOwnedContainer({ dockerControl, containerName: stagingContainerName });
+  resourceState.stagingContainer = false;
+  await requireDockerSuccess(dockerControl, createArgs);
+  resourceState.mainContainer = true;
+  await inspectOwnedContainer(dockerControl, containerName);
 }
 
 async function executeDockerProcess({
   dockerBinary,
   dockerEnvironment,
   spawnProcess,
-  dockerControl,
   args,
-  containerName,
   inputBytes,
   signal,
   limits,
@@ -314,7 +525,6 @@ async function executeDockerProcess({
   }
   if (!child?.stdin || !child?.stdout || !child?.stderr || typeof child.once !== "function") {
     child?.kill?.("SIGKILL");
-    await cleanupOwnedContainer({ dockerControl, containerName });
     throw blockedError();
   }
 
@@ -368,7 +578,6 @@ async function executeDockerProcess({
   const outcome = await outcomePromise;
   clearTimeout(timeout);
   signal?.removeEventListener("abort", onAbort);
-  await cleanupOwnedContainer({ dockerControl, containerName });
 
   if (terminalError) throw terminalError;
   if (outcome.error || outcome.code !== 0) throw blockedError();
@@ -392,6 +601,43 @@ async function executeDockerProcess({
   return result;
 }
 
+async function cleanupDockerSkillResources({
+  dockerControl,
+  containerName,
+  stagingContainerName,
+  inputVolumeName,
+  invocationRoot,
+  resourceState,
+}) {
+  let failed = false;
+  for (const [name, created] of [
+    [stagingContainerName, resourceState.stagingContainer],
+    [containerName, resourceState.mainContainer],
+  ]) {
+    if (!name || !created) continue;
+    try {
+      await cleanupOwnedContainer({ dockerControl, containerName: name });
+    } catch {
+      failed = true;
+    }
+  }
+  if (inputVolumeName && resourceState.inputVolume) {
+    try {
+      await cleanupOwnedVolume({ dockerControl, volumeName: inputVolumeName });
+    } catch {
+      failed = true;
+    }
+  }
+  if (invocationRoot) {
+    try {
+      await cleanupSkillInvocationDirectory(invocationRoot);
+    } catch {
+      failed = true;
+    }
+  }
+  if (failed) throw cleanupError();
+}
+
 export async function cleanupSkillInvocationDirectory(root, {
   chmodPath = chmod,
   removePath = rm,
@@ -403,6 +649,8 @@ export async function cleanupSkillInvocationDirectory(root, {
   try {
     await chmodPath(join(root, "package"), 0o700).catch(() => {});
     await chmodPath(join(root, "package", "scripts"), 0o700).catch(() => {});
+    await chmodPath(join(root, "input"), 0o700).catch(() => {});
+    await chmodPath(join(root, "input", "files"), 0o700).catch(() => {});
     await removePath(root, { recursive: true, force: true });
     try {
       await statPath(root);
@@ -430,10 +678,13 @@ export async function scavengeDockerSkillExecutions({
     try {
       entries = await readDirectory(tempRoot, { withFileTypes: true });
     } catch (failure) {
-      if (failure?.code === "ENOENT") return Object.freeze({ containersRemoved: 0, directoriesRemoved: 0 });
+      if (failure?.code === "ENOENT") {
+        return Object.freeze({ containersRemoved: 0, volumesRemoved: 0, directoriesRemoved: 0 });
+      }
       throw failure;
     }
     let containersRemoved = 0;
+    let volumesRemoved = 0;
     let directoriesRemoved = 0;
     for (const entry of entries) {
       if (!entry?.isDirectory?.() || !entry.name.startsWith(INVOCATION_DIRECTORY_PREFIX)) continue;
@@ -444,19 +695,35 @@ export async function scavengeDockerSkillExecutions({
       } catch {
         continue;
       }
-      if (!isPlainObject(marker)
-        || Object.keys(marker).sort().join(",") !== "containerName,owner"
+      const markerKeys = isPlainObject(marker) ? Object.keys(marker).sort().join(",") : "";
+      const currentMarker = markerKeys === "containerName,inputVolumeName,owner";
+      const legacyMarker = markerKeys === "containerName,owner";
+      if ((!currentMarker && !legacyMarker)
         || marker.owner !== `${DOCKER_SKILL_OWNER_LABEL}=${DOCKER_SKILL_OWNER_VALUE}`
-        || !isManagedContainerName(marker.containerName)) continue;
-      const owned = await listOwnedContainers(dockerControl, marker.containerName);
-      if (owned.length === 1) {
-        await cleanupOwnedContainer({ dockerControl, containerName: marker.containerName });
-        containersRemoved += 1;
+        || !isManagedContainerName(marker.containerName)
+        || (currentMarker
+          && marker.inputVolumeName !== `${marker.containerName}${DOCKER_SKILL_VOLUME_SUFFIX}`)) continue;
+      const containerNames = currentMarker
+        ? [`${marker.containerName}${DOCKER_SKILL_STAGING_SUFFIX}`, marker.containerName]
+        : [marker.containerName];
+      for (const containerName of containerNames) {
+        const owned = await listOwnedContainers(dockerControl, containerName);
+        if (owned.length === 1) {
+          await cleanupOwnedContainer({ dockerControl, containerName });
+          containersRemoved += 1;
+        }
+      }
+      if (currentMarker) {
+        const ownedVolumes = await listOwnedVolumes(dockerControl, marker.inputVolumeName);
+        if (ownedVolumes.length === 1) {
+          await cleanupOwnedVolume({ dockerControl, volumeName: marker.inputVolumeName });
+          volumesRemoved += 1;
+        }
       }
       await cleanupDirectory(root);
       directoriesRemoved += 1;
     }
-    return Object.freeze({ containersRemoved, directoriesRemoved });
+    return Object.freeze({ containersRemoved, volumesRemoved, directoriesRemoved });
   } catch (failure) {
     if (failure instanceof DockerSkillExecutorError) throw failure;
     throw cleanupError();
@@ -478,6 +745,22 @@ async function cleanupOwnedContainer({ dockerControl, containerName }) {
     await requireDockerSuccess(dockerControl, ["container", "rm", "--force", containerName]);
     if ((await listOwnedContainers(dockerControl, containerName)).length !== 0) {
       throw new Error("container_still_present");
+    }
+  } catch (failure) {
+    if (failure instanceof DockerSkillExecutorError) throw failure;
+    throw cleanupError();
+  }
+}
+
+async function cleanupOwnedVolume({ dockerControl, volumeName }) {
+  try {
+    const before = await listOwnedVolumes(dockerControl, volumeName);
+    if (before.length === 0) return;
+    if (before.length !== 1 || before[0] !== volumeName) throw new Error("volume_identity_invalid");
+    await inspectOwnedVolume(dockerControl, volumeName);
+    await requireDockerSuccess(dockerControl, ["volume", "rm", volumeName]);
+    if ((await listOwnedVolumes(dockerControl, volumeName)).length !== 0) {
+      throw new Error("volume_still_present");
     }
   } catch (failure) {
     if (failure instanceof DockerSkillExecutorError) throw failure;
@@ -513,6 +796,33 @@ async function inspectOwnedContainer(dockerControl, containerName) {
     throw new Error("container_identity_invalid");
   }
   return { running: match[2] === "true" };
+}
+
+async function listOwnedVolumes(dockerControl, volumeName) {
+  const args = [
+    "volume", "ls",
+    "--filter", `label=${DOCKER_SKILL_OWNER_LABEL}=${DOCKER_SKILL_OWNER_VALUE}`,
+  ];
+  if (volumeName) args.push("--filter", `label=${DOCKER_SKILL_INVOCATION_LABEL}=${volumeName}`);
+  args.push("--format", "{{.Name}}");
+  const result = await requireDockerSuccess(dockerControl, args);
+  const names = result.stdout.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+  if (names.some((name) => !isManagedVolumeName(name))) throw new Error("volume_identity_invalid");
+  return names;
+}
+
+async function inspectOwnedVolume(dockerControl, volumeName) {
+  const result = await requireDockerSuccess(dockerControl, [
+    "volume", "inspect",
+    "--format", "{{json .Labels}}",
+    volumeName,
+  ]);
+  const labels = parseStrictJson(result.stdout.trim());
+  if (!isPlainObject(labels)
+    || labels[DOCKER_SKILL_OWNER_LABEL] !== DOCKER_SKILL_OWNER_VALUE
+    || labels[DOCKER_SKILL_INVOCATION_LABEL] !== volumeName) {
+    throw new Error("volume_identity_invalid");
+  }
 }
 
 async function requireDockerSuccess(dockerControl, args) {
@@ -574,6 +884,43 @@ function validateLimits(limits) {
   return Object.freeze({ ...limits });
 }
 
+function effectiveRuntimeLimits(policyLimits, requestedLimits) {
+  const policy = validateLimits(policyLimits);
+  const requestedTimeoutMs = requestedLimits.timeoutSeconds * 1_000;
+  const requestedMemoryBytes = requestedLimits.memoryMiB * 1024 * 1024;
+  return Object.freeze({
+    ...policy,
+    timeoutMs: Math.min(policy.timeoutMs, requestedTimeoutMs),
+    memoryBytes: Math.min(policy.memoryBytes, requestedMemoryBytes),
+  });
+}
+
+function normalizeRuntimeImages(images, legacyImage) {
+  const values = images instanceof Map
+    ? [...images.entries()]
+    : isPlainObject(images)
+      ? Object.entries(images)
+      : [];
+  if (legacyImage) values.push(["python3.12", legacyImage]);
+  const normalized = new Map();
+  for (const [runtimeId, image] of values) {
+    if (!["python3.12", "nodejs20-typescript"].includes(runtimeId)
+      || typeof image !== "string"
+      || !DIGEST_PINNED_CONTAINER_IMAGE.test(image)) {
+      continue;
+    }
+    normalized.set(runtimeId, image);
+  }
+  return normalized;
+}
+
+function runtimeCommand(manifest, skillRoot = "/skill") {
+  const entrypoint = `${skillRoot}/${manifest.entrypoint}`;
+  if (manifest.runtime === "python3.12") return ["python3.12", entrypoint];
+  if (manifest.runtime === "nodejs20-typescript") return ["tsx", entrypoint];
+  throw blockedError();
+}
+
 function uniqueContainerName(value) {
   const suffix = String(value).toLowerCase().replace(/[^a-z0-9_.-]/g, "-").slice(0, 96);
   if (!suffix) throw blockedError();
@@ -584,6 +931,12 @@ function isManagedContainerName(value) {
   return typeof value === "string"
     && value.startsWith("looloomi-skill-")
     && SAFE_PART.test(value);
+}
+
+function isManagedVolumeName(value) {
+  return typeof value === "string"
+    && value.endsWith(DOCKER_SKILL_VOLUME_SUFFIX)
+    && isManagedContainerName(value.slice(0, -DOCKER_SKILL_VOLUME_SUFFIX.length));
 }
 
 function defaultDockerEnvironment() {
@@ -632,7 +985,9 @@ async function runDockerControl({ dockerBinary, dockerEnvironment, spawnProcess,
       settled = true;
       child.kill?.("SIGKILL");
       resolve({ timedOut: true });
-    }, 2_000);
+    }, args[0] === "container" && args[1] === "cp"
+      ? DOCKER_COPY_TIMEOUT_MS
+      : DOCKER_CONTROL_TIMEOUT_MS);
     timer.unref?.();
     const done = (value) => {
       if (settled) return;

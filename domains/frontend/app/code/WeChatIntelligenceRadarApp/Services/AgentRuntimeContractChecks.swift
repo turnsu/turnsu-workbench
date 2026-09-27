@@ -6,7 +6,7 @@ enum AgentRuntimeContractChecks {
         try checkPolicyBoundary()
         try checkCMCProviderRequiresBackendSnapshot()
         try checkFixtureMarketSnapshotIsNotPromoted()
-        try checkDaemonAuthTokenLoading()
+        try checkLegacyDaemonClientIsDisabledByDefault()
         try checkLoopOpsSkillBindingsDecodeAndRoundTrip()
         try checkLoopOpsMarketplaceInstallCreatesWorkspaceCopy()
         try checkLoopOpsPromptIncludesOrderedSkillPath()
@@ -27,8 +27,6 @@ enum AgentRuntimeContractChecks {
         try checkLoopOpsKnowledgeRowsHideInternalTerms()
         try checkLoopOpsVisibleCopyHidesInternalTerms()
         try checkLoopOpsInteractionIDsCoverAcceptanceAnchors()
-        _ = try LoopOpsAcceptanceHarness.run()
-        _ = try LoopOpsAcceptanceHarness.runUIActionChecks()
     }
 
     private static func require(_ condition: @autoclosure () -> Bool, _ message: String) throws {
@@ -92,14 +90,51 @@ enum AgentRuntimeContractChecks {
         try require(loaded.assets.allSatisfy { !$0.isLive }, "fixture market assets must not become live")
     }
 
-    private static func checkDaemonAuthTokenLoading() throws {
-        let temp = try temporaryDirectory()
-        let authDir = temp.appendingPathComponent("runtime/agent", isDirectory: true)
-        try FileManager.default.createDirectory(at: authDir, withIntermediateDirectories: true)
-        let authURL = authDir.appendingPathComponent("auth-token.json")
-        let payload = #"{"schemaVersion":"agent-daemon-auth-token-v1","token":"contract-token"}"#
-        try payload.data(using: .utf8)?.write(to: authURL)
-        try require(AgentDaemonAuth.loadToken(pathResolver: RuntimePathResolver(root: temp)) == "contract-token", "daemon auth token must load from runtime/agent/auth-token.json")
+    @MainActor
+    private static func checkLegacyDaemonClientIsDisabledByDefault() throws {
+        LegacyDisabledURLProtocol.requestCount = 0
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [LegacyDisabledURLProtocol.self]
+        var externalURLRejected = false
+        do {
+            _ = try AgentDaemonClient.contractTest(
+                baseURL: URL(string: "https://example.com")!,
+                session: URLSession(configuration: configuration)
+            )
+        } catch AgentDaemonClientError.contractTestURLRequired {
+            externalURLRejected = true
+        }
+        try require(externalURLRejected, "legacy contract client must reject a normal external URL")
+
+        let client = AgentDaemonClient(session: URLSession(configuration: configuration))
+        let eventClient = AgentEventStreamClient(session: URLSession(configuration: configuration))
+        let result = LegacyDisabledProbeResult()
+
+        Task { @MainActor in
+            do {
+                _ = try await client.health()
+                result.httpStatus = "unexpected_success"
+            } catch {
+                result.httpStatus = error.localizedDescription
+            }
+            result.httpFinished = true
+        }
+        Task { @MainActor in
+            do {
+                for try await _ in eventClient.events(runID: "contract-test-run") {}
+                result.streamStatus = "unexpected_success"
+            } catch {
+                result.streamStatus = error.localizedDescription
+            }
+            result.streamFinished = true
+        }
+
+        try waitForLoopOpsContractCheck("legacy daemon default rejection") {
+            result.httpFinished && result.streamFinished
+        }
+        try require(result.httpStatus.contains("历史 Swift Agent 客户端已停用"), "default legacy HTTP client should fail closed")
+        try require(result.streamStatus.contains("历史 Swift Agent 客户端已停用"), "default legacy event client should fail closed")
+        try require(LegacyDisabledURLProtocol.requestCount == 0, "default legacy clients must not start a network request")
     }
 
     private static func checkLoopOpsSkillBindingsDecodeAndRoundTrip() throws {
@@ -851,8 +886,8 @@ enum AgentRuntimeContractChecks {
         store.upsert(contract)
         let session = loopOpsContractCheckSession(scenario: .success)
         let viewModel = DashboardViewModel(
-            agentClient: AgentDaemonClient(baseURL: loopOpsContractCheckBaseURL, session: session, authToken: nil),
-            agentEventClient: AgentEventStreamClient(baseURL: loopOpsContractCheckBaseURL, session: session, authToken: nil)
+            agentClient: try AgentDaemonClient.contractTest(baseURL: loopOpsContractCheckBaseURL, session: session),
+            agentEventClient: try AgentEventStreamClient.contractTest(baseURL: loopOpsContractCheckBaseURL, session: session)
         )
 
         let report = viewModel.runLoopContract(contract, loopOpsStore: store)
@@ -870,8 +905,8 @@ enum AgentRuntimeContractChecks {
         failedStore.upsert(contract)
         let failedSession = loopOpsContractCheckSession(scenario: .submitFailure)
         let failedViewModel = DashboardViewModel(
-            agentClient: AgentDaemonClient(baseURL: loopOpsContractCheckBaseURL, session: failedSession, authToken: nil),
-            agentEventClient: AgentEventStreamClient(baseURL: loopOpsContractCheckBaseURL, session: failedSession, authToken: nil)
+            agentClient: try AgentDaemonClient.contractTest(baseURL: loopOpsContractCheckBaseURL, session: failedSession),
+            agentEventClient: try AgentEventStreamClient.contractTest(baseURL: loopOpsContractCheckBaseURL, session: failedSession)
         )
         let failedReport = failedViewModel.runLoopContract(contract, loopOpsStore: failedStore)
         try require(failedReport.status == "pending_ack", "failed submit should also start as pending before daemon response")
@@ -1165,11 +1200,6 @@ enum AgentRuntimeContractChecks {
         try require(ids.contains(LoopOpsInteractionID.workbenchReviewGuideDecisionApproved), "smoke ids should include Workbench review guide decision approved action")
         try require(ids.contains(LoopOpsInteractionID.workbenchReviewGuideDecisionBlockers), "smoke ids should include Workbench review guide decision blockers")
         try require(ids.contains(LoopOpsInteractionID.workbenchReviewGuideDecisionNotes), "smoke ids should include Workbench review guide decision notes")
-        try require(ids.contains(LoopOpsInteractionID.workbenchReviewGuideRecordHandoff), "smoke ids should include Workbench review guide record handoff")
-        try require(ids.contains(LoopOpsInteractionID.workbenchReviewGuideRecordStatus), "smoke ids should include Workbench review guide record status")
-        try require(ids.contains(LoopOpsInteractionID.workbenchReviewGuideRecordPrepare), "smoke ids should include Workbench review guide record prepare action")
-        try require(ids.contains(LoopOpsInteractionID.workbenchReviewGuideRecordPreview), "smoke ids should include Workbench review guide record command preview")
-        try require(ids.contains(LoopOpsInteractionID.workbenchReviewGuidePersistence), "smoke ids should include Workbench review guide local persistence status")
         try require(ids.contains(LoopOpsInteractionID.workbenchReviewGuideTraceability), "smoke ids should include Workbench review guide traceability")
         try require(ids.contains(LoopOpsInteractionID.workbenchReviewGuideTraceabilityCount), "smoke ids should include Workbench review guide traceability count")
         try require(ids.contains(LoopOpsInteractionID.reviewGuideTraceabilityRow("marketplace-loop-library")), "smoke ids should include marketplace traceability row")
@@ -1294,6 +1324,29 @@ enum AgentRuntimeContractChecks {
     private enum LoopOpsContractCheckScenario {
         case success
         case submitFailure
+    }
+
+    @MainActor
+    private final class LegacyDisabledProbeResult {
+        var httpFinished = false
+        var httpStatus = "pending"
+        var streamFinished = false
+        var streamStatus = "pending"
+    }
+
+    private final class LegacyDisabledURLProtocol: URLProtocol {
+        nonisolated(unsafe) static var requestCount = 0
+
+        override class func canInit(with request: URLRequest) -> Bool { true }
+
+        override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+        override func startLoading() {
+            Self.requestCount += 1
+            client?.urlProtocol(self, didFailWithError: AgentDaemonClientError.http("unexpected request"))
+        }
+
+        override func stopLoading() {}
     }
 
     private final class LoopOpsContractCheckURLProtocol: URLProtocol {

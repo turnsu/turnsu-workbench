@@ -1,3 +1,4 @@
+import "./dialog.css";
 import "@astryxdesign/core/reset.css";
 import "@astryxdesign/core/astryx.css";
 import "@astryxdesign/theme-neutral/theme.css";
@@ -259,16 +260,18 @@ export function Dialog({ open, title, children, actions, onClose, initialFocusSe
   useLayoutEffect(() => {
     if (!open) return undefined;
     openerRef.current = document.activeElement;
-    const preferred = initialFocusSelector
-      ? layerRef.current?.querySelector(initialFocusSelector)
-      : null;
-    let frame;
-    if (preferred) preferred.focus({ preventScroll: true });
-    else {
-      frame = globalThis.requestAnimationFrame?.(() => {
-        visibleDialogControls(layerRef.current)[0]?.focus({ preventScroll: true });
-      });
-    }
+    const focusControl = () => {
+      const preferred = initialFocusSelector
+        ? layerRef.current?.querySelector(initialFocusSelector)
+        : null;
+      (preferred || visibleDialogControls(layerRef.current)[0])?.focus({ preventScroll: true });
+    };
+    // Keep focus inside the modal immediately. Some embedded WebKit hosts throttle
+    // requestAnimationFrame, so relying on the next paint alone can leave focus on
+    // the opener while the dialog is already visible.
+    layerRef.current?.focus({ preventScroll: true });
+    globalThis.queueMicrotask?.(focusControl);
+    const frame = globalThis.requestAnimationFrame?.(focusControl);
     return () => {
       if (frame !== undefined) globalThis.cancelAnimationFrame?.(frame);
       const recorded = openerRef.current;

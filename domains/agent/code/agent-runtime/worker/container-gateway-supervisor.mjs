@@ -1,15 +1,20 @@
-import { mkdir, unlink } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, rmdir, unlink } from "node:fs/promises";
 import net from "node:net";
 import { join } from "node:path";
 
 const MAX_FRAME_BYTES = 4 * 1024 * 1024;
+// macOS has a much lower Unix-domain socket pathname limit than a normal file
+// path. Leave margin for platform-specific terminators rather than allowing a
+// long test or workspace directory to turn a valid Product Gateway into EINVAL.
+const MAX_SOCKET_PATH_BYTES = 96;
 
 export async function startContainerGatewaySupervisor({ payload, rpc, socketRoot = "/tmp" } = {}) {
   if (!payload?.invocationId || !payload?.attemptId || typeof rpc?.call !== "function") {
     throw new TypeError("container_gateway_supervisor_dependencies_invalid");
   }
-  await mkdir(socketRoot, { recursive: true, mode: 0o700 });
-  const socketPath = join(socketRoot, `looloomi-agent-supervisor-${process.pid}.sock`);
+  const socket = await prepareSocketPath({ payload, socketRoot });
+  const socketPath = socket.path;
   await unlink(socketPath).catch(() => {});
   const toolMap = Object.fromEntries(payload.capabilities.toolAllowlist.map((toolId, index) => [`product_tool_${index}`, toolId]));
   const usage = { steps: 0, modelRequests: 0 };
@@ -104,10 +109,17 @@ export async function startContainerGatewaySupervisor({ payload, rpc, socketRoot
     }
     return value;
   };
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(socketPath, resolve);
-  });
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(socketPath, resolve);
+    });
+  } catch (error) {
+    await new Promise((resolve) => server.close(resolve));
+    await unlink(socketPath).catch(() => {});
+    await socket.dispose();
+    throw error;
+  }
   const previous = new Map();
   setEnvironment(previous, "LOOLOOMI_AGENT_SUPERVISOR_SOCKET", socketPath);
   setEnvironment(previous, "LOOLOOMI_PRODUCT_TOOL_MAP", JSON.stringify(toolMap));
@@ -148,8 +160,31 @@ export async function startContainerGatewaySupervisor({ payload, rpc, socketRoot
       for (const socket of sockets) socket.destroy();
       await new Promise((resolve) => server.close(resolve));
       await unlink(socketPath).catch(() => {});
+      await socket.dispose();
       restoreEnvironment(previous);
     },
+  });
+}
+
+async function prepareSocketPath({ payload, socketRoot }) {
+  const filename = `looloomi-agent-supervisor-${process.pid}.sock`;
+  const preferred = join(socketRoot, filename);
+  if (Buffer.byteLength(preferred, "utf8") <= MAX_SOCKET_PATH_BYTES) {
+    await mkdir(socketRoot, { recursive: true, mode: 0o700 });
+    return Object.freeze({ path: preferred, async dispose() {} });
+  }
+  const entropy = `${payload.invocationId}\u0000${payload.attemptId}\u0000${process.pid}\u0000${randomUUID()}`;
+  const suffix = createHash("sha256").update(entropy).digest("hex").slice(0, 20);
+  const fallbackRoot = join("/tmp", `looloomi-gw-${suffix}`);
+  const path = join(fallbackRoot, filename);
+  await mkdir(fallbackRoot, { recursive: true, mode: 0o700 });
+  if (Buffer.byteLength(path, "utf8") > MAX_SOCKET_PATH_BYTES) {
+    await rmdir(fallbackRoot).catch(() => {});
+    throw new Error("container_gateway_socket_path_too_long");
+  }
+  return Object.freeze({
+    path,
+    async dispose() { await rmdir(fallbackRoot).catch(() => {}); },
   });
 }
 

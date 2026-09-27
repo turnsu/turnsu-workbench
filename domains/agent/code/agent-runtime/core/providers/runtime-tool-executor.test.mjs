@@ -44,7 +44,7 @@ assert.equal(cmcSkillForTool("cmc.track_social_price_divergence"), "track_social
         },
       };
     },
-    piKernel: {
+    runtimeKernel: {
       executeTool: async () => {
         throw new Error("pi_should_not_handle_cmc_tool");
       },
@@ -65,7 +65,7 @@ assert.equal(cmcSkillForTool("cmc.track_social_price_divergence"), "track_social
     refreshCMCLive: async () => {
       throw new Error("cmc_should_not_handle_office_tool");
     },
-    piKernel: {
+    runtimeKernel: {
       executeTool: async (toolName, params) => ({
         status: "completed",
         toolName,
@@ -109,7 +109,7 @@ assert.equal(cmcSkillForTool("cmc.track_social_price_divergence"), "track_social
       refreshCMCLive: async () => {
         throw new Error("cmc_should_not_handle_cloud_asr_tool");
       },
-      piKernel: {
+      runtimeKernel: {
         executeTool: async () => {
           throw new Error("pi_should_not_handle_cloud_asr_tool");
         },

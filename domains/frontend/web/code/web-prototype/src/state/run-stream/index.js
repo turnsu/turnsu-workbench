@@ -1,7 +1,9 @@
 export {
   createRunStreamState,
+  isRunTerminalEvent,
   reduceRunEvents,
   runEventReceived,
+  runEventRequiresReadModelRefresh,
   runReadModelRefreshed,
   runStreamConnected,
   runStreamConnectionStarted,

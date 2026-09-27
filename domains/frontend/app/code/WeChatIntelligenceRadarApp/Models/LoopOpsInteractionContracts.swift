@@ -30,11 +30,6 @@ enum LoopOpsInteractionID {
     static let workbenchReviewGuideDecisionBlockers = "loopops.workbench.review-guide.decision.blockers"
     static let workbenchReviewGuideDecisionNotes = "loopops.workbench.review-guide.decision.notes"
     static let workbenchReviewGuideDecisionRecord = "loopops.workbench.review-guide.decision-record"
-    static let workbenchReviewGuideRecordHandoff = "loopops.workbench.review-guide.record-handoff"
-    static let workbenchReviewGuideRecordStatus = "loopops.workbench.review-guide.record-status"
-    static let workbenchReviewGuideRecordPrepare = "loopops.workbench.review-guide.record-prepare"
-    static let workbenchReviewGuideRecordPreview = "loopops.workbench.review-guide.record-preview"
-    static let workbenchReviewGuidePersistence = "loopops.workbench.review-guide.persistence"
     static let workbenchReviewGuideTraceability = "loopops.workbench.review-guide.traceability"
     static let workbenchReviewGuideTraceabilityCount = "loopops.workbench.review-guide.traceability-count"
     static let workbenchReviewGuideTraceabilityRowPrefix = "loopops.workbench.review-guide.traceability-row"
@@ -146,11 +141,6 @@ enum LoopOpsInteractionID {
         workbenchReviewGuideDecisionBlockers,
         workbenchReviewGuideDecisionNotes,
         workbenchReviewGuideDecisionRecord,
-        workbenchReviewGuideRecordHandoff,
-        workbenchReviewGuideRecordStatus,
-        workbenchReviewGuideRecordPrepare,
-        workbenchReviewGuideRecordPreview,
-        workbenchReviewGuidePersistence,
         workbenchReviewGuideTraceability,
         workbenchReviewGuideTraceabilityCount,
         reviewGuideTraceabilityRow("marketplace-loop-library"),

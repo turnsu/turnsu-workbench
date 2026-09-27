@@ -18,6 +18,12 @@ export default function productGatewayExtension(pi) {
   const toolMap = parseToolMap(process.env.LOOLOOMI_PRODUCT_TOOL_MAP);
   const childRef = workflowChildRef(process.argv);
   const maxModelRequests = boundedInteger(process.env.LOOLOOMI_GATEWAY_MAX_MODEL_REQUESTS, 1, 1024, 16);
+  const maxToolResultChars = boundedInteger(
+    process.env.LOOLOOMI_PRODUCT_TOOL_RESULT_MAX_CHARS,
+    1_024,
+    4_000_000,
+    320_000,
+  );
   const faux = createFauxCore({
     api: PROVIDER,
     provider: PROVIDER,
@@ -61,12 +67,12 @@ export default function productGatewayExtension(pi) {
       description: `Execute governed product tool ${toolId}.`,
       parameters: Type.Object({}, { additionalProperties: true }),
       execute: async (_toolCallId, params) => {
-        const result = await client.call({
+        const result = boundedToolResult(await client.call({
           operation: "tool",
           ...(childRef ? { childRef } : {}),
           toolAlias: alias,
           input: structuredClone(params),
-        });
+        }), maxToolResultChars);
         return { content: [{ type: "text", text: JSON.stringify(result) }], details: { status: "completed" } };
       },
     });
@@ -193,6 +199,16 @@ export function workflowChildRef(argv) {
 function boundedInteger(value, minimum, maximum, fallback) {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
+}
+
+function boundedToolResult(value, maximum) {
+  const text = JSON.stringify(value);
+  if (Buffer.byteLength(text, "utf8") <= maximum) return value;
+  return {
+    truncated: true,
+    originalChars: text.length,
+    preview: text.slice(0, Math.max(0, maximum - 256)),
+  };
 }
 
 function nonnegative(value) { return Number.isFinite(value) && value >= 0 ? value : 0; }

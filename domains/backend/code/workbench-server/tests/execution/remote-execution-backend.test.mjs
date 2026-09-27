@@ -62,6 +62,7 @@ function createBroker(transport) {
     persistence,
     clock: () => NOW,
     idFactory: (kind) => `${kind}-${++sequence}`,
+    capacityAuthorizer: { async authorize() { return true; } },
   });
   broker.registerBackend({
     mode: "deterministic_skill",

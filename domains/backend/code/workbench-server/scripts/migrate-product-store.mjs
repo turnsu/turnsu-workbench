@@ -1,42 +1,78 @@
+import { createHash } from "node:crypto";
 import process from "node:process";
 
-import { MongoClient } from "mongodb";
-
-import {
-  PRODUCT_MIGRATIONS,
-  ProductMigrationRunner,
-} from "../src/store/migrations/index.mjs";
+import { ProductPostgresStore } from "../src/store/postgres/product-postgres-store.mjs";
+import { POSTGRES_MIGRATIONS } from "../src/store/postgres/migrations/index.mjs";
 
 const args = new Set(process.argv.slice(2));
-const dbName = valueAfter("--db");
+const printManifest = args.has("--print-manifest");
 const dryRun = args.has("--dry-run");
 const confirmed = args.has("--confirm-write");
-const uri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/?replicaSet=rs0";
+const connectionString = valueAfter("--url") ?? process.env.WORKBENCH_POSTGRES_URL ?? "";
 
-if (!dbName) {
-  fail("migration_db_required", "Pass --db <database>; write mode is limited to explicit _test databases or --confirm-write.");
-}
-if (!dryRun && !dbName.endsWith("_test") && !confirmed) {
-  fail("migration_write_confirmation_required", "Write mode requires a _test database or --confirm-write.");
+if (printManifest) {
+  process.stdout.write(`${JSON.stringify({
+    schemaVersion: "looloomi-postgres-schema-migration-manifest-v1",
+    migrations: await manifest(),
+  }, null, 2)}\n`);
+} else {
+  const database = databaseName(connectionString);
+  if (dryRun) {
+    process.stdout.write(`${JSON.stringify({
+      schemaVersion: "looloomi-postgres-schema-migration-dry-run-v1",
+      database,
+      migrations: await manifest(),
+    }, null, 2)}\n`);
+  } else {
+    if (!database.endsWith("_test") && !confirmed) {
+      fail(
+        "postgres_migration_write_confirmation_required",
+        "Write mode requires a _test database or --confirm-write.",
+      );
+    }
+    const store = new ProductPostgresStore({ poolOptions: { connectionString } });
+    try {
+      const result = await store.runMigrations();
+      process.stdout.write(`${JSON.stringify({
+        schemaVersion: "looloomi-postgres-schema-migration-result-v1",
+        database,
+        ...result,
+      }, null, 2)}\n`);
+    } finally {
+      await store.close();
+    }
+  }
 }
 
-const client = new MongoClient(uri);
-try {
-  await client.connect();
-  const runner = new ProductMigrationRunner({
-    db: client.db(dbName),
-    migrations: PRODUCT_MIGRATIONS,
-  });
-  const result = await runner.run({
-    dryRun,
-    context: {
-      defaultWorkspaceId: process.env.WORKBENCH_DEFAULT_WORKSPACE_ID || "workspace-local",
-      defaultOwnerId: process.env.WORKBENCH_DEFAULT_OWNER_ID || "user-local",
-    },
-  });
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-} finally {
-  await client.close();
+async function manifest() {
+  return Promise.all(POSTGRES_MIGRATIONS.map(async ({ version, description, loadSql }) => {
+    const sql = await loadSql();
+    return {
+      version,
+      description,
+      checksum: `sha256:${createHash("sha256").update(sql).digest("hex")}`,
+    };
+  }));
+}
+
+function databaseName(value) {
+  if (typeof value !== "string" || value.trim() === "") {
+    fail("workbench_postgres_url_required", "Set WORKBENCH_POSTGRES_URL or pass --url.");
+  }
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    fail("workbench_postgres_url_invalid", "WORKBENCH_POSTGRES_URL must be a valid PostgreSQL URL.");
+  }
+  if (!/^postgres(?:ql)?:$/i.test(url.protocol)) {
+    fail("workbench_postgres_url_invalid", "WORKBENCH_POSTGRES_URL must use postgres:// or postgresql://.");
+  }
+  const database = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+  if (!database || database.includes("/")) {
+    fail("postgres_migration_database_required", "The PostgreSQL URL must name exactly one database.");
+  }
+  return database;
 }
 
 function valueAfter(flag) {

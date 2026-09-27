@@ -98,3 +98,9 @@ test("provider failures and unadvertised tool calls return fixed product-safe er
   });
   await assert.rejects(escalation(modelInput()), { code: "provider_response_invalid", status: "failed" });
 });
+
+test("HTTP 402 is a non-retryable billing block without exposing provider account details", async () => {
+  const executor = createOpenAICompatibleModelExecutor({ baseUrl: "https://provider.example", apiKey: "private-key", model: "model-a",
+    fetchImpl: async () => new Response(JSON.stringify({ error: { code: "invalid_request_error", message: "Insufficient Balance for private-account" } }), { status: 402 }) });
+  await assert.rejects(executor(modelInput()), (error) => error.code === "provider_payment_required" && error.status === "blocked" && error.retryable === false && !error.message.includes("private-account"));
+});

@@ -1,28 +1,46 @@
 import { useEffect, useMemo, useState } from "react";
 import { normalizeWorkbenchRoute, parseWorkbenchPath, workbenchPathFor } from "../../routing/workbenchRoutes.js";
 
-const UI_STORAGE_KEY = "loopops.ui.v1";
+const LEGACY_UI_STORAGE_KEY = "loopops.ui.v1";
+const UI_STORAGE_PREFIX = "loopops.ui.v2";
 
-function readPreferences() {
+function preferenceKey(scope) {
+  return `${UI_STORAGE_PREFIX}:${encodeURIComponent(String(scope || "anonymous"))}`;
+}
+
+function readPreferences(scope) {
   if (typeof window === "undefined") return {};
   try {
-    const value = JSON.parse(window.localStorage.getItem(UI_STORAGE_KEY) || "{}");
+    const stored = window.localStorage.getItem(preferenceKey(scope))
+      || (scope === "anonymous" ? window.localStorage.getItem(LEGACY_UI_STORAGE_KEY) : null)
+      || "{}";
+    const value = JSON.parse(stored);
     return value && typeof value === "object" ? value : {};
   } catch {
     return {};
   }
 }
 
-export function useWorkspaceUi() {
-  const initial = useMemo(readPreferences, []);
+function initialLocale(preferences) {
+  if (preferences?.locale === "zh" || preferences?.locale === "en") return preferences.locale;
+  // A saved preference always wins.  In a first visit, however, a Chinese
+  // browser should not have to discover the language switch before the
+  // product becomes readable.
+  return typeof navigator !== "undefined" && /^zh(?:-|$)/i.test(navigator.language || "")
+    ? "zh"
+    : "en";
+}
+
+export function useWorkspaceUi({ preferenceScope = "anonymous" } = {}) {
+  const initial = useMemo(() => readPreferences(preferenceScope), [preferenceScope]);
   const initialRoute = useMemo(
-    () => typeof window === "undefined" ? { page: "loops" } : parseWorkbenchPath(window.location.pathname),
+    () => typeof window === "undefined" ? { page: "agent" } : parseWorkbenchPath(window.location.pathname),
     [],
   );
   const [route, setRoute] = useState(initialRoute);
-  const [activePage, setActivePageState] = useState(initialRoute.page || "loops");
+  const [activePage, setActivePageState] = useState(initialRoute.page || "agent");
   const [theme, setThemeState] = useState(initial.theme === "dark" ? "dark" : "light");
-  const [locale, setLocaleState] = useState(initial.locale === "zh" ? "zh" : "en");
+  const [locale, setLocaleState] = useState(() => initialLocale(initial));
   const [query, setQuery] = useState("");
   const [loopFilter, setLoopFilter] = useState("All");
   const [skillFilter, setSkillFilter] = useState("All");
@@ -34,22 +52,27 @@ export function useWorkspaceUi() {
     if (typeof document !== "undefined") {
       document.documentElement.dataset.theme = theme;
       document.documentElement.dataset.locale = locale;
+      document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
       document.documentElement.style.colorScheme = theme;
     }
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(UI_STORAGE_KEY, JSON.stringify({ activePage, theme, locale }));
+      window.localStorage.setItem(preferenceKey(preferenceScope), JSON.stringify({ theme, locale }));
     }
-  }, [activePage, theme, locale]);
+  }, [preferenceScope, theme, locale]);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
-    const handlePopState = () => {
+    const handleLocationChange = () => {
       const next = parseWorkbenchPath(window.location.pathname);
       setRoute(next);
       setActivePageState(next.page);
     };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
+    window.addEventListener("popstate", handleLocationChange);
+    window.addEventListener("workbench:navigate", handleLocationChange);
+    return () => {
+      window.removeEventListener("popstate", handleLocationChange);
+      window.removeEventListener("workbench:navigate", handleLocationChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -81,10 +104,27 @@ export function useWorkspaceUi() {
     if (typeof window !== "undefined") {
       const nextPath = workbenchPathFor(next);
       const currentPath = window.location.pathname;
-      if (nextPath !== currentPath) window.history[replace ? "replaceState" : "pushState"]({}, "", nextPath);
+      if (nextPath !== currentPath || window.location.search) {
+        window.history[replace ? "replaceState" : "pushState"]({}, "", nextPath);
+        window.dispatchEvent(new Event("workbench:navigate"));
+      }
     }
     setRoute(next);
     setActivePageState(next.page);
+  }
+
+  function navigateToPath(path, { replace = false } = {}) {
+    if (typeof window === "undefined") return;
+    const target = new URL(path, window.location.origin);
+    window.history[replace ? "replaceState" : "pushState"](
+      {},
+      "",
+      `${target.pathname}${target.search}${target.hash}`,
+    );
+    const next = parseWorkbenchPath(target.pathname);
+    setRoute(next);
+    setActivePageState(next.page);
+    window.dispatchEvent(new Event("workbench:navigate"));
   }
 
   function pushToast(message, actionLabel = "", action = null) {
@@ -99,6 +139,7 @@ export function useWorkspaceUi() {
     activePage,
     route,
     navigateTo,
+    navigateToPath,
     setActivePage(page) {
       const normalized = page === "workflows" ? "loops" : page === "templates" ? "builder" : page;
       navigateTo({ page: normalized });

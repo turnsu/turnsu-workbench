@@ -6,7 +6,6 @@ import {
   createJsonLogger,
   createOperationsHttpHandler,
   createProductReadiness,
-  EXPECTED_MIGRATIONS,
   MetricsRegistry,
   ReadinessRegistry,
 } from "../../src/operations/index.mjs";
@@ -55,12 +54,12 @@ test("metrics are deterministic and JSON logging drops unknown or unsafe fields"
 
 test("readiness differentiates required failure from optional capability", async () => {
   const registry = new ReadinessRegistry({ timeoutMs: 100 });
-  registry.register("mongo", async () => ({ ok: true }));
+  registry.register("postgres", async () => ({ ok: true }));
   registry.register("provider", async () => ({ available: false }), { required: false });
   let report = await registry.check();
   assert.equal(report.ready, true);
   assert.deepEqual(report.checks, [
-    { name: "mongo", status: "ok" },
+    { name: "postgres", status: "ok" },
     { name: "provider", status: "optional" },
   ]);
   registry.register("sandbox", async () => ({ available: false }));
@@ -73,10 +72,13 @@ test("operations endpoints expose only bounded liveness, readiness, and Promethe
   const metrics = new MetricsRegistry();
   const fixture = loggerFixture();
   const store = {
-    async connect() { throw new Error("mongo unavailable with secret Bearer must-not-log"); },
+    persistenceDriver: "postgres",
+    createOperationalReadiness() {
+      return { async collectMetrics() { throw new Error("database unavailable with secret Bearer must-not-log"); } };
+    },
   };
   const handler = createOperationsHttpHandler({
-    readiness: { async check() { return { ready: false, checks: [{ name: "mongo", status: "failed" }] }; } },
+    readiness: { async check() { return { ready: false, checks: [{ name: "postgres", status: "failed" }] }; } },
     metrics,
     store,
     logger: fixture.logger,
@@ -91,83 +93,77 @@ test("operations endpoints expose only bounded liveness, readiness, and Promethe
   const ready = new MockResponse();
   await handler(request("/readyz"), ready);
   assert.equal(ready.statusCode, 503);
-  assert.deepEqual(JSON.parse(ready.body), { status: "not_ready", checks: { mongo: "failed" } });
+  assert.deepEqual(JSON.parse(ready.body), { status: "not_ready", checks: { postgres: "failed" } });
 
   const prometheus = new MockResponse();
   await handler(request("/metrics"), prometheus);
   assert.equal(prometheus.statusCode, 200);
-  assert.match(prometheus.body, /workbench_mongo_up 0/);
+  assert.match(prometheus.body, /workbench_postgres_up 0/);
   assert.equal(prometheus.body.includes("secret"), false);
   assert.equal(fixture.output().includes("must-not-log"), false);
 });
 
-test("production readiness verifies Mongo primary, exact migrations, sandbox, and provider", async () => {
-  const rows = EXPECTED_MIGRATIONS.map(({ version, checksum }) => ({ version, checksum, status: "applied" }));
-  const db = {
-    collection(name) {
-      assert.equal(name, "product_schema_migrations");
-      return { find() { return { async toArray() { return rows; } }; } };
+test("PostgreSQL readiness and metrics consume the bound operational owner", async () => {
+  let probeCalls = 0;
+  let migrationCalls = 0;
+  let metricCalls = 0;
+  const operationalOwner = {
+    async probe() { probeCalls += 1; return { ok: true }; },
+    async verifyMigrations() { migrationCalls += 1; return { ok: true }; },
+    async collectMetrics() {
+      metricCalls += 1;
+      return {
+        runQueued: 2,
+        runClaimed: 1,
+        turnQueued: 3,
+        turnRunning: 4,
+        activeLeases: 5,
+        oldestActiveLeaseAgeSeconds: 6,
+        memoryCandidates: { pending: 7, promoted: 8, rejected: 9 },
+        invocations: {
+          queued: 1, running: 2, completed: 3, failed: 4, cancelled: 5, blocked: 6,
+          partial: 7, timeout: 8, permission_denied: 9, sandbox_unavailable: 10,
+          remote_backend_unavailable: 11,
+        },
+        attemptDurationCount: 12,
+        attemptDurationSum: 13,
+      };
     },
   };
   const store = {
-    async connect() { return db; },
-    async health() { return { ok: true, writablePrimary: true }; },
+    persistenceDriver: "postgres",
+    createOperationalReadiness() { return operationalOwner; },
+    async health() { throw new Error("generic_health_must_not_be_called"); },
+    async connect() { throw new Error("generic_connect_must_not_be_called"); },
   };
   const readiness = createProductReadiness({
     store,
     startupState: { ready: true, error: null },
-    agentSandbox: { async probe() { return { available: true }; } },
-    providerProbe: async () => ({ available: true }),
-    requireAgent: true,
-    requireProvider: true,
     requireMigrations: true,
-    modelCatalog: {
-      async getWorkspacePolicy(workspaceId) {
-        assert.equal(workspaceId, "workspace-local");
-        return { defaultProfileIdsByCapability: { chat: "chat-default", image_generation: "image-default" } };
-      },
-      async resolveCurrentProfile({ workspaceId, profileId, capabilities, requireReady }) {
-        assert.equal(workspaceId, "workspace-local");
-        assert.equal(requireReady, true);
-        assert.equal(profileId, `${capabilities[0].replace("_generation", "")}-default`);
-        return { readiness: { state: "ready" } };
-      },
-    },
-    modelRoutingRequirements: [{
-      workspaceId: "workspace-local",
-      capabilities: ["chat", "image_generation"],
-    }],
-    requireModelRouting: true,
   });
   const report = await readiness.check();
   assert.equal(report.ready, true);
-  assert.ok(report.checks.every((item) => item.status === "ok"));
+  assert.deepEqual(report.checks.slice(0, 3), [
+    { name: "startup", status: "ok" },
+    { name: "postgres", status: "ok" },
+    { name: "migrations", status: "ok" },
+  ]);
+  assert.equal(probeCalls, 1);
+  assert.equal(migrationCalls, 1);
 
-  const routingBlocked = createProductReadiness({
+  const metrics = new MetricsRegistry();
+  const fixture = loggerFixture();
+  const handler = createOperationsHttpHandler({
+    readiness,
+    metrics,
     store,
-    startupState: { ready: true, error: null },
-    modelCatalog: {
-      async getWorkspacePolicy() { return { defaultProfileIdsByCapability: { chat: "chat-default" } }; },
-      async resolveCurrentProfile() { return { readiness: { state: "ready" } }; },
-    },
-    modelRoutingRequirements: [{
-      workspaceId: "workspace-local",
-      capabilities: ["chat", "image_generation"],
-    }],
-    requireModelRouting: true,
+    logger: fixture.logger,
   });
-  const blockedReport = await routingBlocked.check();
-  assert.equal(blockedReport.ready, false);
-  assert.deepEqual(blockedReport.checks.find((item) => item.name === "model_routing"), {
-    name: "model_routing",
-    status: "failed",
-  });
-
-  rows.pop();
-  const missing = await readiness.check();
-  assert.equal(missing.ready, false);
-  assert.deepEqual(missing.checks.find((item) => item.name === "migrations"), {
-    name: "migrations",
-    status: "failed",
-  });
+  const response = new MockResponse();
+  await handler(request("/metrics"), response);
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /workbench_postgres_up 1/);
+  assert.match(response.body, /workbench_run_queue_depth 2/);
+  assert.match(response.body, /workbench_execution_attempt_duration_ms_sum 13/);
+  assert.equal(metricCalls, 1);
 });

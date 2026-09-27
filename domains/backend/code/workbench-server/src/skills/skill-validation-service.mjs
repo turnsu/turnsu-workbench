@@ -6,6 +6,7 @@ const SHA256 = /^sha256:[a-f0-9]{64}$/;
 const STABLE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const MAX_TEST_CASES = 20;
 const MAX_JSON_BYTES = 256 * 1024;
+const TERMINAL_TEST_STATUSES = new Set(["passed", "failed", "blocked", "cancelled"]);
 const PUBLIC_RUNTIME_SUMMARY = Object.freeze({
   runtimeLabel: "Python 3.12",
   permissionSummary: "No network, workspace connections, or external actions.",
@@ -28,27 +29,18 @@ export function createSkillValidationService(options) {
 // public record with private hash/isolation evidence used only by this domain.
 export class SkillValidationService {
   #packageLoader;
-  #isolatedExecutor;
   #persistence;
   #executorPolicy;
   #clock;
-  #setTimer;
-  #clearTimer;
 
   constructor({
     packageLoader,
-    isolatedExecutor,
     persistence,
     executorPolicy,
     clock = () => new Date().toISOString(),
-    setTimer = setTimeout,
-    clearTimer = clearTimeout,
   } = {}) {
     if (!packageLoader?.loadPromotedPackage) {
       throw new TypeError("skill_validation_package_loader_required");
-    }
-    if (!isolatedExecutor?.execute) {
-      throw new TypeError("skill_validation_isolated_executor_required");
     }
     if (!persistence?.getTestRun
       || !persistence?.insertTestRun
@@ -59,43 +51,336 @@ export class SkillValidationService {
     if (!isTrustedExecutorPolicy(executorPolicy)) {
       throw new TypeError("skill_validation_executor_policy_required");
     }
-    if (typeof clock !== "function" || typeof setTimer !== "function" || typeof clearTimer !== "function") {
+    if (typeof clock !== "function") {
       throw new TypeError("skill_validation_dependencies_invalid");
     }
     this.#packageLoader = packageLoader;
-    this.#isolatedExecutor = isolatedExecutor;
     this.#persistence = persistence;
     this.#executorPolicy = Object.freeze(structuredClone(executorPolicy));
     this.#clock = clock;
-    this.#setTimer = setTimer;
-    this.#clearTimer = clearTimer;
   }
 
-  async runTests(input = {}) {
-    const request = validateTestRequest(input);
-    for (const testRunId of request.testRunIds) {
-      const existing = await this.#persistence.getTestRun({
-        workspaceId: request.workspaceId,
-        testRunId,
-      });
-      if (existing) {
-        throw serviceError("skill_test_run_replayed", "This Skill test run identifier has already been used.");
-      }
+  async acceptTestRun(input = {}) {
+    const request = validateSingleTestIntakeRequest(input);
+    const testRunId = request.testRunIds[0];
+    const existing = await this.#persistence.getTestRun({
+      workspaceId: request.workspaceId,
+      testRunId,
+    });
+    if (existing) {
+      throw serviceError("skill_test_run_replayed", "This Skill test run identifier has already been used.");
     }
+    const record = {
+      schemaVersion: "workbench-v1",
+      testRunId,
+      workspaceId: request.workspaceId,
+      requestedBy: request.requestedBy ?? null,
+      skillId: request.skillId,
+      skillDraftId: request.draftId,
+      packageHash: request.packageHash,
+      contentHash: request.contentHash,
+      testCase: structuredClone(request.testCases[0]),
+      status: "queued",
+      diagnostics: [],
+      outputPreview: null,
+      startedAt: null,
+      completedAt: null,
+      executionAttempt: 1,
+    };
+    const evidence = testEvidence(request, this.#executorPolicy);
+    await this.#persistence.insertTestRun({ record, evidence });
+    return publicTestRunRecord(record);
+  }
 
-    const loadedPackage = await this.#loadAndVerifyPackage(request);
-    const records = [];
-    for (let index = 0; index < request.testCases.length; index += 1) {
-      const entry = await this.#runTestCase({
-        request,
-        loadedPackage,
-        testCase: request.testCases[index],
-        testRunId: request.testRunIds[index],
-      });
-      await this.#persistence.insertTestRun(entry);
-      records.push(structuredClone(entry.record));
+  async startAcceptedTestRun({
+    workspaceId,
+    testRunId,
+    expectedAttempt,
+    expectedClaimOwner,
+    expectedClaimFence,
+    expectedClaimValidAt,
+  } = {}) {
+    if (typeof this.#persistence.transitionTestRun !== "function") {
+      throw serviceError("skill_test_lifecycle_unavailable", "Skill test lifecycle persistence is unavailable.");
     }
-    return records;
+    const startedAt = timestamp(this.#clock);
+    const record = await this.#persistence.transitionTestRun({
+      workspaceId,
+      testRunId,
+      expectedStatuses: ["queued"],
+      expectedExecutionAttempt: expectedAttempt,
+      expectedClaimOwner,
+      expectedClaimFence,
+      expectedClaimValidAt,
+      patch: {
+        status: "running",
+        startedAt,
+        completedAt: null,
+      },
+    });
+    if (!record) {
+      throw serviceError("skill_test_transition_conflict", "The Skill test could not be started from its current state.");
+    }
+    return publicTestRunRecord(record);
+  }
+
+  async prepareAcceptedTest(input = {}) {
+    if (typeof this.#persistence.transitionTestRun !== "function") {
+      throw serviceError("skill_test_lifecycle_unavailable", "Skill test lifecycle persistence is unavailable.");
+    }
+    const request = validateSingleTestRequest(input);
+    const testRunId = request.testRunIds[0];
+    const existing = await this.#persistence.getTestRun({
+      workspaceId: request.workspaceId,
+      testRunId,
+    });
+    if (!sameAcceptedTest(existing, request, this.#executorPolicy)) {
+      throw serviceError("skill_test_run_identity_mismatch", "The accepted Skill test does not match this execution request.");
+    }
+    if (existing.record.status !== "running") {
+      throw serviceError("skill_test_transition_conflict", "The Skill test is not running.");
+    }
+    const loadedPackage = await this.#loadAndVerifyPackage(request);
+    return Object.freeze({
+      testRunId,
+      startedAt: existing.record.startedAt,
+      inspection: structuredClone(loadedPackage.inspection),
+      executorPolicy: structuredClone(this.#executorPolicy),
+    });
+  }
+
+  classifyAcceptedTestOutcome(input = {}, {
+    result,
+    failure,
+    timedOut = false,
+    callerCancelled = false,
+    startedAt = null,
+  } = {}) {
+    const request = validateSingleTestRequest(input);
+    const testRunId = request.testRunIds[0];
+    const testCase = request.testCases[0];
+    const outcome = classifyTestOutcome({
+      result,
+      failure,
+      expectedOutput: testCase.expectedOutput,
+      timedOut,
+      callerCancelled,
+    });
+    return {
+      schemaVersion: "workbench-v1",
+      testRunId,
+      workspaceId: request.workspaceId,
+      skillId: request.skillId,
+      skillDraftId: request.draftId,
+      packageHash: request.packageHash,
+      contentHash: request.contentHash,
+      testCase: structuredClone(testCase),
+      status: outcome.status,
+      diagnostics: outcome.diagnostics,
+      outputPreview: outcome.outputPreview,
+      startedAt,
+      completedAt: timestamp(this.#clock),
+    };
+  }
+
+  classifyPersistedAcceptedTestOutcome(record, {
+    result,
+    failure,
+    timedOut = false,
+    callerCancelled = false,
+    startedAt = record?.startedAt ?? null,
+  } = {}) {
+    if (!record || typeof record.testRunId !== "string" || typeof record.workspaceId !== "string"
+      || typeof record.skillId !== "string" || typeof record.skillDraftId !== "string"
+      || !record.testCase) {
+      throw serviceError("skill_test_run_identity_mismatch", "The persisted Skill test identity is invalid.");
+    }
+    const outcome = classifyTestOutcome({
+      result,
+      failure,
+      expectedOutput: record.testCase.expectedOutput,
+      timedOut,
+      callerCancelled,
+    });
+    return {
+      schemaVersion: "workbench-v1",
+      testRunId: record.testRunId,
+      workspaceId: record.workspaceId,
+      skillId: record.skillId,
+      skillDraftId: record.skillDraftId,
+      packageHash: record.packageHash,
+      contentHash: record.contentHash,
+      testCase: structuredClone(record.testCase),
+      status: outcome.status,
+      diagnostics: outcome.diagnostics,
+      outputPreview: outcome.outputPreview,
+      startedAt,
+      completedAt: timestamp(this.#clock),
+    };
+  }
+
+  async settleAcceptedTestRun({
+    workspaceId,
+    testRunId,
+    expectedAttempt,
+    expectedClaimOwner,
+    expectedClaimFence,
+    expectedClaimValidAt,
+    expectedStatuses = ["running"],
+    outcome,
+  } = {}) {
+    if (typeof this.#persistence.transitionTestRun !== "function") {
+      throw serviceError("skill_test_lifecycle_unavailable", "Skill test lifecycle persistence is unavailable.");
+    }
+    if (!Array.isArray(expectedStatuses)
+      || expectedStatuses.length === 0
+      || expectedStatuses.some((status) => !["queued", "running"].includes(status))
+      || !TERMINAL_TEST_STATUSES.has(outcome?.status)
+      || outcome?.testRunId !== testRunId
+      || outcome?.workspaceId !== workspaceId) {
+      throw serviceError("skill_test_outcome_invalid", "The Skill test terminal outcome is invalid.");
+    }
+    const record = await this.#persistence.transitionTestRun({
+      workspaceId,
+      testRunId,
+      expectedStatuses,
+      expectedExecutionAttempt: Number.isSafeInteger(expectedAttempt) ? expectedAttempt : undefined,
+      expectedClaimOwner,
+      expectedClaimFence,
+      expectedClaimValidAt,
+      patch: outcome,
+    });
+    if (!record) {
+      throw serviceError("skill_test_transition_conflict", "The Skill test result was rejected by its lifecycle fence.");
+    }
+    return publicTestRunRecord(record);
+  }
+
+  blockedAcceptedTestOutcome({
+    workspaceId,
+    testRunId,
+    skillId,
+    skillDraftId,
+    packageHash,
+    contentHash,
+    testCase,
+    startedAt = null,
+    code = "skill_test_execution_blocked",
+  } = {}) {
+    return {
+      schemaVersion: "workbench-v1",
+      testRunId,
+      workspaceId,
+      skillId,
+      skillDraftId,
+      packageHash,
+      contentHash,
+      testCase: structuredClone(testCase),
+      status: "blocked",
+      diagnostics: [diagnostic(
+        code,
+        "The Skill test could not run through the governed execution path.",
+        "Check runtime readiness and run the test again.",
+      )],
+      outputPreview: null,
+      startedAt,
+      completedAt: timestamp(this.#clock),
+    };
+  }
+
+  cancelledAcceptedTestOutcome({
+    workspaceId,
+    testRunId,
+    skillId,
+    skillDraftId,
+    packageHash,
+    contentHash,
+    testCase,
+    startedAt = null,
+  } = {}) {
+    return {
+      schemaVersion: "workbench-v1",
+      testRunId,
+      workspaceId,
+      skillId,
+      skillDraftId,
+      packageHash,
+      contentHash,
+      testCase: structuredClone(testCase),
+      status: "cancelled",
+      diagnostics: [diagnostic(
+        "skill_test_cancelled",
+        "The Skill test was cancelled.",
+        "Run the test again when ready.",
+      )],
+      outputPreview: null,
+      startedAt,
+      completedAt: timestamp(this.#clock),
+    };
+  }
+
+  async requeueAcceptedTestRun({
+    workspaceId,
+    testRunId,
+    expectedAttempt,
+    nextAttempt,
+    expectedClaimOwner,
+    expectedClaimFence,
+    expectedClaimValidAt,
+  } = {}) {
+    if (typeof this.#persistence.transitionTestRun !== "function") {
+      throw serviceError("skill_test_lifecycle_unavailable", "Skill test lifecycle persistence is unavailable.");
+    }
+    if (!Number.isSafeInteger(expectedAttempt) || !Number.isSafeInteger(nextAttempt)
+      || expectedAttempt < 1 || nextAttempt !== expectedAttempt + 1) {
+      throw serviceError("skill_test_attempt_invalid", "The Skill test recovery attempt is invalid.");
+    }
+    const record = await this.#persistence.transitionTestRun({
+      workspaceId,
+      testRunId,
+      expectedStatuses: ["running"],
+      expectedExecutionAttempt: expectedAttempt,
+      expectedClaimOwner,
+      expectedClaimFence,
+      expectedClaimValidAt,
+      patch: {
+        status: "queued",
+        executionAttempt: nextAttempt,
+        diagnostics: [],
+        outputPreview: null,
+        startedAt: null,
+        completedAt: null,
+      },
+    });
+    if (!record) {
+      throw serviceError("skill_test_transition_conflict", "The Skill test recovery attempt lost its lifecycle fence.");
+    }
+    return publicTestRunRecord(record);
+  }
+
+  async blockAcceptedTestRun({ workspaceId, testRunId, code = "skill_test_execution_blocked" } = {}) {
+    if (typeof this.#persistence.transitionTestRun !== "function") {
+      throw serviceError("skill_test_lifecycle_unavailable", "Skill test lifecycle persistence is unavailable.");
+    }
+    const record = await this.#persistence.transitionTestRun({
+      workspaceId,
+      testRunId,
+      expectedStatuses: ["queued", "running"],
+      patch: {
+        status: "blocked",
+        diagnostics: [diagnostic(
+          code,
+          "The Skill test could not run through the governed execution path.",
+          "Check runtime readiness and run the test again.",
+        )],
+        outputPreview: null,
+        completedAt: timestamp(this.#clock),
+      },
+    });
+    if (!record) {
+      throw serviceError("skill_test_transition_conflict", "The Skill test failure could not be settled.");
+    }
+    return publicTestRunRecord(record);
   }
 
   async createValidation(input = {}) {
@@ -242,87 +527,9 @@ export class SkillValidationService {
     };
   }
 
-  async #runTestCase({ request, loadedPackage, testCase, testRunId }) {
-    const startedAt = timestamp(this.#clock);
-    let result;
-    let failure;
-    let timedOut = false;
-    let callerCancelled = request.signal?.aborted === true;
-    let runtimeSummary = null;
-
-    if (!callerCancelled) {
-      const controller = new AbortController();
-      const onCallerAbort = () => {
-        callerCancelled = true;
-        controller.abort(request.signal?.reason);
-      };
-      request.signal?.addEventListener("abort", onCallerAbort, { once: true });
-      const timer = this.#setTimer(() => {
-        timedOut = true;
-        controller.abort(serviceError("skill_test_timed_out", "The Skill test exceeded its time limit."));
-      }, testCase.timeoutSeconds * 1_000);
-      try {
-        result = await this.#isolatedExecutor.execute({
-          workspaceId: request.workspaceId,
-          objectId: request.objectId,
-          objectHash: request.objectHash,
-          packageHash: request.packageHash,
-          inspection: loadedPackage.inspection,
-          input: structuredClone(testCase.input),
-          signal: controller.signal,
-        });
-      } catch (error) {
-        failure = error;
-      } finally {
-        this.#clearTimer(timer);
-        request.signal?.removeEventListener("abort", onCallerAbort);
-      }
-    }
-
-    const outcome = classifyTestOutcome({
-      result,
-      failure,
-      expectedOutput: testCase.expectedOutput,
-      timedOut,
-      callerCancelled,
-    });
-    runtimeSummary = this.#executorPolicy;
-    const record = {
-      schemaVersion: "workbench-v1",
-      testRunId,
-      workspaceId: request.workspaceId,
-      skillId: request.skillId,
-      skillDraftId: request.draftId,
-      packageHash: request.packageHash,
-      contentHash: request.contentHash,
-      testCase: structuredClone(testCase),
-      status: outcome.status,
-      diagnostics: outcome.diagnostics,
-      outputPreview: outcome.outputPreview,
-      startedAt,
-      completedAt: timestamp(this.#clock),
-    };
-    return {
-      record,
-      evidence: {
-        workspaceId: request.workspaceId,
-        skillId: request.skillId,
-        skillDraftId: request.draftId,
-        draftRevision: request.draftRevision,
-        uploadId: request.uploadId,
-        objectId: request.objectId,
-        objectHash: request.objectHash,
-        packageHash: request.packageHash,
-        contentHash: request.contentHash,
-        isolated: runtimeSummary?.isolated === true,
-        networkDenied: runtimeSummary?.networkDenied === true,
-        runtimeSummary: runtimeSummary ? publicRuntimeSummary(runtimeSummary) : null,
-      },
-    };
-  }
 }
 
-function validateTestRequest(input) {
+function validateTestRequest(input, { requireResolvedMaterials = true } = {}) {
   const request = validateCommonRequest(input);
   if (!Array.isArray(input.testCases)
     || input.testCases.length < 1
@@ -334,7 +541,70 @@ function validateTestRequest(input) {
   }
   const testRunIds = validateTestRunIds(input.testRunIds);
   const testCases = input.testCases.map(validateTestCase);
-  return { ...request, testCases, testRunIds };
+  if (!requireResolvedMaterials) {
+    return {
+      ...request,
+      testCases,
+      testRunIds,
+      resolvedMaterialsByTestCase: testCases.map(() => []),
+    };
+  }
+  const suppliedMaterials = input.resolvedMaterialsByTestCase
+    ?? testCases.map(() => []);
+  if (
+    !Array.isArray(suppliedMaterials)
+    || suppliedMaterials.length !== testCases.length
+  ) {
+    throw serviceError("skill_material_bindings_invalid", "Resolve materials for every Skill test case.");
+  }
+  const resolvedMaterialsByTestCase = suppliedMaterials.map(
+    (materials, index) => validateResolvedMaterials(materials, testCases[index]),
+  );
+  return { ...request, testCases, testRunIds, resolvedMaterialsByTestCase };
+}
+
+function validateSingleTestRequest(input) {
+  const request = validateTestRequest(input);
+  if (request.testCases.length !== 1 || request.testRunIds.length !== 1) {
+    throw serviceError("skill_test_single_run_required", "Create and execute one immutable Skill test target at a time.");
+  }
+  return request;
+}
+
+function validateSingleTestIntakeRequest(input) {
+  const request = validateTestRequest(input, { requireResolvedMaterials: false });
+  if (request.testCases.length !== 1 || request.testRunIds.length !== 1) {
+    throw serviceError("skill_test_single_run_required", "Create and execute one immutable Skill test target at a time.");
+  }
+  return request;
+}
+
+function testEvidence(request, executorPolicy) {
+  return {
+    workspaceId: request.workspaceId,
+    skillId: request.skillId,
+    skillDraftId: request.draftId,
+    draftRevision: request.draftRevision,
+    uploadId: request.uploadId,
+    objectId: request.objectId,
+    objectHash: request.objectHash,
+    packageHash: request.packageHash,
+    contentHash: request.contentHash,
+    isolated: executorPolicy?.isolated === true,
+    networkDenied: executorPolicy?.networkDenied === true,
+    runtimeSummary: executorPolicy ? publicRuntimeSummary(executorPolicy) : null,
+  };
+}
+
+function sameAcceptedTest(entry, request, executorPolicy) {
+  return Boolean(entry?.record && entry?.evidence)
+    && sameOwner(entry.record, request)
+    && sameContent(entry, request)
+    && entry.record.testRunId === request.testRunIds[0]
+    && isDeepStrictEqual(entry.record.testCase, request.testCases[0])
+    && entry.evidence.isolated === (executorPolicy?.isolated === true)
+    && entry.evidence.networkDenied === (executorPolicy?.networkDenied === true)
+    && isDeepStrictEqual(entry.evidence.runtimeSummary, publicRuntimeSummary(executorPolicy));
 }
 
 function validateValidationRequest(input) {
@@ -368,6 +638,9 @@ function validateCommonRequest(input) {
   if (!Number.isSafeInteger(input.draftRevision) || input.draftRevision < 1) {
     throw serviceError("skill_draft_revision_invalid", "The Skill draft revision is invalid.");
   }
+  if (input.requestedBy !== undefined && !STABLE_ID.test(input.requestedBy || "")) {
+    throw serviceError("skill_validation_reference_invalid", "The Skill validation requester is invalid.");
+  }
   if (input.permissionAcknowledged !== true) {
     throw serviceError(
       "skill_permission_acknowledgement_required",
@@ -379,6 +652,7 @@ function validateCommonRequest(input) {
   }
   return {
     workspaceId: input.workspaceId,
+    ...(input.requestedBy === undefined ? {} : { requestedBy: input.requestedBy }),
     skillId: input.skillId,
     draftId: input.draftId,
     draftRevision: input.draftRevision,
@@ -404,7 +678,15 @@ function validateTestRunIds(values) {
 
 function validateTestCase(value) {
   if (!isPlainObject(value)
-    || !hasOnlyKeys(value, ["name", "purpose", "input", "expectedOutput", "timeoutSeconds"])
+    || !hasOnlyKeys(value, [
+      "name",
+      "purpose",
+      "input",
+      "expectedOutput",
+      "timeoutSeconds",
+      "materialBindings",
+      "connectionBindings",
+    ])
     || !boundedText(value.name, 200)
     || !boundedText(value.purpose, 2_000)
     || !isPlainJsonObject(value.input)
@@ -413,13 +695,94 @@ function validateTestCase(value) {
     || value.timeoutSeconds < 1
     || value.timeoutSeconds > 120
     || jsonBytes(value.input) > MAX_JSON_BYTES
-    || (value.expectedOutput !== undefined && jsonBytes(value.expectedOutput) > MAX_JSON_BYTES)) {
+    || (value.expectedOutput !== undefined && jsonBytes(value.expectedOutput) > MAX_JSON_BYTES)
+    || !validMaterialBindingRefs(value.materialBindings ?? [])
+    || !validConnectionBindingRefs(value.connectionBindings ?? [])) {
     throw serviceError(
       "skill_test_case_invalid",
       "Each Skill test case requires bounded object input, an optional exact expected output, and a 1-120 second timeout.",
     );
   }
   return structuredClone(value);
+}
+
+function validConnectionBindingRefs(bindings) {
+  return Array.isArray(bindings)
+    && bindings.length <= 32
+    && new Set(bindings.map((binding) => binding?.requirementId)).size === bindings.length
+    && bindings.every((binding) => (
+      STABLE_ID.test(binding?.requirementId || "")
+      && STABLE_ID.test(binding?.connectionId || "")
+    ));
+}
+
+function validMaterialBindingRefs(bindings) {
+  return Array.isArray(bindings)
+    && bindings.length <= 32
+    && new Set(bindings.map((binding) => binding?.materialKey)).size === bindings.length
+    && bindings.every((binding) => (
+      STABLE_ID.test(binding?.materialKey || "")
+      && ["attachment", "workspace_resource"].includes(binding?.source?.kind)
+    ));
+}
+
+function validateResolvedMaterials(materials, testCase) {
+  if (!Array.isArray(materials) || materials.length !== (testCase.materialBindings ?? []).length) {
+    throw serviceError("skill_material_bindings_invalid", "Every declared Skill material must resolve exactly once.");
+  }
+  const requested = new Map((testCase.materialBindings ?? []).map((binding) => [
+    binding.materialKey,
+    binding.source.kind,
+  ]));
+  const seen = new Set();
+  for (const material of materials) {
+    if (
+      !isPlainObject(material)
+      || !requested.has(material.materialKey)
+      || requested.get(material.materialKey) !== material.kind
+      || seen.has(material.materialKey)
+      || !Buffer.isBuffer(material.bytes)
+      || material.bytes.byteLength < 1
+      || material.bytes.byteLength > 16 * 1024 * 1024
+      || !SHA256.test(material.contentHash || "")
+      || typeof material.mediaType !== "string"
+      || material.mediaType.length > 128
+      || (
+        material.contextText !== null
+        && material.contextText !== undefined
+        && (typeof material.contextText !== "string" || material.contextText.length > 120_000)
+      )
+    ) {
+      throw serviceError("skill_material_bindings_invalid", "A resolved Skill material is invalid or stale.");
+    }
+    seen.add(material.materialKey);
+  }
+  return materials.map(cloneResolvedMaterial);
+}
+
+function cloneResolvedMaterial(material) {
+  return {
+    materialKey: material.materialKey,
+    kind: material.kind,
+    mediaType: material.mediaType,
+    contentHash: material.contentHash,
+    bytes: Buffer.from(material.bytes),
+    contextText: material.contextText ?? null,
+  };
+}
+
+function publicTestRunRecord(record) {
+  const value = structuredClone(record);
+  for (const field of [
+    "requestedBy",
+    "executionAttempt",
+    "runnerClaimOwner",
+    "runnerClaimFence",
+    "runnerClaimExpiresAt",
+    "settlementFailureCode",
+    "settlementRetryAt",
+  ]) delete value[field];
+  return value;
 }
 
 function classifyTestOutcome({ result, failure, expectedOutput, timedOut, callerCancelled }) {
@@ -434,8 +797,24 @@ function classifyTestOutcome({ result, failure, expectedOutput, timedOut, caller
     };
   }
   if (failure) {
+    const providerMessage = {
+      provider_auth_failed: "The model credentials were rejected. Update the model connection and retry.",
+      provider_payment_required: "The model provider requires account credit or billing action. Resolve billing or select another authorized model before retrying.",
+      provider_rate_limited: "The model provider is busy. Wait briefly and retry.",
+      provider_content_rejected: "The model provider rejected this input. Review the sample and retry.",
+      provider_timeout: "The model provider timed out. Retry or choose another configured model.",
+      provider_request_invalid: "The model provider rejected the request format. Check the model configuration.",
+      provider_request_failed: "The model provider could not be reached. Check the connection and retry.",
+      provider_response_invalid: "The model returned an unreadable response. Retry the test.",
+      provider_response_too_large: "The model response was too large. Narrow the requested output.",
+      model_cost_budget_exceeded: "The test exceeded its model budget. Narrow the sample and retry.",
+    }[failure.code];
+    if (providerMessage) return failedOutcome(failure.code, providerMessage);
     if (failure.code === "skill_execution_invalid_output"
-      || failure.code === "skill_execution_output_limit") {
+      || failure.code === "skill_execution_output_limit"
+      || failure.code === "execution_result_schema_mismatch"
+      || failure.code === "prompt_skill_output_invalid"
+      || failure.code === "prompt_skill_output_truncated") {
       return failedOutcome("skill_test_invalid_output", "The Skill returned an invalid or oversized result.");
     }
     return {
@@ -510,8 +889,8 @@ function isTrustedExecutorPolicy(value) {
 
 function isPublicRuntimeSummary(value) {
   return isPlainObject(value)
-    && value.runtimeLabel === PUBLIC_RUNTIME_SUMMARY.runtimeLabel
-    && value.permissionSummary === PUBLIC_RUNTIME_SUMMARY.permissionSummary;
+    && boundedText(value.runtimeLabel, 100)
+    && boundedText(value.permissionSummary, 1_000);
 }
 
 function publicRuntimeSummary(value) {

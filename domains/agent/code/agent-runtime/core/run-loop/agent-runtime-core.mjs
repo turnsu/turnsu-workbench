@@ -1,14 +1,14 @@
 import { buildRouteContext } from "../capability/capability-normalizer.mjs";
 
-export function createAgentRuntimeCore({ router, gateEngine, piKernel, finalOutput, artifacts, providerExecutor, capabilityCatalog, builderProposalGenerator }) {
-  return new AgentRuntimeCore({ router, gateEngine, piKernel, finalOutput, artifacts, providerExecutor, capabilityCatalog, builderProposalGenerator });
+export function createAgentRuntimeCore({ router, gateEngine, runtimeKernel, finalOutput, artifacts, providerExecutor, capabilityCatalog, builderProposalGenerator }) {
+  return new AgentRuntimeCore({ router, gateEngine, runtimeKernel, finalOutput, artifacts, providerExecutor, capabilityCatalog, builderProposalGenerator });
 }
 
 export class AgentRuntimeCore {
-  constructor({ router, gateEngine, piKernel, finalOutput, artifacts, providerExecutor, capabilityCatalog = null, builderProposalGenerator = null } = {}) {
+  constructor({ router, gateEngine, runtimeKernel, finalOutput, artifacts, providerExecutor, capabilityCatalog = null, builderProposalGenerator = null } = {}) {
     this.router = router;
     this.gateEngine = gateEngine;
-    this.piKernel = piKernel;
+    this.runtimeKernel = runtimeKernel;
     this.finalOutput = finalOutput;
     this.artifacts = artifacts;
     this.providerExecutor = providerExecutor;
@@ -84,11 +84,11 @@ export class AgentRuntimeCore {
   }
 
   async executeKernelTool(toolName, params, options = {}) {
-    return this.piKernel.executeTool(toolName, params, options);
+    return this.runtimeKernel.executeTool(toolName, params, options);
   }
 
   skillReadiness(skillID) {
-    if (typeof this.piKernel?.skillReadiness !== "function") {
+    if (typeof this.runtimeKernel?.skillReadiness !== "function") {
       return {
         skillID: String(skillID || ""),
         status: "blocked",
@@ -96,18 +96,18 @@ export class AgentRuntimeCore {
         code: "pi_skill_binding_unavailable",
       };
     }
-    return this.piKernel.skillReadiness(skillID);
+    return this.runtimeKernel.skillReadiness(skillID);
   }
 
   async invokeSkill(skillOrRequest, input, options = {}) {
-    if (typeof this.piKernel?.invokeSkill !== "function") {
+    if (typeof this.runtimeKernel?.invokeSkill !== "function") {
       throw new Error("pi_skill_invocation_unavailable");
     }
     if (typeof skillOrRequest !== "object" || skillOrRequest === null) {
-      return this.piKernel.invokeSkill(skillOrRequest, input, options);
+      return this.runtimeKernel.invokeSkill(skillOrRequest, input, options);
     }
     const { skillID, input: skillInput, ...invocationOptions } = skillOrRequest;
-    return this.piKernel.invokeSkill(skillID, skillInput, invocationOptions);
+    return this.runtimeKernel.invokeSkill(skillID, skillInput, invocationOptions);
   }
 
   async generateBuilderProposal(input) {
@@ -122,7 +122,7 @@ export class AgentRuntimeCore {
   async executeRuntimeTool(toolName, params, deps = {}) {
     return this.providerExecutor.executeRuntimeToolViaCore(toolName, params, {
       ...deps,
-      piKernel: this.piKernel,
+      runtimeKernel: this.runtimeKernel,
     });
   }
 }

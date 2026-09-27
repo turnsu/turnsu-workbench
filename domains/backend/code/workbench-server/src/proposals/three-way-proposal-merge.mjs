@@ -38,6 +38,41 @@ export function mergeWorkflowProposal({ base, current, proposed }) {
   return { status: "merged", merged, conflicts: [] };
 }
 
+export function applyWorkflowAgentOperations(base, operations) {
+  if (!Check(WorkflowRevisionSchema, base)) throw mergeError("merge_base_revision_invalid");
+  if (!Array.isArray(operations) || operations.length === 0 || operations.length > 256) {
+    throw mergeError("merge_operations_invalid");
+  }
+  const proposed = structuredClone(base);
+  for (const operation of operations) {
+    if (
+      !operation
+      || !["add", "replace", "remove"].includes(operation.op)
+      || typeof operation.path !== "string"
+      || !/^\/(?:graph\/(?:nodes|edges)\/[^/]+(?:\/[^/]+)?|resourceRefs\/[^/]+|runSettings\/[^/]+|definition\/[^/]+)$/.test(operation.path)
+      || (operation.op !== "remove" && !Object.hasOwn(operation, "value"))
+    ) {
+      throw mergeError("merge_operation_invalid", { path: operation?.path });
+    }
+    const currentValue = valueAt(proposed, operation.path);
+    if (operation.op === "add" && currentValue !== MISSING) {
+      throw mergeError("merge_add_target_exists", { path: operation.path });
+    }
+    if (operation.op !== "add" && currentValue === MISSING) {
+      throw mergeError("merge_target_missing", { path: operation.path });
+    }
+    applyUnit(
+      proposed,
+      operation.path,
+      operation.op === "remove" ? MISSING : structuredClone(operation.value),
+    );
+  }
+  if (!Check(WorkflowRevisionSchema, proposed)) {
+    throw mergeError("merged_workflow_revision_invalid");
+  }
+  return proposed;
+}
+
 function units(revision) {
   const result = new Map();
   for (const node of revision.graph.nodes) {

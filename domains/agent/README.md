@@ -30,10 +30,6 @@ Agent owns reasoning, prompts, skills, capability packages, tool routing, run lo
 
 Most agent code currently lives in `domains/agent/code/agent-runtime/`.
 
-## Migrated Docs
-
-- Agent architecture notes: [documents/architecture/](documents/architecture/)
-- Agent plans: [documents/plan/](documents/plan/)
-- Agent state records: [documents/state/](documents/state/)
-- Agent problem reviews: [documents/problem/](documents/problem/)
-- Agent runtime package wiki: [code/agent-runtime/wiki/AGENT_RUNTIME_WIKI.md](code/agent-runtime/wiki/AGENT_RUNTIME_WIKI.md)
+The current architecture document and executable tests supersede old Agent Plan/State ledgers.
+Package-level mechanics remain documented in
+[AGENT_RUNTIME_WIKI.md](code/agent-runtime/wiki/AGENT_RUNTIME_WIKI.md) only where they still match code.

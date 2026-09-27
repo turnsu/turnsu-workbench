@@ -2,20 +2,25 @@ import {
   skillDefinitionExample,
   workflowTemplateExample,
 } from "../../../workbench-contracts/examples/canonical-examples.mjs";
+import {
+  Check,
+  ProductObjectSchema,
+  SkillSchema,
+  SkillVersionSchema,
+} from "@looloomi/workbench-contracts";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { isDeepStrictEqual } from "node:util";
 import {
   WORKFLOW_CONFORMANCE_EXECUTION_REF,
   WORKFLOW_CONFORMANCE_INPUT_SCHEMA,
   WORKFLOW_CONFORMANCE_OUTPUT_SCHEMA,
   WORKFLOW_CONFORMANCE_SKILL_ID,
-} from "../../../../../agent/code/agent-runtime/extensions/workflow-conformance/binding.mjs";
-import {
   MEETING_ACTION_EXTRACTOR_EXECUTION_REF,
   MEETING_ACTION_EXTRACTOR_INPUT_SCHEMA,
   MEETING_ACTION_EXTRACTOR_OUTPUT_SCHEMA,
   MEETING_ACTION_EXTRACTOR_SKILL_ID,
-} from "../../../../../agent/code/agent-runtime/extensions/meeting-action-extractor/binding.mjs";
+} from "../../../../../agent/code/agent-runtime/public-api.mjs";
 import { inspectSkillPackage } from "../validation/skill-package-inspector.mjs";
 
 const clone = (value) => structuredClone(value);
@@ -185,34 +190,88 @@ function contentHash(value) {
   return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
 }
 
-async function ensureBundledSkillVersion({ store, skill, now, testMode }) {
+function requireLifecycleRepositories(store) {
   const { skillAssets, skillVersions, objects } = store.repositories || {};
-  if (!skillAssets?.get || !skillAssets?.insert || !skillVersions?.getBySkillRef || !skillVersions?.insert || !objects?.get || !objects?.insert) {
-    return null;
+  const methods = [
+    [skillAssets, ["get", "insert", "patch"]],
+    [skillVersions, ["get", "getBySkillRef", "insert"]],
+    [objects, ["get", "getByWorkspaceContentHash", "insert"]],
+  ];
+  if (methods.some(([repository, required]) => (
+    required.some((method) => typeof repository?.[method] !== "function")
+  ))) {
+    throw new Error("system_catalog_lifecycle_repositories_unavailable");
   }
+  return { skillAssets, skillVersions, objects };
+}
+
+async function ensureBundledSkillVersion({ store, skill, now, testMode }) {
+  const { skillAssets, skillVersions, objects } = requireLifecycleRepositories(store);
   const workspaceId = skill.workspaceId || "workspace-local";
   const version = skill.version;
-  const existing = await skillVersions.getBySkillRef(skill.skillId, version, { workspaceId });
-  if (existing) return existing;
-
+  const expectedSkillVersionId = `skill-version-system-${skill.skillId}-${version}`;
+  const asset = await skillAssets.get(skill.skillId);
+  const assetContract = asset ? { ...asset } : null;
+  if (assetContract) delete assetContract.nameNormalized;
+  if (asset && (asset.ownerId !== "system-catalog" || asset.workspaceId !== workspaceId)) {
+    throw new Error("system_catalog_skill_owner_conflict");
+  }
+  const exactAssetIdentity = asset
+    && asset.schemaVersion === "workbench-v1"
+    && asset.skillId === skill.skillId
+    && asset.workspaceId === workspaceId
+    && asset.ownerId === "system-catalog"
+    && asset.currentDraftId === null
+    && asset.latestPublishedVersionId === expectedSkillVersionId
+    && asset.retirement === undefined;
+  const currentPublishedAsset = exactAssetIdentity
+    && asset.lifecycle === "published"
+    && asset.visibility === "workspace"
+    && Check(SkillSchema, assetContract);
+  const legacyReadyAsset = exactAssetIdentity
+    && asset.lifecycle === "ready"
+    && asset.visibility === "private"
+    && Check(SkillSchema, { ...assetContract, lifecycle: "published" });
+  if (asset && !currentPublishedAsset && !legacyReadyAsset) {
+    throw new Error("system_catalog_skill_asset_conflict");
+  }
+  const patch = {
+    latestPublishedVersionId: expectedSkillVersionId,
+    lifecycle: "published",
+    visibility: "workspace",
+    updatedAt: now,
+  };
+  const assetCandidate = asset
+    ? { ...assetContract, ...patch }
+    : {
+        schemaVersion: "workbench-v1",
+        skillId: skill.skillId,
+        workspaceId,
+        ownerId: "system-catalog",
+        visibility: "workspace",
+        lifecycle: "published",
+        currentDraftId: null,
+        latestPublishedVersionId: expectedSkillVersionId,
+        createdAt: now,
+        updatedAt: now,
+      };
+  if (!Check(SkillSchema, assetCandidate)) {
+    throw new Error("system_catalog_skill_asset_conflict");
+  }
   const { source, inspection } = bundledPackage(testMode);
   const objectId = `object-system-${skill.skillId}-${inspection.contentHash.slice("sha256:".length, 28)}`;
-  if (!await objects.get(objectId, { workspaceId })) {
-    await objects.insert({
-      schemaVersion: "workbench-v1",
-      objectId,
-      workspaceId,
-      contentHash: inspection.contentHash,
-      mediaType: "application/vnd.looloomi.skill-package+json",
-      sizeBytes: Buffer.byteLength(source, "utf8"),
-      createdAt: now,
-    });
-  }
-  const createdVersion = await skillVersions.insert({
+  const expectedObject = {
     schemaVersion: "workbench-v1",
-    skillVersionId: `skill-version-system-${skill.skillId}-${version}`,
-    skillId: skill.skillId,
+    objectId,
     workspaceId,
+    contentHash: inspection.contentHash,
+    mediaType: "application/vnd.looloomi.skill-package+json",
+    sizeBytes: Buffer.byteLength(source, "utf8"),
+  };
+  const expectedVersion = {
+    skillVersionId: expectedSkillVersionId,
+    workspaceId,
+    skillId: skill.skillId,
     version,
     packageObjectId: objectId,
     packageHash: inspection.contentHash,
@@ -226,36 +285,92 @@ async function ensureBundledSkillVersion({ store, skill, now, testMode }) {
     name: skill.name,
     description: skill.description,
     category: skill.category,
-    inputSchema: clone(skill.inputSchema),
-    outputSchema: clone(skill.outputSchema),
-    risk: clone(skill.risk),
-    dependencies: clone(skill.dependencies),
+    inputSchema: skill.inputSchema,
+    outputSchema: skill.outputSchema,
+    risk: skill.risk,
+    dependencies: skill.dependencies,
     connectionRequirements: [],
-    validation: { validationId: `system-${skill.skillId}-${version}`, status: "passed", diagnostics: [], testedAt: now },
-    executionRef: clone(skill.executionRef),
-    publishedBy: "system-catalog",
-    publishedAt: now,
-  });
-  const asset = await skillAssets.get(skill.skillId, { workspaceId });
-  const patch = {
-    latestPublishedVersionId: createdVersion.skillVersionId,
-    lifecycle: "ready",
-    updatedAt: now,
+    executionRef: skill.executionRef,
   };
+  const [versionById, versionByRef] = await Promise.all([
+    skillVersions.get(expectedVersion.skillVersionId),
+    skillVersions.getBySkillRef(skill.skillId, version, { workspaceId }),
+  ]);
+  if (
+    Boolean(versionById) !== Boolean(versionByRef)
+    || (versionById && !isDeepStrictEqual(versionById, versionByRef))
+  ) {
+    throw new Error("system_catalog_skill_version_conflict");
+  }
+  let publishedVersion = versionByRef;
+  if (publishedVersion) {
+    const exactFields = Object.entries(expectedVersion).every(([field, expected]) => (
+      isDeepStrictEqual(publishedVersion[field], expected)
+    ));
+    if (
+      !Check(SkillVersionSchema, publishedVersion)
+      || publishedVersion.validation.status !== "passed"
+      || publishedVersion.publishedBy !== "system-catalog"
+      || !exactFields
+    ) {
+      throw new Error("system_catalog_skill_version_conflict");
+    }
+  }
+  const [objectById, objectByTuple] = await Promise.all([
+    objects.get(objectId),
+    objects.getByWorkspaceContentHash(workspaceId, inspection.contentHash),
+  ]);
+  if (
+    Boolean(objectById) !== Boolean(objectByTuple)
+    || (objectById && !isDeepStrictEqual(objectById, objectByTuple))
+  ) {
+    throw new Error("system_catalog_skill_object_conflict");
+  }
+  const packageObject = objectById;
+  if (packageObject) {
+    const exactObjectFields = Object.entries(expectedObject).every(([field, expected]) => (
+      isDeepStrictEqual(packageObject[field], expected)
+    ));
+    if (!Check(ProductObjectSchema, packageObject) || !exactObjectFields) {
+      throw new Error("system_catalog_skill_object_conflict");
+    }
+  } else if (publishedVersion) {
+    throw new Error("system_catalog_skill_object_conflict");
+  }
+  if (!publishedVersion) {
+    if (!packageObject) {
+      await objects.insert({
+        ...expectedObject,
+        createdAt: now,
+      });
+    }
+    publishedVersion = await skillVersions.insert({
+      schemaVersion: "workbench-v1",
+      skillVersionId: expectedVersion.skillVersionId,
+      skillId: skill.skillId,
+      workspaceId,
+      version,
+      packageObjectId: objectId,
+      packageHash: inspection.contentHash,
+      contentHash: expectedVersion.contentHash,
+      manifest: inspection.manifest || {},
+      name: skill.name,
+      description: skill.description,
+      category: skill.category,
+      inputSchema: clone(skill.inputSchema),
+      outputSchema: clone(skill.outputSchema),
+      risk: clone(skill.risk),
+      dependencies: clone(skill.dependencies),
+      connectionRequirements: [],
+      validation: { validationId: `system-${skill.skillId}-${version}`, status: "passed", diagnostics: [], testedAt: now },
+      executionRef: clone(skill.executionRef),
+      publishedBy: "system-catalog",
+      publishedAt: now,
+    });
+  }
   if (asset) await skillAssets.patch(skill.skillId, patch, { workspaceId });
-  else await skillAssets.insert({
-    schemaVersion: "workbench-v1",
-    skillId: skill.skillId,
-    workspaceId,
-    ownerId: "system-catalog",
-    visibility: "private",
-    lifecycle: "ready",
-    currentDraftId: null,
-    latestPublishedVersionId: createdVersion.skillVersionId,
-    createdAt: now,
-    updatedAt: now,
-  });
-  return createdVersion;
+  else await skillAssets.insert(assetCandidate);
+  return publishedVersion;
 }
 
 export async function bootstrapWorkbenchCatalog({
@@ -270,6 +385,7 @@ export async function bootstrapWorkbenchCatalog({
   if (!store.repositories?.skills?.upsert || !store.repositories?.templates?.get || !store.repositories?.templates?.insert) {
     throw new TypeError("catalog_bootstrap_store_invalid");
   }
+  requireLifecycleRepositories(store);
   const now = clock();
   const skill = clone(skillDefinitionExample);
   const template = clone(workflowTemplateExample);
@@ -326,14 +442,12 @@ export async function bootstrapWorkbenchCatalog({
   }
   const ready = probe?.ready === true || probe?.status === "ready";
   if (ready) {
-    skill.status = "ready";
     skill.readiness = { status: "ready", diagnostics: [] };
     skill.setupChecks = [{ checkId: "runtime-probe", label: "Runtime probe", status: "passed", message: probe.code ?? "ready" }];
     template.availability = { status: "available", diagnostics: [] };
     await ensureBundledSkillVersion({ store, skill, now, testMode });
   } else {
     const diagnostic = blockedDiagnostic(probe?.code ?? "runtime_binding_not_registered");
-    skill.status = "blocked";
     skill.readiness = { status: "blocked", diagnostics: [diagnostic] };
     skill.setupChecks = [{ checkId: "runtime-probe", label: "Runtime probe", status: "failed", message: probe?.code ?? "runtime_binding_not_registered" }];
     template.availability = { status: "blocked", diagnostics: [diagnostic] };

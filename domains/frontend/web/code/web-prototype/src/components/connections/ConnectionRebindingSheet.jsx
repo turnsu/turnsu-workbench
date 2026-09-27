@@ -1,14 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { Cable, CheckCircle2, Plus, Settings2, ShieldCheck } from "lucide-react";
 
-import { useConnectionMutations, useConnectionsQuery } from "../../api/queries.js";
+import {
+  useConnectionMutations,
+  useConnectionsQuery,
+  useWorkspaceFeatureReadiness,
+} from "../../api/queries.js";
 import { Button, Dialog } from "../../design-system/index.jsx";
 import { StatusPill } from "../shared/StatusPill.jsx";
 
 const idempotencyKey = (kind) => `${kind}-${globalThis.crypto?.randomUUID?.() || Date.now()}`;
 
 function isReady(connection) {
-  return connection?.status === "connected" && connection?.validation?.status === "valid";
+  return connection?.status === "connected"
+    && connection?.validation?.status === "valid"
+    && connection?.credentialState === "bound"
+    && connection?.driverBackend === "production";
 }
 
 function statusKey(connection) {
@@ -46,9 +53,11 @@ export function ConnectionRebindingSheet({
   onClose,
   onSubmit,
   onRequestAccess,
+  preferredConnectionId = "",
   t,
 }) {
   const connectionsQuery = useConnectionsQuery(open);
+  const readinessQuery = useWorkspaceFeatureReadiness(open);
   const connectionMutations = useConnectionMutations();
   const [selectedByRequirement, setSelectedByRequirement] = useState({});
   const [localConnections, setLocalConnections] = useState({});
@@ -56,6 +65,8 @@ export function ConnectionRebindingSheet({
   const [form, setForm] = useState({ label: "", permissionSummary: "" });
   const [configurationError, setConfigurationError] = useState("");
   const [configuring, setConfiguring] = useState(false);
+  const connectionSetupGate = readinessQuery.data?.data?.actions?.connectionSetup?.runnable;
+  const governedSetupAvailable = connectionSetupGate?.status === "ready";
 
   useEffect(() => {
     if (!open) {
@@ -73,6 +84,17 @@ export function ConnectionRebindingSheet({
         !values.some((item) => item.connectionId === connection.connectionId)
       )));
   }, [connectionsQuery.data, localConnections]);
+
+  useEffect(() => {
+    if (!open || !preferredConnectionId) return;
+    const preferred = connections.find((connection) => connection.connectionId === preferredConnectionId);
+    if (!preferred) return;
+    setSelectedByRequirement((current) => (
+      current[preferred.capabilityKey] === preferred.connectionId
+        ? current
+        : { ...current, [preferred.capabilityKey]: preferred.connectionId }
+    ));
+  }, [connections, open, preferredConnectionId]);
 
   const requirementRows = requirements.map((requirement) => {
     const matches = connections.filter((connection) => connection.capabilityKey === requirement.requirementId);
@@ -92,6 +114,10 @@ export function ConnectionRebindingSheet({
 
   function openConfiguration(requirementId, connection = null) {
     if (readOnly) return;
+    if (connection?.credentialState !== "bound" && !governedSetupAvailable) {
+      setConfigurationError(connectionSetupGate?.reasonCode || "connection_credential_binding_unavailable");
+      return;
+    }
     setEditing({ requirementId, connection });
     setForm({
       label: connection?.label || "",
@@ -120,6 +146,16 @@ export function ConnectionRebindingSheet({
             label,
             permissionSummary,
           });
+      if (saved.data.credentialState !== "bound") {
+        setLocalConnections((current) => ({ ...current, [saved.data.connectionId]: saved.data }));
+        setSelectedByRequirement((current) => ({
+          ...current,
+          [editing.requirementId]: saved.data.connectionId,
+        }));
+        setEditing({ ...editing, connection: saved.data });
+        setConfigurationError("connection_credential_binding_unavailable");
+        return;
+      }
       const validated = await connectionMutations.validateConnection.mutateAsync({
         connectionId: saved.data.connectionId,
         ifMatch: saved.etag,
@@ -163,7 +199,12 @@ export function ConnectionRebindingSheet({
       <Button
         variant="primary"
         icon={<CheckCircle2 size={15} />}
-        disabled={configuring || !form.label.trim() || !form.permissionSummary.trim()}
+        disabled={
+          configuring
+          || !form.label.trim()
+          || !form.permissionSummary.trim()
+          || (editing?.connection?.credentialState !== "bound" && !governedSetupAvailable)
+        }
         title={!form.label.trim() || !form.permissionSummary.trim() ? t("connections.fieldsRequired") : undefined}
         onClick={saveAndValidate}
         data-testid="loopops.connections.save-validate"
@@ -184,6 +225,12 @@ export function ConnectionRebindingSheet({
         {editing ? (
           <div className="connectionConfigurationForm">
             <div className="connectionCapabilityReadout"><Cable size={16} /><span>{t("connections.capability")}</span><strong>{editing.requirementId}</strong></div>
+            {!governedSetupAvailable && editing.connection?.credentialState !== "bound" ? (
+              <div className="connectionBlockingState" role="status">
+                <strong>{t("connections.status.needsSetup")}</strong>
+                <p>{connectionSetupGate?.message || t("connections.configurationFailed")}</p>
+              </div>
+            ) : null}
             <label>
               <span>{t("connections.label")}</span>
               <input value={form.label} disabled={configuring} onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))} maxLength={200} />
@@ -203,6 +250,12 @@ export function ConnectionRebindingSheet({
               <div className="connectionBlockingState" role="alert">
                 <p>{t("connections.loadFailed")}</p>
                 <Button variant="secondary" onClick={() => connectionsQuery.refetch()}>{t("actions.retry")}</Button>
+              </div>
+            ) : null}
+            {configurationError ? (
+              <div className="connectionBlockingState" role="alert">
+                <strong>{t("connections.status.needsSetup")}</strong>
+                <p>{connectionSetupGate?.message || t("connections.configurationFailed")}</p>
               </div>
             ) : null}
             {requirementRows.map(({ requirementId, matches, selected }) => (
@@ -239,8 +292,13 @@ export function ConnectionRebindingSheet({
                     <p>{t("connections.missing")}</p>
                     {readOnly ? (
                       <Button variant="secondary" onClick={onRequestAccess}>{t("permissions.requestAccess")}</Button>
-                    ) : (
+                    ) : governedSetupAvailable ? (
                       <Button variant="secondary" icon={<Plus size={15} />} onClick={() => openConfiguration(requirementId)}>{t("connections.create")}</Button>
+                    ) : (
+                      <div role="status">
+                        <p>{connectionSetupGate?.message || t("connections.configurationFailed")}</p>
+                        {connectionSetupGate?.action === "contact_admin" ? <Button variant="secondary" onClick={onRequestAccess}>{t("permissions.requestAccess")}</Button> : null}
+                      </div>
                     )}
                   </div>
                 )}

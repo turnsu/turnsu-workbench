@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -6,7 +6,6 @@ import {
   ChevronUp,
   Download,
   GripVertical,
-  MessageSquare,
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
@@ -14,7 +13,6 @@ import {
   Plus,
   RefreshCw,
   Save,
-  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -22,9 +20,8 @@ import { Button, SegmentedControl, TextArea, TextInput } from "../../design-syst
 import { LoopCanvas } from "../canvas/LoopCanvas.jsx";
 import { StatusPill } from "../shared/StatusPill.jsx";
 import { productNodePurpose, productNodeTitle, productTitle } from "../../utils/productCopy.js";
-import { ModelPicker } from "../models/ModelPicker.jsx";
 import { NodeModelOverride, WorkflowModelSettings } from "../models/WorkflowModelSettings.jsx";
-import { defaultModelSelection, useModelCatalog } from "../../state/models/index.js";
+import { WorkflowDocumentView } from "../loops/WorkflowDocumentView.jsx";
 
 function listValue(value = []) {
   return Array.isArray(value) ? value.join(", ") : value;
@@ -108,12 +105,6 @@ function readinessLabel(value, t) {
   return value;
 }
 
-function proposalOperationLabel(operation, t) {
-  const key = `builder.proposalOperation.${operation?.op || "unknown"}`;
-  const label = t(key);
-  return label === key ? t("builder.proposalOperation.unknown") : label;
-}
-
 const builderTabs = [
   { value: "definition", labelKey: "builder.definitionTab" },
   { value: "outline", labelKey: "builder.outlineTab" },
@@ -129,25 +120,17 @@ const paletteModes = [
 ];
 
 export function TemplatesBuilderView({ workspace }) {
-  const [builderTab, setBuilderTab] = useState(workspace.builderInitialTab || "canvas");
+  const [builderTab, setBuilderTab] = useState(workspace.builderInitialTab || "definition");
   const [resourceMode, setResourceMode] = useState("skills");
   const [resourceQuery, setResourceQuery] = useState("");
   const [inspectorOpen, setInspectorOpen] = useState(() => (
     typeof window === "undefined" || !window.matchMedia("(max-width: 820px)").matches
   ));
-  const [assistantOpen, setAssistantOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [dropMessage, setDropMessage] = useState("");
   const [resourcePreview, setResourcePreview] = useState(null);
   const [mobilePaletteOpen, setMobilePaletteOpen] = useState(false);
   const [confirmConflictReload, setConfirmConflictReload] = useState(false);
-  const [builderModelRevisionId, setBuilderModelRevisionId] = useState("");
-  const builderModels = useModelCatalog({
-    capabilities: ["chat", "tool_calling", "structured_output"],
-    context: "builder",
-    selectedRevisionId: builderModelRevisionId,
-  });
-  const builderModelReady = builderModels.options.some((option) => option.value === builderModelRevisionId && !option.disabled);
   const loop = workspace.selectedLoop;
   const t = workspace.t;
   const nodes = loop?.workflow?.nodes || [];
@@ -162,13 +145,9 @@ export function TemplatesBuilderView({ workspace }) {
     ? [...workspace.skills, ...workspace.managedSkills].find((skill) => skill.id === selectedNode.skillId)
     : null;
   const selectedSkillExecution = selectedSkill?.canonical?.execution
-    || selectedSkill?.canonical?.executionRef
     || selectedSkill?.canonical?.definition?.execution
-    || selectedSkill?.canonical?.definition?.executionRef
     || selectedSkill?.canonical?.version?.execution
-    || selectedSkill?.canonical?.version?.executionRef
-    || selectedSkill?.canonical?.draft?.execution
-    || selectedSkill?.canonical?.draft?.executionRef;
+    || selectedSkill?.canonical?.draft?.execution;
   const selectedNodeModelCapability = selectedSkill?.requiredModelCapability
     || selectedSkillExecution?.requiredModelCapability
     || selectedSkillExecution?.requiredCapability
@@ -193,11 +172,9 @@ export function TemplatesBuilderView({ workspace }) {
   const isTemplate = loop?.type === "LoopTemplate";
   const canRunSelected = loop?.type === "LoopWorkflow" && workspace.canRunWorkflow;
   const runBlockedReason = isTemplate
-    ? t("builder.cloneBeforeRun")
+    ? t("feature.createWorkflowUnavailable")
     : isDirty ? t("error.save_before_compile") : t("builder.resolveSetupBeforeRun");
-  const runRecoveryLabel = isTemplate
-    ? t("actions.cloneTemplate")
-    : isDirty ? t("actions.saveCurrentWorkflow") : t("builder.openNodeEditor");
+  const runRecoveryLabel = isDirty ? t("actions.saveCurrentWorkflow") : t("builder.openNodeEditor");
   const isClonedWorkflow = loop?.type === "LoopWorkflow" && loop?.clonedFromTitle;
   const resourceNeedle = resourceQuery.trim().toLowerCase();
   const activePaletteMode = paletteModes.find((mode) => mode.value === resourceMode) || paletteModes[0];
@@ -243,12 +220,6 @@ export function TemplatesBuilderView({ workspace }) {
     [resourceNeedle, visibleSkills.length, visibleMaterials.length, workspace.resourcePalette],
   );
 
-  useEffect(() => {
-    if (!builderModelRevisionId && builderModels.profiles.length) {
-      setBuilderModelRevisionId(defaultModelSelection(builderModels.profiles, "structured_output", "revision"));
-    }
-  }, [builderModelRevisionId, builderModels.profiles]);
-
   function handleDragStart(event, payload) {
     setDropMessage("");
     event.dataTransfer.effectAllowed = "copy";
@@ -290,8 +261,7 @@ export function TemplatesBuilderView({ workspace }) {
   }
 
   function recoverRunBlock() {
-    if (isTemplate) workspace.cloneLoop(loop.id);
-    else if (isDirty) workspace.saveWorkspace();
+    if (isDirty) workspace.saveWorkspace();
     else setInspectorOpen(true);
   }
 
@@ -315,6 +285,11 @@ export function TemplatesBuilderView({ workspace }) {
     workspace.prepareRun(loop.id);
   }
 
+  if (loop && builderTab !== "canvas") {
+    return <WorkflowDocumentView workspace={workspace} availableSkills={availableSkills}
+      initialSection={builderTab} onOpenCanvas={() => { setBuilderTab("canvas"); setInspectorOpen(false); }} />;
+  }
+
   return (
     <div
       className={`surface builderSurface cozeBuilder ${inspectorOpen ? "inspectorOpen" : "inspectorCollapsed"} ${builderTab === "canvas" ? "mobileCanvasMode" : ""} ${mobilePaletteOpen ? "mobilePaletteOpen" : ""}`}
@@ -330,8 +305,6 @@ export function TemplatesBuilderView({ workspace }) {
             <p>{isDirty ? t("state.currentWorkflowUnsaved") : t("builder.savedJustNow")} <i aria-hidden="true" /> {readinessLabel(loop.readiness, t)}</p>
           </div>
           <div className="builderPageActions">
-            <Button variant="secondary" icon={<Sparkles size={15} />} onClick={() => setAssistantOpen(true)} data-testid="loopops.builder.assistant.open">{t("builder.proposeChange")}</Button>
-            <span className="builderActionDivider" />
             <Button variant="secondary" icon={<Save size={15} />} disabled={!workspace.canSaveWorkflow} onClick={workspace.saveWorkspace} data-testid="loopops.topbar.primary.save-workflow">{t("actions.saveDraft")}</Button>
             <Button variant="secondary" icon={<Play size={15} />} disabled={!canRunSelected} onClick={runSelectedLoop}>{t("actions.testLoop")}</Button>
             <Button variant="secondary" disabled={isTemplate || isDirty} onClick={() => workspace.openPublishReview(loop.id)} data-testid="loopops.builder.publish">{t("actions.publish")}</Button>
@@ -489,11 +462,12 @@ export function TemplatesBuilderView({ workspace }) {
                 <StatusPill tone={isDirty ? "warning" : "success"}>
                   {isDirty ? t("state.unsaved") : t("state.savedShort")}
                 </StatusPill>
-                {isTemplate ? (
-                  <Button variant="primary" onClick={() => workspace.cloneLoop(loop.id)}>
-                    {t("actions.cloneTemplate")}
-                  </Button>
-                ) : <div className="buttonRow"><Button variant="secondary" disabled={isDirty} onClick={workspace.duplicateSelectedWorkflow} title={isDirty ? t("builder.copySavedVersion") : undefined} data-testid="loopops.builder.duplicate">{t("actions.duplicate")}</Button><Button variant="secondary" icon={<Play size={15} />} disabled={!canRunSelected} onClick={runSelectedLoop}>{t("actions.runMock")}</Button><Button variant="secondary" disabled={isDirty} onClick={() => workspace.openPublishReview(loop.id)} data-testid="loopops.builder.publish">{t("actions.publish")}</Button></div>}
+                {!isTemplate ? (
+                  <div className="buttonRow">
+                    <Button variant="secondary" icon={<Play size={15} />} disabled={!canRunSelected} onClick={runSelectedLoop}>{t("actions.runMock")}</Button>
+                    <Button variant="secondary" disabled={isDirty} onClick={() => workspace.openPublishReview(loop.id)} data-testid="loopops.builder.publish">{t("actions.publish")}</Button>
+                  </div>
+                ) : null}
               </div>
             </header>
 
@@ -594,10 +568,10 @@ export function TemplatesBuilderView({ workspace }) {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => isTemplate ? workspace.cloneLoop(loop.id) : setInspectorOpen(true)}
+                    onClick={() => setInspectorOpen(true)}
                     data-testid="loopops.builder.selected-node.edit"
                   >
-                    {isTemplate ? t("actions.cloneTemplate") : t("builder.editContract")}
+                    {isTemplate ? t("actions.open") : t("builder.editContract")}
                   </Button>
                 </>
               ) : (
@@ -653,114 +627,6 @@ export function TemplatesBuilderView({ workspace }) {
               />
             ) : null}
 
-            {workspace.pendingPatch ? (
-              <section className="patchReceipt patchReceiptBanner" data-testid="loopops.templates.builder-patch-receipt" aria-labelledby="builder-proposal-title">
-                <div>
-                  <strong id="builder-proposal-title">{t("builder.patchReceipt")}</strong>
-                  <p>{workspace.pendingPatch.summary}</p>
-                </div>
-                <div className="proposalSummary">
-                  <span>{t("builder.proposalChangeCount", { count: workspace.pendingPatch.operations.length })}</span>
-                  <ul>
-                    {workspace.pendingPatch.operations.slice(0, 4).map((operation, index) => (
-                      <li key={`${operation.op}-${index}`}>{proposalOperationLabel(operation, t)}</li>
-                    ))}
-                  </ul>
-                  {workspace.pendingPatch.status !== "proposed" ? (
-                    <p className="proposalBlocked" role="alert">{t("builder.proposalNeedsRevision")}</p>
-                  ) : null}
-                </div>
-                <div className="buttonRow">
-                  <Button variant="secondary" size="sm" onClick={workspace.dismissBuilderPatch} data-testid="loopops.templates.dismiss-builder-patch">
-                    {t("actions.dismissPatch")}
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    disabled={workspace.builderAssistantBusy || workspace.pendingPatch.status !== "proposed"}
-                    title={workspace.pendingPatch.status !== "proposed" ? t("builder.proposalNeedsRevision") : undefined}
-                    onClick={workspace.applyBuilderPatch}
-                    data-testid="loopops.templates.apply-builder-patch"
-                  >
-                    {workspace.builderAssistantBusy ? t("builder.applyingProposal") : t("actions.applyPatch")}
-                  </Button>
-                </div>
-              </section>
-            ) : null}
-
-            <section className={`assistantDock ${assistantOpen ? "open" : ""}`} data-testid="loopops.builder.chat">
-              <button
-                type="button"
-                className="assistantToggle"
-                onClick={() => setAssistantOpen((value) => !value)}
-                data-testid="loopops.builder.assistant.toggle"
-                aria-expanded={assistantOpen}
-              >
-                <span><MessageSquare size={15} /> {t("builder.assistant")}</span>
-                {assistantOpen ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
-              </button>
-              {assistantOpen ? (
-                <div className="assistantPanel">
-                  <div className="assistantIntro">
-                    <strong>{t("builder.assistantPromptTitle")}</strong>
-                    <p>{t("builder.assistantPromptCopy")}</p>
-                  </div>
-                  <form className="assistantComposer" onSubmit={(event) => {
-                    event.preventDefault();
-                    if (builderModelReady && workspace.composer.trim() && !isTemplate && !isDirty && !workspace.builderAssistantBusy) {
-                      workspace.sendChat(workspace.composer, builderModelRevisionId);
-                    }
-                  }}>
-                    <ModelPicker
-                      options={builderModels.options}
-                      requiredCapabilities={["chat", "tool_calling", "structured_output"]}
-                      value={builderModelRevisionId}
-                      onChange={setBuilderModelRevisionId}
-                      label={t("model.builder")}
-                      hint={t("model.turnPinHint")}
-                      loading={builderModels.isLoading}
-                      unavailableLabel={t("model.unavailable")}
-                      historicalLabel={t("model.historical")}
-                      testId="loopops.builder.assistant.model"
-                    />
-                    <TextArea
-                      label={t("builder.assistantPromptLabel")}
-                      value={workspace.composer}
-                      onChange={workspace.setComposer}
-                      placeholder={t("builder.assistantPromptPlaceholder")}
-                      rows={3}
-                      width="100%"
-                      disabled={isTemplate || workspace.builderAssistantBusy}
-                    />
-                    <div className="assistantComposerFooter">
-                      <span>
-                        {isTemplate
-                          ? t("builder.assistantUseTemplateFirst")
-                          : isDirty ? t("builder.assistantSaveFirst") : t("builder.assistantConfirmFirst")}
-                      </span>
-                      <Button
-                        variant="primary"
-                        type="submit"
-                        size="sm"
-                        disabled={isTemplate || isDirty || workspace.builderAssistantBusy || !workspace.composer.trim() || !builderModelReady}
-                        data-testid="loopops.builder.assistant.send"
-                      >
-                        {workspace.builderAssistantBusy ? t("builder.preparingProposal") : t("builder.reviewProposal")}
-                      </Button>
-                    </div>
-                  </form>
-                  {workspace.builderProposalError ? (
-                    <div className="assistantError" role="alert">
-                      <span>{workspace.builderProposalError}</span>
-                      <Button variant="secondary" size="sm" onClick={() => workspace.sendChat(workspace.composer, builderModelRevisionId)} disabled={!workspace.composer.trim() || workspace.builderAssistantBusy || !builderModelReady}>
-                        {t("actions.retry")}
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </section>
-
             <footer className={`debugDock ${debugOpen ? "expanded" : ""}`} data-testid="loopops.builder.debug-panel">
               <div className="debugSummary">
                 <h3>{t("builder.debug")}</h3>
@@ -807,9 +673,11 @@ export function TemplatesBuilderView({ workspace }) {
               {!canRunSelected ? (
                 <div className="runBlockedNotice" data-testid="loopops.builder.run-blocked">
                   <span>{runBlockedReason}</span>
-                  <Button variant="secondary" size="sm" onClick={recoverRunBlock} data-testid="loopops.builder.run-blocked.recover">
-                    {runRecoveryLabel}
-                  </Button>
+                  {!isTemplate ? (
+                    <Button variant="secondary" size="sm" onClick={recoverRunBlock} data-testid="loopops.builder.run-blocked.recover">
+                      {runRecoveryLabel}
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
               {debugOpen ? (
@@ -952,11 +820,7 @@ export function TemplatesBuilderView({ workspace }) {
 
               <section className="inspectorSection">
                 <h3>{t("builder.actionsSection")}</h3>
-                {isTemplate ? (
-                  <Button variant="primary" onClick={() => workspace.cloneLoop(loop.id)}>
-                    {t("actions.cloneTemplate")}
-                  </Button>
-                ) : <div className="buttonRow inspectorActions">
+                {!isTemplate ? <div className="buttonRow inspectorActions">
                   <Button
                     variant="secondary"
                     icon={<ArrowUp size={15} />}
@@ -981,7 +845,7 @@ export function TemplatesBuilderView({ workspace }) {
                   >
                     {t("actions.deleteNode")}
                   </Button>
-                </div>}
+                </div> : null}
               </section>
               </div>
             ) : (

@@ -9,7 +9,12 @@ export function createAgwaSubagentBackend({
   providerProbe = async () => ({ ready: false, reason: "provider_unavailable" }),
 } = {}) {
   if (typeof cwd !== "string" || cwd.length === 0) throw new TypeError("agwab_subagent_cwd_required");
-  if (!["inline", "headless"].includes(backend) || !Array.isArray(extensions)
+  if (backend !== "headless") {
+    throw new TypeError(backend === "inline"
+      ? "agwab_subagent_inline_backend_unsupported"
+      : "agwab_subagent_runtime_options_invalid");
+  }
+  if (!Array.isArray(extensions)
     || extensions.some((item) => typeof item !== "string" || item.length === 0)) {
     throw new TypeError("agwab_subagent_runtime_options_invalid");
   }
@@ -30,7 +35,6 @@ export function createAgwaSubagentBackend({
         throw backendError("model_configuration_missing", "Agent model configuration is missing.", "blocked");
       }
       await emit?.("agwab.subagent.launching", { backend: "pi-subagent" });
-      const detached = backend === "headless";
       const launch = await runtime.runSubagent({
         backend,
         cwd,
@@ -44,10 +48,13 @@ export function createAgwaSubagentBackend({
         tools: [...request.capabilities.toolAllowlist],
         skills: safeStringArray(request.metadata?.skillPaths),
         extensions: [...extensions],
+        toolResultBudget: {
+          maxTotalChars: toolResultBudgetChars(request.limits?.maxToolResultChars),
+        },
         timeoutMs: request.limits.timeoutMs,
         correlationId: request.invocationId,
-        async: detached,
-        onComplete: detached ? "detach" : "return",
+        async: true,
+        onComplete: "detach",
         signal,
       });
       if (!launch?.runId) throw backendError("agwab_launch_invalid", "Subagent launch did not return a run reference.");
@@ -64,7 +71,17 @@ export function createAgwaSubagentBackend({
           status,
           output,
           summary: safeSummary(status, logs?.logText?.stderr),
-          evidence: [{ kind: "agwab_output", ref: `agwab-subagent:${launch.runId}:output` }],
+          evidence: [],
+          workerTranscript: {
+            mediaType: "application/json",
+            content: JSON.stringify({
+              schemaVersion: "worker-transcript-v1",
+              backend: "pi-subagent",
+              runId: launch.runId,
+              status,
+              logs: logs?.logText ?? {},
+            }),
+          },
           usage: usageFrom(snapshot?.metadata?.usage ?? logs?.metadata?.usage, request, output),
         };
       } finally {
@@ -151,6 +168,12 @@ function safeStringArray(value) {
 
 function normalizeThinking(value) {
   return ["off", "minimal", "low", "medium", "high", "xhigh"].includes(value) ? value : "medium";
+}
+
+function toolResultBudgetChars(value) {
+  return Number.isSafeInteger(value) && value >= 1_024 && value <= 4_000_000
+    ? value
+    : 320_000;
 }
 
 function backendError(code, message, status = "failed") {

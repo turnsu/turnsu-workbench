@@ -7,9 +7,10 @@ import {
   DiagnosticSchema,
   EntityTagSchema,
   InstallationIdSchema,
+  InstallationUpdateDraftIdSchema,
   LoopImportIdSchema,
   LoopVersionIdSchema,
-  ModelProfileRevisionIdSchema,
+  ModelProfileIdSchema,
   ObjectIdSchema,
   ResourceIdSchema,
   ProposalIdSchema,
@@ -37,11 +38,17 @@ import {
   ResponseEnvelopeSchema,
   RevisionMutationHeadersSchema,
   SaveWorkflowRevisionDataSchema,
+  StartRunDataSchema,
   type WorkbenchEndpointMetadata,
   WORKBENCH_API_PREFIX,
 } from "./http.js";
+import { RunCommandDataSchema, RunCommandRequestSchema, WORKBENCH_V1_RUN_ENDPOINTS } from "./runs-http.js";
+import { AgentSessionSchema } from "./agents.js";
+import { AttachmentMediaTypeSchema, AttachmentRefSchema } from "./attachments.js";
 import {
   AssetInstallationSchema,
+  InstallationUpdateDraftSchema,
+  InstallationUpdateImpactSchema,
   LifecycleBuilderProposalSchema,
   LoopDefinitionSchema,
   LoopSkillUpdatePreviewSchema,
@@ -53,6 +60,8 @@ import {
   SkillDraftSummarySchema,
   SkillDraftPackageSchema,
   SkillAssetSummarySchema,
+  RegisteredToolPackageSchema,
+  SkillRuntimeCatalogItemSchema,
   SkillTestCaseSchema,
   SkillTestRunIdSchema,
   SkillTestRunSchema,
@@ -73,9 +82,12 @@ import {
   SkillPublishedVersionSummarySchema,
   SkillPublishReleasePublicSchema,
   WorkspaceAssetReleaseSchema,
+  WorkspaceAssetKindSchema,
   WorkspaceResourceSchema,
   WorkspaceMembershipSchema,
   WorkspaceRoleSchema,
+  StagedLoopDraftSchema,
+  StagedLoopProposalSchema,
 } from "./lifecycle.js";
 import {
   PORTABLE_LOOP_PACKAGE_MEDIA_TYPE,
@@ -85,7 +97,7 @@ import {
   PortableSkillRefSchema,
 } from "./portable-loop.js";
 import { strictObject } from "./schema.js";
-import { RunComparisonSchema } from "./runs.js";
+import { RunComparisonSchema, WorkflowRunSchema, WorkflowRunStatusSchema } from "./runs.js";
 import { WorkflowRevisionSchema, WorkflowSchema } from "./workflows.js";
 
 const readMetadata = {
@@ -135,6 +147,7 @@ const connectionRevisionMutationMetadata = {
 } as const;
 
 const pageQuery = strictObject({ ...CursorPageRequestSchema.properties });
+const libraryQuery = strictObject({ ...CursorPageRequestSchema.properties, assetKind: Type.Optional(WorkspaceAssetKindSchema) });
 const SkillPathParamsSchema = strictObject({ skillId: SkillIdSchema });
 const SkillDraftPathParamsSchema = strictObject({
   skillId: SkillIdSchema,
@@ -164,8 +177,12 @@ const ProposalPathParamsSchema = strictObject({
   workflowId: WorkflowIdSchema,
   proposalId: ProposalIdSchema,
 });
+const StagedProposalPathParamsSchema = strictObject({ proposalId: ProposalIdSchema });
 const ReleasePathParamsSchema = strictObject({ releaseId: ReleaseIdSchema });
 const InstallationPathParamsSchema = strictObject({ installationId: InstallationIdSchema });
+const InstallationUpdateDraftPathParamsSchema = strictObject({
+  updateDraftId: InstallationUpdateDraftIdSchema,
+});
 const UploadPathParamsSchema = strictObject({ uploadId: UploadIdSchema });
 const UploadChunkPathParamsSchema = strictObject({
   uploadId: UploadIdSchema,
@@ -218,6 +235,25 @@ export const CreateSkillDataSchema = strictObject({
 export const SkillAssetListResponseSchema = ListResponseEnvelopeSchema(
   SkillAssetSummarySchema,
   "SkillAssetListResponse",
+);
+export const SkillRuntimeCatalogResponseSchema = ListResponseEnvelopeSchema(
+  SkillRuntimeCatalogItemSchema,
+  "SkillRuntimeCatalogResponse",
+);
+export const RegisteredToolCatalogResponseSchema = ListResponseEnvelopeSchema(
+  RegisteredToolPackageSchema,
+  "RegisteredToolCatalogResponse",
+);
+export const StartLoopAgentTaskRequestSchema = MutationRequestEnvelopeSchema(
+  StartRunDataSchema,
+  "StartLoopAgentTaskRequest",
+);
+export const StartLoopAgentTaskResponseSchema = ResponseEnvelopeSchema(
+  strictObject({
+    session: AgentSessionSchema,
+    run: WorkflowRunSchema,
+  }),
+  "StartLoopAgentTaskResponse",
 );
 export const CreateSkillRequestSchema = MutationRequestEnvelopeSchema(
   CreateSkillDataSchema,
@@ -334,6 +370,20 @@ export const RunComparisonResponseSchema = ResponseEnvelopeSchema(
   RunComparisonSchema,
   "RunComparisonResponse",
 );
+export const RecentWorkItemSchema = strictObject(
+  {
+    runId: RunIdSchema,
+    workflowId: WorkflowIdSchema,
+    title: Type.String({ minLength: 1, maxLength: 200 }),
+    status: WorkflowRunStatusSchema,
+    updatedAt: UtcTimestampSchema,
+  },
+  { $id: "RecentWorkItem" },
+);
+export const RecentWorkListResponseSchema = ListResponseEnvelopeSchema(
+  RecentWorkItemSchema,
+  "RecentWorkListResponse",
+);
 
 export const CreateLoopDataSchema = strictObject({
   name: Type.String({ minLength: 1, maxLength: 200 }),
@@ -347,6 +397,10 @@ export const CreateLoopRequestSchema = MutationRequestEnvelopeSchema(
 export const CreateLoopResponseSchema = ResponseEnvelopeSchema(
   strictObject({ workflow: WorkflowSchema, revision: WorkflowRevisionSchema }),
   "CreateLoopResponse",
+);
+export const CreateLoopFromReleaseRequestSchema = MutationRequestEnvelopeSchema(
+  strictObject({ name: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })) }),
+  "CreateLoopFromReleaseRequest",
 );
 
 export const CreateLoopImportDataSchema = strictObject({
@@ -497,7 +551,7 @@ export const LoopSkillUpdatePreviewResponseSchema = ResponseEnvelopeSchema(
 
 export const GenerateProposalDataSchema = strictObject({
   instruction: Type.String({ minLength: 1, maxLength: 8000 }),
-  modelProfileRevisionId: Type.Optional(ModelProfileRevisionIdSchema),
+  modelProfileId: Type.Optional(ModelProfileIdSchema),
 });
 export const GenerateProposalRequestSchema = MutationRequestEnvelopeSchema(
   GenerateProposalDataSchema,
@@ -506,6 +560,39 @@ export const GenerateProposalRequestSchema = MutationRequestEnvelopeSchema(
 export const ProposalResponseSchema = ResponseEnvelopeSchema(
   LifecycleBuilderProposalSchema,
   "LifecycleBuilderProposalResponse",
+);
+export const GenerateStagedLoopProposalDataSchema = strictObject({
+  name: Type.String({ minLength: 1, maxLength: 200 }),
+  sourceText: Type.String({ minLength: 1, maxLength: 8000 }),
+  definition: LoopDefinitionSchema,
+  modelProfileId: Type.Optional(ModelProfileIdSchema),
+});
+export const GenerateStagedLoopProposalRequestSchema = MutationRequestEnvelopeSchema(
+  GenerateStagedLoopProposalDataSchema,
+  "GenerateStagedLoopProposalRequest",
+);
+export const StagedLoopProposalResponseSchema = ResponseEnvelopeSchema(
+  StagedLoopProposalSchema,
+  "StagedLoopProposalResponse",
+);
+export const CommitStagedLoopProposalDataSchema = strictObject({
+  draft: StagedLoopDraftSchema,
+});
+export const CommitStagedLoopProposalRequestSchema = MutationRequestEnvelopeSchema(
+  CommitStagedLoopProposalDataSchema,
+  "CommitStagedLoopProposalRequest",
+);
+export const CommitStagedLoopProposalResponseSchema = ResponseEnvelopeSchema(
+  strictObject({
+    workflow: WorkflowSchema,
+    revision: WorkflowRevisionSchema,
+    proposal: StagedLoopProposalSchema,
+  }),
+  "CommitStagedLoopProposalResponse",
+);
+export const DismissStagedLoopProposalRequestSchema = MutationRequestEnvelopeSchema(
+  EmptyObjectSchema,
+  "DismissStagedLoopProposalRequest",
 );
 export const ApplyProposalDataSchema = strictObject({
   baseRevisionId: Type.String({ minLength: 1, maxLength: 128 }),
@@ -520,6 +607,65 @@ export const PublishLoopDataSchema = strictObject({
   releaseNotes: Type.String({ maxLength: 4000 }),
   startingPoint: Type.Boolean(),
 });
+// An owner's reviewed report of local work, not proof of managed cloud execution.
+export const RecordLocalLoopTrialDataSchema = strictObject({
+  workflowRevisionId: WorkflowRevisionIdSchema,
+  revisionContentHash: ContentHashSchema,
+  localTrialId: Type.String({ minLength: 1, maxLength: 128, pattern: "^[a-zA-Z0-9][a-zA-Z0-9_-]*$" }),
+  agentKind: Type.Union([Type.Literal("codex"), Type.Literal("claude"), Type.Literal("pi")]),
+  inputSummary: Type.String({ maxLength: 16000 }),
+  output: Type.String({ minLength: 1, maxLength: 64000 }),
+  reviewNote: Type.String({ minLength: 1, maxLength: 4000 }),
+  confirm: Type.Literal(true),
+  reportedCompletedAt: UtcTimestampSchema,
+});
+export const LocalLoopTrialReceiptSchema = strictObject({
+  trialId: ObjectIdSchema,
+  workspaceId: WorkspaceIdSchema,
+  workflowId: WorkflowIdSchema,
+  ...Type.Omit(RecordLocalLoopTrialDataSchema, ["confirm"]).properties,
+  outputHash: ContentHashSchema,
+  provenance: Type.Literal("member_attested_local"),
+  reviewState: Type.Literal("human_reviewed"),
+  reviewedBy: UserIdSchema,
+  recordedAt: UtcTimestampSchema,
+  visibility: Type.Literal("private"),
+  cloudReady: Type.Literal(false),
+});
+export const RecordLocalLoopTrialRequestSchema = MutationRequestEnvelopeSchema(RecordLocalLoopTrialDataSchema, "RecordLocalLoopTrialRequest");
+export const RecordLocalLoopTrialResponseSchema = ResponseEnvelopeSchema(LocalLoopTrialReceiptSchema, "RecordLocalLoopTrialResponse");
+export const NativeLoopRecipeSchema = strictObject({
+  name: Type.String({ minLength: 1, maxLength: 200 }),
+  description: Type.String({ maxLength: 8000 }),
+  ...Type.Omit(SaveLoopRevisionDataSchema, ["baseRevisionId", "saveReason"]).properties,
+});
+export const NativeLoopSkillPinSchema = strictObject({
+  skillId: SkillIdSchema, skillVersionId: SkillVersionIdSchema,
+  version: Type.String({ minLength: 1, maxLength: 128 }), contentHash: ContentHashSchema,
+  releaseId: ReleaseIdSchema, sourceWorkspaceId: WorkspaceIdSchema,
+  packageHash: ContentHashSchema, packageObjectHash: ContentHashSchema,
+});
+const nativeLoopExecutionProperties = {
+  executionMode: Type.Literal("native_agent"),
+  executionSemantics: Type.Literal("agent_guided_recipe"),
+  cloudReady: Type.Literal(false),
+};
+export const PublishNativeLoopDataSchema = strictObject({
+  trialId: ObjectIdSchema, workflowRevisionId: WorkflowRevisionIdSchema, revisionContentHash: ContentHashSchema,
+  version: Type.String({ minLength: 1, maxLength: 64 }), releaseNotes: Type.String({ maxLength: 4000 }), confirm: Type.Literal(true),
+});
+export const PublishNativeLoopRequestSchema = MutationRequestEnvelopeSchema(PublishNativeLoopDataSchema, "PublishNativeLoopRequest");
+export const PublishNativeLoopResponseSchema = ResponseEnvelopeSchema(strictObject({
+  release: WorkspaceAssetReleaseSchema,
+  nativeLoopVersion: strictObject({ versionId: LoopVersionIdSchema, workflowId: WorkflowIdSchema,
+    version: Type.String({ minLength: 1, maxLength: 64 }), contentHash: ContentHashSchema, ...nativeLoopExecutionProperties }),
+}), "PublishNativeLoopResponse");
+export const NativeLoopPackageSchema = strictObject({
+  releaseId: ReleaseIdSchema, sourceWorkspaceId: WorkspaceIdSchema, versionId: LoopVersionIdSchema,
+  version: Type.String({ minLength: 1, maxLength: 64 }), contentHash: ContentHashSchema,
+  ...nativeLoopExecutionProperties, recipe: NativeLoopRecipeSchema, skillPins: Type.Array(NativeLoopSkillPinSchema, { minItems: 1, maxItems: 20 }),
+});
+export const NativeLoopPackageResponseSchema = ResponseEnvelopeSchema(NativeLoopPackageSchema, "NativeLoopPackageResponse");
 export const PublishLoopRequestSchema = MutationRequestEnvelopeSchema(
   PublishLoopDataSchema,
   "PublishLoopRequest",
@@ -541,6 +687,18 @@ export const InstallationResponseSchema = ResponseEnvelopeSchema(
   AssetInstallationSchema,
   "AssetInstallationResponse",
 );
+export const InstallSystemCatalogDefaultPackRequestSchema = MutationRequestEnvelopeSchema(
+  EmptyObjectSchema,
+  "InstallSystemCatalogDefaultPackRequest",
+);
+export const InstallSystemCatalogDefaultPackResponseSchema = ResponseEnvelopeSchema(
+  strictObject({
+    schemaVersion: WorkbenchSchemaVersionSchema,
+    sourceWorkspaceId: WorkspaceIdSchema,
+    installations: Type.Array(AssetInstallationSchema, { minItems: 1, maxItems: 32 }),
+  }),
+  "InstallSystemCatalogDefaultPackResponse",
+);
 export const InstallationListResponseSchema = ListResponseEnvelopeSchema(
   AssetInstallationSchema,
   "InstallationListResponse",
@@ -553,6 +711,37 @@ export const AdoptInstallationReleaseRequestSchema = MutationRequestEnvelopeSche
   AdoptInstallationReleaseDataSchema,
   "AdoptInstallationReleaseRequest",
 );
+export const InstallationUpdateImpactQuerySchema = strictObject({
+  releaseId: ReleaseIdSchema,
+});
+export const InstallationUpdateImpactResponseSchema = ResponseEnvelopeSchema(
+  InstallationUpdateImpactSchema,
+  "InstallationUpdateImpactResponse",
+);
+export const CreateInstallationUpdateDraftDataSchema = strictObject({
+  releaseId: ReleaseIdSchema,
+  connectionBindings: Type.Optional(
+    Type.Array(ConnectionBindingSchema, { uniqueItems: true, maxItems: 128 }),
+  ),
+});
+export const CreateInstallationUpdateDraftRequestSchema =
+  MutationRequestEnvelopeSchema(
+    CreateInstallationUpdateDraftDataSchema,
+    "CreateInstallationUpdateDraftRequest",
+  );
+export const InstallationUpdateDraftResponseSchema = ResponseEnvelopeSchema(
+  InstallationUpdateDraftSchema,
+  "InstallationUpdateDraftResponse",
+);
+export const InstallationUpdateDraftDecisionRequestSchema =
+  MutationRequestEnvelopeSchema(
+    strictObject({
+      connectionBindings: Type.Optional(
+        Type.Array(ConnectionBindingSchema, { uniqueItems: true, maxItems: 128 }),
+      ),
+    }),
+    "InstallationUpdateDraftDecisionRequest",
+  );
 export const StartFromReleaseDataSchema = strictObject({
   name: Type.String({ minLength: 1, maxLength: 200 }),
   connectionBindings: Type.Optional(Type.Array(ConnectionBindingSchema, { uniqueItems: true })),
@@ -586,6 +775,77 @@ export const UploadPackageDataSchema = strictObject({
 export const UploadPackageRequestSchema = MutationRequestEnvelopeSchema(
   UploadPackageDataSchema,
   "UploadPackageRequest",
+);
+const SkillDraftScaffoldInputSchema = strictObject({
+  name: Type.String({ minLength: 1, maxLength: 200 }),
+  identifier: Type.Optional(Type.String({
+    minLength: 1,
+    maxLength: 64,
+    pattern: "^[A-Za-z][A-Za-z0-9_-]*$",
+  })),
+  description: Type.String({ minLength: 1, maxLength: 2000 }),
+  required: Type.Boolean(),
+  acceptedMediaTypes: Type.Optional(Type.Array(AttachmentMediaTypeSchema, {
+    minItems: 1,
+    maxItems: 9,
+    uniqueItems: true,
+  })),
+});
+const SkillDraftScaffoldParameterSchema = strictObject({
+  name: Type.String({ minLength: 1, maxLength: 64 }),
+  description: Type.String({ minLength: 1, maxLength: 1000 }),
+  required: Type.Boolean(),
+  type: Type.Union([
+    Type.Literal("string"),
+    Type.Literal("number"),
+    Type.Literal("boolean"),
+    Type.Literal("json"),
+    Type.Literal("markdown"),
+  ]),
+});
+const SkillDraftScaffoldOutputSchema = strictObject({
+  name: Type.String({ minLength: 1, maxLength: 64 }),
+  description: Type.String({ minLength: 1, maxLength: 1000 }),
+  type: Type.Union([
+    Type.Literal("string"),
+    Type.Literal("number"),
+    Type.Literal("boolean"),
+    Type.Literal("json"),
+    Type.Literal("markdown"),
+    Type.Literal("file"),
+  ]),
+});
+export const ScaffoldSkillDraftPackageDataSchema = strictObject({
+  definitionType: Type.Union([Type.Literal("prompt"), Type.Literal("script")]),
+  name: Type.String({ minLength: 1, maxLength: 200 }),
+  description: Type.String({ minLength: 1, maxLength: 2000 }),
+  category: Type.String({ minLength: 1, maxLength: 100 }),
+  tags: Type.Array(Type.String({ minLength: 1, maxLength: 64 }), { maxItems: 12, uniqueItems: true }),
+  materials: Type.Array(SkillDraftScaffoldInputSchema, { maxItems: 64 }),
+  parameters: Type.Array(SkillDraftScaffoldParameterSchema, { maxItems: 64 }),
+  outputs: Type.Array(SkillDraftScaffoldOutputSchema, { minItems: 1, maxItems: 64 }),
+  smoke: strictObject({
+    purpose: Type.String({ maxLength: 2000 }),
+    input: Type.String({ maxLength: 20_000 }),
+    expectedOutcome: Type.String({ maxLength: 4000 }),
+  }),
+  runtime: Type.Optional(strictObject({
+    runtimeId: Type.String({ minLength: 1, maxLength: 128 }),
+    timeoutSeconds: Type.Integer({ minimum: 1, maximum: 120 }),
+    memoryMiB: Type.Integer({ minimum: 64, maximum: 512, multipleOf: 64 }),
+  })),
+});
+export const ScaffoldSkillDraftPackageRequestSchema = MutationRequestEnvelopeSchema(
+  ScaffoldSkillDraftPackageDataSchema,
+  "ScaffoldSkillDraftPackageRequest",
+);
+export const ScaffoldSkillDraftPackageResponseSchema = ResponseEnvelopeSchema(
+  strictObject({
+    filename: Type.String({ minLength: 1, maxLength: 512 }),
+    sizeBytes: Type.Integer({ minimum: 1, maximum: 4_194_304 }),
+    files: Type.Array(UploadPackageFileSchema, { minItems: 1, maxItems: 3 }),
+  }),
+  "ScaffoldSkillDraftPackageResponse",
 );
 export const UploadResponseSchema = ResponseEnvelopeSchema(
   UploadSessionPublicSchema,
@@ -633,21 +893,49 @@ export const WorkspaceConnectionPublicSchema = strictObject(
     connectionId: ConnectionIdSchema,
     workspaceId: WorkspaceIdSchema,
     capabilityKey: Type.String({ minLength: 1, maxLength: 128 }),
+    driverKey: Type.String({ minLength: 1, maxLength: 128 }),
+    driverBackend: Type.Union([
+      Type.Literal("production"),
+      Type.Literal("test"),
+    ]),
     label: Type.String({ minLength: 1, maxLength: 200 }),
     configuration: ConnectionConfigurationSchema,
+    credentialState: Type.Union([
+      Type.Literal("unbound"),
+      Type.Literal("bound"),
+      Type.Literal("expired"),
+    ]),
     status: Type.Union([
       Type.Literal("connected"),
       Type.Literal("needs_setup"),
+      Type.Literal("checking"),
       Type.Literal("disabled"),
     ]),
     validation: strictObject({
       status: Type.Union([
         Type.Literal("never_checked"),
+        Type.Literal("checking"),
         Type.Literal("valid"),
         Type.Literal("invalid"),
       ]),
       checkedAt: Type.Union([UtcTimestampSchema, Type.Null()]),
       message: Type.String({ minLength: 1, maxLength: 1000 }),
+      principal: Type.Optional(Type.String({ maxLength: 200 })),
+      scopes: Type.Optional(
+        Type.Array(Type.String({ minLength: 1, maxLength: 200 }), {
+          uniqueItems: true,
+          maxItems: 128,
+        }),
+      ),
+      effects: Type.Optional(
+        Type.Array(Type.String({ minLength: 1, maxLength: 200 }), {
+          uniqueItems: true,
+          maxItems: 128,
+        }),
+      ),
+      expiresAt: Type.Optional(
+        Type.Union([UtcTimestampSchema, Type.Null()]),
+      ),
     }),
     revision: Type.Integer({ minimum: 1 }),
     createdAt: UtcTimestampSchema,
@@ -680,18 +968,39 @@ export const ValidateConnectionRequestSchema = MutationRequestEnvelopeSchema(
   strictObject({}),
   "ValidateConnectionRequest",
 );
+export const BindConnectionCredentialRequestSchema = MutationRequestEnvelopeSchema(
+  strictObject({
+    secretRef: Type.String({
+      minLength: 1,
+      maxLength: 256,
+      pattern: "^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
+    }),
+  }),
+  "BindConnectionCredentialRequest",
+);
 export const ConnectionResponseSchema = ResponseEnvelopeSchema(
   WorkspaceConnectionPublicSchema,
   "WorkspaceConnectionResponse",
 );
 export const CreateResourceDataSchema = strictObject({
   label: Type.String({ minLength: 1, maxLength: 200 }),
-  mediaType: Type.Union([Type.Literal("text/plain"), Type.Literal("text/markdown")]),
+  mediaType: Type.Union([
+    Type.Literal("text/plain"),
+    Type.Literal("text/markdown"),
+    Type.Literal("text/csv"),
+  ]),
   contentBase64: Type.String({ minLength: 1, maxLength: 1398104, pattern: "^[A-Za-z0-9+/]*={0,2}$" }),
 });
 export const CreateResourceRequestSchema = MutationRequestEnvelopeSchema(
   CreateResourceDataSchema,
   "CreateResourceRequest",
+);
+export const CreateResourceFromAttachmentRequestSchema = MutationRequestEnvelopeSchema(
+  strictObject({
+    label: Type.String({ minLength: 1, maxLength: 200 }),
+    attachment: AttachmentRefSchema,
+  }),
+  "CreateResourceFromAttachmentRequest",
 );
 export const ResourceResponseSchema = ResponseEnvelopeSchema(
   WorkspaceResourceSchema,
@@ -702,19 +1011,59 @@ export const ResourceListResponseSchema = ListResponseEnvelopeSchema(
   "WorkspaceResourceListResponse",
 );
 
-export const RunCommandDataSchema = strictObject({
-  reason: Type.Optional(Type.String({ minLength: 1, maxLength: 2000 })),
-});
-export const RunCommandRequestSchema = MutationRequestEnvelopeSchema(
-  RunCommandDataSchema,
-  "RunCommandRequest",
-);
+export { RunCommandDataSchema, RunCommandRequestSchema };
 
 function endpoint<T extends WorkbenchEndpointMetadata>(value: T): T {
   return value;
 }
 
-export const WORKBENCH_V1_LIFECYCLE_ENDPOINTS = {
+export const WORKBENCH_V1_STAGED_LOOP_ENDPOINTS = {
+  getStagedLoopProposal: endpoint({
+    ...readMetadata,
+    operationId: "getStagedLoopProposal",
+    method: "GET",
+    path: `${WORKBENCH_API_PREFIX}/loop-draft-proposals/{proposalId}`,
+    pathParamsSchema: StagedProposalPathParamsSchema,
+    querySchema: EmptyObjectSchema,
+    responseBodySchema: StagedLoopProposalResponseSchema,
+  }),
+  generateStagedLoopProposal: endpoint({
+    ...mutationMetadata,
+    operationId: "generateStagedLoopProposal",
+    method: "POST",
+    path: `${WORKBENCH_API_PREFIX}/loop-draft-proposals`,
+    successStatus: 201,
+    pathParamsSchema: EmptyObjectSchema,
+    querySchema: EmptyObjectSchema,
+    requestBodySchema: GenerateStagedLoopProposalRequestSchema,
+    responseBodySchema: StagedLoopProposalResponseSchema,
+  }),
+  commitStagedLoopProposal: endpoint({
+    ...mutationMetadata,
+    operationId: "commitStagedLoopProposal",
+    method: "POST",
+    path: `${WORKBENCH_API_PREFIX}/loop-draft-proposals/{proposalId}/commit`,
+    successStatus: 201,
+    pathParamsSchema: StagedProposalPathParamsSchema,
+    querySchema: EmptyObjectSchema,
+    requestBodySchema: CommitStagedLoopProposalRequestSchema,
+    responseBodySchema: CommitStagedLoopProposalResponseSchema,
+    responseHeadersSchema: EntityTagResponseHeadersSchema,
+    responseHeaders: ["ETag"],
+  }),
+  dismissStagedLoopProposal: endpoint({
+    ...mutationMetadata,
+    operationId: "dismissStagedLoopProposal",
+    method: "POST",
+    path: `${WORKBENCH_API_PREFIX}/loop-draft-proposals/{proposalId}/dismiss`,
+    pathParamsSchema: StagedProposalPathParamsSchema,
+    querySchema: EmptyObjectSchema,
+    requestBodySchema: DismissStagedLoopProposalRequestSchema,
+    responseBodySchema: StagedLoopProposalResponseSchema,
+  }),
+} as const satisfies Record<string, WorkbenchEndpointMetadata>;
+
+const WORKBENCH_V1_LIFECYCLE_BASE_ENDPOINTS = {
   getActiveSession: endpoint({
     ...readMetadata,
     operationId: "getActiveSession",
@@ -724,6 +1073,15 @@ export const WORKBENCH_V1_LIFECYCLE_ENDPOINTS = {
     querySchema: EmptyObjectSchema,
     responseBodySchema: V1SessionWorkspaceResponseSchema,
   }),
+  listRecentWork: endpoint({
+    ...readMetadata,
+    operationId: "listRecentWork",
+    method: "GET",
+    path: `${WORKBENCH_API_PREFIX}/recent-work`,
+    pathParamsSchema: EmptyObjectSchema,
+    querySchema: pageQuery,
+    responseBodySchema: RecentWorkListResponseSchema,
+  }),
   listMemberships: endpoint({
     ...readMetadata,
     operationId: "listMemberships",
@@ -732,17 +1090,6 @@ export const WORKBENCH_V1_LIFECYCLE_ENDPOINTS = {
     pathParamsSchema: EmptyObjectSchema,
     querySchema: pageQuery,
     responseBodySchema: V1MembershipListResponseSchema,
-  }),
-  addMembership: endpoint({
-    ...mutationMetadata,
-    operationId: "addMembership",
-    method: "POST",
-    path: `${WORKBENCH_API_PREFIX}/workspace/memberships`,
-    successStatus: 201,
-    pathParamsSchema: EmptyObjectSchema,
-    querySchema: EmptyObjectSchema,
-    requestBodySchema: AddMembershipRequestSchema,
-    responseBodySchema: ResponseEnvelopeSchema(WorkspaceMembershipSchema),
   }),
   createSkill: endpoint({
     ...mutationMetadata,
@@ -763,6 +1110,46 @@ export const WORKBENCH_V1_LIFECYCLE_ENDPOINTS = {
     pathParamsSchema: EmptyObjectSchema,
     querySchema: pageQuery,
     responseBodySchema: SkillAssetListResponseSchema,
+  }),
+  listSkillRuntimes: endpoint({
+    ...readMetadata,
+    operationId: "listSkillRuntimes",
+    method: "GET",
+    path: `${WORKBENCH_API_PREFIX}/skill-runtimes`,
+    pathParamsSchema: EmptyObjectSchema,
+    querySchema: EmptyObjectSchema,
+    responseBodySchema: SkillRuntimeCatalogResponseSchema,
+  }),
+  listRegisteredToolPackages: endpoint({
+    ...readMetadata,
+    operationId: "listRegisteredToolPackages",
+    method: "GET",
+    path: `${WORKBENCH_API_PREFIX}/registered-tool-packages`,
+    pathParamsSchema: EmptyObjectSchema,
+    querySchema: EmptyObjectSchema,
+    responseBodySchema: RegisteredToolCatalogResponseSchema,
+  }),
+  scaffoldSkillDraftPackage: endpoint({
+    ...mutationMetadata,
+    operationId: "scaffoldSkillDraftPackage",
+    method: "POST",
+    path: `${WORKBENCH_API_PREFIX}/skill-draft-packages/scaffold`,
+    successStatus: 200,
+    pathParamsSchema: EmptyObjectSchema,
+    querySchema: EmptyObjectSchema,
+    requestBodySchema: ScaffoldSkillDraftPackageRequestSchema,
+    responseBodySchema: ScaffoldSkillDraftPackageResponseSchema,
+  }),
+  startLoopAgentTask: endpoint({
+    ...mutationMetadata,
+    operationId: "startLoopAgentTask",
+    method: "POST",
+    path: `${WORKBENCH_API_PREFIX}/loops/{workflowId}/agent-tasks`,
+    successStatus: 202,
+    pathParamsSchema: WorkflowPathParamsSchema,
+    querySchema: EmptyObjectSchema,
+    requestBodySchema: StartLoopAgentTaskRequestSchema,
+    responseBodySchema: StartLoopAgentTaskResponseSchema,
   }),
   getSkillDraft: endpoint({
     ...readMetadata,
@@ -829,6 +1216,17 @@ export const WORKBENCH_V1_LIFECYCLE_ENDPOINTS = {
     pathParamsSchema: SkillTestRunPathParamsSchema,
     querySchema: EmptyObjectSchema,
     responseBodySchema: SkillTestRunResponseSchema,
+  }),
+  cancelSkillTest: endpoint({
+    ...mutationMetadata,
+    operationId: "cancelSkillTest",
+    method: "POST",
+    path: `${WORKBENCH_API_PREFIX}/skills/{skillId}/tests/{testRunId}/cancel`,
+    successStatus: 202,
+    pathParamsSchema: SkillTestRunPathParamsSchema,
+    querySchema: EmptyObjectSchema,
+    requestBodySchema: RunCommandRequestSchema,
+    responseBodySchema: ResponseEnvelopeSchema(SkillTestRunIdSchema),
   }),
   createSkillValidation: endpoint({
     ...revisionMutationMetadata,
@@ -910,15 +1308,6 @@ export const WORKBENCH_V1_LIFECYCLE_ENDPOINTS = {
     requestBodySchema: DeprecateSkillRequestSchema,
     responseBodySchema: ResponseEnvelopeSchema(SkillAssetRecordSummarySchema),
   }),
-  getRunComparison: endpoint({
-    ...readMetadata,
-    operationId: "getRunComparison",
-    method: "GET",
-    path: `${WORKBENCH_API_PREFIX}/runs/{runId}/comparison/{otherRunId}`,
-    pathParamsSchema: RunComparisonPathParamsSchema,
-    querySchema: EmptyObjectSchema,
-    responseBodySchema: RunComparisonResponseSchema,
-  }),
   createLoop: endpoint({
     ...mutationMetadata,
     operationId: "createLoop",
@@ -928,65 +1317,6 @@ export const WORKBENCH_V1_LIFECYCLE_ENDPOINTS = {
     pathParamsSchema: EmptyObjectSchema,
     querySchema: EmptyObjectSchema,
     requestBodySchema: CreateLoopRequestSchema,
-    responseBodySchema: CreateLoopResponseSchema,
-  }),
-  createLoopImport: endpoint({
-    ...mutationMetadata,
-    operationId: "createLoopImport",
-    method: "POST",
-    path: `${WORKBENCH_API_PREFIX}/loop-imports`,
-    successStatus: 202,
-    pathParamsSchema: EmptyObjectSchema,
-    querySchema: EmptyObjectSchema,
-    requestBodySchema: CreateLoopImportRequestSchema,
-    responseBodySchema: LoopImportResponseSchema,
-    responseHeadersSchema: EntityTagResponseHeadersSchema,
-    responseHeaders: ["ETag"],
-  }),
-  getLoopImport: endpoint({
-    ...readMetadata,
-    operationId: "getLoopImport",
-    method: "GET",
-    path: `${WORKBENCH_API_PREFIX}/loop-imports/{importId}`,
-    pathParamsSchema: LoopImportPathParamsSchema,
-    querySchema: EmptyObjectSchema,
-    responseBodySchema: LoopImportResponseSchema,
-    responseHeadersSchema: EntityTagResponseHeadersSchema,
-    responseHeaders: ["ETag"],
-  }),
-  commitLoopImport: endpoint({
-    ...revisionMutationMetadata,
-    operationId: "commitLoopImport",
-    method: "POST",
-    path: `${WORKBENCH_API_PREFIX}/loop-imports/{importId}/commit`,
-    successStatus: 201,
-    pathParamsSchema: LoopImportPathParamsSchema,
-    querySchema: EmptyObjectSchema,
-    requestBodySchema: CommitLoopImportRequestSchema,
-    responseBodySchema: CreateLoopResponseSchema,
-    responseHeadersSchema: EntityTagResponseHeadersSchema,
-    responseHeaders: ["ETag"],
-  }),
-  duplicateLoop: endpoint({
-    ...mutationMetadata,
-    operationId: "duplicateLoop",
-    method: "POST",
-    path: `${WORKBENCH_API_PREFIX}/loops/{workflowId}/duplicate`,
-    successStatus: 201,
-    pathParamsSchema: WorkflowPathParamsSchema,
-    querySchema: EmptyObjectSchema,
-    requestBodySchema: DuplicateLoopRequestSchema,
-    responseBodySchema: CreateLoopResponseSchema,
-  }),
-  createLoopDraftFromRun: endpoint({
-    ...mutationMetadata,
-    operationId: "createLoopDraftFromRun",
-    method: "POST",
-    path: `${WORKBENCH_API_PREFIX}/runs/{runId}/draft`,
-    successStatus: 201,
-    pathParamsSchema: RunPathParamsSchema,
-    querySchema: EmptyObjectSchema,
-    requestBodySchema: DuplicateLoopRequestSchema,
     responseBodySchema: CreateLoopResponseSchema,
   }),
   saveLoopRevision: endpoint({
@@ -1002,74 +1332,27 @@ export const WORKBENCH_V1_LIFECYCLE_ENDPOINTS = {
     responseHeadersSchema: EntityTagResponseHeadersSchema,
     responseHeaders: ["ETag"],
   }),
-  exportLoop: endpoint({
-    ...readMetadata,
-    operationId: "exportLoop",
-    method: "GET",
-    path: `${WORKBENCH_API_PREFIX}/loops/{workflowId}/export`,
-    pathParamsSchema: WorkflowPathParamsSchema,
-    querySchema: LoopExportQuerySchema,
-    requestHeadersSchema: PortableLoopExportRequestHeadersSchema,
-    responseBodySchema: PortableLoopPackageResponseSchema,
-    responseMediaType: PORTABLE_LOOP_PACKAGE_MEDIA_TYPE,
-    responseHeadersSchema: PortableLoopExportResponseHeadersSchema,
-    optionalRequestHeaders: ["If-None-Match"],
-    responseHeaders: ["ETag", "Content-Disposition"],
-  }),
-  createLoopSkillUpdate: endpoint({
+  recordLocalLoopTrial: endpoint({
     ...revisionMutationMetadata,
-    operationId: "createLoopSkillUpdate",
+    operationId: "recordLocalLoopTrial",
     method: "POST",
-    path: `${WORKBENCH_API_PREFIX}/loops/{workflowId}/skill-updates`,
+    path: `${WORKBENCH_API_PREFIX}/workflows/{workflowId}/local-trials`,
     successStatus: 201,
     pathParamsSchema: WorkflowPathParamsSchema,
     querySchema: EmptyObjectSchema,
-    requestBodySchema: CreateLoopSkillUpdateRequestSchema,
-    responseBodySchema: CreateLoopResponseSchema,
-    responseHeadersSchema: EntityTagResponseHeadersSchema,
-    responseHeaders: ["ETag"],
+    requestBodySchema: RecordLocalLoopTrialRequestSchema,
+    responseBodySchema: RecordLocalLoopTrialResponseSchema,
   }),
-  getLoopSkillUpdatePreview: endpoint({
-    ...readMetadata,
-    operationId: "getLoopSkillUpdatePreview",
-    method: "GET",
-    path: `${WORKBENCH_API_PREFIX}/loops/{workflowId}/skill-updates/{skillVersionId}`,
-    pathParamsSchema: LoopSkillUpdatePreviewPathParamsSchema,
-    querySchema: EmptyObjectSchema,
-    responseBodySchema: LoopSkillUpdatePreviewResponseSchema,
-    responseHeadersSchema: EntityTagResponseHeadersSchema,
-    responseHeaders: ["ETag"],
+  publishNativeLoop: endpoint({
+    ...revisionMutationMetadata, operationId: "publishNativeLoop", method: "POST",
+    path: `${WORKBENCH_API_PREFIX}/loops/{workflowId}/native-publish`, successStatus: 201,
+    pathParamsSchema: WorkflowPathParamsSchema, querySchema: EmptyObjectSchema,
+    requestBodySchema: PublishNativeLoopRequestSchema, responseBodySchema: PublishNativeLoopResponseSchema,
   }),
-  generateLoopProposal: endpoint({
-    ...revisionMutationMetadata,
-    operationId: "generateLoopProposal",
-    method: "POST",
-    path: `${WORKBENCH_API_PREFIX}/loops/{workflowId}/proposals`,
-    successStatus: 201,
-    pathParamsSchema: WorkflowPathParamsSchema,
-    querySchema: EmptyObjectSchema,
-    requestBodySchema: GenerateProposalRequestSchema,
-    responseBodySchema: ProposalResponseSchema,
-  }),
-  applyLoopProposal: endpoint({
-    ...revisionMutationMetadata,
-    operationId: "applyLoopProposal",
-    method: "POST",
-    path: `${WORKBENCH_API_PREFIX}/loops/{workflowId}/proposals/{proposalId}/apply`,
-    pathParamsSchema: ProposalPathParamsSchema,
-    querySchema: EmptyObjectSchema,
-    requestBodySchema: ApplyProposalRequestSchema,
-    responseBodySchema: ProposalResponseSchema,
-  }),
-  dismissLoopProposal: endpoint({
-    ...revisionMutationMetadata,
-    operationId: "dismissLoopProposal",
-    method: "POST",
-    path: `${WORKBENCH_API_PREFIX}/loops/{workflowId}/proposals/{proposalId}/dismiss`,
-    pathParamsSchema: ProposalPathParamsSchema,
-    querySchema: EmptyObjectSchema,
-    requestBodySchema: ApplyProposalRequestSchema,
-    responseBodySchema: ProposalResponseSchema,
+  getNativeLoopPackage: endpoint({
+    ...readMetadata, operationId: "getNativeLoopPackage", method: "GET",
+    path: `${WORKBENCH_API_PREFIX}/team-library/{releaseId}/native-loop-package`,
+    pathParamsSchema: ReleasePathParamsSchema, querySchema: EmptyObjectSchema, responseBodySchema: NativeLoopPackageResponseSchema,
   }),
   publishLoop: endpoint({
     ...revisionMutationMetadata,
@@ -1087,7 +1370,35 @@ export const WORKBENCH_V1_LIFECYCLE_ENDPOINTS = {
     method: "GET",
     path: `${WORKBENCH_API_PREFIX}/team-library`,
     pathParamsSchema: EmptyObjectSchema,
-    querySchema: pageQuery,
+    querySchema: libraryQuery,
+    responseBodySchema: ListResponseEnvelopeSchema(WorkspaceAssetReleaseSchema),
+  }),
+  getNativeSkillPackage: endpoint({
+    ...readMetadata,
+    operationId: "getNativeSkillPackage",
+    method: "GET",
+    path: `${WORKBENCH_API_PREFIX}/team-library/{releaseId}/native-skill-package`,
+    pathParamsSchema: ReleasePathParamsSchema,
+    querySchema: EmptyObjectSchema,
+    responseBodySchema: ResponseEnvelopeSchema(Type.Object({
+      releaseId: ReleaseIdSchema,
+      versionId: SkillVersionIdSchema,
+      version: Type.String({ minLength: 1, maxLength: 64 }),
+      skillName: Type.String({ pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 64 }),
+      contentHash: ContentHashSchema,
+      packageHash: ContentHashSchema,
+      packageObjectHash: ContentHashSchema,
+      compatibility: Type.Union([Type.String(), Type.Null()]),
+      packageContentBase64: Type.String({ maxLength: 16777216 }),
+    }, { additionalProperties: false })),
+  }),
+  listSystemCatalog: endpoint({
+    ...readMetadata,
+    operationId: "listSystemCatalog",
+    method: "GET",
+    path: `${WORKBENCH_API_PREFIX}/system-catalog`,
+    pathParamsSchema: EmptyObjectSchema,
+    querySchema: libraryQuery,
     responseBodySchema: ListResponseEnvelopeSchema(WorkspaceAssetReleaseSchema),
   }),
   installRelease: endpoint({
@@ -1101,27 +1412,27 @@ export const WORKBENCH_V1_LIFECYCLE_ENDPOINTS = {
     requestBodySchema: InstallReleaseRequestSchema,
     responseBodySchema: InstallationResponseSchema,
   }),
-  useReleaseAsStartingPoint: endpoint({
+  createLoopFromRelease: endpoint({
     ...mutationMetadata,
-    operationId: "useReleaseAsStartingPoint",
+    operationId: "createLoopFromRelease",
     method: "POST",
-    path: `${WORKBENCH_API_PREFIX}/team-library/{releaseId}/starting-point`,
+    path: `${WORKBENCH_API_PREFIX}/team-library/{releaseId}/workflows`,
     successStatus: 201,
     pathParamsSchema: ReleasePathParamsSchema,
     querySchema: EmptyObjectSchema,
-    requestBodySchema: StartFromReleaseRequestSchema,
+    requestBodySchema: CreateLoopFromReleaseRequestSchema,
     responseBodySchema: CreateLoopResponseSchema,
   }),
-  forkTeamLibraryLoop: endpoint({
+  installDefaultSystemCatalog: endpoint({
     ...mutationMetadata,
-    operationId: "forkTeamLibraryLoop",
+    operationId: "installDefaultSystemCatalog",
     method: "POST",
-    path: `${WORKBENCH_API_PREFIX}/team-library/{releaseId}/fork`,
+    path: `${WORKBENCH_API_PREFIX}/system-catalog/default-pack/install`,
     successStatus: 201,
-    pathParamsSchema: ReleasePathParamsSchema,
+    pathParamsSchema: EmptyObjectSchema,
     querySchema: EmptyObjectSchema,
-    requestBodySchema: StartFromReleaseRequestSchema,
-    responseBodySchema: CreateLoopResponseSchema,
+    requestBodySchema: InstallSystemCatalogDefaultPackRequestSchema,
+    responseBodySchema: InstallSystemCatalogDefaultPackResponseSchema,
   }),
   getInstallation: endpoint({
     ...readMetadata,
@@ -1141,15 +1452,64 @@ export const WORKBENCH_V1_LIFECYCLE_ENDPOINTS = {
     querySchema: pageQuery,
     responseBodySchema: InstallationListResponseSchema,
   }),
-  adoptInstallationRelease: endpoint({
+  getInstallationUpdateImpact: endpoint({
+    ...readMetadata,
+    operationId: "getInstallationUpdateImpact",
+    method: "GET",
+    path: `${WORKBENCH_API_PREFIX}/installations/{installationId}/update-impact`,
+    pathParamsSchema: InstallationPathParamsSchema,
+    querySchema: InstallationUpdateImpactQuerySchema,
+    responseBodySchema: InstallationUpdateImpactResponseSchema,
+  }),
+  createInstallationUpdateDraft: endpoint({
     ...mutationMetadata,
-    operationId: "adoptInstallationRelease",
+    operationId: "createInstallationUpdateDraft",
     method: "POST",
-    path: `${WORKBENCH_API_PREFIX}/installations/{installationId}/adopt-release`,
+    path: `${WORKBENCH_API_PREFIX}/installations/{installationId}/update-drafts`,
+    successStatus: 201,
     pathParamsSchema: InstallationPathParamsSchema,
     querySchema: EmptyObjectSchema,
-    requestBodySchema: AdoptInstallationReleaseRequestSchema,
-    responseBodySchema: InstallationResponseSchema,
+    requestBodySchema: CreateInstallationUpdateDraftRequestSchema,
+    responseBodySchema: InstallationUpdateDraftResponseSchema,
+  }),
+  getInstallationUpdateDraft: endpoint({
+    ...readMetadata,
+    operationId: "getInstallationUpdateDraft",
+    method: "GET",
+    path: `${WORKBENCH_API_PREFIX}/installation-update-drafts/{updateDraftId}`,
+    pathParamsSchema: InstallationUpdateDraftPathParamsSchema,
+    querySchema: EmptyObjectSchema,
+    responseBodySchema: InstallationUpdateDraftResponseSchema,
+  }),
+  refreshInstallationUpdateDraft: endpoint({
+    ...mutationMetadata,
+    operationId: "refreshInstallationUpdateDraft",
+    method: "POST",
+    path: `${WORKBENCH_API_PREFIX}/installation-update-drafts/{updateDraftId}/refresh`,
+    pathParamsSchema: InstallationUpdateDraftPathParamsSchema,
+    querySchema: EmptyObjectSchema,
+    requestBodySchema: InstallationUpdateDraftDecisionRequestSchema,
+    responseBodySchema: InstallationUpdateDraftResponseSchema,
+  }),
+  confirmInstallationUpdateDraft: endpoint({
+    ...mutationMetadata,
+    operationId: "confirmInstallationUpdateDraft",
+    method: "POST",
+    path: `${WORKBENCH_API_PREFIX}/installation-update-drafts/{updateDraftId}/confirm`,
+    pathParamsSchema: InstallationUpdateDraftPathParamsSchema,
+    querySchema: EmptyObjectSchema,
+    requestBodySchema: InstallationUpdateDraftDecisionRequestSchema,
+    responseBodySchema: InstallationUpdateDraftResponseSchema,
+  }),
+  keepCurrentInstallationVersion: endpoint({
+    ...mutationMetadata,
+    operationId: "keepCurrentInstallationVersion",
+    method: "POST",
+    path: `${WORKBENCH_API_PREFIX}/installation-update-drafts/{updateDraftId}/keep-current`,
+    pathParamsSchema: InstallationUpdateDraftPathParamsSchema,
+    querySchema: EmptyObjectSchema,
+    requestBodySchema: InstallationUpdateDraftDecisionRequestSchema,
+    responseBodySchema: InstallationUpdateDraftResponseSchema,
   }),
   createUpload: endpoint({
     ...mutationMetadata,
@@ -1251,6 +1611,17 @@ export const WORKBENCH_V1_LIFECYCLE_ENDPOINTS = {
     requestBodySchema: CreateResourceRequestSchema,
     responseBodySchema: ResourceResponseSchema,
   }),
+  createResourceFromAttachment: endpoint({
+    ...mutationMetadata,
+    operationId: "createResourceFromAttachment",
+    method: "POST",
+    path: `${WORKBENCH_API_PREFIX}/resources/from-attachment`,
+    successStatus: 201,
+    pathParamsSchema: EmptyObjectSchema,
+    querySchema: EmptyObjectSchema,
+    requestBodySchema: CreateResourceFromAttachmentRequestSchema,
+    responseBodySchema: ResourceResponseSchema,
+  }),
   getResource: endpoint({
     ...readMetadata,
     operationId: "getResource",
@@ -1309,29 +1680,26 @@ export const WORKBENCH_V1_LIFECYCLE_ENDPOINTS = {
     requestBodySchema: ValidateConnectionRequestSchema,
     responseBodySchema: ConnectionResponseSchema,
   }),
-  cancelRun: endpoint({
-    ...mutationMetadata,
-    operationId: "cancelRun",
+  bindConnectionCredential: endpoint({
+    ...connectionRevisionMutationMetadata,
+    operationId: "bindConnectionCredential",
     method: "POST",
-    path: `${WORKBENCH_API_PREFIX}/runs/{runId}/cancel`,
-    successStatus: 202,
-    pathParamsSchema: RunPathParamsSchema,
+    path: `${WORKBENCH_API_PREFIX}/connections/{connectionId}/credential-binding`,
+    pathParamsSchema: ConnectionPathParamsSchema,
     querySchema: EmptyObjectSchema,
-    requestBodySchema: RunCommandRequestSchema,
-    responseBodySchema: ResponseEnvelopeSchema(RunIdSchema),
+    requestBodySchema: BindConnectionCredentialRequestSchema,
+    responseBodySchema: ConnectionResponseSchema,
   }),
-  retryRun: endpoint({
-    ...mutationMetadata,
-    operationId: "retryRun",
-    method: "POST",
-    path: `${WORKBENCH_API_PREFIX}/runs/{runId}/retry`,
-    successStatus: 202,
-    pathParamsSchema: RunPathParamsSchema,
-    querySchema: EmptyObjectSchema,
-    requestBodySchema: RunCommandRequestSchema,
-    responseBodySchema: ResponseEnvelopeSchema(RunIdSchema),
-  }),
+  cancelRun: WORKBENCH_V1_RUN_ENDPOINTS.cancelRun,
+  retryRun: WORKBENCH_V1_RUN_ENDPOINTS.retryRun,
 } as const satisfies Record<string, WorkbenchEndpointMetadata>;
+
+export const WORKBENCH_V1_LIFECYCLE_ENDPOINTS:
+  typeof WORKBENCH_V1_LIFECYCLE_BASE_ENDPOINTS & typeof WORKBENCH_V1_STAGED_LOOP_ENDPOINTS = Object.assign(
+  {},
+  WORKBENCH_V1_LIFECYCLE_BASE_ENDPOINTS,
+  WORKBENCH_V1_STAGED_LOOP_ENDPOINTS,
+);
 
 export function lifecycleEndpointKeys(): readonly string[] {
   return Object.keys(WORKBENCH_V1_LIFECYCLE_ENDPOINTS);

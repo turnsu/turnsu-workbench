@@ -1,28 +1,38 @@
 import Foundation
 
-struct AgentDaemonAuthToken: Decodable {
-    let token: String
-}
-
-struct AgentDaemonAuth {
-    static func loadToken(pathResolver: RuntimePathResolver = RuntimePathResolver()) -> String? {
-        let url = pathResolver.runtimeDirectory
-            .appendingPathComponent("agent", isDirectory: true)
-            .appendingPathComponent("auth-token.json")
-        guard let data = try? Data(contentsOf: url),
-              let payload = try? JSONDecoder.agentArtifactDecoder().decode(AgentDaemonAuthToken.self, from: data),
-              !payload.token.isEmpty
-        else {
-            return nil
-        }
-        return payload.token
-    }
-}
-
 struct AgentDaemonClient {
-    var baseURL: URL = URL(string: "http://127.0.0.1:8797")!
-    var session: URLSession = .shared
-    var authToken: String? = AgentDaemonAuth.loadToken()
+    private let baseURL: URL
+    private let session: URLSession
+    private let authToken: String?
+    private let contractTestAccess: Bool
+
+    init(session: URLSession = .shared) {
+        self.baseURL = URL(string: "https://legacy-agent-disabled.invalid")!
+        self.session = session
+        self.authToken = nil
+        self.contractTestAccess = false
+    }
+
+    private init(baseURL: URL, session: URLSession, authToken: String?) {
+        self.baseURL = baseURL
+        self.session = session
+        self.authToken = authToken
+        self.contractTestAccess = true
+    }
+
+    static func contractTest(
+        baseURL: URL,
+        session: URLSession,
+        authToken: String? = nil
+    ) throws -> AgentDaemonClient {
+        guard ProcessInfo.processInfo.environment["WORKBENCH_TEST_MODE"] == "1" else {
+            throw AgentDaemonClientError.contractTestModeRequired
+        }
+        guard isContractTestURL(baseURL) else {
+            throw AgentDaemonClientError.contractTestURLRequired
+        }
+        return AgentDaemonClient(baseURL: baseURL, session: session, authToken: authToken)
+    }
 
     func health() async throws -> AgentDaemonStatus {
         try await get("/health", as: AgentDaemonStatus.self)
@@ -119,6 +129,7 @@ struct AgentDaemonClient {
     }
 
     private func get<T: Decodable>(_ path: String, as type: T.Type) async throws -> T {
+        try requireContractTestAccess()
         let url = endpoint(path)
         var request = URLRequest(url: url, timeoutInterval: 3)
         request.httpMethod = "GET"
@@ -129,6 +140,7 @@ struct AgentDaemonClient {
     }
 
     private func post<Body: Encodable, T: Decodable>(_ path: String, body: Body, as type: T.Type) async throws -> T {
+        try requireContractTestAccess()
         let url = endpoint(path)
         var request = URLRequest(url: url, timeoutInterval: 90)
         request.httpMethod = "POST"
@@ -141,6 +153,7 @@ struct AgentDaemonClient {
     }
 
     private func patch<Body: Encodable, T: Decodable>(_ path: String, body: Body, as type: T.Type) async throws -> T {
+        try requireContractTestAccess()
         let url = endpoint(path)
         var request = URLRequest(url: url, timeoutInterval: 20)
         request.httpMethod = "PATCH"
@@ -153,6 +166,7 @@ struct AgentDaemonClient {
     }
 
     private func delete<T: Decodable>(_ path: String, as type: T.Type) async throws -> T {
+        try requireContractTestAccess()
         let url = endpoint(path)
         var request = URLRequest(url: url, timeoutInterval: 20)
         request.httpMethod = "DELETE"
@@ -170,6 +184,18 @@ struct AgentDaemonClient {
     private func applyAuth(to request: inout URLRequest) {
         guard let authToken, !authToken.isEmpty else { return }
         request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+    }
+
+    private func requireContractTestAccess() throws {
+        guard contractTestAccess else {
+            throw AgentDaemonClientError.legacyClientDisabled
+        }
+    }
+
+    private static func isContractTestURL(_ url: URL) -> Bool {
+        guard url.scheme == "https", let host = url.host?.lowercased() else { return false }
+        return host.hasSuffix(".test")
+            || (host.hasSuffix(".invalid") && (host.contains("mock") || host.contains("_test")))
     }
 
     private func validate(response: URLResponse, data: Data) throws {
@@ -224,10 +250,19 @@ struct WeChatLiveRefreshResult: Decodable {
 }
 
 enum AgentDaemonClientError: LocalizedError {
+    case legacyClientDisabled
+    case contractTestModeRequired
+    case contractTestURLRequired
     case http(String)
 
     var errorDescription: String? {
         switch self {
+        case .legacyClientDisabled:
+            return "历史 Swift Agent 客户端已停用，请使用 Web Product API。"
+        case .contractTestModeRequired:
+            return "legacy Agent contract client requires WORKBENCH_TEST_MODE=1"
+        case .contractTestURLRequired:
+            return "legacy Agent contract client requires an explicit .test or mock URL"
         case let .http(message):
             return "Agent daemon HTTP error: \(message)"
         }
@@ -235,14 +270,50 @@ enum AgentDaemonClientError: LocalizedError {
 }
 
 struct AgentEventStreamClient {
-    var baseURL: URL = URL(string: "http://127.0.0.1:8797")!
-    var session: URLSession = .shared
-    var authToken: String? = AgentDaemonAuth.loadToken()
+    private let baseURL: URL
+    private let session: URLSession
+    private let authToken: String?
+    private let contractTestAccess: Bool
+
+    init(session: URLSession = .shared) {
+        self.baseURL = URL(string: "https://legacy-agent-disabled.invalid")!
+        self.session = session
+        self.authToken = nil
+        self.contractTestAccess = false
+    }
+
+    private init(baseURL: URL, session: URLSession, authToken: String?) {
+        self.baseURL = baseURL
+        self.session = session
+        self.authToken = authToken
+        self.contractTestAccess = true
+    }
+
+    static func contractTest(
+        baseURL: URL,
+        session: URLSession,
+        authToken: String? = nil
+    ) throws -> AgentEventStreamClient {
+        guard ProcessInfo.processInfo.environment["WORKBENCH_TEST_MODE"] == "1" else {
+            throw AgentDaemonClientError.contractTestModeRequired
+        }
+        guard baseURL.scheme == "https",
+              let host = baseURL.host?.lowercased(),
+              host.hasSuffix(".test")
+                || (host.hasSuffix(".invalid") && (host.contains("mock") || host.contains("_test")))
+        else {
+            throw AgentDaemonClientError.contractTestURLRequired
+        }
+        return AgentEventStreamClient(baseURL: baseURL, session: session, authToken: authToken)
+    }
 
     func events(runID: String) -> AsyncThrowingStream<AgentStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
+                    guard contractTestAccess else {
+                        throw AgentDaemonClientError.legacyClientDisabled
+                    }
                     let url = URL(string: "/runs/\(runID)/events", relativeTo: baseURL)!.absoluteURL
                     var request = URLRequest(url: url, timeoutInterval: 300)
                     request.httpMethod = "GET"

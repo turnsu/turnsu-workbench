@@ -1,833 +1,222 @@
-#!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { assertSupportedNodeVersion } from "../../code/workbench-server/src/runtime/node-version-gate.mjs";
+import { ProductPostgresStore } from "../../code/workbench-server/src/store/postgres/product-postgres-store.mjs";
 import {
-  backupFilename,
-  backupManifestPath,
-  decryptBackupStream,
-  encryptBackupStream,
-  selectBackupRetention,
-  verifyBackupManifest,
-  writeBackupManifest,
-} from "./encrypted-mongo-backup.mjs";
+  assertPostgresTools,
+  createPostgresBackup,
+  parsePostgresConnection,
+  restorePostgresBackup,
+} from "./postgres-backup-restore.mjs";
 import {
-  LOCAL_SECRET_ACCOUNTS,
-  modelCredentialAccount,
-  readKeychainSecret,
-  writeKeychainSecret,
-} from "./keychain.mjs";
-import {
-  activateRelease,
-  buildReleaseManifest,
-  rollbackRelease,
-  verifyReleaseManifest,
-} from "./release-manager.mjs";
-import { stageLocalRelease } from "./release-bundle.mjs";
-import { scanReleaseSecrets } from "./release-secret-scan.mjs";
-import {
-  authenticatedMongoUri,
-  buildDaemonEnvironment,
-  ensureLocalDirectories,
-  initializeLocalSecrets,
-  inspectLocalFilesystem,
-  localPaths,
-  materializeMongoSecrets,
-  readLocalConfig,
-  writeLocalConfig,
-} from "./local-runtime.mjs";
-import { createObjectStoreBackup, restoreObjectStoreBackup } from "./object-store-backup.mjs";
-import { runProductProviderSmoke } from "./provider-smoke.mjs";
-import { runLocalWatchdog } from "./watchdog.mjs";
+  validatePostgresReleaseManifest,
+  writePostgresReleaseManifest,
+} from "./postgres-release.mjs";
 
-assertSupportedNodeVersion();
-
-const sourceDirectory = fileURLToPath(new URL(".", import.meta.url));
-const repositoryRoot = resolve(sourceDirectory, "../../../..");
-const composePath = join(repositoryRoot, "docker-compose.yml");
-const serverBin = join(repositoryRoot, "domains/backend/code/workbench-server/bin/workbench-server.mjs");
-const migrationBin = join(repositoryRoot, "domains/backend/code/workbench-server/scripts/migrate-product-store.mjs");
-const bundledNode = join(repositoryRoot, ".tooling/node/bin/node");
-const MONGO_IMAGE = "mongo@sha256:340c1c56fb10e95cf79ff547f8664b96bc6ead9909bc355238cbf865a9695a6f";
-const LATEST_MIGRATION = "006-model-routing";
-const FROZEN_FRONTEND_TREE = "c928dda4e262bff84186333068317413d8debce6";
-const CRITICAL_RESTORE_COLLECTIONS = Object.freeze([
-  "runs", "execution_events", "execution_checkpoints", "agent_turns",
-  "memory_deletion_tombstones", "audit_events",
-  "model_profiles", "model_profile_revisions", "model_routing_policies", "product_artifacts",
-]);
-
-const args = process.argv.slice(2);
-const command = args.shift();
+const here = dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = resolve(here, "../../../..");
+const command = process.argv[2] ?? "help";
 
 try {
-  const result = await dispatch(command, args);
-  if (result !== undefined) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  if (result?.schemaVersion === "looloomi-secret-scan-v1"
-    && (result.findings !== 0 || result.oversizedFilesSkipped !== 0)) process.exitCode = 1;
+  switch (command) {
+    case "help":
+      printHelp();
+      break;
+    case "postgres-up":
+      await run("docker", ["compose", "up", "-d", "--wait", "--wait-timeout", "90", "postgres"], { cwd: repositoryRoot });
+      break;
+    case "postgres-down":
+      await run("docker", ["compose", "down"], { cwd: repositoryRoot });
+      break;
+    case "migrate":
+      await migrate();
+      break;
+    case "doctor":
+    case "readiness":
+      await doctor();
+      break;
+    case "backup":
+      await backup();
+      break;
+    case "restore":
+      await restore();
+      break;
+    case "stage-release":
+      await stageRelease();
+      break;
+    case "release":
+      await activateRelease();
+      break;
+    case "serve":
+      await serve();
+      break;
+    default:
+      throw coded("workbench_local_command_unknown");
+  }
 } catch (error) {
-  process.stderr.write(`${JSON.stringify({ code: safeCode(error?.code) })}\n`);
+  process.stderr.write(`${JSON.stringify({ code: error?.code ?? "workbench_local_failed" })}\n`);
   process.exitCode = 1;
 }
 
-async function dispatch(name, argv) {
-  const root = valueAfter(argv, "--root") ?? process.env.WORKBENCH_LOCAL_ROOT;
-  const paths = localPaths(root);
-  switch (name) {
-    case "init-secrets":
-      await ensureLocalDirectories(paths);
-      return initializeLocalSecrets({ force: argv.includes("--rotate") });
-    case "set-model-key": {
-      const secret = (await readStdin(16_384)).toString("utf8").trim();
-      if (!secret) throw coded("model_key_required");
-      const credentialRef = valueAfter(argv, "--credential-ref") ?? "default";
-      await writeKeychainSecret(modelCredentialAccount(credentialRef), secret);
-      return { updated: true, credentialRef };
-    }
-    case "configure": {
-      const profile = modelProfileImportFromArgs(argv);
-      const workspaceId = valueAfter(argv, "--workspace-id") ?? "workspace-local";
-      return writeLocalConfig({
-        modelCatalogImport: {
-          schemaVersion: "model-catalog-import-v1",
-          profiles: [profile],
-          routingPolicies: [{
-            workspaceId,
-            defaultProfileIdsByCapability: Object.fromEntries(
-              profile.capabilities.map((capability) => [capability, profile.profileId]),
-            ),
-            workflowFallbackAllowed: false,
-          }],
-        },
-        agentImage: requiredAfter(argv, "--agent-image"),
-        skillImage: requiredAfter(argv, "--skill-image"),
-        port: integerAfter(argv, "--port", 8798),
-        database: valueAfter(argv, "--database") ?? "looloomi_workbench",
-        logLevel: valueAfter(argv, "--log-level") ?? "info",
-      }, paths);
-    }
-    case "add-model": {
-      const config = await readLocalConfig(paths);
-      const profile = modelProfileImportFromArgs(argv);
-      return writeLocalConfig({
-        ...config,
-        modelCatalogImport: {
-          ...config.modelCatalogImport,
-          profiles: [
-            ...config.modelCatalogImport.profiles.filter((item) =>
-              item.profileId !== profile.profileId),
-            profile,
-          ],
-        },
-      }, paths);
-    }
-    case "set-default-model": {
-      const config = await readLocalConfig(paths);
-      const profileId = requiredAfter(argv, "--model-profile-id");
-      const workspaceId = valueAfter(argv, "--workspace-id") ?? "workspace-local";
-      const policy = config.modelCatalogImport.routingPolicies.find((item) => item.workspaceId === workspaceId);
-      if (!policy) throw coded("local_model_policy_unavailable");
-      return writeLocalConfig({
-        ...config,
-        modelCatalogImport: {
-          ...config.modelCatalogImport,
-          routingPolicies: config.modelCatalogImport.routingPolicies.map((item) => item.workspaceId === workspaceId ? {
-            ...item,
-            defaultProfileIdsByCapability: {
-              ...item.defaultProfileIdsByCapability,
-              chat: profileId,
-              tool_calling: profileId,
-              structured_output: profileId,
-            },
-          } : item),
-        },
-      }, paths);
-    }
-    case "set-capability-default": {
-      const config = await readLocalConfig(paths);
-      const workspaceId = valueAfter(argv, "--workspace-id") ?? "workspace-local";
-      const capability = requiredAfter(argv, "--capability");
-      const profileId = requiredAfter(argv, "--model-profile-id");
-      const policy = config.modelCatalogImport.routingPolicies.find((item) => item.workspaceId === workspaceId);
-      if (!policy) throw coded("local_model_policy_unavailable");
-      return writeLocalConfig({
-        ...config,
-        modelCatalogImport: {
-          ...config.modelCatalogImport,
-          routingPolicies: config.modelCatalogImport.routingPolicies.map((item) => item.workspaceId === workspaceId ? {
-            ...item,
-            defaultProfileIdsByCapability: {
-              ...item.defaultProfileIdsByCapability,
-              [capability]: profileId,
-            },
-          } : item),
-        },
-      }, paths);
-    }
-    case "doctor": {
-      const requireRunning = argv.includes("--require-running");
-      const result = await doctor({ paths, requireRunning });
-      if (requireRunning && result.status !== "ready") throw coded("local_doctor_failed");
-      return result;
-    }
-    case "watchdog":
-      return runLocalWatchdog({
-        statePath: paths.watchdogState,
-        check: () => doctor({ paths, requireRunning: true }),
-        notify: (state) => writeWatchdogAlert(state),
-      });
-    case "preflight":
-    case "diagnostics":
-      return doctor({ paths, requireRunning: false });
-    case "status": {
-      const result = await doctor({ paths, requireRunning: true });
-      if (result.status !== "ready") throw coded("local_service_not_ready");
-      return result;
-    }
-    case "install":
-    case "start":
-      return startLocalServices(paths);
-    case "stop":
-      return stopLocalServices(paths);
-    case "restart":
-      return restartLocalServer(paths);
-    case "mongo-up":
-      await materializeMongoSecrets(paths);
-      await runChecked("docker", ["compose", "-f", composePath, "up", "-d", "--wait"], {
-        env: composeEnvironment(paths),
-      });
-      return { status: "running" };
-    case "mongo-down":
-      await runChecked("docker", ["compose", "-f", composePath, "down"], { env: composeEnvironment(paths) });
-      return { status: "stopped" };
-    case "migrate": {
-      const mongo = await materializeMongoSecrets(paths);
-      const config = await readLocalConfig(paths);
-      await runChecked(bundledNode, [migrationBin, "--db", config.database, "--confirm-write"], {
-        cwd: repositoryRoot,
-        env: { ...minimalEnvironment(), MONGODB_URI: authenticatedMongoUri(mongo) },
-      });
-      return { status: "migrated" };
-    }
-    case "serve": {
-      const env = await buildDaemonEnvironment({ paths, baseEnv: minimalEnvironment() });
-      return inheritProcess(bundledNode, [serverBin], { cwd: repositoryRoot, env });
-    }
-    case "backup":
-      return createBackup(paths);
-    case "restore-drill":
-      return restoreDrill(paths, requiredAfter(argv, "--backup"));
-    case "smoke-chat":
-      return smokeProvider(paths, argv, { kind: "chat", confirmBillable: false });
-    case "smoke-stability":
-      if (!argv.includes("--confirm-billable")) throw coded("stability_billable_confirmation_required");
-      return smokeProvider(paths, argv, { kind: "stability", confirmBillable: true });
-    case "manifest":
-      return createManifest({
-        bundleRoot: requiredAfter(argv, "--bundle"),
-        version: requiredAfter(argv, "--version"),
-        paths,
-      });
-    case "stage-release":
-      return stageLocalRelease({
-        sourceRoot: repositoryRoot,
-        destination: requiredAfter(argv, "--destination"),
-      });
-    case "scan-release-secrets": {
-      const sourceCommit = await runChecked("git", ["rev-parse", "HEAD"]);
-      return scanReleaseSecrets({
-        root: requiredAfter(argv, "--bundle"),
-        sourceCommit: sourceCommit.stdout.trim(),
-      });
-    }
-    case "activate":
-    case "upgrade": {
-      const config = await readLocalConfig(paths);
-      const bundleRoot = requiredAfter(argv, "--bundle");
-      await verifyCandidateBundle(bundleRoot);
-      const backup = await createBackup(paths);
-      const activated = await activateRelease({
-        bundleRoot,
-        installRoot: paths.root,
-        healthCheck: (candidate, manifest) => candidateHealthCheck(candidate, manifest, { paths, config }),
-      });
-      await installLaunchAgents(paths);
-      await waitForReady(config.port);
-      return { status: "upgraded", backup: backup.backup, ...activated };
-    }
-    case "rollback": {
-      const config = await readLocalConfig(paths);
-      const rolledBack = await rollbackRelease({ installRoot: paths.root });
-      await installLaunchAgents(paths);
-      await waitForReady(config.port);
-      return { status: "rolled_back", ...rolledBack };
-    }
-    case "install-launchagents":
-      return installLaunchAgents(paths);
-    case "help":
-    case undefined:
-      return { commands: [
-        "init-secrets", "set-model-key", "configure", "add-model", "set-default-model", "set-capability-default",
-        "install", "preflight", "start", "stop",
-        "restart", "status", "backup", "restore-drill", "upgrade", "rollback", "diagnostics",
-        "doctor", "watchdog", "mongo-up", "mongo-down", "migrate", "serve", "stage-release", "manifest",
-        "activate", "install-launchagents", "scan-release-secrets", "smoke-chat", "smoke-stability",
-      ] };
-    default:
-      throw coded("local_command_unknown");
+async function migrate() {
+  const connectionString = requiredPostgresUrl();
+  const { database } = parsePostgresConnection(connectionString);
+  if (!database.endsWith("_test") && !flag("--confirm-write")) {
+    throw coded("postgres_migration_write_confirmation_required");
   }
-}
-
-async function smokeProvider(paths, argv, { kind, confirmBillable }) {
-  const bundleRoot = resolve(requiredAfter(argv, "--bundle"));
-  const profileId = requiredAfter(argv, "--model-profile-id");
-  const sourceCommit = requiredAfter(argv, "--source-commit");
-  const config = await readLocalConfig(paths);
-  const testDatabase = `looloomi_provider_${kind}_${randomUUID().replaceAll("-", "").slice(0, 12)}_test`;
-  const temporary = await mkdtemp(`/private/tmp/looloomi-${kind}-smoke-`);
-  const candidateNode = join(bundleRoot, ".tooling/node/bin/node");
-  const candidateMigration = join(bundleRoot, "domains/backend/code/workbench-server/scripts/migrate-product-store.mjs");
-  let evidence;
-  let operationFailed = false;
+  const store = new ProductPostgresStore({ poolOptions: { connectionString } });
   try {
-    const baseEnvironment = await buildDaemonEnvironment({ paths, baseEnv: minimalEnvironment() });
-    const env = {
-      ...baseEnvironment,
-      WORKBENCH_LOCAL_ROOT: paths.root,
-      WORKBENCH_MONGODB_DB: testDatabase,
-      WORKBENCH_OBJECT_STORE_ROOT: join(temporary, "objects"),
-      WORKBENCH_EXECUTION_ROOT: join(temporary, "executions"),
-      WORKBENCH_AGENT_SANDBOX_ROOT: join(temporary, "agent-sandbox"),
-      WORKBENCH_TEST_MODE: "0",
-    };
-    await runChecked(candidateNode, [candidateMigration, "--db", testDatabase, "--confirm-write"], {
-      cwd: bundleRoot,
-      env: { ...env, MONGODB_URI: env.WORKBENCH_MONGODB_URI },
-    });
-    evidence = await runProductProviderSmoke({
-      bundleRoot,
-      sourceCommit,
-      kind,
-      profileId,
-      confirmBillable,
-      env,
-    });
-  } catch (error) {
-    operationFailed = true;
-    throw error;
+    const result = await store.runMigrations();
+    process.stdout.write(`${JSON.stringify({
+      schemaVersion: "looloomi-postgres-migration-result-v1",
+      database,
+      ...result,
+    }, null, 2)}\n`);
   } finally {
-    const cleanup = await runProcess(
-      "docker",
-      ["exec", "looloomi-mongodb", "/opt/looloomi/mongo-drop-test.sh", testDatabase],
-    ).catch(() => ({ code: -1 }));
-    await rm(temporary, { recursive: true, force: true });
-    if (!operationFailed && cleanup.code !== 0) throw coded("provider_smoke_cleanup_failed");
+    await store.close();
   }
-  const evidenceRoot = join(bundleRoot, "release-evidence");
-  await mkdir(evidenceRoot, { recursive: true, mode: 0o700 });
-  const evidencePath = join(evidenceRoot, `${kind === "chat" ? "chat" : "stability"}-provider-smoke.json`);
-  await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });
-  return {
-    status: "passed",
-    capability: evidence.capability,
-    profileRevisionId: evidence.profileRevisionId,
-    evidence: evidencePath,
-  };
 }
 
-async function verifyCandidateBundle(bundleRoot) {
-  let manifest;
-  try { manifest = JSON.parse(await readFile(join(bundleRoot, "release-manifest.json"), "utf8")); }
-  catch { throw coded("release_manifest_invalid"); }
-  return verifyReleaseManifest({ root: bundleRoot, manifest });
-}
-
-async function doctor({ paths, requireRunning }) {
-  const checks = await inspectLocalFilesystem(paths);
-  let config = null;
-  try { config = await readLocalConfig(paths); checks.push({ name: "config", ok: true }); }
-  catch { checks.push({ name: "config", ok: false }); }
-  for (const account of [
-    LOCAL_SECRET_ACCOUNTS.mongoUsername,
-    LOCAL_SECRET_ACCOUNTS.mongoPassword,
-    LOCAL_SECRET_ACCOUNTS.mongoReplicaKey,
-    LOCAL_SECRET_ACCOUNTS.backupKey,
-  ]) {
-    try { await readKeychainSecret(account); checks.push({ name: `keychain_${account}`, ok: true }); }
-    catch { checks.push({ name: `keychain_${account}`, ok: false }); }
-  }
-  const docker = await runProcess("docker", ["info", "--format", "{{json .ServerVersion}}"]);
-  checks.push({ name: "docker", ok: docker.code === 0 });
-  if (config) {
-    const requiredProfiles = new Set(config.modelCatalogImport.routingPolicies.flatMap((policy) =>
-      Object.values(policy.defaultProfileIdsByCapability)));
-    const credentialProfiles = config.modelCatalogImport.profiles.filter((item) => item.enabled);
-    for (const item of credentialProfiles) {
-      const credentialRef = item.credentialRef;
-      const account = modelCredentialAccount(credentialRef);
-      const required = requiredProfiles.has(item.profileId);
-      try { await readKeychainSecret(account); checks.push({ name: `keychain_model_${credentialRef}`, ok: true, required }); }
-      catch { checks.push({ name: `keychain_model_${credentialRef}`, ok: false, required }); }
-    }
-    for (const [name, image] of [["agent_image", config.agentImage], ["skill_image", config.skillImage], ["mongo_image", MONGO_IMAGE]]) {
-      const inspected = await runProcess("docker", ["image", "inspect", image, "--format", "{{.Id}}"]);
-      checks.push({ name, ok: inspected.code === 0 });
-    }
-    try {
-      const response = await fetch(`http://127.0.0.1:${config.port}/readyz`, { signal: AbortSignal.timeout(3000) });
-      checks.push({ name: "server_ready", ok: response.status === 200 });
-    } catch { checks.push({ name: "server_ready", ok: !requireRunning }); }
-  }
-  const ok = checks.every((item) => item.ok || item.required === false);
-  return { status: ok ? "ready" : "not_ready", checks };
-}
-
-async function startLocalServices(paths) {
-  await materializeMongoSecrets(paths);
-  await runChecked("docker", ["compose", "-f", composePath, "up", "-d", "--wait"], {
-    env: composeEnvironment(paths),
-  });
-  const mongo = await materializeMongoSecrets(paths);
-  const config = await readLocalConfig(paths);
-  await runChecked(bundledNode, [migrationBin, "--db", config.database, "--confirm-write"], {
-    cwd: repositoryRoot,
-    env: { ...minimalEnvironment(), MONGODB_URI: authenticatedMongoUri(mongo) },
-  });
-  await installLaunchAgents(paths);
-  await waitForReady(config.port);
-  return { status: "ready" };
-}
-
-async function stopLocalServices(paths) {
-  const launchAgents = join(homedir(), "Library", "LaunchAgents");
-  for (const definition of launchAgentDefinitions(paths)) {
-    await runProcess("/bin/launchctl", [
-      "bootout", `gui/${process.getuid()}`, join(launchAgents, `${definition.label}.plist`),
+async function doctor() {
+  const connectionString = requiredPostgresUrl();
+  const { database } = parsePostgresConnection(connectionString);
+  const tools = await assertPostgresTools();
+  const store = new ProductPostgresStore({ poolOptions: { connectionString } });
+  try {
+    const operations = store.createOperationalReadiness();
+    const [probe, migrations] = await Promise.all([
+      operations.probe(),
+      operations.verifyMigrations(),
     ]);
+    const ready = probe.ok === true && migrations.ok === true;
+    process.stdout.write(`${JSON.stringify({
+      schemaVersion: "looloomi-postgres-doctor-v1",
+      ready,
+      database,
+      checks: { postgres: probe.ok === true, migrations: migrations.ok === true, tools: tools.available === true },
+    }, null, 2)}\n`);
+    if (!ready) process.exitCode = 1;
+  } finally {
+    await store.close();
   }
-  await runChecked("docker", ["compose", "-f", composePath, "down"], { env: composeEnvironment(paths) });
-  return { status: "stopped" };
 }
 
-async function restartLocalServer(paths) {
-  const config = await readLocalConfig(paths);
-  await runChecked("/bin/launchctl", [
-    "kickstart", "-k", `gui/${process.getuid()}/com.looloomi.workbench.server`,
-  ]);
-  await waitForReady(config.port);
-  return { status: "ready" };
-}
-
-async function waitForReady(port, { timeoutMs = 60_000 } = {}) {
-  const deadline = Date.now() + timeoutMs;
-  do {
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/readyz`, { signal: AbortSignal.timeout(2_000) });
-      if (response.status === 200) return true;
-    } catch {}
-    await new Promise((resolveWait) => setTimeout(resolveWait, 500));
-  } while (Date.now() < deadline);
-  throw coded("local_service_start_timeout");
-}
-
-async function writeWatchdogAlert(state) {
-  const failed = state.failedChecks.length > 0 ? state.failedChecks.join(",") : "unknown";
-  await runChecked("/usr/bin/logger", [
-    "-p", "user.err", "-t", "com.looloomi.workbench.watchdog",
-    `readiness_failed consecutive=${state.consecutiveFailures} checks=${failed}`,
-  ]);
-}
-
-async function createBackup(paths) {
-  await ensureLocalDirectories(paths);
-  const config = await readLocalConfig(paths);
-  const key = String(await readKeychainSecret(LOCAL_SECRET_ACCOUNTS.backupKey)).trim();
-  const destination = join(paths.backups, backupFilename());
-  const objectDestination = `${destination}.objects`;
-  const manifestPath = backupManifestPath(destination);
-  const before = await mongoSnapshotSummary(config.database);
-  const child = spawn("docker", ["exec", "looloomi-mongodb", "/opt/looloomi/mongo-backup.sh", config.database], {
-    stdio: ["ignore", "pipe", "pipe"],
-    env: minimalEnvironment(),
+async function backup() {
+  const root = value("--output") ?? join(defaultRoot(), "backups", timestampDirectory());
+  const result = await createPostgresBackup({
+    connectionString: requiredPostgresUrl(),
+    objectStoreRoot: process.env.WORKBENCH_OBJECT_STORE_ROOT ?? join(defaultRoot(), "objects"),
+    backupSetDirectory: resolve(root),
+    encryptionKey: await backupKey(),
   });
-  drainBounded(child.stderr);
-  const exit = waitForChild(child);
-  try {
-    await encryptBackupStream({ source: child.stdout, destination, key });
-    const code = await exit;
-    if (code !== 0) throw coded("mongo_backup_failed");
-    const objectBackup = await createObjectStoreBackup({
-      root: paths.objectStore,
-      destination: objectDestination,
-      key,
-    });
-    const after = await mongoSnapshotSummary(config.database);
-    if (JSON.stringify(before) !== JSON.stringify(after)) {
-      throw coded("backup_product_snapshot_changed");
-    }
-    assertArtifactObjectStoreEquivalent(after._artifacts, objectBackup.files);
-    await writeBackupManifest({
-      archive: destination,
-      objectArchive: objectDestination,
-      objectFiles: objectBackup.files,
-      artifactsVerified: objectBackup.artifactsVerified,
-      artifacts: after._artifacts,
-      mongoSnapshot: after,
-      database: config.database,
-      migrationVersion: LATEST_MIGRATION,
-      releaseVersion: await currentReleaseVersion(paths),
-    });
-  } catch (error) {
-    child.kill("SIGKILL");
-    await rm(destination, { force: true }).catch(() => {});
-    await rm(objectDestination, { force: true }).catch(() => {});
-    await rm(manifestPath, { force: true }).catch(() => {});
-    throw error;
-  }
-  const files = await readdir(paths.backups);
-  const retention = selectBackupRetention(files);
-  for (const name of retention.remove) {
-    const archive = join(paths.backups, name);
-    await rm(archive, { force: true });
-    await rm(`${archive}.objects`, { force: true });
-    await rm(backupManifestPath(archive), { force: true });
-  }
-  return { status: "completed", backup: destination, manifest: manifestPath, retained: retention.keep.length };
+  process.stdout.write(`${JSON.stringify({
+    schemaVersion: "looloomi-postgres-backup-result-v1",
+    status: "completed",
+    backupSetDirectory: result.backupSetDirectory,
+    sourceSnapshot: result.manifest.sourceSnapshot,
+  }, null, 2)}\n`);
 }
 
-async function restoreDrill(paths, backupPath) {
-  const info = await lstat(backupPath);
-  if (!info.isFile() || info.isSymbolicLink()) throw coded("backup_file_invalid");
-  const config = await readLocalConfig(paths);
-  const manifest = await verifyBackupManifest({ archive: backupPath });
-  if (manifest.database !== config.database || manifest.migrationVersion !== LATEST_MIGRATION) {
-    throw coded("backup_manifest_incompatible");
-  }
-  const key = String(await readKeychainSecret(LOCAL_SECRET_ACCOUNTS.backupKey)).trim();
-  const target = `looloomi_restore_${Date.now()}_test`;
-  const objectTarget = join(paths.runtime, "restore-drills", target, "objects");
-  const restore = spawn("docker", [
-    "exec", "-i", "looloomi-mongodb", "/opt/looloomi/mongo-restore.sh", config.database, target,
-  ], { stdio: ["pipe", "ignore", "pipe"], env: minimalEnvironment() });
-  drainBounded(restore.stderr);
-  const exit = waitForChild(restore);
-  await decryptBackupStream({ source: backupPath, destination: restore.stdin, key });
-  if (await exit !== 0) throw coded("mongo_restore_failed");
-  const objectStore = await restoreObjectStoreBackup({
-    source: manifest.objectStoreArchive,
-    destinationRoot: objectTarget,
-    key,
-    expectedFiles: manifest.objectStore.files,
+async function restore() {
+  if (!flag("--confirm-restore")) throw coded("postgres_restore_confirmation_required");
+  const source = requiredValue("--source");
+  const targetConnectionString = requiredValue("--target-url");
+  const objectTargetRoot = requiredValue("--object-target");
+  const result = await restorePostgresBackup({
+    backupSetDirectory: resolve(source),
+    targetConnectionString,
+    objectTargetRoot: resolve(objectTargetRoot),
+    encryptionKey: await backupKey(),
   });
-  const verified = await runChecked("docker", [
-    "exec", "looloomi-mongodb", "/opt/looloomi/mongo-verify-restore.sh", target,
-  ]);
-  let collections;
-  try { collections = JSON.parse(verified.stdout.trim()); } catch { throw coded("mongo_restore_verification_failed"); }
-  assertRestoreEquivalent(manifest.mongoSnapshot, collections);
-  if (JSON.stringify(collections._artifacts) !== JSON.stringify(manifest.objectStore.artifacts)) {
-    throw coded("object_store_artifact_metadata_mismatch");
-  }
-  assertArtifactObjectStoreEquivalent(collections._artifacts, manifest.objectStore.files);
-  await runChecked("docker", ["exec", "looloomi-mongodb", "/opt/looloomi/mongo-drop-test.sh", target]);
-  await rm(join(paths.runtime, "restore-drills", target), { recursive: true, force: true });
-  return { status: "verified", targetDatabase: target, cleaned: true, collections, objectStore };
+  process.stdout.write(`${JSON.stringify({
+    schemaVersion: "looloomi-postgres-restore-result-v1",
+    status: "verified",
+    isolated: result.isolated,
+    targetDatabase: result.targetDatabase,
+    restoredSnapshot: result.restoredSnapshot,
+  }, null, 2)}\n`);
 }
 
-function assertArtifactObjectStoreEquivalent(artifacts, files) {
-  if (!Array.isArray(artifacts) || !Array.isArray(files)) throw coded("object_store_artifact_metadata_mismatch");
-  const byPath = new Map(files.map((item) => [item.path, item]));
-  for (const artifact of artifacts) {
-    const object = byPath.get(`${artifact.workspaceId}/${artifact.objectId}.bin`);
-    if (!object || object.digest !== artifact.contentHash || object.bytes !== artifact.sizeBytes) {
-      throw coded("object_store_artifact_metadata_mismatch");
-    }
-  }
+async function stageRelease() {
+  const outputFile = resolve(requiredValue("--output"));
+  const manifest = await writePostgresReleaseManifest({ repositoryRoot, outputFile });
+  process.stdout.write(`${JSON.stringify({
+    schemaVersion: "looloomi-postgres-release-stage-result-v1",
+    outputFile,
+    candidate: manifest.candidate,
+  }, null, 2)}\n`);
 }
 
-async function mongoSnapshotSummary(database) {
-  const result = await runChecked("docker", [
-    "exec", "looloomi-mongodb", "/opt/looloomi/mongo-snapshot-summary.sh", database,
-  ]);
-  try { return JSON.parse(result.stdout.trim()); }
-  catch { throw coded("mongo_restore_verification_failed"); }
+async function activateRelease() {
+  if (!flag("--confirm-release")) throw coded("postgres_release_confirmation_required");
+  const manifestFile = resolve(requiredValue("--manifest"));
+  await validatePostgresReleaseManifest({ repositoryRoot, manifestFile });
+  await serve();
 }
 
-function assertRestoreEquivalent(source, restored) {
-  for (const name of CRITICAL_RESTORE_COLLECTIONS) {
-    if (source?.[name]?.readable !== true || restored?.[name]?.readable !== true
-      || source[name].count !== restored[name].count || restored[name].duplicateIds !== 0
-      || source?._indexCounts?.[name] !== restored?._indexCounts?.[name]) {
-      throw coded("mongo_restore_verification_failed");
-    }
-  }
-  if (JSON.stringify(source?._migrationLedger) !== JSON.stringify(restored?._migrationLedger)) {
-    throw coded("mongo_restore_verification_failed");
-  }
-}
-
-async function currentReleaseVersion(paths) {
-  try {
-    const state = JSON.parse(await readFile(join(paths.root, "release-state.json"), "utf8"));
-    if (/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(state?.version || "")) return state.version;
-  } catch {}
-  return "unmanaged-local";
-}
-
-async function createManifest({ bundleRoot, version, paths }) {
-  const config = await readLocalConfig(paths);
-  const frontendStatus = await runChecked("git", ["status", "--porcelain", "--", "domains/frontend"]);
-  const frontendTree = await runChecked("git", ["rev-parse", "HEAD:domains/frontend"]);
-  const sourceCommit = await runChecked("git", ["rev-parse", "HEAD"]);
-  if (frontendStatus.stdout.trim() || frontendTree.stdout.trim() !== FROZEN_FRONTEND_TREE) {
-    throw coded("frozen_frontend_integrity_failed");
-  }
-  const files = await walkFiles(bundleRoot);
-  const manifest = await buildReleaseManifest({
-    root: bundleRoot,
-    version,
-    sourceCommit: sourceCommit.stdout.trim(),
-    files: files.filter((path) => path !== "release-manifest.json"),
-    agentImage: config.agentImage,
-    skillImage: config.skillImage,
-    mongoImage: MONGO_IMAGE,
-    frontendTreeHash: FROZEN_FRONTEND_TREE,
+async function serve() {
+  await run(resolve(repositoryRoot, "scripts/start-workbench-server.sh"), [], {
+    cwd: repositoryRoot,
   });
-  await verifyReleaseManifest({ root: bundleRoot, manifest });
-  await writeFile(join(bundleRoot, "release-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
-  return { version, files: manifest.files.length };
 }
 
-async function candidateHealthCheck(candidate, manifest, { paths, config }) {
-  const node = join(candidate, ".tooling/node/bin/node");
-  const server = join(candidate, "domains/backend/code/workbench-server/bin/workbench-server.mjs");
-  const info = await Promise.all([lstat(node), lstat(server)]);
-  if (!info.every((item) => item.isFile() && !item.isSymbolicLink())
-    || manifest.agentImage !== config.agentImage || manifest.skillImage !== config.skillImage
-    || manifest.mongoImage !== MONGO_IMAGE || manifest.frontendTreeHash !== FROZEN_FRONTEND_TREE) return false;
-  for (const image of [manifest.agentImage, manifest.skillImage, manifest.mongoImage]) {
-    if ((await runProcess("docker", ["image", "inspect", image, "--format", "{{.Id}}"])).code !== 0) return false;
-  }
-  const env = await buildDaemonEnvironment({ paths, baseEnv: minimalEnvironment() });
-  const candidateMigration = join(candidate, "domains/backend/code/workbench-server/scripts/migrate-product-store.mjs");
-  const migration = await runProcess(node, [candidateMigration, "--db", config.database, "--confirm-write"], {
-    cwd: candidate,
-    env: { ...env, MONGODB_URI: env.WORKBENCH_MONGODB_URI },
-  });
-  if (migration.code !== 0) return false;
-  return runCandidateReadinessProbe({ candidate, node, env: { ...env, WORKBENCH_PORT: "0" } });
+function requiredPostgresUrl() {
+  const value = String(process.env.WORKBENCH_POSTGRES_URL ?? "").trim();
+  if (!value) throw coded("workbench_postgres_url_required");
+  return value;
 }
 
-function runCandidateReadinessProbe({ candidate, node, env }) {
-  const source = `
-    import { resolve } from "node:path";
-    import { pathToFileURL } from "node:url";
-    const moduleUrl = pathToFileURL(resolve("domains/backend/code/workbench-server/src/server.mjs")).href;
-    const { startWorkbenchServer } = await import(moduleUrl);
-    let running;
-    try {
-      running = await startWorkbenchServer({ port: 0 });
-      const address = running.server.address();
-      if (!address || typeof address === "string") throw new Error("candidate_address_invalid");
-      const response = await fetch(\`http://127.0.0.1:\${address.port}/readyz\`, { signal: AbortSignal.timeout(10_000) });
-      const body = await response.json();
-      if (response.status !== 200 || body?.status !== "ready") throw new Error("candidate_not_ready");
-      process.stdout.write("candidate_ready\\n");
-    } finally {
-      await running?.close?.();
-    }
-  `;
-  return new Promise((resolveProbe) => {
-    const child = spawn(node, ["--input-type=module", "--eval", source], {
-      cwd: candidate,
-      env,
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-    });
-    const stdout = [];
-    let bytes = 0;
-    child.stdout.on("data", (chunk) => {
-      bytes += chunk.length;
-      if (bytes <= 128 * 1024) stdout.push(chunk);
-      else child.kill("SIGKILL");
-    });
-    drainBounded(child.stderr);
-    const timeout = setTimeout(() => child.kill("SIGKILL"), 60_000);
-    child.once("error", () => { clearTimeout(timeout); resolveProbe(false); });
-    child.once("close", (code) => {
-      clearTimeout(timeout);
-      resolveProbe(code === 0 && Buffer.concat(stdout).toString("utf8").trim().endsWith("candidate_ready"));
+async function backupKey() {
+  const inline = String(process.env.WORKBENCH_BACKUP_KEY_BASE64 ?? "").trim();
+  if (inline) return Buffer.from(inline, "base64");
+  const path = process.env.WORKBENCH_BACKUP_KEY_FILE
+    ?? join(process.env.WORKBENCH_SECRETS_DIR ?? join(defaultRoot(), "secrets"), "backup-key");
+  return Buffer.from((await readFile(path, "utf8")).trim(), "base64");
+}
+
+function run(executable, args, { cwd = repositoryRoot } = {}) {
+  return new Promise((resolveRun, rejectRun) => {
+    const child = spawn(executable, args, { cwd, env: process.env, stdio: "inherit" });
+    child.once("error", rejectRun);
+    child.once("exit", (code, signal) => {
+      if (code === 0) resolveRun();
+      else rejectRun(coded("workbench_local_child_failed", { code, signal }));
     });
   });
 }
 
-async function installLaunchAgents(paths) {
-  await ensureLocalDirectories(paths);
-  const launchAgents = join(homedir(), "Library", "LaunchAgents");
-  await mkdir(launchAgents, { recursive: true, mode: 0o700 });
-  const definitions = launchAgentDefinitions(paths);
-  for (const definition of definitions) {
-    const path = join(launchAgents, `${definition.label}.plist`);
-    await writeFile(path, renderPlist(definition), { mode: 0o600 });
-    await chmod(path, 0o600);
-    await runProcess("/bin/launchctl", ["bootout", `gui/${process.getuid()}`, path]);
-    await runChecked("/bin/launchctl", ["bootstrap", `gui/${process.getuid()}`, path]);
-  }
-  return { installed: definitions.map((item) => item.label) };
+function value(name) {
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] ?? null : null;
+}
+function requiredValue(name) {
+  const result = value(name);
+  if (!result) throw coded(`workbench_local_argument_required:${name}`);
+  return result;
+}
+function flag(name) { return process.argv.includes(name); }
+function defaultRoot() { return join(homedir(), "Library", "Application Support", "Looloomi Workbench"); }
+function timestampDirectory() { return new Date().toISOString().replaceAll(":", "-"); }
+
+function printHelp() {
+  process.stdout.write(`PostgreSQL-only Workbench operations\n\n`);
+  process.stdout.write(`  postgres-up | postgres-down\n`);
+  process.stdout.write(`  migrate --confirm-write\n`);
+  process.stdout.write(`  doctor | readiness\n`);
+  process.stdout.write(`  backup [--output <directory>]\n`);
+  process.stdout.write(`  restore --source <directory> --target-url <..._restore_test> --object-target <..._restore_test> --confirm-restore\n`);
+  process.stdout.write(`  stage-release --output <manifest.json>\n`);
+  process.stdout.write(`  release --manifest <manifest.json> --confirm-release\n`);
+  process.stdout.write(`  serve\n`);
 }
 
-function launchAgentDefinitions(paths) {
-  const node = join(paths.current, ".tooling/node/bin/node");
-  const cli = join(paths.current, "domains/backend/operations/local/workbench-local.mjs");
-  return [
-    {
-      label: "com.looloomi.workbench.server",
-      args: [node, cli, "serve", "--root", paths.root],
-      workingDirectory: paths.current,
-      runAtLoad: true,
-      keepAlive: true,
-      stdout: join(paths.logs, "server.stdout.jsonl"),
-      stderr: join(paths.logs, "server.stderr.jsonl"),
-    },
-    {
-      label: "com.looloomi.workbench.backup",
-      args: [node, cli, "backup", "--root", paths.root],
-      workingDirectory: paths.current,
-      interval: 86400,
-      stdout: join(paths.logs, "backup.stdout.jsonl"),
-      stderr: join(paths.logs, "backup.stderr.jsonl"),
-    },
-    {
-      label: "com.looloomi.workbench.watchdog",
-      args: [node, cli, "watchdog", "--root", paths.root],
-      workingDirectory: paths.current,
-      interval: 60,
-      stdout: join(paths.logs, "watchdog.stdout.jsonl"),
-      stderr: join(paths.logs, "watchdog.stderr.jsonl"),
-    },
-  ];
-}
-
-function renderPlist(definition) {
-  const array = definition.args.map((item) => `<string>${xml(item)}</string>`).join("");
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>Label</key><string>${definition.label}</string><key>ProgramArguments</key><array>${array}</array><key>WorkingDirectory</key><string>${xml(definition.workingDirectory)}</string><key>RunAtLoad</key><${definition.runAtLoad ? "true" : "false"}/>${definition.keepAlive ? "<key>KeepAlive</key><true/>" : ""}${definition.interval ? `<key>StartInterval</key><integer>${definition.interval}</integer>` : ""}<key>ProcessType</key><string>Background</string><key>ThrottleInterval</key><integer>10</integer><key>StandardOutPath</key><string>${xml(definition.stdout)}</string><key>StandardErrorPath</key><string>${xml(definition.stderr)}</string></dict></plist>\n`;
-}
-
-function composeEnvironment(paths) {
-  return {
-    ...minimalEnvironment(),
-    WORKBENCH_SECRETS_DIR: paths.secrets,
-    WORKBENCH_MONGO_DATA_DIR: paths.mongoData,
-    WORKBENCH_MONGO_CONFIG_DIR: paths.mongoConfig,
-  };
-}
-
-function minimalEnvironment() {
-  return { PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" };
-}
-
-function runChecked(binary, argv, options = {}) {
-  return runProcess(binary, argv, options).then((result) => {
-    if (result.code !== 0) throw coded("local_process_failed");
-    return result;
-  });
-}
-
-function runProcess(binary, argv, { cwd = repositoryRoot, env = minimalEnvironment() } = {}) {
-  return new Promise((resolveProcess, reject) => {
-    let child;
-    try { child = spawn(binary, argv, { cwd, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true }); }
-    catch { return reject(coded("local_process_unavailable")); }
-    const stdout = [];
-    let bytes = 0;
-    child.stdout.on("data", (chunk) => { bytes += chunk.length; if (bytes <= 1_000_000) stdout.push(chunk); else child.kill("SIGKILL"); });
-    drainBounded(child.stderr);
-    child.once("error", () => reject(coded("local_process_unavailable")));
-    child.once("close", (code) => resolveProcess({ code, stdout: Buffer.concat(stdout).toString("utf8") }));
-  });
-}
-
-function inheritProcess(binary, argv, { cwd, env }) {
-  return new Promise((resolveProcess, reject) => {
-    const child = spawn(binary, argv, { cwd, env, stdio: "inherit", windowsHide: true });
-    child.once("error", () => reject(coded("local_process_unavailable")));
-    child.once("close", (code, signal) => {
-      if (signal || code !== 0) reject(coded("local_daemon_failed"));
-      else resolveProcess({ status: "stopped" });
-    });
-    const forward = (signal) => child.kill(signal);
-    process.once("SIGINT", forward);
-    process.once("SIGTERM", forward);
-  });
-}
-
-function waitForChild(child) {
-  return new Promise((resolveProcess, reject) => {
-    child.once("error", () => reject(coded("local_process_unavailable")));
-    child.once("close", resolveProcess);
-  });
-}
-
-function drainBounded(stream) {
-  let bytes = 0;
-  stream?.on("data", (chunk) => { bytes += chunk.length; if (bytes > 128 * 1024) stream.destroy(); });
-}
-
-async function walkFiles(root, prefix = "") {
-  const result = [];
-  for (const entry of await readdir(join(root, prefix), { withFileTypes: true })) {
-    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isSymbolicLink()) throw coded("release_file_invalid");
-    if (entry.isDirectory()) result.push(...await walkFiles(root, path));
-    else if (entry.isFile()) result.push(path);
-  }
-  return result.sort();
-}
-
-function valueAfter(argv, flag) { const index = argv.indexOf(flag); return index >= 0 ? argv[index + 1] : undefined; }
-function requiredAfter(argv, flag) { const value = valueAfter(argv, flag); if (!value) throw coded("local_argument_required"); return value; }
-function integerAfter(argv, flag, fallback) { const value = valueAfter(argv, flag); if (value === undefined) return fallback; const parsed = Number(value); if (!Number.isInteger(parsed)) throw coded("local_argument_invalid"); return parsed; }
-function modelProfileImportFromArgs(argv) {
-  const provider = valueAfter(argv, "--provider") ?? "custom";
-  const id = valueAfter(argv, "--model-profile-id") ?? `${provider}-default`;
-  const endpoint = valueAfter(argv, "--model-base-url");
-  const protocol = valueAfter(argv, "--protocol");
-  const capabilities = String(valueAfter(argv, "--capabilities")
-    ?? (provider === "stability" ? "image_generation" : "chat,tool_calling,structured_output"))
-    .split(",").map((item) => item.trim()).filter(Boolean);
-  return {
-    profileId: id,
-    displayName: valueAfter(argv, "--label") ?? id,
-    scope: "global",
-    enabled: true,
-    provider,
-    ...(protocol ? { protocol } : {}),
-    providerModelId: requiredAfter(argv, "--model"),
-    capabilities,
-    parameterSchemaVersion: "model-parameters-v1",
-    defaults: {},
-    limits: {},
-    credentialRef: valueAfter(argv, "--credential-ref") ?? provider,
-    ...(endpoint ? { endpoint } : {}),
-    policyVersion: "1",
-  };
-}
-function safeCode(value) { return typeof value === "string" && /^[a-z0-9_:-]{1,128}$/.test(value) ? value : "local_operation_failed"; }
-function coded(code) { const error = new Error(code); error.code = code; error.productSafe = true; return error; }
-function xml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;"); }
-
-async function readStdin(maxBytes) {
-  const chunks = [];
-  let bytes = 0;
-  for await (const chunk of process.stdin) {
-    bytes += chunk.length;
-    if (bytes > maxBytes) throw coded("stdin_too_large");
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks);
+function coded(code, details = {}) {
+  const error = new Error(code);
+  error.code = code;
+  error.details = details;
+  error.productSafe = true;
+  return error;
 }

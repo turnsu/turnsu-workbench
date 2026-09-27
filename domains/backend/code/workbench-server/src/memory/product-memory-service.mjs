@@ -179,7 +179,11 @@ export class ProductMemoryService {
     const memories = await this.persistence.searchMemories({ ...normalized, now: this.clock(), limit: Math.min(normalized.limit * 10, 1000) });
     const allowed = [];
     for (const memory of memories) if (await this.#canAccess(memory.scope, context, "read")) allowed.push(memory);
-    return allowed.map((memory) => scoreMemory(memory, normalized, this.clock())).sort((left, right) => right.score - left.score).slice(0, normalized.limit);
+    return allowed
+      .map((memory) => scoreMemory(memory, normalized, this.clock()))
+      .sort((left, right) => right.score - left.score
+        || left.memory.memoryId.localeCompare(right.memory.memoryId))
+      .slice(0, normalized.limit);
   }
 
   async contextCapsule({ query, context, maxItems = 10, maxChars = 4000 }) {
@@ -279,7 +283,7 @@ export class ProductMemoryService {
     if (scope.kind === "personal") return scope.ownerUserId === context.userId;
     if (scope.kind === "workspace") {
       if (action === "read") return true;
-      if (action === "submit") return ["owner", "admin", "maintainer", "member"].includes(context.role);
+      if (action === "submit") return ["owner", "admin", "member"].includes(context.role);
       return ["owner", "admin"].includes(context.role);
     }
     return this.objectPermissionResolver({ scope, context, action });

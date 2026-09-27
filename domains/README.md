@@ -1,48 +1,13 @@
-# Project Domain Split
+# 项目领域
 
-Date: 2026-06-30
+当前产品是[Turnsu 工作台](../PRODUCT.md)：本地桌面工作先可用，团队共享再通过现有 Product API 授权接力。[Master PRD v0.6](../wiki/prd/2026-08-04-looloomi-team-intelligence-workspace-master-prd.md)定义目标，[架构现状](../wiki/architecture/CURRENT_SYSTEM_ARCHITECTURE.md)定义已实现事实。
 
-This directory separates project material by domain. The active iteration target is currently the Web Skill / Workflow / Loop workbench.
+| 领域 | 当前职责 |
+| --- | --- |
+| [frontend/desktop](frontend/desktop/code/turnsu-desktop/README.md) | 独立桌面客户端；本地项目、会话、任务和结果的主要入口 |
+| [frontend/web](frontend/web/README.md) | 已有 Web 工作台；继续维护已用的 Product 路径 |
+| frontend/app | 历史 Swift 资料，不是当前桌面实现 |
+| backend | Product API、PostgreSQL、授权、共享工作、固定版本和云端执行 |
+| agent | 本机多 Agent Host 与受 Product 管理的 Worker / Runtime |
 
-```text
-domains/
-  frontend/
-    app/
-      documents/
-      code/
-    web/
-      documents/
-      code/
-  backend/
-    documents/
-    code/
-  agent/
-    documents/
-    code/
-```
-
-The `code/` folders hold runnable or build-critical implementation. The `documents/` folders hold product, design, architecture, plan, state, and problem records for the matching domain.
-
-## Domain Responsibilities
-
-| Domain | Responsibility | Current main source |
-| --- | --- | --- |
-| Frontend / Web | Active Skill / Workflow / Loop web workbench | `domains/frontend/web/code/web-prototype` |
-| Frontend / App | Retained native surface, not the current iteration target | `domains/frontend/app/` |
-| Backend | Out of scope for the current web prototype pass | `domains/backend/` |
-| Agent | PI-SDK / skill / loop semantics background, not changed in this pass | `domains/agent/` |
-
-## Rules For Future Work
-
-- Start with `PRODUCT.md`, `DESIGN.md`, and `domains/frontend/documents/current-skill-workflow-loop-workbench.md`.
-- Keep App and Web frontend decisions separate unless a shared Skill / Workflow / Loop object contract is explicitly needed.
-- Keep Backend and Agent responsibilities separate: Backend owns product data and process/API boundaries; Agent owns reasoning, tool plans, prompts, skills, and capability execution semantics.
-- Do not move build-critical source files until the package/build config and scripts are updated in the same change.
-- Prefer module-local `documents/` over large global redesign documents.
-- Move superseded frontend documents into `domains/frontend/documents/history/`.
-
-## Migration Stages
-
-1. Domain split: App, Web, Backend, and Agent have separate `code/` and `documents/` roots.
-2. Build split: separate test commands and CI per domain.
-3. Shared contracts: extract shared product object schemas only after App/Web/Backend/Agent usage is clear.
+桌面与 Web 可以共享真实公共契约和经验证的组件，不应强行共享同一页面布局或把本机 Host 变成第二个 Product 控制面。历史路径和数据库身份保留兼容；具体开发约束见[AGENTS.md](../AGENTS.md)。

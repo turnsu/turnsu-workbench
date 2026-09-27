@@ -39,70 +39,36 @@ export class MetricsRegistry {
   }
 }
 
-export async function collectMongoOperationalMetrics({ store, registry, clock = () => new Date() } = {}) {
+export async function collectProductOperationalMetrics({ store, registry } = {}) {
   if (!registry || typeof registry.set !== "function") throw new TypeError("metrics_registry_required");
-  try {
-    const db = await store.connect();
-    const now = clock();
-    const [
-      runQueued, runClaimed, turnQueued, turnRunning, activeLeases, oldestLease,
-      memoryStatuses, invocationStatuses, attemptDurations,
-    ] = await Promise.all([
-      db.collection("run_jobs").countDocuments({ status: "queued" }),
-      db.collection("run_jobs").countDocuments({ status: "claimed" }),
-      db.collection("agent_turns").countDocuments({ status: "queued" }),
-      db.collection("agent_turns").countDocuments({ status: "running" }),
-      db.collection("capability_leases").countDocuments({ status: "active" }),
-      db.collection("capability_leases").find({ status: "active" }, { projection: { issuedAt: 1, createdAt: 1 } })
-        .sort({ issuedAt: 1, createdAt: 1 }).limit(1).next(),
-      groupedCounts(db.collection("memory_candidates")),
-      groupedCounts(db.collection("execution_invocations")),
-      db.collection("execution_attempts").aggregate([
-        { $match: { startedAt: { $exists: true }, finishedAt: { $exists: true } } },
-        { $project: {
-          durationMs: { $subtract: [
-            { $convert: { input: "$finishedAt", to: "date", onError: null, onNull: null } },
-            { $convert: { input: "$startedAt", to: "date", onError: null, onNull: null } },
-          ] },
-        } },
-        { $match: { durationMs: { $gte: 0 } } },
-        { $group: { _id: null, count: { $sum: 1 }, sum: { $sum: "$durationMs" } } },
-      ]).toArray(),
-    ]);
-    registry.set("workbench_mongo_up", {}, 1);
-    registry.set("workbench_run_queue_depth", {}, runQueued);
-    registry.set("workbench_run_claimed", {}, runClaimed);
-    registry.set("workbench_agent_turn_queue_depth", {}, turnQueued);
-    registry.set("workbench_agent_turn_running", {}, turnRunning);
-    registry.set("workbench_capability_leases_active", {}, activeLeases);
-    for (const status of ["pending", "promoted", "rejected"]) {
-      registry.set("workbench_memory_candidates_total", { status }, memoryStatuses.get(status) ?? 0);
-    }
-    for (const status of [
-      "queued", "running", "completed", "failed", "cancelled", "blocked", "partial", "timeout",
-      "permission_denied", "sandbox_unavailable", "remote_backend_unavailable",
-    ]) {
-      registry.set("workbench_execution_invocations_total", { status }, invocationStatuses.get(status) ?? 0);
-    }
-    registry.set("workbench_execution_attempt_duration_ms_count", {}, attemptDurations[0]?.count ?? 0);
-    registry.set("workbench_execution_attempt_duration_ms_sum", {}, attemptDurations[0]?.sum ?? 0);
-    const issuedAt = oldestLease?.issuedAt ?? oldestLease?.createdAt;
-    const ageSeconds = issuedAt ? Math.max(0, (now.getTime() - new Date(issuedAt).getTime()) / 1000) : 0;
-    registry.set("workbench_oldest_active_lease_age_seconds", {}, Number.isFinite(ageSeconds) ? ageSeconds : 0);
-    return { ok: true };
-  } catch {
-    registry.set("workbench_mongo_up", {}, 0);
+  if (store?.persistenceDriver !== "postgres") throw new TypeError("postgres_product_store_required");
+  const operations = store.createOperationalReadiness?.();
+  if (!operations?.collectMetrics) {
+    registry.set("workbench_postgres_up", {}, 0);
     return { ok: false };
   }
-}
-
-async function groupedCounts(collection) {
-  const rows = await collection.aggregate([
-    { $match: { status: { $type: "string" } } },
-    { $group: { _id: "$status", count: { $sum: 1 } } },
-  ]).toArray();
-  return new Map(rows.filter((item) => typeof item?._id === "string" && Number.isFinite(item?.count))
-    .map((item) => [item._id, item.count]));
+  try {
+    const metrics = await operations.collectMetrics();
+    registry.set("workbench_postgres_up", {}, 1);
+    registry.set("workbench_run_queue_depth", {}, metrics.runQueued);
+    registry.set("workbench_run_claimed", {}, metrics.runClaimed);
+    registry.set("workbench_agent_turn_queue_depth", {}, metrics.turnQueued);
+    registry.set("workbench_agent_turn_running", {}, metrics.turnRunning);
+    registry.set("workbench_capability_leases_active", {}, metrics.activeLeases);
+    for (const [status, count] of Object.entries(metrics.memoryCandidates)) {
+      registry.set("workbench_memory_candidates_total", { status }, count);
+    }
+    for (const [status, count] of Object.entries(metrics.invocations)) {
+      registry.set("workbench_execution_invocations_total", { status }, count);
+    }
+    registry.set("workbench_execution_attempt_duration_ms_count", {}, metrics.attemptDurationCount);
+    registry.set("workbench_execution_attempt_duration_ms_sum", {}, metrics.attemptDurationSum);
+    registry.set("workbench_oldest_active_lease_age_seconds", {}, metrics.oldestActiveLeaseAgeSeconds);
+    return { ok: true };
+  } catch {
+    registry.set("workbench_postgres_up", {}, 0);
+    return { ok: false };
+  }
 }
 
 function assertMetric(name, labels, value) {

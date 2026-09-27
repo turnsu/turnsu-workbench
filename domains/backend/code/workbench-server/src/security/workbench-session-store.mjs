@@ -1,13 +1,18 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 const defaultToken = () => randomBytes(32).toString("base64url");
+
+// Browser tokens are intentionally never persisted or logged verbatim. Both
+// durable stores share this one format so a future composition switch does not
+// silently create a second session-token authority.
+export const hashSessionToken = (value) => `sha256:${createHash("sha256").update(String(value)).digest("hex")}`;
 
 export class WorkbenchSessionStore {
   #sessions = new Map();
 
   constructor({
     clock = () => new Date(),
-    ttlMilliseconds = 8 * 60 * 60 * 1000,
+    ttlMilliseconds = 7 * 24 * 60 * 60 * 1000,
     tokenFactory = defaultToken,
     csrfTokenFactory = defaultToken,
   } = {}) {
@@ -36,6 +41,11 @@ export class WorkbenchSessionStore {
     return { ...session };
   }
 
+  revoke(token) {
+    const revoked = this.#sessions.delete(token);
+    return { revoked };
+  }
+
   #now() {
     const value = this.clock();
     const date = value instanceof Date ? value : new Date(value);
@@ -48,5 +58,8 @@ export const parseCookies = (value = "") => Object.fromEntries(
   value.split(";").map((part) => part.trim().split(/=(.*)/s, 2)).filter(([key]) => key),
 );
 
-export const sessionCookie = (token, maxAgeSeconds) =>
-  `workbench_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSeconds}`;
+export const sessionCookie = (token, maxAgeSeconds, { secure = false } = {}) =>
+  `workbench_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure ? "; Secure" : ""}`;
+
+export const clearSessionCookie = ({ secure = false } = {}) =>
+  `workbench_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure ? "; Secure" : ""}`;

@@ -670,7 +670,6 @@ private struct LoopOpsWorkbenchReviewGuidePanel: View {
 
     @AppStorage("loopops.reviewGuide.startedPathIDs") private var startedPathIDsRaw = ""
     @AppStorage("loopops.reviewGuide.checkedPathIDs") private var checkedPathIDsRaw = ""
-    @AppStorage("loopops.reviewGuide.recordPrepared") private var recordPrepared = false
     @AppStorage("loopops.reviewGuide.reviewDecision") private var reviewDecision = "pending"
     @AppStorage("loopops.reviewGuide.reviewBlockers") private var reviewBlockers = "Native click-through evidence still needs human confirmation."
     @AppStorage("loopops.reviewGuide.reviewNotes") private var reviewNotes = "Check evidence map, traceability, queue isolation, Skill OS tool creation, and Knowledge attach."
@@ -740,27 +739,6 @@ private struct LoopOpsWorkbenchReviewGuidePanel: View {
         pathIDSet(from: checkedPathIDsRaw)
     }
 
-    private var reviewRecordStatus: String {
-        switch reviewDecision {
-        case "approved":
-            return "pass"
-        case "needs_work":
-            return "needs-work"
-        default:
-            return "pending-manual-review"
-        }
-    }
-
-    private var recordCommandPreview: String {
-        [
-            "LOOPOPS_WEB_URL=\(shellQuoted("http://127.0.0.1:5189/"))",
-            "LOOPOPS_REVIEW_STATUS=\(shellQuoted(reviewRecordStatus))",
-            "LOOPOPS_REVIEW_BLOCKERS=\(shellQuoted(reviewRecordStatus == "pass" ? "" : reviewBlockers))",
-            "LOOPOPS_REVIEW_NOTES=\(shellQuoted(reviewNotes))",
-            "scripts/record-loopops-review.command"
-        ].joined(separator: " ")
-    }
-
     private func pathIDSet(from rawValue: String) -> Set<String> {
         Set(rawValue.split(separator: ",").map(String.init))
     }
@@ -786,15 +764,6 @@ private struct LoopOpsWorkbenchReviewGuidePanel: View {
         }
         startedPathIDsRaw = encodedPathIDs(startedIDs)
         checkedPathIDsRaw = encodedPathIDs(checkedIDs)
-    }
-
-    private func shellQuoted(_ value: String) -> String {
-        let escaped = value
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "$", with: "\\$")
-            .replacingOccurrences(of: "`", with: "\\`")
-        return "\"\(escaped)\""
     }
 
     var body: some View {
@@ -826,8 +795,6 @@ private struct LoopOpsWorkbenchReviewGuidePanel: View {
             traceability
 
             reviewDecisionBoard
-
-            recordHandoff
         }
         .padding(13)
         .background(RadarTheme.panel)
@@ -1012,7 +979,7 @@ private struct LoopOpsWorkbenchReviewGuidePanel: View {
                     .accessibilityIdentifier(LoopOpsInteractionID.workbenchReviewGuideDecisionNotes)
             }
 
-            Text("复核后用本地命令记录状态、阻断项和备注；下方命令仅作预览。")
+            Text("该面板只保留当前 Swift 参考界面的本地审阅笔记，不作为产品功能或发布签收证据。")
                 .font(.system(size: 10.8))
                 .foregroundStyle(RadarTheme.secondaryText)
                 .lineLimit(2)
@@ -1033,50 +1000,6 @@ private struct LoopOpsWorkbenchReviewGuidePanel: View {
         default:
             return "Pending human review"
         }
-    }
-
-    private var recordHandoff: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("本地复核记录")
-                        .font(.system(size: 12.2, weight: .semibold))
-                        .foregroundStyle(RadarTheme.primaryText)
-                    Text(recordPrepared ? "Ready to record" : "Pending human review")
-                        .font(.system(size: 10.8, weight: .semibold))
-                        .foregroundStyle(recordPrepared ? RadarTheme.green : RadarTheme.secondaryText)
-                        .accessibilityIdentifier(LoopOpsInteractionID.workbenchReviewGuideRecordStatus)
-                    Text("Saved locally")
-                        .font(.system(size: 10.4, weight: .medium))
-                        .foregroundStyle(RadarTheme.secondaryText)
-                        .accessibilityIdentifier(LoopOpsInteractionID.workbenchReviewGuidePersistence)
-                }
-                Spacer(minLength: 8)
-                Button(recordPrepared ? "已准备" : "准备记录") {
-                    recordPrepared.toggle()
-                }
-                .font(.system(size: 10.5, weight: .semibold))
-                .buttonStyle(ResearchSecondaryButtonStyle())
-                .accessibilityIdentifier(LoopOpsInteractionID.workbenchReviewGuideRecordPrepare)
-            }
-
-            VStack(alignment: .leading, spacing: 5) {
-                LoopOpsRecordHandoffRow(label: "本地命令", value: "scripts/record-loopops-review.command")
-                LoopOpsRecordHandoffRow(label: "命令预览", value: recordCommandPreview)
-                    .accessibilityIdentifier(LoopOpsInteractionID.workbenchReviewGuideRecordPreview)
-                LoopOpsRecordHandoffRow(label: "记录内容", value: "复核状态、阻断项、备注")
-                LoopOpsRecordHandoffRow(label: "本地复核记录", value: "review-records/loopops-review-*.md + .json")
-            }
-
-            Text("本地命令不会打开系统权限弹窗。")
-                .font(.system(size: 10.8))
-                .foregroundStyle(RadarTheme.secondaryText)
-                .lineLimit(2)
-        }
-        .padding(9)
-        .background(RadarTheme.panelElevated)
-        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-        .accessibilityIdentifier(LoopOpsInteractionID.workbenchReviewGuideRecordHandoff)
     }
 
     private var traceability: some View {
@@ -1137,26 +1060,6 @@ private struct LoopOpsWorkbenchReviewGuidePanel: View {
         .background(RadarTheme.panelElevated)
         .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         .accessibilityIdentifier(LoopOpsInteractionID.workbenchReviewGuideTraceability)
-    }
-}
-
-private struct LoopOpsRecordHandoffRow: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(label)
-                .font(.system(size: 10.6, weight: .semibold))
-                .foregroundStyle(RadarTheme.secondaryText)
-                .frame(width: 52, alignment: .leading)
-            Text(value)
-                .font(.system(size: 10.4, weight: .medium, design: .monospaced))
-                .foregroundStyle(RadarTheme.blue)
-                .lineLimit(2)
-                .truncationMode(.middle)
-            Spacer(minLength: 0)
-        }
     }
 }
 

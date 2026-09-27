@@ -66,9 +66,11 @@ fs.writeFileSync(offlinePath, html);
 const stats = fs.statSync(offlinePath);
 const relativeOfflinePath = path.relative(rootDir, offlinePath);
 
-console.log("web_offline_review=pass");
-console.log(`web_offline_review_path=${offlinePath}`);
-console.log(`web_offline_review_relative_path=${relativeOfflinePath}`);
-console.log(`web_offline_review_bytes=${stats.size}`);
-console.log(`web_offline_review_css=${cssAssetPath}`);
-console.log(`web_offline_review_js=${jsAssetPath}`);
+console.log("web_visual_preview_export=ready");
+console.log("web_visual_preview_scope=visual-only");
+console.log("web_visual_preview_functional_evidence=false");
+console.log(`web_visual_preview_path=${offlinePath}`);
+console.log(`web_visual_preview_relative_path=${relativeOfflinePath}`);
+console.log(`web_visual_preview_bytes=${stats.size}`);
+console.log(`web_visual_preview_css=${cssAssetPath}`);
+console.log(`web_visual_preview_js=${jsAssetPath}`);

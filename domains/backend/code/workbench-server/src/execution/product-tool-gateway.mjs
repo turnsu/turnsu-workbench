@@ -1,8 +1,12 @@
 import { Check, ExecutionCapabilitiesSchema } from "@looloomi/workbench-contracts";
 
+import { sanitizeLarkToolResult } from "../tools/lark-tool-output.mjs";
+import { getLarkToolPolicy } from "../tools/lark-tool-policy.mjs";
+import { AGENT_MATERIAL_TOOL_ID } from "../tools/agent-material-tool.mjs";
 import { capabilitiesAreSubset } from "./execution-broker.mjs";
 
 const MAX_GATEWAY_INPUT_BYTES = 1_000_000;
+const MODEL_USAGE_FIELDS = ["inputTokens", "outputTokens", "totalTokens", "imageCount", "costUsdMicros"];
 
 export class ProductToolGatewayError extends Error {
   constructor(code, message = code, { status = "permission_denied" } = {}) {
@@ -50,6 +54,79 @@ export class ProductToolGateway {
       return result;
     } catch (error) {
       this.#observer?.({ outcome: "rejected", code: safeObserverCode(error?.code), operation: message?.operation });
+      throw error;
+    }
+  }
+
+  async recoverEffect(message, binding) {
+    try {
+      validateRecoveryMessage(message, binding);
+      const { invocation, lease } = await this.#authorize(message, binding);
+      const recovery = invocation.request?.metadata?.effectRecovery;
+      if (!sameRecovery(recovery, message.effectRecovery)) {
+        throw denied("gateway_effect_recovery_lineage_invalid");
+      }
+      assertToolAllowed({
+        toolId: recovery.action,
+        connectionId: recovery.connectionId,
+        externalAction: true,
+      }, lease.capabilities);
+      assertRecoveryConnectionSnapshot(invocation.request?.metadata, recovery);
+      if (typeof this.#toolExecutor?.reconcileEffect !== "function") {
+        throw outcomeUnknown("gateway_effect_recovery_unavailable");
+      }
+      const usage = this.#usageFor(message.invocationId, message.attemptId);
+      if (usage.steps !== 0 || invocation.request.limits.maxSteps < 1) {
+        throw outcomeUnknown("gateway_effect_recovery_budget_exceeded");
+      }
+      usage.steps += 1;
+      const result = await this.#toolExecutor.reconcileEffect({
+        workspaceId: invocation.workspaceId,
+        effectId: recovery.effectId,
+        signal: message.signal,
+      });
+      await this.#authorize(message, binding);
+      assertRecoveredEffect(result, recovery, invocation);
+      let safe;
+      try {
+        safe = sanitizeLarkToolResult(recovery.action, {
+          status: result.status,
+          action: result.action,
+          effect: getLarkToolPolicy(recovery.action)?.effect,
+          output: result.output,
+          externalRef: result.externalRef,
+          receipt: result.receipt,
+          reconciled: true,
+        });
+      } catch (error) {
+        throw new ProductToolGatewayError(
+          safeObserverCode(error?.code),
+          "The recovered Lark Tool output did not match its product contract.",
+          { status: "effect_outcome_unknown" },
+        );
+      }
+      const projected = {
+        ...safe,
+        effectId: recovery.effectId,
+        connectionId: recovery.connectionId,
+        requirementId: recovery.requirementId,
+        approvalFingerprint: recovery.approvalFingerprint,
+        credentialBindingFingerprint: recovery.credentialBindingFingerprint,
+        driverBackend: recovery.driverBackend,
+        sourceInvocationId: recovery.sourceInvocationId,
+        sourceAttemptId: recovery.sourceAttemptId,
+      };
+      if (!isJsonValue(projected) || byteLength(projected) > invocation.request.limits.maxOutputBytes) {
+        throw outcomeUnknown("gateway_effect_recovery_result_invalid");
+      }
+      this.#observer?.({ outcome: "allowed", code: "ok", operation: "effect_recovery" });
+      return structuredClone(projected);
+    } catch (error) {
+      this.#observer?.({
+        outcome: "rejected",
+        code: safeObserverCode(error?.code),
+        operation: "effect_recovery",
+      });
       throw error;
     }
   }
@@ -111,6 +188,13 @@ export class ProductToolGateway {
         }
         usage.requestedModelRevisionIds.add(result.requestedModelRevisionId);
         usage.actualModelRevisionIds.add(result.actualModelRevisionId);
+        for (const name of MODEL_USAGE_FIELDS) {
+          const amount = result.usage?.[name] ?? 0;
+          if (!Number.isSafeInteger(amount) || amount < 0 || !Number.isSafeInteger(usage[name] + amount)) {
+            throw new ProductToolGatewayError("gateway_model_usage_invalid", "The model usage could not be verified.", { status: "failed" });
+          }
+          usage[name] += amount;
+        }
       } finally {
         this.#untrackModelController(message, modelController);
       }
@@ -119,16 +203,31 @@ export class ProductToolGateway {
       if (!this.#toolExecutor) throw blocked("tool_backend_unavailable");
       result = await this.#toolExecutor({
         toolId: message.toolId,
+        actor: structuredClone(invocation.request?.actor ?? null),
         connectionId: message.connectionId ?? null,
         input: structuredClone(message.input),
         invocationId: message.invocationId,
         attemptId: message.attemptId,
         workspaceId: invocation.workspaceId,
+        controller: structuredClone(invocation.request?.controller ?? null),
         capabilities: structuredClone(effectiveCapabilities),
+        metadata: structuredClone(invocation.request?.metadata ?? {}),
+        effectId: message.effectId,
         signal: message.signal,
       });
     }
     await this.#authorize(message, binding);
+    if (message.operation === "tool" && getLarkToolPolicy(message.toolId)) {
+      try {
+        result = sanitizeLarkToolResult(message.toolId, result);
+      } catch (error) {
+        throw new ProductToolGatewayError(
+          safeObserverCode(error?.code),
+          "The Lark Tool returned output that did not match its product contract.",
+          { status: "failed" },
+        );
+      }
+    }
     if (!isJsonValue(result) || byteLength(result) > limits.maxOutputBytes) {
       throw new ProductToolGatewayError("gateway_result_invalid", "Gateway result is invalid.", { status: "failed" });
     }
@@ -149,6 +248,7 @@ export class ProductToolGateway {
     if (!usage) return {
       requestedModelRevisionId: null,
       actualModelRevisionId: null,
+      usage: { steps: 0, modelRequests: 0, ...Object.fromEntries(MODEL_USAGE_FIELDS.map((name) => [name, 0])) },
     };
     return {
       requestedModelRevisionId: usage.requestedModelRevisionIds.size === 1
@@ -157,6 +257,11 @@ export class ProductToolGateway {
       actualModelRevisionId: usage.actualModelRevisionIds.size === 1
         ? [...usage.actualModelRevisionIds][0]
         : null,
+      usage: {
+        steps: usage.steps,
+        modelRequests: usage.modelRequests,
+        ...Object.fromEntries(MODEL_USAGE_FIELDS.map((name) => [name, usage[name]])),
+      },
     };
   }
 
@@ -199,6 +304,7 @@ export class ProductToolGateway {
       usage = {
         steps: 0,
         modelRequests: 0,
+        ...Object.fromEntries(MODEL_USAGE_FIELDS.map((name) => [name, 0])),
         requestedModelRevisionIds: new Set(),
         actualModelRevisionIds: new Set(),
       };
@@ -221,11 +327,83 @@ function validateGatewayMessage(message, binding) {
   }
 }
 
+function validateRecoveryMessage(message, binding) {
+  if (!isPlainObject(message)
+    || !isPlainObject(binding)
+    || message.invocationId !== binding.invocationId
+    || message.attemptId !== binding.attemptId
+    || message.capabilityLeaseId !== binding.capabilityLeaseId
+    || !validRecovery(message.effectRecovery)) {
+    throw denied("gateway_effect_recovery_request_invalid");
+  }
+}
+
+const RECOVERY_FIELDS = Object.freeze([
+  "schemaVersion",
+  "effectId",
+  "action",
+  "connectionId",
+  "requirementId",
+  "approvalFingerprint",
+  "credentialBindingFingerprint",
+  "driverBackend",
+  "sourceInvocationId",
+  "sourceAttemptId",
+]);
+
+function validRecovery(value) {
+  return isPlainObject(value)
+    && value.schemaVersion === "workbench-effect-recovery-v1"
+    && RECOVERY_FIELDS.every((field) => typeof value[field] === "string" && value[field].length > 0)
+    && Object.keys(value).every((field) => RECOVERY_FIELDS.includes(field));
+}
+
+function sameRecovery(left, right) {
+  return validRecovery(left)
+    && validRecovery(right)
+    && RECOVERY_FIELDS.every((field) => left[field] === right[field]);
+}
+
+function assertRecoveryConnectionSnapshot(metadata, recovery) {
+  const snapshot = (metadata?.connectionSnapshots ?? []).find((candidate) => (
+    candidate?.connectionId === recovery.connectionId
+    && candidate?.requirementId === recovery.requirementId
+  ));
+  if (!snapshot
+    || snapshot.approvalFingerprint !== recovery.approvalFingerprint
+    || snapshot.credentialBindingFingerprint !== recovery.credentialBindingFingerprint
+    || snapshot.driverBackend !== recovery.driverBackend) {
+    throw denied("gateway_effect_recovery_connection_invalid");
+  }
+}
+
+function assertRecoveredEffect(result, recovery, invocation) {
+  if (!isPlainObject(result)
+    || result.status !== "succeeded"
+    || result.effectId !== recovery.effectId
+    || result.action !== recovery.action
+    || result.connectionId !== recovery.connectionId
+    || result.requirementId !== recovery.requirementId
+    || result.approvalFingerprint !== recovery.approvalFingerprint
+    || result.credentialBindingFingerprint !== recovery.credentialBindingFingerprint
+    || result.driverBackend !== recovery.driverBackend
+    || result.invocationId !== recovery.sourceInvocationId
+    || result.attemptId !== recovery.sourceAttemptId
+    || result.controllerId !== invocation.request?.controller?.controllerId
+    || result.nodeId !== invocation.request?.metadata?.outerNodeId) {
+    throw outcomeUnknown("gateway_effect_recovery_result_mismatch");
+  }
+}
+
 function assertToolAllowed(message, capabilities) {
   if (typeof message.toolId !== "string" || !capabilities.toolAllowlist.includes(message.toolId)) {
     throw denied("gateway_tool_forbidden");
   }
-  if (message.connectionId !== undefined && !capabilities.connectionIds.includes(message.connectionId)) {
+  if (message.toolId === AGENT_MATERIAL_TOOL_ID) {
+    if (message.connectionId != null) throw denied("gateway_connection_forbidden");
+    if (message.externalAction === true) throw denied("gateway_external_action_forbidden");
+    if (message.network === true) throw denied("gateway_network_forbidden");
+  } else if (typeof message.connectionId !== "string" || !capabilities.connectionIds.includes(message.connectionId)) {
     throw denied("gateway_connection_forbidden");
   }
   if (message.network === true && capabilities.network !== true) throw denied("gateway_network_forbidden");
@@ -238,6 +416,14 @@ function denied(code) {
 
 function blocked(code) {
   return new ProductToolGatewayError(code, "Gateway backend is unavailable.", { status: "blocked" });
+}
+
+function outcomeUnknown(code) {
+  return new ProductToolGatewayError(
+    code,
+    "The original external effect could not be reconciled safely.",
+    { status: "effect_outcome_unknown" },
+  );
 }
 
 function safeObserverCode(value) {

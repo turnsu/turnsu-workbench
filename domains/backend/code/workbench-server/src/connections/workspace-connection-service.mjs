@@ -1,6 +1,25 @@
+import { createHash } from "node:crypto";
+
 import { ProductStoreError } from "../store/errors.mjs";
 
 const clone = (value) => value === undefined ? undefined : structuredClone(value);
+export const CONNECTION_APPROVAL_SCHEMA_VERSION = "connection-approval-v1";
+
+const canonicalJson = (value) => {
+  if (value === undefined) return "undefined";
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  return `{${Object.keys(value).sort().map((key) => (
+    `${JSON.stringify(key)}:${canonicalJson(value[key])}`
+  )).join(",")}}`;
+};
+const fingerprint = (value) =>
+  `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
+const normalizedStrings = (value) => [...new Set(
+  (Array.isArray(value) ? value : [])
+    .filter((entry) => typeof entry === "string" && entry.length > 0),
+)].sort();
+const CONTENT_FINGERPRINT = /^sha256:[a-f0-9]{16,64}$/;
 
 const requiredString = (value, code) => {
   if (typeof value !== "string" || value.length === 0) throw new ProductStoreError(code, code);
@@ -26,6 +45,8 @@ const uniqueRequirements = (requirements = []) => {
 
 export function productSafeConnection(connection) {
   if (!connection) return null;
+  const expired = typeof connection.validation?.expiresAt === "string"
+    && Date.parse(connection.validation.expiresAt) <= Date.now();
   const configuration = {};
   if (typeof connection.configuration?.accountLabel === "string") {
     configuration.accountLabel = connection.configuration.accountLabel;
@@ -38,10 +59,17 @@ export function productSafeConnection(connection) {
     connectionId: connection.connectionId,
     workspaceId: connection.workspaceId,
     capabilityKey: connection.capabilityKey,
+    driverKey: connection.driverKey ?? "unconfigured",
+    driverBackend: connection.driverBackend ?? "production",
     label: connection.label,
     configuration,
-    status: connection.status,
-    validation: clone(connection.validation),
+    credentialState: expired ? "expired" : connection.credentialState ?? "unbound",
+    status: expired && connection.status === "connected" ? "needs_setup" : connection.status,
+    validation: expired ? {
+      ...clone(connection.validation),
+      status: "invalid",
+      message: "This Connection credential has expired. Rebind and validate it before use.",
+    } : clone(connection.validation),
     revision: connection.revision,
     createdAt: connection.createdAt,
     updatedAt: connection.updatedAt,
@@ -53,6 +81,124 @@ export function formatConnectionEtag({ connectionId, revision } = {}) {
     throw new TypeError("connection_etag_requires_revision");
   }
   return `"cnv1:${connectionId}:${revision}"`;
+}
+
+export function connectionOperationalIssue(connection, { now = Date.now() } = {}) {
+  if (connection?.status !== "connected" || connection?.validation?.status !== "valid") {
+    return {
+      code: "connection_not_ready",
+      message: "Validate the selected connection before continuing.",
+    };
+  }
+  if (
+    connection.credentialState !== "bound"
+    || connection.driverBackend !== "production"
+    || (
+      typeof connection.validation?.expiresAt === "string"
+      && Date.parse(connection.validation.expiresAt) <= now
+    )
+  ) {
+    return {
+      code: "connection_not_ready",
+      message: "The selected connection credential is missing, expired, or test-only.",
+    };
+  }
+  return null;
+}
+
+export function isCompleteConnectionApprovalSnapshot(snapshot) {
+  return Boolean(
+    snapshot
+    && snapshot.approvalSchemaVersion === CONNECTION_APPROVAL_SCHEMA_VERSION
+    && typeof snapshot.requirementId === "string"
+    && snapshot.requirementId.length > 0
+    && typeof snapshot.connectionId === "string"
+    && snapshot.connectionId.length > 0
+    && Number.isSafeInteger(snapshot.connectionRevision)
+    && snapshot.connectionRevision >= 1
+    && typeof snapshot.capabilityKey === "string"
+    && snapshot.capabilityKey.length > 0
+    && typeof snapshot.driverKey === "string"
+    && snapshot.driverKey.length > 0
+    && snapshot.driverBackend === "production"
+    && typeof snapshot.principal === "string"
+    && snapshot.principal.length > 0
+    && CONTENT_FINGERPRINT.test(snapshot.principalFingerprint)
+    && CONTENT_FINGERPRINT.test(snapshot.permissionFingerprint)
+    && CONTENT_FINGERPRINT.test(snapshot.credentialBindingFingerprint)
+    && CONTENT_FINGERPRINT.test(snapshot.approvalFingerprint)
+    && (snapshot.validationExpiresAt === null || typeof snapshot.validationExpiresAt === "string")
+  );
+}
+
+export function connectionApprovalSnapshot(connection, { requirementId, now = Date.now() } = {}) {
+  const operationalIssue = connectionOperationalIssue(connection, { now });
+  if (operationalIssue) {
+    throw new ProductStoreError(operationalIssue.code, operationalIssue.message, {
+      connectionId: connection?.connectionId,
+      requirementId,
+    });
+  }
+  const principal = connection?.validation?.principal;
+  if (
+    typeof requirementId !== "string"
+    || requirementId.length === 0
+    || typeof connection?.connectionId !== "string"
+    || !Number.isSafeInteger(connection?.revision)
+    || typeof connection?.capabilityKey !== "string"
+    || typeof connection?.driverKey !== "string"
+    || connection?.driverBackend !== "production"
+    || typeof principal !== "string"
+    || principal.length === 0
+    || !CONTENT_FINGERPRINT.test(connection?.credentialBindingFingerprint)
+  ) {
+    throw new ProductStoreError(
+      "connection_rebind_required",
+      "Rebind and validate this Connection before creating a Run.",
+      { connectionId: connection?.connectionId, requirementId },
+    );
+  }
+  const scopes = normalizedStrings(connection.validation?.scopes);
+  const effects = normalizedStrings(connection.validation?.effects);
+  const base = {
+    approvalSchemaVersion: CONNECTION_APPROVAL_SCHEMA_VERSION,
+    requirementId,
+    connectionId: connection.connectionId,
+    connectionRevision: connection.revision,
+    capabilityKey: connection.capabilityKey,
+    driverKey: connection.driverKey,
+    driverBackend: connection.driverBackend,
+    principal,
+    principalFingerprint: fingerprint({ principal }),
+    permissionFingerprint: fingerprint({ principal, scopes, effects }),
+    credentialBindingFingerprint: connection.credentialBindingFingerprint,
+    validationExpiresAt: connection.validation?.expiresAt ?? null,
+  };
+  return Object.freeze({
+    ...base,
+    approvalFingerprint: fingerprint(base),
+  });
+}
+
+export function connectionApprovalSnapshotsMatch(expected, current) {
+  if (!isCompleteConnectionApprovalSnapshot(expected) || !isCompleteConnectionApprovalSnapshot(current)) {
+    return false;
+  }
+  return [
+    "approvalSchemaVersion",
+    "requirementId",
+    "connectionId",
+    "connectionRevision",
+    "capabilityKey",
+    "driverKey",
+    "driverBackend",
+    "principal",
+    "principalFingerprint",
+    "permissionFingerprint",
+    "credentialBindingFingerprint",
+    "validationExpiresAt",
+    "approvalFingerprint",
+  ].every((field) => expected[field] === current[field]);
 }
 
 export async function validateRequiredConnectionBindings({
@@ -110,10 +256,11 @@ export async function validateRequiredConnectionBindings({
         { requirementId: requirement.requirementId },
       );
     }
-    if (connection.status !== "connected" || connection.validation?.status !== "valid") {
+    const operationalIssue = connectionOperationalIssue(connection);
+    if (operationalIssue) {
       throw new ProductStoreError(
-        "connection_not_ready",
-        "Validate the selected connection before continuing.",
+        operationalIssue.code,
+        operationalIssue.message,
         { requirementId: requirement.requirementId, connectionId },
       );
     }
@@ -173,6 +320,7 @@ export async function persistConnectionBindings({
 
 export function createWorkspaceConnectionService({
   store,
+  driverRegistry = null,
   clock = () => new Date().toISOString(),
   idFactory = (kind) => `${kind}-${crypto.randomUUID()}`,
 } = {}) {
@@ -204,6 +352,8 @@ export function createWorkspaceConnectionService({
     if (!value) throw new ProductStoreError("connection_not_found", "Connection not found.", { connectionId });
     return value;
   };
+  const resolveDriver = (capabilityKey) =>
+    driverRegistry?.resolve?.(capabilityKey) ?? null;
 
   return Object.freeze({
     async list({ workspaceId, query = {} }) {
@@ -222,15 +372,21 @@ export function createWorkspaceConnectionService({
         key: idempotencyKey,
         request: clone(request),
         workspaceId,
+        effectivePrincipalId: actorId,
       }, async (session) => {
         const now = clock();
+        const registration = resolveDriver(data.capabilityKey);
         const connection = await repository().insert({
           schemaVersion: "workbench-v1",
           connectionId: idFactory("connection"),
           workspaceId,
           capabilityKey: data.capabilityKey,
+          driverKey: registration?.driverKey ?? "unconfigured",
+          driverBackend: registration?.backend ?? "production",
           label: data.label,
           configuration: clone(data.configuration ?? {}),
+          credentialState: "unbound",
+          credentialBindingFingerprint: null,
           status: "needs_setup",
           validation: {
             status: "never_checked",
@@ -246,22 +402,45 @@ export function createWorkspaceConnectionService({
       });
     },
     async update({ connectionId, idempotencyKey, ifMatch, request, workspaceId, actorId }) {
+      const updateData = request?.data ?? request;
+      if (updateData?.enabled === false) {
+        const current = await read(connectionId, workspaceId);
+        if (formatConnectionEtag(current) !== ifMatch) {
+          throw new ProductStoreError("connection_revision_conflict", "The connection changed after it was opened.");
+        }
+        const registration = resolveDriver(current.capabilityKey);
+        await registration?.driver?.revoke?.({
+          workspaceId,
+          actorId,
+          connectionId,
+          capabilityKey: current.capabilityKey,
+          configuration: clone(current.configuration),
+        });
+      }
       return runMutation({
         scope: `update-connection:${connectionId}`,
         key: idempotencyKey,
         request: { ifMatch, request: clone(request) },
         workspaceId,
+        effectivePrincipalId: actorId,
       }, async (session) => {
         const current = await read(connectionId, workspaceId, { session });
         if (formatConnectionEtag(current) !== ifMatch) {
           throw new ProductStoreError("connection_revision_conflict", "The connection changed after it was opened.");
         }
-        const data = request?.data ?? request;
+        const data = updateData;
         const enabled = data.enabled ?? current.status !== "disabled";
+        const registration = resolveDriver(current.capabilityKey);
         const now = clock();
         const next = await repository().patchWithRevision(connectionId, current.revision, {
           ...(data.label ? { label: data.label } : {}),
           ...(data.configuration ? { configuration: clone(data.configuration) } : {}),
+          driverKey: registration?.driverKey ?? current.driverKey ?? "unconfigured",
+          driverBackend: registration?.backend ?? current.driverBackend ?? "production",
+          credentialState: enabled ? current.credentialState ?? "unbound" : "unbound",
+          credentialBindingFingerprint: enabled && current.credentialState === "bound"
+            ? current.credentialBindingFingerprint ?? null
+            : null,
           status: enabled ? "needs_setup" : "disabled",
           validation: {
             status: "never_checked",
@@ -276,40 +455,209 @@ export function createWorkspaceConnectionService({
         return { data: productSafeConnection(next), etag: formatConnectionEtag(next) };
       });
     },
+    async bindCredential({ connectionId, idempotencyKey, ifMatch, request, workspaceId, actorId }) {
+      if (!store.runIdempotentExternalMutation) {
+        throw new TypeError("workbench_external_idempotency_required");
+      }
+      const secretRef = requiredString(
+        request?.data?.secretRef ?? request?.secretRef,
+        "connection_secret_ref_required",
+      );
+      return store.runIdempotentExternalMutation({
+        scope: `bind-connection-credential:${connectionId}`,
+        key: idempotencyKey,
+        request: { ifMatch, secretRef },
+        workspaceId,
+        effectivePrincipalId: actorId,
+        operationIdKind: "connection-credential-binding",
+      }, async () => {
+        const current = await read(connectionId, workspaceId);
+        if (formatConnectionEtag(current) !== ifMatch) {
+          throw new ProductStoreError("connection_revision_conflict", "The connection changed after it was opened.");
+        }
+        if (current.status === "disabled") {
+          throw new ProductStoreError("connection_disabled", "This connection is disabled.");
+        }
+        const registration = resolveDriver(current.capabilityKey);
+        if (!registration?.driver?.bindSecretRef) {
+          throw new ProductStoreError(
+            "connection_credential_binding_unavailable",
+            "No governed credential binding service is configured for this Connection.",
+          );
+        }
+        const result = await registration.driver.bindSecretRef({
+          workspaceId,
+          actorId,
+          connectionId,
+          capabilityKey: current.capabilityKey,
+          configuration: clone(current.configuration),
+          secretRef,
+        });
+        if (
+          result?.ok !== true
+          || result.credentialState !== "bound"
+          || !CONTENT_FINGERPRINT.test(result.credentialBindingFingerprint)
+        ) {
+          throw new ProductStoreError(
+            result?.code ?? "connection_credential_binding_failed",
+            result?.message ?? "The credential reference could not be bound.",
+          );
+        }
+        const credentialBindingFingerprint = result.credentialBindingFingerprint;
+        return runMutation({
+          scope: `commit-connection-credential-binding:${connectionId}`,
+          key: idempotencyKey,
+          request: { ifMatch, bound: true },
+          workspaceId,
+          effectivePrincipalId: actorId,
+        }, async (session) => {
+          const latest = await read(connectionId, workspaceId, { session });
+          if (formatConnectionEtag(latest) !== ifMatch) {
+            throw new ProductStoreError(
+              "connection_revision_conflict",
+              "The Connection changed while its credential was being bound.",
+            );
+          }
+          const now = clock();
+          const next = await repository().patchWithRevision(connectionId, latest.revision, {
+            driverKey: registration.driverKey,
+            driverBackend: registration.backend,
+            credentialState: "bound",
+            credentialBindingFingerprint,
+            status: "needs_setup",
+            validation: {
+              status: "never_checked",
+              checkedAt: null,
+              message: "Credential reference bound. Validate this Connection before using it.",
+            },
+            revision: latest.revision + 1,
+            updatedAt: now,
+          }, { workspaceId, session });
+          if (!next) {
+            throw new ProductStoreError(
+              "connection_revision_conflict",
+              "The Connection changed while its credential was being bound.",
+            );
+          }
+          await audit({
+            workspaceId,
+            actorId,
+            action: "connection.credential_bound",
+            entityId: connectionId,
+            options: { session },
+          });
+          return {
+            data: productSafeConnection(next),
+            etag: formatConnectionEtag(next),
+          };
+        });
+      });
+    },
     async validate({ connectionId, idempotencyKey, ifMatch, request, workspaceId, actorId }) {
-      return runMutation({
+      if (!store.runIdempotentExternalMutation) {
+        throw new TypeError("workbench_external_idempotency_required");
+      }
+      return store.runIdempotentExternalMutation({
         scope: `validate-connection:${connectionId}`,
         key: idempotencyKey,
         request: { ifMatch, request: clone(request) },
         workspaceId,
-      }, async (session) => {
-        const current = await read(connectionId, workspaceId, { session });
+        effectivePrincipalId: actorId,
+        operationIdKind: "connection-validation",
+      }, async () => {
+        const current = await read(connectionId, workspaceId);
         if (formatConnectionEtag(current) !== ifMatch) {
           throw new ProductStoreError("connection_revision_conflict", "The connection changed after it was opened.");
         }
-        const configured = Boolean(
-          current.configuration?.accountLabel && current.configuration?.permissionSummary,
-        );
-        const enabled = current.status !== "disabled";
-        const valid = enabled && configured;
-        const now = clock();
-        const next = await repository().patchWithRevision(connectionId, current.revision, {
-          status: !enabled ? "disabled" : valid ? "connected" : "needs_setup",
-          validation: {
-            status: valid ? "valid" : "invalid",
-            checkedAt: now,
-            message: !enabled
-              ? "This connection is disabled."
-              : valid
-                ? "Connection setup is ready."
-                : "Add an account label and permission summary, then validate again.",
+        if (current.status === "disabled") {
+          throw new ProductStoreError("connection_disabled", "This connection is disabled.");
+        }
+        const registration = resolveDriver(current.capabilityKey);
+        const context = {
+          workspaceId,
+          actorId,
+          connectionId,
+          capabilityKey: current.capabilityKey,
+          configuration: clone(current.configuration),
+        };
+        const credentialState = registration?.driver?.credentialState
+          ? await registration.driver.credentialState(context)
+          : "unbound";
+        const rawProbe = registration?.driver?.probe
+          ? await registration.driver.probe(context)
+          : {
+              ok: false,
+              code: "connection_driver_unavailable",
+              message: "No Connection driver is configured for this capability.",
+            };
+        const probe = rawProbe?.ok === true && registration?.driver?.validate
+          ? await registration.driver.validate({ ...context, probe: clone(rawProbe) })
+          : rawProbe;
+        return runMutation({
+          scope: `commit-connection-validation:${connectionId}`,
+          key: idempotencyKey,
+          request: {
+            ifMatch,
+            probe: {
+              ok: probe?.ok === true,
+              code: probe?.code ?? null,
+              principal: probe?.principal ?? null,
+              scopes: probe?.scopes ?? [],
+              effects: probe?.effects ?? [],
+              expiresAt: probe?.expiresAt ?? null,
+            },
           },
-          revision: current.revision + 1,
-          updatedAt: now,
-        }, { workspaceId, session });
-        if (!next) throw new ProductStoreError("connection_revision_conflict", "The connection changed while it was being validated.");
-        await audit({ workspaceId, actorId, action: "connection.validated", entityId: connectionId, options: { session } });
-        return { data: productSafeConnection(next), etag: formatConnectionEtag(next) };
+          workspaceId,
+          effectivePrincipalId: actorId,
+        }, async (session) => {
+          const latest = await read(connectionId, workspaceId, { session });
+          if (formatConnectionEtag(latest) !== ifMatch) {
+            throw new ProductStoreError("connection_revision_conflict", "The connection changed while it was being validated.");
+          }
+          const valid = probe?.ok === true
+            && credentialState === "bound"
+            && CONTENT_FINGERPRINT.test(latest.credentialBindingFingerprint);
+          const now = clock();
+          const next = await repository().patchWithRevision(connectionId, latest.revision, {
+            driverKey: registration?.driverKey ?? latest.driverKey ?? "unconfigured",
+            driverBackend: registration?.backend ?? latest.driverBackend ?? "production",
+            credentialState,
+            status: valid ? "connected" : "needs_setup",
+            validation: {
+              status: valid ? "valid" : "invalid",
+              checkedAt: now,
+              message: valid
+                ? "Connection probe and required scopes passed."
+                : String(
+                  credentialState === "bound" && !latest.credentialBindingFingerprint
+                    ? "Rebind this legacy credential before validation."
+                    : probe?.message ?? "Connection validation failed.",
+                ).slice(0, 1000),
+              ...(valid ? {
+                principal: String(probe.principal ?? "").slice(0, 200),
+                scopes: clone(probe.scopes ?? []),
+                effects: clone(probe.effects ?? []),
+                expiresAt: probe.expiresAt ?? null,
+              } : {}),
+            },
+            revision: latest.revision + 1,
+            updatedAt: now,
+          }, { workspaceId, session });
+          if (!next) {
+            throw new ProductStoreError("connection_revision_conflict", "The connection changed while it was being validated.");
+          }
+          await audit({
+            workspaceId,
+            actorId,
+            action: "connection.validated",
+            entityId: connectionId,
+            options: { session },
+          });
+          return {
+            data: productSafeConnection(next),
+            etag: formatConnectionEtag(next),
+          };
+        });
       });
     },
   });

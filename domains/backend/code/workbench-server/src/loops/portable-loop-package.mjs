@@ -5,6 +5,7 @@ import {
   PortableLoopPackageV1Schema,
 } from "@looloomi/workbench-contracts";
 
+import { connectionOperationalIssue } from "../connections/workspace-connection-service.mjs";
 import { parseStrictJson } from "../validation/strict-json-parser.mjs";
 
 const MAX_PACKAGE_BYTES = 12 * 1024 * 1024;
@@ -458,7 +459,10 @@ function connectionMismatch(connection, expected) {
   if (connection.workspaceId !== expected.workspaceId) return { code: "connection_workspace_mismatch", message: "The selected connection belongs to another workspace." };
   if (expected.connectionId && connection.connectionId !== expected.connectionId) return { code: "connection_id_mismatch", message: "The resolver returned a different connection than the selected mapping." };
   if (connection.capabilityKey !== expected.capabilityKey) return { code: "connection_capability_mismatch", message: "The selected connection does not provide the exact required capability." };
-  if (connection.status !== "connected" || connection.validation?.status !== "valid") return { code: "connection_not_valid", message: "The selected connection must be connected and valid." };
+  const operationalIssue = connectionOperationalIssue(connection);
+  if (operationalIssue) {
+    return { code: "connection_not_valid", message: operationalIssue.message };
+  }
   return null;
 }
 

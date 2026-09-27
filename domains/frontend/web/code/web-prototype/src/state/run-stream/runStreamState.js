@@ -9,9 +9,12 @@ const RUN_STATUS_BY_EVENT = Object.freeze({
   "run.started": "running",
   "review.requested": "waiting_review",
   "run.paused": "paused",
+  "run.cancellation_requested": "cancellation_requested",
   "run.completed": "completed",
   "run.failed": "failed",
   "run.cancelled": "cancelled",
+  "run.partial": "partial",
+  "run.effect_outcome_unknown": "effect_outcome_unknown",
 });
 
 const NODE_STATUS_BY_EVENT = Object.freeze({
@@ -21,14 +24,31 @@ const NODE_STATUS_BY_EVENT = Object.freeze({
   "node.failed": "failed",
 });
 
-const TERMINAL_EVENTS = new Set(["run.completed", "run.failed", "run.cancelled"]);
-const READ_MODEL_EVENTS = new Set([
-  "review.requested",
-  "run.paused",
+const TERMINAL_EVENTS = new Set([
   "run.completed",
   "run.failed",
   "run.cancelled",
+  "run.partial",
+  "run.effect_outcome_unknown",
 ]);
+const READ_MODEL_EVENTS = new Set([
+  "review.requested",
+  "run.paused",
+  "run.cancellation_requested",
+  "run.completed",
+  "run.failed",
+  "run.cancelled",
+  "run.partial",
+  "run.effect_outcome_unknown",
+]);
+
+export function isRunTerminalEvent(type) {
+  return TERMINAL_EVENTS.has(type);
+}
+
+export function runEventRequiresReadModelRefresh(type) {
+  return READ_MODEL_EVENTS.has(type);
+}
 
 export function createRunStreamState() {
   return { byRunId: {} };
@@ -122,7 +142,9 @@ function reduceEvent(state, event) {
 
   const nodeStatus = NODE_STATUS_BY_EVENT[event.type];
   if (nodeStatus && event.nodeId) {
-    next.status = "running";
+    if (current.status !== "cancellation_requested" && !current.terminal) {
+      next.status = "running";
+    }
     next.nodes = {
       ...current.nodes,
       [event.nodeId]: {
@@ -144,12 +166,12 @@ function reduceEvent(state, event) {
       occurredAt: event.occurredAt,
       sequence: event.sequence,
     };
-  } else if (event.type === "run.paused" || TERMINAL_EVENTS.has(event.type)) {
+  } else if (event.type === "run.paused" || isRunTerminalEvent(event.type)) {
     next.currentNodeId = null;
     next.pendingReview = null;
   }
 
-  if (TERMINAL_EVENTS.has(event.type)) {
+  if (isRunTerminalEvent(event.type)) {
     next.terminal = {
       type: event.type,
       status: runStatus,
@@ -159,7 +181,7 @@ function reduceEvent(state, event) {
     };
   }
 
-  if (READ_MODEL_EVENTS.has(event.type)) next.readModelRefreshRequired = true;
+  if (runEventRequiresReadModelRefresh(event.type)) next.readModelRefreshRequired = true;
 
   return {
     ...state,

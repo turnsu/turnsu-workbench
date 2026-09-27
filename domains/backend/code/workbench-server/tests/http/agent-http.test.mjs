@@ -67,6 +67,10 @@ const sessionValue = {
   userId: "user-a",
   workspaceId: "workspace-a",
   scope: { kind: "module", objectKind: "workflow", objectId: "workflow-a", branchId: "agent-branch-a", baseVersionId: "revision-a" },
+  title: "Improve workflow",
+  source: { kind: "manual" },
+  taskStatus: "idle",
+  archived: false,
   status: "active",
   lastUsedModelProfileId: "deepseek-default",
   modelPreferenceState: "preference_only",
@@ -92,6 +96,27 @@ const turnValue = {
   startedAt: null,
   finishedAt: null,
   updatedAt: NOW,
+};
+const proposalValue = {
+  schemaVersion: "workbench-v1",
+  proposalId: "agent-proposal-a",
+  workspaceId: "workspace-a",
+  userId: "user-a",
+  sessionId: sessionValue.sessionId,
+  turnId: turnValue.turnId,
+  definitionId: "loop_creator",
+  objectKind: "workflow",
+  objectId: "workflow-a",
+  branchId: "agent-branch-a",
+  baseVersionId: "revision-a",
+  summary: "Improve the workflow definition.",
+  operations: [{ op: "replace", path: "/definition/goal", value: "Improved goal" }],
+  evidenceRefs: [],
+  validationResult: { status: "passed", diagnostics: [] },
+  status: "proposed",
+  createdBy: "user-a",
+  createdAt: NOW,
+  decidedAt: null,
 };
 
 test("formal Agent session and asynchronous turn routes dispatch contract-valid responses", async () => {
@@ -132,15 +157,49 @@ test("formal Agent session and asynchronous turn routes dispatch contract-valid 
       };
     },
     async createAgentSession(input) { calls.push(input); return sessionValue; },
+    async listAgentSessions(input) { calls.push(input); return { data: [sessionValue], page: { nextCursor: null, hasMore: false } }; },
+    async updateAgentSession(input) {
+      calls.push(input);
+      return { ...sessionValue, title: input.request.data.title, archived: input.request.data.archived };
+    },
     async selectAgentSessionModel(input) {
       calls.push(input);
       return { ...sessionValue, lastUsedModelProfileId: input.request.data.modelProfileId };
     },
     async getAgentSession() { return sessionValue; },
+    async getAgentSessionQueue() {
+      return {
+        sessionId: sessionValue.sessionId,
+        runningTurnId: null,
+        queuedTurnCount: 1,
+        items: [{
+          admissionId: "admission-a",
+          commandId: "product-command-a",
+          invocationId: null,
+          sessionId: sessionValue.sessionId,
+          turnId: turnValue.turnId,
+          reasonCode: "waiting_session_turn",
+          position: 1,
+          estimatedWaitSeconds: 30,
+          approximate: true,
+          cancellable: true,
+          cancelAction: {
+            method: "POST",
+            path: `/api/workbench/v1/agent-sessions/${sessionValue.sessionId}/turns/${turnValue.turnId}/cancel`,
+          },
+          createdAt: NOW,
+          updatedAt: NOW,
+        }],
+        page: { nextCursor: null, hasMore: false },
+      };
+    },
     async createAgentTurn(input) { calls.push(input); return turnValue; },
     async getAgentTurn() { return turnValue; },
     async cancelAgentTurn() { return { ...turnValue, status: "cancelled", result: null, finishedAt: NOW }; },
     async listAgentSessionEvents() { return { data: [], page: { nextCursor: null, hasMore: false } }; },
+    async getAgentProposal(input) { calls.push(input); return proposalValue; },
+    async applyAgentProposal(input) { calls.push(input); return { ...proposalValue, status: "accepted", decidedAt: NOW }; },
+    async rejectAgentProposal(input) { calls.push(input); return { ...proposalValue, status: "rejected", decidedAt: NOW }; },
   };
   const { handler, session } = setup(application);
 
@@ -161,6 +220,37 @@ test("formal Agent session and asynchronous turn routes dispatch contract-valid 
   assert.equal(createdSession.status, 201, createdSession.body);
   assert.equal(Check(WORKBENCH_V1_AGENT_ENDPOINTS.createAgentSession.responseBodySchema, JSON.parse(createdSession.body)), true);
 
+  const listedSessions = await invoke(handler, {
+    url: "/api/workbench/v1/agent-sessions?definitionId=loop_creator&taskStatus=blocked&search=launch&archived=true",
+    headers: { Cookie: `workbench_session=${session.token}` },
+  });
+  assert.equal(listedSessions.status, 200, listedSessions.body);
+  assert.equal(Check(WORKBENCH_V1_AGENT_ENDPOINTS.listAgentSessions.responseBodySchema, JSON.parse(listedSessions.body)), true);
+  const listCall = calls.find((call) => call.query?.search === "launch");
+  assert.equal(listCall.query.archived, true);
+  assert.equal(listCall.query.taskStatus, "blocked");
+
+  const updatedSession = await invoke(handler, {
+    method: "PATCH",
+    url: `/api/workbench/v1/agent-sessions/${sessionValue.sessionId}`,
+    headers: headers(session, "update-agent-session-a"),
+    body: {
+      schemaVersion: "workbench-api-v1",
+      data: { title: "Renamed task", archived: true },
+    },
+  });
+  assert.equal(updatedSession.status, 200, updatedSession.body);
+  assert.equal(Check(WORKBENCH_V1_AGENT_ENDPOINTS.updateAgentSession.responseBodySchema, JSON.parse(updatedSession.body)), true);
+  assert.equal(JSON.parse(updatedSession.body).data.archived, true);
+
+  const queue = await invoke(handler, {
+    url: `/api/workbench/v1/agent-sessions/${sessionValue.sessionId}/queue?limit=25`,
+    headers: { Cookie: `workbench_session=${session.token}` },
+  });
+  assert.equal(queue.status, 200, queue.body);
+  assert.equal(Check(WORKBENCH_V1_AGENT_ENDPOINTS.getAgentSessionQueue.responseBodySchema, JSON.parse(queue.body)), true);
+  assert.equal(JSON.parse(queue.body).data.items[0].reasonCode, "waiting_session_turn");
+
   const selectedModel = await invoke(handler, {
     method: "POST",
     url: `/api/workbench/v1/agent-sessions/${sessionValue.sessionId}/model`,
@@ -178,7 +268,7 @@ test("formal Agent session and asynchronous turn routes dispatch contract-valid 
       schemaVersion: "workbench-api-v1",
       data: {
         kind: "agent_message",
-        modelProfileRevisionId: "model-revision-deepseek-1",
+        modelProfileId: "deepseek-default",
         input: { message: "Improve it" },
       },
     },
@@ -186,6 +276,31 @@ test("formal Agent session and asynchronous turn routes dispatch contract-valid 
   assert.equal(createdTurn.status, 202, createdTurn.body);
   assert.equal(Check(WORKBENCH_V1_AGENT_ENDPOINTS.createAgentTurn.responseBodySchema, JSON.parse(createdTurn.body)), true);
   assert.equal(calls.find((call) => call.turnId === undefined && call.request?.data?.kind)?.sessionId, sessionValue.sessionId);
+
+  const proposal = await invoke(handler, {
+    url: `/api/workbench/v1/agent-sessions/${sessionValue.sessionId}/proposals/${proposalValue.proposalId}`,
+    headers: { Cookie: `workbench_session=${session.token}` },
+  });
+  assert.equal(proposal.status, 200, proposal.body);
+  assert.equal(Check(WORKBENCH_V1_AGENT_ENDPOINTS.getAgentProposal.responseBodySchema, JSON.parse(proposal.body)), true);
+
+  const appliedProposal = await invoke(handler, {
+    method: "POST",
+    url: `/api/workbench/v1/agent-sessions/${sessionValue.sessionId}/proposals/${proposalValue.proposalId}/apply`,
+    headers: headers(session, "apply-agent-proposal-a"),
+    body: { schemaVersion: "workbench-api-v1", data: {} },
+  });
+  assert.equal(appliedProposal.status, 200, appliedProposal.body);
+  assert.equal(JSON.parse(appliedProposal.body).data.status, "accepted");
+
+  const rejectedProposal = await invoke(handler, {
+    method: "POST",
+    url: `/api/workbench/v1/agent-sessions/${sessionValue.sessionId}/proposals/${proposalValue.proposalId}/reject`,
+    headers: headers(session, "reject-agent-proposal-a"),
+    body: { schemaVersion: "workbench-api-v1", data: {} },
+  });
+  assert.equal(rejectedProposal.status, 200, rejectedProposal.body);
+  assert.equal(JSON.parse(rejectedProposal.body).data.status, "rejected");
 });
 
 test("Agent mutations require browser security and do not expose a generic Worker execution route", async () => {
@@ -200,4 +315,21 @@ test("Agent mutations require browser security and do not expose a generic Worke
 
   const worker = await invoke(handler, { method: "POST", url: "/api/workbench/v1/workers/execute", headers: headers(session, "worker") });
   assert.equal(worker.status, 404);
+});
+
+test("temporary Loop task source read failures stay retryable and never masquerade as blocked", async () => {
+  const error = new Error("The Loop task status is temporarily unavailable.");
+  error.code = "agent_task_source_unavailable";
+  const { handler, session } = setup({
+    async getAgentSession() { throw error; },
+  });
+  const response = await invoke(handler, {
+    url: `/api/workbench/v1/agent-sessions/${sessionValue.sessionId}`,
+    headers: { Cookie: `workbench_session=${session.token}` },
+  });
+  const body = JSON.parse(response.body);
+  assert.equal(response.status, 503);
+  assert.equal(body.code, "agent_task_source_unavailable");
+  assert.equal(body.retryable, true);
+  assert.notEqual(body.code, "blocked");
 });

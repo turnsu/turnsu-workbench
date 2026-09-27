@@ -7,7 +7,17 @@ import {
 import { createStabilityImageExecutor } from "./stability-image-model-executor.mjs";
 
 const PROFILE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-const CAPABILITIES = new Set(["chat", "tool_calling", "structured_output", "image_generation"]);
+const CAPABILITIES = new Set([
+  "chat",
+  "tool_calling",
+  "structured_output",
+  "image_input",
+  "image_generation",
+  "realtime_audio_input",
+  "realtime_audio_output",
+  "realtime_turn_detection",
+  "realtime_barge_in",
+]);
 const TRANSIENT_PROVIDER_ERRORS = new Set([
   "provider_rate_limited",
   "provider_timeout",
@@ -82,6 +92,9 @@ export function createModelService({
     signal,
   } = {}) => {
     const requiredCapability = normalizeCapability(capability, typedInput ?? input);
+    if (inputContainsImage(typedInput ?? input) && requiredCapability !== "image_input") {
+      throw modelError("model_capability_mismatch");
+    }
     const primary = modelProfileRevisionId
       ? await source.resolveRevision({
         revisionId: modelProfileRevisionId,
@@ -121,7 +134,10 @@ export function createModelService({
         invocationId, attemptId, workspaceId, capability: requiredCapability,
       }));
       try {
-        const apiKey = await resolveCredential(revision.credentialRef);
+        const apiKey = await resolveCredential(credentialReference(revision), {
+          workspaceId,
+          revision,
+        });
         const executor = createExecutor({
           revision,
           apiKey,
@@ -194,32 +210,36 @@ export function createModelService({
 
 async function resolveTurnSelection(source, {
   workspaceId,
+  userId = null,
   kind,
   explicitRevisionId = null,
   lastUsedModelProfileId = null,
+  requiredCapabilities = null,
 } = {}) {
-  const capabilities = kind === "model_task"
+  const capabilities = Array.isArray(requiredCapabilities) && requiredCapabilities.length > 0
+    ? [...new Set(requiredCapabilities)]
+    : kind === "model_task"
     ? ["image_generation"]
     : ["chat", "tool_calling", "structured_output"];
   let resolved;
   let inheritedFrom;
   if (explicitRevisionId) {
     resolved = await source.resolveRevision({
-      revisionId: explicitRevisionId, workspaceId, capabilities, requireReady: true,
+      revisionId: explicitRevisionId, workspaceId, ...(userId ? { userId } : {}), capabilities, requireReady: true,
     });
     inheritedFrom = "turn";
   } else if (lastUsedModelProfileId) {
     resolved = await source.resolveCurrentProfile({
-      profileId: lastUsedModelProfileId, workspaceId, capabilities, requireReady: true,
+      profileId: lastUsedModelProfileId, workspaceId, ...(userId ? { userId } : {}), capabilities, requireReady: true,
     });
     inheritedFrom = "session_preference";
   } else {
-    const policy = await source.getWorkspacePolicy?.(workspaceId);
-    const capability = kind === "model_task" ? "image_generation" : "structured_output";
+    const policy = await source.getWorkspacePolicy?.(workspaceId, ...(userId ? [{ userId }] : []));
+    const capability = requiredCapabilities?.length ? capabilities[0] : kind === "model_task" ? "image_generation" : "structured_output";
     const profileId = policy?.defaultProfileIdsByCapability?.[capability];
     if (!profileId) throw modelError("model_route_unresolved");
     resolved = await source.resolveCurrentProfile({
-      profileId, workspaceId, capabilities, requireReady: true,
+      profileId, workspaceId, ...(userId ? { userId } : {}), capabilities, requireReady: true,
     });
     inheritedFrom = "workspace_default";
   }
@@ -243,7 +263,15 @@ async function probeCatalog({ source, resolveCredential, fetchImpl, artifactServ
       const resolved = await source.resolveCurrentProfile({
         profileId, workspaceId, capabilities: [], requireReady: false,
       });
-      const apiKey = await resolveCredential(resolved.revision.credentialRef);
+      const apiKey = await resolveCredential(credentialReference(resolved.revision));
+      if (resolved.revision.protocol === "openai_realtime") {
+        profiles.push({
+          profileId,
+          revisionId: resolved.revision.revisionId,
+          available: typeof apiKey === "string" && apiKey.length > 0,
+        });
+        continue;
+      }
       const executor = createExecutor({
         revision: resolved.revision,
         apiKey,
@@ -364,7 +392,7 @@ function normalizeUsage(value, { imageCount = 0 } = {}) {
 }
 
 function buildCredentialResolver(resolver, credentials) {
-  if (resolver?.resolve) return (credentialRef) => resolver.resolve(credentialRef);
+  if (resolver?.resolve) return (credentialRef, context) => resolver.resolve(credentialRef, context);
   if (typeof resolver === "function") return resolver;
   const map = isPlainObject(credentials) ? new Map(Object.entries(credentials)) : null;
   if (!map) return async () => { throw credentialUnavailable(); };
@@ -373,6 +401,16 @@ function buildCredentialResolver(resolver, credentials) {
     if (typeof secret !== "string" || secret.length === 0) throw credentialUnavailable();
     return secret;
   };
+}
+
+// Legacy catalog entries use credentialRef. PostgreSQL revision records hold
+// only a governed opaque SecretBinding id; passing that id to the injected
+// resolver keeps the secret store at the Product boundary without changing
+// the public Model catalog shape.
+function credentialReference(revision) {
+  const value = revision?.credentialRef ?? revision?.secretBindingId;
+  if (!PROFILE_ID.test(value ?? "")) throw credentialUnavailable();
+  return value;
 }
 
 function createLegacyCatalog({ profiles, defaultModelProfileId }) {
@@ -508,9 +546,20 @@ function normalizeFallbacks(value, primaryRevisionId) {
 }
 
 function normalizeCapability(value, input) {
-  const capability = value ?? (typeof input?.prompt === "string" ? "image_generation" : "chat");
+  const capability = value ?? (typeof input?.prompt === "string"
+    ? "image_generation"
+    : inputContainsImage(input)
+      ? "image_input"
+      : "chat");
   if (!CAPABILITIES.has(capability)) throw modelError("model_capability_mismatch");
   return capability;
+}
+
+function inputContainsImage(input) {
+  const messages = input?.messages ?? input?.context?.messages;
+  return Array.isArray(messages) && messages.some((message) =>
+    Array.isArray(message?.content)
+      && message.content.some((part) => part?.type === "image"));
 }
 
 function normalizeCredentialError(error) {

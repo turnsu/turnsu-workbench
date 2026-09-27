@@ -1,9 +1,6 @@
 import { join } from "node:path";
 
-import {
-  AuthStorage,
-  ModelRegistry,
-} from "@earendil-works/pi-coding-agent";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
 const result = (ready, code, availableModelCount = 0) => Object.freeze({
   ready,
@@ -13,8 +10,11 @@ const result = (ready, code, availableModelCount = 0) => Object.freeze({
 
 export async function inspectPiBuilderProviderReadiness({
   agentDir,
-  authStorageFactory = (authPath) => AuthStorage.create(authPath),
-  modelRegistryFactory = (authStorage, modelsPath) => ModelRegistry.create(authStorage, modelsPath),
+  // Since Pi 0.83 the SDK no longer exports AuthStorage/ModelRegistry; the default
+  // auth source is the auth.json path consumed by ModelRuntime.create(). The
+  // factory hooks keep tests independent from the concrete SDK wiring.
+  authStorageFactory = (authPath) => authPath,
+  modelRegistryFactory = (authPath, modelsPath) => ModelRuntime.create({ authPath, modelsPath }),
 } = {}) {
   if (typeof agentDir !== "string" || !agentDir) {
     throw new TypeError("pi_builder_provider_agent_dir_required");
@@ -25,8 +25,8 @@ export async function inspectPiBuilderProviderReadiness({
 
   try {
     const authStorage = authStorageFactory(join(agentDir, "auth.json"));
-    const modelRegistry = modelRegistryFactory(authStorage, join(agentDir, "models.json"));
-    modelRegistry.refresh();
+    const modelRegistry = await modelRegistryFactory(authStorage, join(agentDir, "models.json"));
+    await modelRegistry.refresh();
     if (modelRegistry.getError()) {
       return result(false, "builder_provider_configuration_invalid");
     }

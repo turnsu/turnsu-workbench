@@ -34,70 +34,71 @@ export function useTeamConnectionActions(workspace) {
     });
   }
 
-  function startingPoint(release, name, afterSuccess) {
-    return rebinding.run({
-      actionKey: `starting:${release.releaseId}`,
-      actionLabel: t("actions.useStartingPoint"),
-      execute(connectionBindings) {
-        return mutations.useTeamReleaseAsStartingPoint.mutateAsync({
-          releaseId: release.releaseId,
-          idempotencyKey: mutationKey("team-starting-point"),
-          data: { name, connectionBindings },
-        });
-      },
-      async onSuccess(result) {
-        const workflow = result.data.workflow;
-        workspace.pushToast(t("toast.teamStartingPointCreated", { title: workflow.name }));
-        workspace.editLoop(workflow.workflowId);
-        await afterSuccess?.(result);
-      },
-    });
-  }
-
-  function fork(release, name, afterSuccess) {
-    return rebinding.run({
-      actionKey: `fork:${release.releaseId}`,
-      actionLabel: t("actions.forkLoop"),
-      execute(connectionBindings) {
-        return mutations.forkTeamLoopRelease.mutateAsync({
-          releaseId: release.releaseId,
-          idempotencyKey: mutationKey("team-fork"),
-          data: { name, connectionBindings },
-        });
-      },
-      async onSuccess(result) {
-        const workflow = result.data.workflow;
-        workspace.pushToast(t("toast.teamForkCreated", { title: workflow.name }));
-        workspace.editLoop(workflow.workflowId);
-        await afterSuccess?.(result);
-      },
-    });
-  }
-
   function update(release, afterSuccess) {
     return rebinding.run({
       actionKey: `update:${release.releaseId}`,
-      actionLabel: t("actions.updateInstalledVersion"),
+      actionLabel: t("actions.reviewUpdate"),
       execute(connectionBindings) {
-        return mutations.adoptInstallationRelease.mutateAsync({
+        return mutations.createInstallationUpdateDraft.mutateAsync({
           installationId: release.installation.installationId,
           releaseId: release.releaseId,
           connectionBindings,
-          idempotencyKey: mutationKey("team-update"),
+          idempotencyKey: mutationKey("team-update-draft"),
         });
       },
       async onSuccess(result) {
-        workspace.pushToast(t("toast.teamReleaseUpdated", { title: release.title }));
         await afterSuccess?.(result);
       },
     });
+  }
+
+  async function applyUpdate(updateDraftId, afterSuccess) {
+    try {
+      const result = await mutations.confirmInstallationUpdateDraft.mutateAsync({
+        updateDraftId,
+        idempotencyKey: mutationKey("team-update-confirm"),
+      });
+      workspace.pushToast(t("toast.teamReleaseUpdated"));
+      await afterSuccess?.(result);
+      return result;
+    } catch (error) {
+      workspace.pushToast(error?.message || t("connections.actionFailed"));
+      throw error;
+    }
+  }
+
+  async function refreshUpdate(updateDraftId, afterSuccess) {
+    try {
+      const result = await mutations.refreshInstallationUpdateDraft.mutateAsync({
+        updateDraftId,
+        idempotencyKey: mutationKey("team-update-refresh"),
+      });
+      await afterSuccess?.(result);
+      return result;
+    } catch (error) {
+      workspace.pushToast(error?.message || t("connections.actionFailed"));
+      throw error;
+    }
+  }
+
+  async function keepCurrent(updateDraftId, afterSuccess) {
+    const result = await mutations.keepCurrentInstallationVersion.mutateAsync({
+      updateDraftId,
+      idempotencyKey: mutationKey("team-update-keep-current"),
+    });
+    await afterSuccess?.(result);
+    return result;
   }
 
   return {
     ...rebinding,
+    updateDecisionPending: mutations.confirmInstallationUpdateDraft.isPending
+      || mutations.refreshInstallationUpdateDraft.isPending
+      || mutations.keepCurrentInstallationVersion.isPending,
     install,
-    startingPoint,
-    fork,
     update,
+    refreshUpdate,
+    applyUpdate,
+    keepCurrent,
   };
 }

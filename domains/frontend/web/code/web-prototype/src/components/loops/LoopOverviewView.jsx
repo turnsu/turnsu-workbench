@@ -1,7 +1,6 @@
 import {
   ArrowLeft,
   CheckCircle2,
-  Download,
   FileText,
   GitBranch,
   History,
@@ -17,6 +16,10 @@ import { productDescription, productNodePurpose, productNodeTitle, productTitle 
 
 function readinessTone(readiness) {
   return readiness === "Ready" ? "success" : "warning";
+}
+
+function localCopy(locale, zh, en) {
+  return locale === "zh" ? zh : en;
 }
 
 function definitionItems(definition = {}, t, loop, locale) {
@@ -65,9 +68,11 @@ export function LoopOverviewView({ workspace }) {
 
   const readiness = loop.readiness === "Ready" ? t("status.ready") : t("loopsBoard.needsWork");
   const nextAction = loop.readiness === "Ready"
-    ? () => workspace.prepareRun(loop.id)
+    ? () => workspace.runLoopInAgent(loop.id)
     : () => workspace.editLoop(loop.id, "definition");
-  const nextActionLabel = loop.readiness === "Ready" ? t("actions.prepareRun") : t("actions.continueBuilding");
+  const nextActionLabel = loop.readiness === "Ready"
+    ? localCopy(workspace.locale, "前往 Agent 运行", "Run in Agent")
+    : t("actions.continueBuilding");
 
   return (
     <div className="surface loopObjectPage" data-testid="loopops.loops.overview">
@@ -86,18 +91,8 @@ export function LoopOverviewView({ workspace }) {
           </div>
         </div>
         <div className="objectPageActions">
-          <Button
-            variant="secondary"
-            icon={<Download size={15} />}
-            disabled={!loop.currentRevisionId || workspace.serverState.mutations.exportLoop.isPending}
-            title={!loop.currentRevisionId ? t("loopTransfer.exportUnavailable") : t("loopTransfer.exportSavedVersion")}
-            onClick={workspace.exportSelectedLoop}
-            data-testid="loopops.loop-overview.export"
-          >
-            {workspace.serverState.mutations.exportLoop.isPending ? t("loopTransfer.exporting") : t("loopTransfer.exportLoop")}
-          </Button>
           <Button variant="secondary" onClick={() => workspace.editLoop(loop.id, "definition")}>{t("actions.edit")}</Button>
-          <Button variant="primary" icon={loop.readiness === "Ready" ? <Play size={15} /> : <GitBranch size={15} />} onClick={nextAction} data-testid="loopops.loop-overview.primary">
+          <Button variant="primary" icon={loop.readiness === "Ready" ? <Play size={15} /> : <GitBranch size={15} />} onClick={nextAction} data-testid={loop.readiness === "Ready" ? "loopops.loops.run-in-agent" : "loopops.loop-overview.primary"}>
             {nextActionLabel}
           </Button>
         </div>

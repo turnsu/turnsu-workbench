@@ -488,16 +488,14 @@ struct OpsWorkspaceView: View {
 
     // MARK: 后台服务
     private var daemonCard: some View {
-        settingsCard("后台服务", icon: "server.rack", tint: daemonConnected ? RadarTheme.green : RadarTheme.gold) {
+        settingsCard("历史客户端状态", icon: "server.rack", tint: RadarTheme.gold) {
             HStack(spacing: 8) {
-                StatusDot(color: daemonConnected ? RadarTheme.green : RadarTheme.gold, pulsing: daemonConnected)
-                Text(daemonConnected ? "已连接 · 127.0.0.1:\(daemon.daemon?.port ?? 8797)" : "未连接")
+                StatusDot(color: RadarTheme.gold)
+                Text("Legacy Agent client 已停用")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(RadarTheme.primaryText)
             }
-            Text(daemonConnected
-                 ? "Agent Runtime Host 正在运行，可发起任务与实时刷新。"
-                 : "运行 scripts/start-agent-daemon.sh（或双击桌面「启动」）后自动连接。")
+            Text("请使用 Web Product API 工作台。此 Swift 参考界面不会直连 Agent daemon。")
                 .font(.system(size: 10.5))
                 .foregroundStyle(RadarTheme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -508,7 +506,7 @@ struct OpsWorkspaceView: View {
     private var providersCard: some View {
         settingsCard("Agent 能力源", icon: "brain.head.profile", tint: RadarTheme.violet) {
             if daemon.providers.isEmpty {
-                Text(daemonConnected ? "未检测到能力源配置。" : "后台未连接，无法检查能力源。")
+                Text("历史客户端不读取能力源配置；请在 Web Product API 工作台检查模型与运行就绪状态。")
                     .font(.system(size: 11)).foregroundStyle(RadarTheme.secondaryText)
             } else {
                 ForEach(daemon.providers, id: \.provider) { p in

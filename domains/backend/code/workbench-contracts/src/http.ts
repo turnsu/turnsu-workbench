@@ -1,36 +1,47 @@
-import { Type, type Static, type TSchema } from "typebox";
+import { Type, type Static } from "typebox";
 
 import { CompileResultSchema } from "./compiler.js";
 import {
   CursorPageRequestSchema,
-  CursorPageSchema,
-  EntityTagSchema,
-  IdempotencyKeySchema,
   JsonObjectSchema,
-  RequestIdSchema,
+  NodeIdSchema,
   ResourceRefSchema,
   RunIdSchema,
   SkillIdSchema,
   TemplateIdSchema,
-  UtcTimestampSchema,
   WorkflowIdSchema,
   WorkflowRevisionIdSchema,
-  WorkspaceIdSchema,
-  WorkbenchApiSchemaVersionSchema,
 } from "./common.js";
 import {
-  ReviewDecisionSchema,
-  ReviewDecisionValueSchema,
+  EmptyObjectSchema,
+  EntityTagResponseHeadersSchema,
+  EventCursorHeadersSchema,
+  ListResponseEnvelopeSchema,
+  MUTATION_ENDPOINT_METADATA,
+  MutationRequestEnvelopeSchema,
+  READ_ENDPOINT_METADATA,
+  ResponseEnvelopeSchema,
+  RevisionMutationHeadersSchema,
+  WORKBENCH_API_PREFIX,
+  type WorkbenchEndpointMetadata,
+} from "./endpoint-core.js";
+import { SkillMaterialBindingSchema } from "./attachments.js";
+import {
   RunEventSchema,
-  RunReadModelSchema,
   WorkflowRunSchema,
   WorkflowRunStatusSchema,
 } from "./runs.js";
+import {
+  ReviewDecisionRequestSchema,
+  ReviewDecisionResponseSchema,
+  RunDetailResponseSchema,
+  RunPathParamsSchema,
+  WORKBENCH_V1_RUN_ENDPOINTS,
+} from "./runs-http.js";
 import { strictObject } from "./schema.js";
 import {
   SkillDefinitionSchema,
   SkillCatalogItemSchema,
-  SkillStatusSchema,
 } from "./skills.js";
 import {
   InputFormSchema,
@@ -42,110 +53,10 @@ import {
   WorkflowStatusSchema,
   WorkflowTemplateSchema,
 } from "./workflows.js";
+import { WORKBENCH_V1_WORKSPACE_ENDPOINTS } from "./workspace-http.js";
 
-export const WORKBENCH_API_PREFIX = "/api/workbench/v1" as const;
-
-export function MutationRequestEnvelopeSchema<const Data extends TSchema>(
-  data: Data,
-  id?: string,
-) {
-  return strictObject(
-    {
-      schemaVersion: WorkbenchApiSchemaVersionSchema,
-      data,
-    },
-    id === undefined ? {} : { $id: id },
-  );
-}
-
-export function ResponseEnvelopeSchema<const Data extends TSchema>(
-  data: Data,
-  id?: string,
-) {
-  return strictObject(
-    {
-      schemaVersion: WorkbenchApiSchemaVersionSchema,
-      data,
-      requestId: RequestIdSchema,
-    },
-    id === undefined ? {} : { $id: id },
-  );
-}
-
-export function ListResponseEnvelopeSchema<const Item extends TSchema>(
-  item: Item,
-  id?: string,
-) {
-  return strictObject(
-    {
-      schemaVersion: WorkbenchApiSchemaVersionSchema,
-      data: Type.Array(item),
-      page: CursorPageSchema,
-      requestId: RequestIdSchema,
-    },
-    id === undefined ? {} : { $id: id },
-  );
-}
-
-export type MutationRequestEnvelope<Data> = {
-  schemaVersion: "workbench-api-v1";
-  data: Data;
-};
-
-export type ResponseEnvelope<Data> = {
-  schemaVersion: "workbench-api-v1";
-  data: Data;
-  requestId: string;
-};
-
-export const EmptyObjectSchema = strictObject({});
-export const EmptyHeadersSchema = strictObject({});
-
-export const IdempotencyHeadersSchema = strictObject({
-  "Idempotency-Key": IdempotencyKeySchema,
-});
-
-export const RevisionMutationHeadersSchema = strictObject({
-  "Idempotency-Key": IdempotencyKeySchema,
-  "If-Match": EntityTagSchema,
-});
-
-export const EventCursorHeadersSchema = strictObject({
-  "Last-Event-ID": Type.Optional(Type.String({ pattern: "^[0-9]+$" })),
-});
-
-export const EntityTagResponseHeadersSchema = strictObject({
-  ETag: EntityTagSchema,
-});
-
-export const WorkspaceCapabilitiesSchema = strictObject({
-  builderProposal: Type.Literal(false),
-  resources: Type.Literal(false),
-  maxParallelism: Type.Literal(1),
-});
-
-export const WorkspaceSchema = strictObject({
-  workspaceId: WorkspaceIdSchema,
-  name: Type.String({ minLength: 1, maxLength: 200 }),
-  capabilities: WorkspaceCapabilitiesSchema,
-  createdAt: UtcTimestampSchema,
-  updatedAt: UtcTimestampSchema,
-});
-
-export const WorkspaceSessionSchema = strictObject({
-  csrfToken: Type.String({ minLength: 32, maxLength: 256 }),
-  expiresAt: UtcTimestampSchema,
-});
-
-export const WorkspaceBootstrapSchema = strictObject({
-  workspace: WorkspaceSchema,
-  session: WorkspaceSessionSchema,
-});
-
-export const WorkspaceResponseSchema = ResponseEnvelopeSchema(
-  WorkspaceBootstrapSchema,
-  "WorkspaceResponse",
-);
+export * from "./endpoint-core.js";
+export * from "./workspace-http.js";
 export const SkillListResponseSchema = ListResponseEnvelopeSchema(
   SkillCatalogItemSchema,
   "SkillListResponse",
@@ -228,6 +139,15 @@ export const StartRunDataSchema = strictObject({
   workflowRevisionId: WorkflowRevisionIdSchema,
   inputs: JsonObjectSchema,
   resourceRefs: Type.Array(ResourceRefSchema),
+  materialBindings: Type.Optional(
+    Type.Array(
+      strictObject({
+        nodeId: NodeIdSchema,
+        binding: SkillMaterialBindingSchema,
+      }),
+      { maxItems: 128 },
+    ),
+  ),
 });
 export const StartRunRequestSchema = MutationRequestEnvelopeSchema(
   StartRunDataSchema,
@@ -241,14 +161,6 @@ export const RunHistoryResponseSchema = ListResponseEnvelopeSchema(
   WorkflowRunSchema,
   "RunHistoryResponse",
 );
-export const RunDetailResponseSchema = ResponseEnvelopeSchema(
-  strictObject({
-    run: WorkflowRunSchema,
-    readModel: RunReadModelSchema,
-  }),
-  "RunDetailResponse",
-);
-
 export const RunEventsPageSchema = strictObject({
   events: Type.Array(RunEventSchema),
   nextSequence: Type.Integer({ minimum: 1 }),
@@ -257,26 +169,6 @@ export const RunEventsPageSchema = strictObject({
 export const RunEventsResponseSchema = ResponseEnvelopeSchema(
   RunEventsPageSchema,
   "RunEventsResponse",
-);
-
-export const ReviewDecisionDataSchema = strictObject({
-  nodeId: Type.String({ minLength: 1, maxLength: 128 }),
-  decision: ReviewDecisionValueSchema,
-  comment: Type.Optional(Type.String({ maxLength: 4000 })),
-  requestedChanges: Type.Array(
-    Type.String({ minLength: 1, maxLength: 1000 }),
-  ),
-});
-export const ReviewDecisionRequestSchema = MutationRequestEnvelopeSchema(
-  ReviewDecisionDataSchema,
-  "ReviewDecisionRequest",
-);
-export const ReviewDecisionResponseSchema = ResponseEnvelopeSchema(
-  strictObject({
-    decision: ReviewDecisionSchema,
-    run: WorkflowRunSchema,
-  }),
-  "ReviewDecisionResponse",
 );
 
 export const SkillPathParamsSchema = strictObject({ skillId: SkillIdSchema });
@@ -290,11 +182,9 @@ export const WorkflowRevisionPathParamsSchema = strictObject({
   workflowId: WorkflowIdSchema,
   revisionId: WorkflowRevisionIdSchema,
 });
-export const RunPathParamsSchema = strictObject({ runId: RunIdSchema });
 
 export const SkillListQuerySchema = strictObject({
   ...CursorPageRequestSchema.properties,
-  status: Type.Optional(SkillStatusSchema),
   category: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
 });
 export const TemplateListQuerySchema = strictObject({
@@ -314,62 +204,10 @@ export const RunEventsQuerySchema = strictObject({
   after: Type.Optional(Type.Integer({ minimum: 0 })),
 });
 
-export interface WorkbenchEndpointMetadata {
-  operationId: string;
-  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-  path: `${typeof WORKBENCH_API_PREFIX}${string}`;
-  mutation: boolean;
-  successStatus: 200 | 201 | 202;
-  responseMediaType:
-    | "application/json"
-    | "application/octet-stream"
-    | "text/event-stream"
-    | "application/vnd.looloomi.loop-package+json";
-  pathParamsSchema: TSchema;
-  querySchema: TSchema;
-  requestHeadersSchema: TSchema;
-  requestBodySchema?: TSchema;
-  responseBodySchema: TSchema;
-  responseHeadersSchema: TSchema;
-  requiredRequestHeaders: readonly string[];
-  optionalRequestHeaders: readonly string[];
-  responseHeaders: readonly string[];
-}
-
-const readMetadata = {
-  mutation: false,
-  successStatus: 200,
-  responseMediaType: "application/json",
-  requestHeadersSchema: EmptyHeadersSchema,
-  responseHeadersSchema: EmptyHeadersSchema,
-  requiredRequestHeaders: [],
-  optionalRequestHeaders: [],
-  responseHeaders: [],
-} as const;
-
-const mutationMetadata = {
-  mutation: true,
-  successStatus: 200,
-  responseMediaType: "application/json",
-  requestHeadersSchema: IdempotencyHeadersSchema,
-  responseHeadersSchema: EmptyHeadersSchema,
-  requiredRequestHeaders: ["Idempotency-Key"],
-  optionalRequestHeaders: [],
-  responseHeaders: [],
-} as const;
-
 export const WORKBENCH_V1_ENDPOINTS = {
-  workspace: {
-    ...readMetadata,
-    operationId: "workspace",
-    method: "GET",
-    path: `${WORKBENCH_API_PREFIX}/workspace`,
-    pathParamsSchema: EmptyObjectSchema,
-    querySchema: EmptyObjectSchema,
-    responseBodySchema: WorkspaceResponseSchema,
-  },
+  workspace: WORKBENCH_V1_WORKSPACE_ENDPOINTS.workspace,
   listSkills: {
-    ...readMetadata,
+    ...READ_ENDPOINT_METADATA,
     operationId: "listSkills",
     method: "GET",
     path: `${WORKBENCH_API_PREFIX}/skills`,
@@ -378,7 +216,7 @@ export const WORKBENCH_V1_ENDPOINTS = {
     responseBodySchema: SkillListResponseSchema,
   },
   getSkill: {
-    ...readMetadata,
+    ...READ_ENDPOINT_METADATA,
     operationId: "getSkill",
     method: "GET",
     path: `${WORKBENCH_API_PREFIX}/skills/{skillId}`,
@@ -387,7 +225,7 @@ export const WORKBENCH_V1_ENDPOINTS = {
     responseBodySchema: SkillDetailResponseSchema,
   },
   listTemplates: {
-    ...readMetadata,
+    ...READ_ENDPOINT_METADATA,
     operationId: "listTemplates",
     method: "GET",
     path: `${WORKBENCH_API_PREFIX}/templates`,
@@ -396,7 +234,7 @@ export const WORKBENCH_V1_ENDPOINTS = {
     responseBodySchema: TemplateListResponseSchema,
   },
   getTemplate: {
-    ...readMetadata,
+    ...READ_ENDPOINT_METADATA,
     operationId: "getTemplate",
     method: "GET",
     path: `${WORKBENCH_API_PREFIX}/templates/{templateId}`,
@@ -404,19 +242,8 @@ export const WORKBENCH_V1_ENDPOINTS = {
     querySchema: EmptyObjectSchema,
     responseBodySchema: TemplateDetailResponseSchema,
   },
-  useTemplate: {
-    ...mutationMetadata,
-    operationId: "useTemplate",
-    method: "POST",
-    path: `${WORKBENCH_API_PREFIX}/templates/{templateId}/workflows`,
-    successStatus: 201,
-    pathParamsSchema: TemplatePathParamsSchema,
-    querySchema: EmptyObjectSchema,
-    requestBodySchema: UseTemplateRequestSchema,
-    responseBodySchema: UseTemplateResponseSchema,
-  },
   listWorkflows: {
-    ...readMetadata,
+    ...READ_ENDPOINT_METADATA,
     operationId: "listWorkflows",
     method: "GET",
     path: `${WORKBENCH_API_PREFIX}/workflows`,
@@ -425,7 +252,7 @@ export const WORKBENCH_V1_ENDPOINTS = {
     responseBodySchema: WorkflowListResponseSchema,
   },
   getWorkflow: {
-    ...readMetadata,
+    ...READ_ENDPOINT_METADATA,
     operationId: "getWorkflow",
     method: "GET",
     path: `${WORKBENCH_API_PREFIX}/workflows/{workflowId}`,
@@ -436,7 +263,7 @@ export const WORKBENCH_V1_ENDPOINTS = {
     responseHeaders: ["ETag"],
   },
   getWorkflowRevision: {
-    ...readMetadata,
+    ...READ_ENDPOINT_METADATA,
     operationId: "getWorkflowRevision",
     method: "GET",
     path: `${WORKBENCH_API_PREFIX}/workflows/{workflowId}/revisions/{revisionId}`,
@@ -447,7 +274,7 @@ export const WORKBENCH_V1_ENDPOINTS = {
     responseHeaders: ["ETag"],
   },
   saveWorkflowRevision: {
-    ...mutationMetadata,
+    ...MUTATION_ENDPOINT_METADATA,
     operationId: "saveWorkflowRevision",
     method: "POST",
     path: `${WORKBENCH_API_PREFIX}/workflows/{workflowId}/revisions`,
@@ -462,7 +289,7 @@ export const WORKBENCH_V1_ENDPOINTS = {
     responseHeaders: ["ETag"],
   },
   compileWorkflow: {
-    ...mutationMetadata,
+    ...MUTATION_ENDPOINT_METADATA,
     operationId: "compileWorkflow",
     method: "POST",
     path: `${WORKBENCH_API_PREFIX}/workflows/{workflowId}/compile`,
@@ -472,7 +299,7 @@ export const WORKBENCH_V1_ENDPOINTS = {
     responseBodySchema: CompileWorkflowResponseSchema,
   },
   startRun: {
-    ...mutationMetadata,
+    ...MUTATION_ENDPOINT_METADATA,
     operationId: "startRun",
     method: "POST",
     path: `${WORKBENCH_API_PREFIX}/workflows/{workflowId}/runs`,
@@ -483,7 +310,7 @@ export const WORKBENCH_V1_ENDPOINTS = {
     responseBodySchema: StartRunResponseSchema,
   },
   listWorkflowRuns: {
-    ...readMetadata,
+    ...READ_ENDPOINT_METADATA,
     operationId: "listWorkflowRuns",
     method: "GET",
     path: `${WORKBENCH_API_PREFIX}/workflows/{workflowId}/runs`,
@@ -491,17 +318,9 @@ export const WORKBENCH_V1_ENDPOINTS = {
     querySchema: RunHistoryQuerySchema,
     responseBodySchema: RunHistoryResponseSchema,
   },
-  getRun: {
-    ...readMetadata,
-    operationId: "getRun",
-    method: "GET",
-    path: `${WORKBENCH_API_PREFIX}/runs/{runId}`,
-    pathParamsSchema: RunPathParamsSchema,
-    querySchema: EmptyObjectSchema,
-    responseBodySchema: RunDetailResponseSchema,
-  },
+  getRun: WORKBENCH_V1_RUN_ENDPOINTS.getRun,
   getRunEvents: {
-    ...readMetadata,
+    ...READ_ENDPOINT_METADATA,
     operationId: "getRunEvents",
     method: "GET",
     path: `${WORKBENCH_API_PREFIX}/runs/{runId}/events`,
@@ -512,23 +331,13 @@ export const WORKBENCH_V1_ENDPOINTS = {
     responseBodySchema: RunEventSchema,
     optionalRequestHeaders: ["Last-Event-ID"],
   },
-  submitReviewDecision: {
-    ...mutationMetadata,
-    operationId: "submitReviewDecision",
-    method: "POST",
-    path: `${WORKBENCH_API_PREFIX}/runs/{runId}/review-decisions`,
-    pathParamsSchema: RunPathParamsSchema,
-    querySchema: EmptyObjectSchema,
-    requestBodySchema: ReviewDecisionRequestSchema,
-    responseBodySchema: ReviewDecisionResponseSchema,
-  },
+  submitReviewDecision: WORKBENCH_V1_RUN_ENDPOINTS.submitReviewDecision,
 } as const satisfies Record<string, WorkbenchEndpointMetadata>;
 
-export type Workspace = Static<typeof WorkspaceSchema>;
 export type UseTemplateRequest = Static<typeof UseTemplateRequestSchema>;
 export type SaveWorkflowRevisionRequest = Static<
   typeof SaveWorkflowRevisionRequestSchema
 >;
 export type CompileWorkflowRequest = Static<typeof CompileWorkflowRequestSchema>;
 export type StartRunRequest = Static<typeof StartRunRequestSchema>;
-export type ReviewDecisionRequest = Static<typeof ReviewDecisionRequestSchema>;
+export type { ReviewDecisionRequest } from "./runs-http.js";

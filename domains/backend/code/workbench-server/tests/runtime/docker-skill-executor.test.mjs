@@ -7,6 +7,7 @@ import { PassThrough } from "node:stream";
 import test from "node:test";
 
 import {
+  buildDockerSkillArguments,
   cleanupSkillInvocationDirectory,
   createDockerSkillExecutor,
   DOCKER_SKILL_INVOCATION_LABEL,
@@ -24,6 +25,7 @@ import {
 import { inspectSkillPackage } from "../../src/validation/skill-package-inspector.mjs";
 
 const IMAGE = "python@sha256:9d3abd9fc11d06998ccdbdd93b4dd49b5ad7d67fcbbc11c016eb0eb2c2194891";
+const NODE_IMAGE = "node@sha256:3c1f5749ec84a47b8b30cb4c7a43ce6fd80a99e462b255220309abb745526442";
 const SKILL = `---\nname: isolated-proof\ndescription: Prove bounded isolated execution.\ndisable-model-invocation: true\n---\n`;
 const SCRIPT = "import json, sys\njson.dump(json.load(sys.stdin), sys.stdout)\n";
 const RUNTIME_MANIFEST = `${JSON.stringify({
@@ -102,25 +104,30 @@ async function temporaryRoot(t) {
 
 function createDockerController(calls, {
   containers = [],
+  volumes = [],
   defaultRunning = false,
   failCommand = null,
 } = {}) {
   const state = new Map(containers.map((name) => [name, { running: true }]));
-  const known = new Set(state.keys());
+  const volumeState = new Set(volumes);
   return async (args) => {
     calls.push(args);
     const command = `${args[0]} ${args[1]}`;
-    if (command === failCommand) return controlResult(1, "", "failed");
+    if (command === failCommand || (typeof failCommand === "function" && failCommand(args))) {
+      return controlResult(1, "", "failed");
+    }
     if (command === "container ls") {
       const invocationFilter = args.find((value) => value.startsWith(`label=${DOCKER_SKILL_INVOCATION_LABEL}=`));
       const requestedName = invocationFilter?.slice(`label=${DOCKER_SKILL_INVOCATION_LABEL}=`.length);
-      if (requestedName && !known.has(requestedName)) {
-        known.add(requestedName);
-        state.set(requestedName, { running: defaultRunning });
-      }
       const names = [...state.keys()].filter((name) => !requestedName || name === requestedName);
       return controlResult(0, names.length ? `${names.join("\n")}\n` : "");
     }
+    if (command === "container create") {
+      const name = args[args.indexOf("--name") + 1];
+      state.set(name, { running: name.endsWith("-staging") ? false : defaultRunning });
+      return controlResult(0, `${name}-id\n`);
+    }
+    if (command === "container cp") return controlResult();
     const containerName = args.at(-1);
     if (command === "container inspect") {
       const current = state.get(containerName);
@@ -138,6 +145,29 @@ function createDockerController(calls, {
     }
     if (command === "container rm") {
       state.delete(containerName);
+      return controlResult();
+    }
+    if (command === "volume create") {
+      const name = args.at(-1);
+      volumeState.add(name);
+      return controlResult(0, `${name}\n`);
+    }
+    if (command === "volume ls") {
+      const invocationFilter = args.find((value) => value.startsWith(`label=${DOCKER_SKILL_INVOCATION_LABEL}=`));
+      const requestedName = invocationFilter?.slice(`label=${DOCKER_SKILL_INVOCATION_LABEL}=`.length);
+      const names = [...volumeState].filter((name) => !requestedName || name === requestedName);
+      return controlResult(0, names.length ? `${names.join("\n")}\n` : "");
+    }
+    if (command === "volume inspect") {
+      const name = args.at(-1);
+      if (!volumeState.has(name)) return controlResult(1, "", "not found");
+      return controlResult(0, `${JSON.stringify({
+        [DOCKER_SKILL_OWNER_LABEL]: DOCKER_SKILL_OWNER_VALUE,
+        [DOCKER_SKILL_INVOCATION_LABEL]: name,
+      })}\n`);
+    }
+    if (command === "volume rm") {
+      volumeState.delete(args.at(-1));
       return controlResult();
     }
     return controlResult(1, "", "unsupported command");
@@ -160,29 +190,87 @@ test("Docker executor requires a digest-pinned image", () => {
   );
 });
 
+test("Docker runtime readiness verifies the daemon and every pinned image", async () => {
+  const { objectStore } = executablePackage();
+  const calls = [];
+  const executor = createDockerSkillExecutor({
+    objectStore,
+    images: new Map([
+      ["python3.12", IMAGE],
+      ["nodejs20-typescript", NODE_IMAGE],
+    ]),
+    dockerControl: async (args) => {
+      calls.push(args);
+      return args.at(-1) === NODE_IMAGE
+        ? controlResult(1, "", "not found")
+        : controlResult(0, "sha256:verified\n", "");
+    },
+  });
+
+  assert.deepEqual(await executor.probeRuntimes(), [
+    { runtimeId: "python3.12", available: true, verified: true, reasonCode: "ready" },
+    { runtimeId: "nodejs20-typescript", available: false, verified: true, reasonCode: "skill_runtime_image_unavailable" },
+  ]);
+  assert.ok(calls.every((args) => args[0] === "image" && args[1] === "inspect"));
+});
+
+test("Docker executor dispatches Node.js 20 TypeScript through its governed image", () => {
+  const args = buildDockerSkillArguments({
+    image: NODE_IMAGE,
+    containerName: "looloomi-skill-node-proof",
+    inputVolumeName: "looloomi-skill-node-proof-input",
+    runtimeManifest: {
+      runtime: "nodejs20-typescript",
+      entrypoint: "scripts/main.ts",
+      protocol: { stdin: "json", stdout: "json" },
+      permissions: {
+        network: false,
+        connections: [],
+        externalActions: false,
+        filesystem: "scratch-only",
+      },
+      limits: { timeoutSeconds: 45, memoryMiB: 256 },
+    },
+  });
+
+  assert.equal(args.includes("--network"), true);
+  assert.equal(args.includes("none"), true);
+  assert.equal(args.includes("--read-only"), true);
+  assert.deepEqual(option(args, "--memory"), [String(256 * 1024 * 1024)]);
+  assert.deepEqual(args.slice(0, 2), ["container", "create"]);
+  assert.deepEqual(option(args, "--mount"), [
+    "type=volume,src=looloomi-skill-node-proof-input,dst=/workspace,readonly",
+  ]);
+  assert.deepEqual(args.slice(-3), [NODE_IMAGE, "tsx", "/workspace/skill/scripts/main.ts"]);
+});
+
 test("Docker executor emits the deterministic isolation policy and one JSON stdin object", async (t) => {
   const root = await temporaryRoot(t);
   const fixture = executablePackage();
   const calls = [];
   const controls = [];
-  const dockerControl = createDockerController(controls);
+  const controlledDocker = createDockerController(controls);
   let receivedInput;
   let materializedMode;
-  const spawnProcess = (command, args, options) => {
-    calls.push({ command, args, options });
-    const child = new FakeChild();
-    const chunks = [];
-    child.stdin.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-    child.stdin.on("finish", async () => {
-      receivedInput = Buffer.concat(chunks).toString("utf8");
-      const mount = args[args.indexOf("--mount") + 1];
-      const packageRoot = mount.match(/src=(.*),dst=\/skill,readonly$/)[1];
+  const dockerControl = async (args) => {
+    if (`${args[0]} ${args[1]}` === "container cp" && args.at(-1).endsWith(":/workspace/skill")) {
+      const packageRoot = args[2].slice(0, -2);
       materializedMode = {
         root: (await stat(packageRoot)).mode & 0o777,
         skill: (await stat(join(packageRoot, "SKILL.md"))).mode & 0o777,
         manifest: (await stat(join(packageRoot, "skill.runtime.json"))).mode & 0o777,
         script: (await stat(join(packageRoot, "scripts/main.py"))).mode & 0o777,
       };
+    }
+    return controlledDocker(args);
+  };
+  const spawnProcess = (command, args, options) => {
+    calls.push({ command, args, options });
+    const child = new FakeChild();
+    const chunks = [];
+    child.stdin.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    child.stdin.on("finish", () => {
+      receivedInput = Buffer.concat(chunks).toString("utf8");
       child.stdout.end('{"ok":true,"value":7}\n');
       child.stderr.end();
       child.close(0);
@@ -206,7 +294,13 @@ test("Docker executor emits the deterministic isolation policy and one JSON stdi
   assert.equal(receivedInput, '{"value":7}\n');
   assert.deepEqual(materializedMode, { root: 0o555, skill: 0o444, manifest: 0o444, script: 0o444 });
 
-  const args = calls[0].args;
+  assert.deepEqual(calls[0].args, [
+    "container", "start", "--attach", "--interactive", "looloomi-skill-policy-proof",
+  ]);
+  const args = controls.find((entry) => entry[0] === "container"
+    && entry[1] === "create"
+    && entry.includes("looloomi-skill-policy-proof"));
+  assert.ok(args);
   assert.deepEqual(option(args, "--pull"), ["never"]);
   assert.equal(args.includes("--rm"), false);
   assert.deepEqual(options(args, "--label"), [
@@ -222,15 +316,19 @@ test("Docker executor emits the deterministic isolation policy and one JSON stdi
   assert.deepEqual(option(args, "--memory"), [String(128 * 1024 * 1024)]);
   assert.deepEqual(option(args, "--cpus"), ["0.5"]);
   assert.match(option(args, "--tmpfs")[0], /^\/tmp:rw,noexec,nosuid,nodev,size=\d+,mode=1777$/);
-  assert.match(option(args, "--mount")[0], /,dst=\/skill,readonly$/);
-  assert.equal(args.includes("--env"), false);
-  assert.deepEqual(args.slice(-3), [IMAGE, "python3.12", "/skill/scripts/main.py"]);
-  assert.deepEqual(controls.map((entry) => entry.slice(0, 2)), [
-    ["container", "ls"],
-    ["container", "inspect"],
-    ["container", "rm"],
-    ["container", "ls"],
+  assert.deepEqual(option(args, "--mount"), [
+    "type=volume,src=looloomi-skill-policy-proof-input,dst=/workspace,readonly",
   ]);
+  assert.equal(args.some((value) => value.includes(root)), false);
+  assert.equal(args.some((value) => value.startsWith("type=bind")), false);
+  assert.equal(args.includes("--env"), false);
+  assert.deepEqual(args.slice(-3), [IMAGE, "python3.12", "/workspace/skill/scripts/main.py"]);
+  assert.ok(controls.some((entry) => entry[0] === "volume" && entry[1] === "create"));
+  assert.ok(controls.some((entry) => entry[0] === "container"
+    && entry[1] === "create"
+    && entry.includes("looloomi-skill-policy-proof-staging")));
+  assert.ok(controls.some((entry) => entry[0] === "container" && entry[1] === "cp"));
+  assert.ok(controls.some((entry) => entry[0] === "volume" && entry[1] === "rm"));
   assert.deepEqual(await readdir(root), []);
 });
 
@@ -364,8 +462,8 @@ test("timeout and AbortSignal cancellation kill the named container and clean te
     "looloomi-skill-termination-1",
     "looloomi-skill-termination-2",
   ]);
-  assert.equal(controls.filter((args) => args[1] === "inspect").length, 4);
-  assert.equal(controls.filter((args) => args[1] === "rm").length, 2);
+  assert.ok(controls.filter((args) => args[0] === "container" && args[1] === "inspect").length >= 4);
+  assert.equal(controls.filter((args) => args[0] === "container" && args[1] === "rm").length, 4);
   assert.deepEqual(await readdir(root), []);
 });
 
@@ -447,6 +545,7 @@ test("startup scavenging removes only labelled containers and invocation directo
   await writeFile(join(ownedRoot, ".looloomi-skill-invocation.json"), JSON.stringify({
     owner: `${DOCKER_SKILL_OWNER_LABEL}=${DOCKER_SKILL_OWNER_VALUE}`,
     containerName: "looloomi-skill-stale",
+    inputVolumeName: "looloomi-skill-stale-input",
   }));
   await writeFile(join(unownedRoot, ".looloomi-skill-invocation.json"), JSON.stringify({
     owner: "another-product=v1",
@@ -456,18 +555,22 @@ test("startup scavenging removes only labelled containers and invocation directo
   const controls = [];
   const result = await scavengeDockerSkillExecutions({
     dockerControl: createDockerController(controls, {
-      containers: ["looloomi-skill-stale", "looloomi-skill-other-server"],
+      containers: [
+        "looloomi-skill-stale",
+        "looloomi-skill-stale-staging",
+        "looloomi-skill-other-server",
+      ],
+      volumes: ["looloomi-skill-stale-input"],
     }),
     tempRoot: root,
   });
-  assert.deepEqual(result, { containersRemoved: 1, directoriesRemoved: 1 });
+  assert.deepEqual(result, { containersRemoved: 2, volumesRemoved: 1, directoriesRemoved: 1 });
   assert.deepEqual(await readdir(root), ["execution-unowned"]);
   assert.ok(controls.some((args) => args[1] === "kill"));
   assert.ok(controls.some((args) => args[1] === "inspect"));
   assert.ok(controls.some((args) => args[1] === "rm"));
-  for (const args of controls.filter((entry) => entry[1] === "ls")) {
+  for (const args of controls.filter((entry) => entry[0] === "container" && entry[1] === "ls")) {
     assert.ok(args.includes(`label=${DOCKER_SKILL_OWNER_LABEL}=${DOCKER_SKILL_OWNER_VALUE}`));
-    assert.ok(args.includes(`label=${DOCKER_SKILL_INVOCATION_LABEL}=looloomi-skill-stale`));
   }
   assert.equal(controls.some((args) => args.includes("looloomi-skill-other-server")), false);
 });

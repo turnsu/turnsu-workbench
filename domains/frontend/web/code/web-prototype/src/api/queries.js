@@ -1,15 +1,27 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   encodeBytesBase64,
   formatSkillPackageBytes,
-  PORTABLE_LOOP_PACKAGE_MEDIA_TYPE,
+  isTerminalRunStatus,
   WorkbenchApiError,
   workbenchApi,
 } from "./client.js";
 import { workbenchKeys } from "./queryKeys.js";
 
 const RESUMABLE_CHUNK_SIZE_BYTES = 512 * 1024;
+const ATTACHMENT_MEDIA_BY_EXTENSION = Object.freeze({
+  md: "text/markdown",
+  txt: "text/plain",
+  csv: "text/csv",
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+});
 
 function reportUploadProgress(onProgress, upload, phase) {
   const receivedBytes = upload?.transfer?.receivedBytes || 0;
@@ -29,118 +41,6 @@ function requireUsableUpload(upload) {
     message: "The Skill package needs changes before it can be used.",
     details: { state: upload?.state, findings: upload?.findings || [] },
   });
-}
-
-function requirePortableLoopUpload(upload) {
-  if (upload?.assetKind === "loop" && upload?.state === "ready_draft") return upload;
-  throw new WorkbenchApiError({
-    code: "loop_upload_not_ready",
-    message: "The Loop file needs changes before it can be imported.",
-    details: { state: upload?.state, findings: upload?.findings || [] },
-  });
-}
-
-async function portableLoopBytes(data) {
-  if (data?.bytes instanceof Uint8Array) return data.bytes;
-  if (data?.bytes instanceof ArrayBuffer) return new Uint8Array(data.bytes);
-  if (typeof data?.file?.arrayBuffer === "function") return new Uint8Array(await data.file.arrayBuffer());
-  throw new WorkbenchApiError({
-    code: "loop_file_required",
-    message: "Choose a Loop file to continue.",
-  });
-}
-
-export async function inspectResumableLoopPackage({
-  api = workbenchApi,
-  data,
-  idempotencyKey,
-  onProgress,
-}) {
-  const bytes = await portableLoopBytes(data);
-  if (bytes.byteLength < 2 || bytes.byteLength > 12 * 1024 * 1024) {
-    throw new WorkbenchApiError({
-      code: "loop_file_size_invalid",
-      message: "Choose a Loop file smaller than 12 MB.",
-    });
-  }
-  const created = await api.createUpload({
-    assetKind: "loop",
-    filename: data.file?.name || data.filename || "import.loop.json",
-    sizeBytes: bytes.byteLength,
-    mediaType: PORTABLE_LOOP_PACKAGE_MEDIA_TYPE,
-    ingestMethod: "resumable",
-  }, { idempotencyKey: `${idempotencyKey}:upload` });
-  const uploadId = created.data.uploadId;
-  let current = await api.getUpload(uploadId);
-  reportUploadProgress(onProgress, current.data, current.data.state === "selecting" ? "uploading" : "checking");
-
-  if (current.data.state === "selecting") {
-    const expectedChunks = Math.max(1, Math.ceil(bytes.byteLength / RESUMABLE_CHUNK_SIZE_BYTES));
-    if (current.data.assetKind !== "loop"
-      || current.data.ingestMethod !== "resumable"
-      || current.data.sizeBytes !== bytes.byteLength
-      || current.data.transfer?.chunkSizeBytes !== RESUMABLE_CHUNK_SIZE_BYTES
-      || current.data.transfer?.totalChunks !== expectedChunks) {
-      throw new WorkbenchApiError({
-        code: "upload_session_invalid",
-        message: "The Loop transfer could not be resumed.",
-      });
-    }
-    const receivedChunks = new Set(current.data.transfer.receivedChunks || []);
-    for (let index = 0; index < expectedChunks; index += 1) {
-      if (receivedChunks.has(index)) continue;
-      const start = index * RESUMABLE_CHUNK_SIZE_BYTES;
-      current = await api.uploadChunk(uploadId, index, {
-        contentBase64: encodeBytesBase64(bytes.subarray(start, start + RESUMABLE_CHUNK_SIZE_BYTES)),
-      }, { idempotencyKey: `${idempotencyKey}:chunk:${index}` });
-      reportUploadProgress(onProgress, current.data, "uploading");
-    }
-    current = await api.completeUpload(uploadId, {
-      idempotencyKey: `${idempotencyKey}:complete`,
-    });
-  }
-  reportUploadProgress(onProgress, current.data, "checking");
-  return { upload: requirePortableLoopUpload(current.data), idempotencyKey };
-}
-
-export async function beginPortableLoopImport({
-  api = workbenchApi,
-  data,
-  idempotencyKey,
-  onProgress,
-}) {
-  const inspected = await inspectResumableLoopPackage({ api, data, idempotencyKey, onProgress });
-  onProgress?.({ phase: "preparing", percent: 100, receivedBytes: inspected.upload.sizeBytes, totalBytes: inspected.upload.sizeBytes });
-  const created = await api.createLoopImport(
-    { uploadId: inspected.upload.uploadId },
-    { idempotencyKey: `${idempotencyKey}:import` },
-  );
-  return { upload: inspected.upload, loopImport: created.data, etag: created.etag };
-}
-
-export async function loadPortableLoopImportOptions({ api = workbenchApi, portableLoop }) {
-  const skillRequirements = portableLoop?.requirements?.skills || [];
-  const skillEntries = await Promise.all(skillRequirements.map(async (requirement) => {
-    try {
-      const result = await api.listSkillVersions(requirement.skillId);
-      return [requirement.ref, (result.data || []).filter((version) => (
-        version.skillId === requirement.skillId
-        && version.version === requirement.version
-        && version.contentHash === requirement.contentHash
-      ))];
-    } catch {
-      return [requirement.ref, []];
-    }
-  }));
-  const [resources, connections] = await Promise.all([
-    api.listResources(),
-    api.listConnections(),
-  ]);
-  return {
-    skillsByRef: Object.fromEntries(skillEntries),
-    resources: resources.data || [],
-    connections: connections.data || [],
-  };
 }
 
 export async function inspectResumableSkillPackage({
@@ -236,6 +136,16 @@ export function useWorkspaceBootstrap() {
   });
 }
 
+export function useWorkspaceFeatureReadiness(enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.workspaceFeatureReadiness,
+    queryFn: ({ signal }) => workbenchApi.getWorkspaceFeatureReadiness({ signal }),
+    enabled,
+    staleTime: 15_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
 export function useActiveSessionQuery(enabled = true) {
   return useQuery({
     queryKey: workbenchKeys.session,
@@ -245,10 +155,36 @@ export function useActiveSessionQuery(enabled = true) {
   });
 }
 
+export function useRecentWorkQuery(query = { limit: 3 }, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.recentWork(query),
+    queryFn: () => workbenchApi.listRecentWork(query),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateModelProfileMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ data, idempotencyKey }) => workbenchApi.createModelProfile(data, { idempotencyKey }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["workbench", "model-profiles"] }),
+  });
+}
+
+export function useModelConfigurationMembersQuery(principal = {}, enabled = true) {
+  return useQuery({
+    queryKey: ["workbench", "model-configuration-members", principal.workspaceId, principal.userId],
+    queryFn: ({ signal }) => workbenchApi.listMembers({ signal }),
+    enabled: enabled && Boolean(principal.userId),
+    staleTime: 0,
+  });
+}
+
 export function useModelProfilesQuery(filters = {}, enabled = true) {
   return useQuery({
     queryKey: workbenchKeys.modelProfiles(filters),
-    queryFn: () => workbenchApi.listModelProfiles(filters),
+    queryFn: ({ signal }) => workbenchApi.listModelProfiles(filters, { signal }),
     enabled,
     staleTime: 30_000,
   });
@@ -263,33 +199,83 @@ export function useAgentDefinitionsQuery(enabled = true) {
   });
 }
 
-export function useAgentSessionQuery(sessionId, enabled = true) {
-  return useQuery({
-    queryKey: workbenchKeys.agentSession(sessionId),
-    queryFn: () => workbenchApi.getAgentSession(sessionId),
-    enabled: enabled && Boolean(sessionId),
-    refetchInterval(query) {
-      return query.state.data?.data?.activeTurnId ? 1_000 : false;
-    },
-  });
-}
-
-export function useAgentTurnsQuery(sessionId, query = {}, enabled = true) {
-  return useQuery({
-    queryKey: workbenchKeys.agentTurns(sessionId, query),
-    queryFn: () => workbenchApi.listAgentTurns(sessionId, query),
-    enabled: enabled && Boolean(sessionId),
+export function useAgentSessionsQuery(query = { definitionId: "main", limit: 100 }, enabled = true, principal = {}) {
+  const result = useInfiniteQuery({
+    queryKey: workbenchKeys.agentSessions(principal, query),
+    initialPageParam: null,
+    queryFn: ({ signal, pageParam }) => workbenchApi.listAgentSessions({
+      ...query,
+      ...(pageParam ? { cursor: pageParam } : {}),
+    }, { signal }),
+    getNextPageParam: (lastPage) => lastPage.page?.hasMore
+      ? lastPage.page.nextCursor
+      : undefined,
+    enabled,
     refetchInterval(result) {
-      const active = result.state.data?.data?.some((turn) => !["completed", "failed", "cancelled", "blocked"].includes(turn.status));
+      const active = result.state.data?.pages?.some((page) => page.data?.some((session) => (
+        ["queued", "running", "waiting_review"].includes(session.taskStatus)
+      )));
       return active ? 1_500 : false;
     },
   });
+  const data = result.data
+    ? {
+        data: result.data.pages.flatMap((page) => page.data || []),
+        page: result.data.pages.at(-1)?.page,
+      }
+    : undefined;
+  return { ...result, data };
 }
 
-export function useAgentTurnQuery(sessionId, turnId, enabled = true) {
+export function agentSessionRefetchInterval(query) {
+  const session = query.state.data?.data;
+  return session?.activeTurnId || ["queued", "running"].includes(session?.taskStatus)
+    ? 1_000
+    : false;
+}
+
+export function useAgentSessionQuery(sessionId, enabled = true, principal = {}) {
   return useQuery({
-    queryKey: workbenchKeys.agentTurn(sessionId, turnId),
-    queryFn: () => workbenchApi.getAgentTurn(sessionId, turnId),
+    queryKey: workbenchKeys.agentSession(principal, sessionId),
+    queryFn: ({ signal }) => workbenchApi.getAgentSession(sessionId, { signal }),
+    enabled: enabled && Boolean(sessionId),
+    refetchInterval: agentSessionRefetchInterval,
+  });
+}
+
+export function useAgentTurnsQuery(sessionId, query = {}, enabled = true, principal = {}) {
+  const result = useInfiniteQuery({
+    queryKey: workbenchKeys.agentTurns(principal, sessionId, query),
+    initialPageParam: null,
+    queryFn: ({ signal, pageParam }) => workbenchApi.listAgentTurns(sessionId, {
+      ...query,
+      ...(pageParam ? { cursor: pageParam } : {}),
+    }, { signal }),
+    getNextPageParam: (lastPage) => lastPage.page?.hasMore
+      ? lastPage.page.nextCursor
+      : undefined,
+    enabled: enabled && Boolean(sessionId),
+    refetchInterval(result) {
+      const active = result.state.data?.pages?.some((page) => page.data?.some(
+        (turn) => !["completed", "failed", "cancelled", "blocked"].includes(turn.status),
+      ));
+      return active ? 1_500 : false;
+    },
+  });
+  const orderedPages = result.data ? [...result.data.pages].reverse() : [];
+  const data = result.data
+    ? {
+        data: orderedPages.flatMap((page) => page.data || []),
+        page: result.data.pages.at(-1)?.page,
+      }
+    : undefined;
+  return { ...result, data };
+}
+
+export function useAgentTurnQuery(sessionId, turnId, enabled = true, principal = {}) {
+  return useQuery({
+    queryKey: workbenchKeys.agentTurn(principal, sessionId, turnId),
+    queryFn: ({ signal }) => workbenchApi.getAgentTurn(sessionId, turnId, { signal }),
     enabled: enabled && Boolean(sessionId && turnId),
     refetchInterval(query) {
       const status = query.state.data?.data?.status;
@@ -298,33 +284,264 @@ export function useAgentTurnQuery(sessionId, turnId, enabled = true) {
   });
 }
 
-export function useAgentEventsQuery(sessionId, query = {}, enabled = true) {
-  return useQuery({
-    queryKey: workbenchKeys.agentEvents(sessionId, query),
-    queryFn: () => workbenchApi.listAgentSessionEvents(sessionId, query),
+export function useAgentEventsQuery(sessionId, query = {}, enabled = true, principal = {}) {
+  const result = useInfiniteQuery({
+    queryKey: workbenchKeys.agentEvents(principal, sessionId, query),
+    initialPageParam: null,
+    queryFn: ({ signal, pageParam }) => workbenchApi.listAgentSessionEvents(sessionId, {
+      ...query,
+      ...(pageParam ? { cursor: pageParam } : {}),
+    }, { signal }),
+    getNextPageParam: (lastPage) => lastPage.page?.hasMore
+      ? lastPage.page.nextCursor
+      : undefined,
     enabled: enabled && Boolean(sessionId),
     refetchInterval: 2_000,
   });
+  const orderedPages = result.data ? [...result.data.pages].reverse() : [];
+  const data = result.data
+    ? {
+        data: orderedPages.flatMap((page) => page.data || []),
+        page: result.data.pages.at(-1)?.page,
+      }
+    : undefined;
+  return { ...result, data };
 }
 
-export function useRunInvocationsQuery(runId, enabled = true) {
+export function useAgentProposalQuery(
+  sessionId,
+  proposalId,
+  enabled = true,
+  principal = {},
+) {
+  return useQuery({
+    queryKey: workbenchKeys.agentProposal(principal, sessionId, proposalId),
+    queryFn: ({ signal }) => workbenchApi.getAgentProposal(
+      sessionId,
+      proposalId,
+      { signal },
+    ),
+    enabled: enabled && Boolean(sessionId && proposalId),
+  });
+}
+
+export function useInboxQuery(principal = {}, query = { limit: 50 }, enabled = true) {
+  const result = useInfiniteQuery({
+    queryKey: workbenchKeys.inbox(principal, query),
+    initialPageParam: null,
+    queryFn: ({ signal, pageParam }) => workbenchApi.getInbox({
+      ...query,
+      ...(pageParam ? { cursor: pageParam } : {}),
+    }, { signal }),
+    getNextPageParam: (lastPage) => lastPage.data?.page?.hasMore
+      ? lastPage.data.page.nextCursor
+      : undefined,
+    enabled,
+    refetchInterval: 15_000,
+    staleTime: 5_000,
+  });
+  const data = result.data
+    ? {
+        data: {
+          items: result.data.pages.flatMap((page) => page.data?.items || []),
+          count: result.data.pages[0]?.data?.count ?? 0,
+          page: result.data.pages.at(-1)?.data?.page,
+        },
+      }
+    : undefined;
+  return { ...result, data };
+}
+
+export function useScopesQuery(principal = {}, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.scopes(principal),
+    queryFn: ({ signal }) => workbenchApi.listScopes({ signal }),
+    enabled: enabled && Boolean(principal.workspaceId && principal.userId),
+    staleTime: 15_000,
+  });
+}
+
+export function useScopeQuery(principal = {}, scopeId, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.scope(principal, scopeId),
+    queryFn: ({ signal }) => workbenchApi.getScope(scopeId, { signal }),
+    enabled: enabled && Boolean(principal.workspaceId && principal.userId && scopeId),
+    staleTime: 15_000,
+  });
+}
+
+export function useAutomationsQuery(principal = {}, query = {}, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.automations(principal, query),
+    queryFn: ({ signal }) => workbenchApi.listAutomations(query, { signal }),
+    enabled: enabled && Boolean(principal.workspaceId && principal.userId),
+    staleTime: 5_000,
+    refetchInterval(current) {
+      const active = current.state.data?.data?.some((automation) => automation.status === "active");
+      return active ? 15_000 : false;
+    },
+  });
+}
+
+export function useAutomationCandidatesQuery(principal = {}, query = {}, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.automationCandidates(principal, query),
+    queryFn: ({ signal }) => workbenchApi.listAutomationCandidates(query, { signal }),
+    enabled: enabled && Boolean(principal.workspaceId && principal.userId),
+    staleTime: 15_000,
+  });
+}
+
+export function useAutomationOccurrencesQuery(principal = {}, automationId, query = { limit: 20 }, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.automationOccurrences(principal, automationId, query),
+    queryFn: ({ signal }) => workbenchApi.listAutomationOccurrences(automationId, query, { signal }),
+    enabled: enabled && Boolean(principal.workspaceId && principal.userId && automationId),
+    staleTime: 5_000,
+    refetchInterval: 15_000,
+  });
+}
+
+export function useAutomationMutations(principal = {}) {
+  const queryClient = useQueryClient();
+  const refresh = (automationId = "") => Promise.all([
+    queryClient.invalidateQueries({ queryKey: workbenchKeys.automations(principal) }),
+    queryClient.invalidateQueries({ queryKey: workbenchKeys.automationCandidates(principal) }),
+    queryClient.invalidateQueries({ queryKey: workbenchKeys.scopes(principal) }),
+    ...(automationId
+      ? [
+        queryClient.invalidateQueries({ queryKey: workbenchKeys.automation(principal, automationId) }),
+        queryClient.invalidateQueries({ queryKey: workbenchKeys.automationOccurrences(principal, automationId) }),
+      ]
+      : []),
+  ]);
+  const reviseScopePolicy = useMutation({
+    async mutationFn({ scopeId, data, ifMatch, idempotencyKey }) {
+      // Scope lists intentionally do not disclose a mutable version. Fetch the
+      // selected entity immediately before the write when the caller did not
+      // already open it, so every policy revision still has optimistic
+      // concurrency protection rather than weakening the endpoint contract.
+      const current = ifMatch ? null : await workbenchApi.getScope(scopeId);
+      const etag = ifMatch || current?.etag;
+      if (!etag) throw new WorkbenchApiError({
+        code: "scope_policy_etag_unavailable",
+        message: "Reload the scope before changing its policy.",
+      });
+      return workbenchApi.reviseScopePolicy(scopeId, data, { ifMatch: etag, idempotencyKey });
+    },
+    onSuccess: (result, variables) => {
+      queryClient.setQueryData(workbenchKeys.scope(principal, variables.scopeId), result);
+      return refresh();
+    },
+  });
+  const createAutomation = useMutation({
+    mutationFn: ({ data, idempotencyKey }) => workbenchApi.createAutomation(data, { idempotencyKey }),
+    onSuccess: (result) => {
+      queryClient.setQueryData(workbenchKeys.automation(principal, result.data.automationId), result);
+      return refresh(result.data.automationId);
+    },
+  });
+  const reviseAutomation = useMutation({
+    async mutationFn({ automationId, data, ifMatch, idempotencyKey }) {
+      // Cards intentionally carry only the product-safe list projection. Fetch
+      // the canonical entity when necessary so an edit always has the server's
+      // optimistic-concurrency token rather than guessing at a revision.
+      const current = ifMatch ? null : await workbenchApi.getAutomation(automationId);
+      const etag = ifMatch || current?.etag;
+      if (!etag) throw new WorkbenchApiError({
+        code: "automation_etag_unavailable",
+        message: "Reload the Automation before saving changes.",
+      });
+      return workbenchApi.reviseAutomation(
+        automationId,
+        data,
+        { ifMatch: etag, idempotencyKey },
+      );
+    },
+    onSuccess: (result, variables) => {
+      queryClient.setQueryData(workbenchKeys.automation(principal, variables.automationId), result);
+      return refresh(variables.automationId);
+    },
+  });
+  const transitionAutomation = useMutation({
+    async mutationFn({ automationId, transition, ifMatch, idempotencyKey }) {
+      // The list projection is deliberately product-safe and omits the ETag.
+      // Resolve the canonical Automation before transition so stale cards fail
+      // closed instead of writing with an inferred revision.
+      const current = ifMatch ? null : await workbenchApi.getAutomation(automationId);
+      const etag = ifMatch || current?.etag;
+      if (!etag) throw new WorkbenchApiError({
+        code: "automation_etag_unavailable",
+        message: "Reload the Automation before changing its state.",
+      });
+      return workbenchApi.transitionAutomation(
+        automationId,
+        transition,
+        { ifMatch: etag, idempotencyKey },
+      );
+    },
+    onSuccess: (result, variables) => {
+      queryClient.setQueryData(workbenchKeys.automation(principal, variables.automationId), result);
+      return refresh(variables.automationId);
+    },
+  });
+  return { reviseScopePolicy, createAutomation, reviseAutomation, transitionAutomation };
+}
+
+export function useAttachmentMutations() {
+  const queryClient = useQueryClient();
+  const createAttachment = useMutation({
+    async mutationFn({ file, ttlSeconds, idempotencyKey }) {
+      if (!(file instanceof File)) throw new WorkbenchApiError({
+        code: "attachment_file_required",
+        message: "Choose a file to attach.",
+      });
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const extension = file.name.split(".").pop()?.toLowerCase() || "";
+      const mediaType = file.type || ATTACHMENT_MEDIA_BY_EXTENSION[extension] || "";
+      return workbenchApi.createAttachment({
+        fileName: file.name,
+        mediaType,
+        contentBase64: encodeBytesBase64(bytes),
+        ...(ttlSeconds ? { ttlSeconds } : {}),
+      }, { idempotencyKey });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["workbench", "attachments"] }),
+  });
+  const retryAttachment = useMutation({
+    mutationFn: ({ attachmentId, idempotencyKey }) => (
+      workbenchApi.retryAttachment(attachmentId, { idempotencyKey })
+    ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["workbench", "attachments"] }),
+  });
+  const deleteAttachment = useMutation({
+    mutationFn: ({ attachmentId, idempotencyKey }) => (
+      workbenchApi.deleteAttachment(attachmentId, { idempotencyKey })
+    ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["workbench", "attachments"] }),
+  });
+  return { createAttachment, retryAttachment, deleteAttachment };
+}
+
+export function useRunInvocationsQuery(runId, enabled = true, { pollWhileRunActive = false } = {}) {
   return useQuery({
     queryKey: workbenchKeys.runInvocations(runId),
     queryFn: () => workbenchApi.listRunInvocations(runId),
     enabled: enabled && Boolean(runId),
     refetchInterval(query) {
+      if (pollWhileRunActive) return 1_000;
       const active = query.state.data?.data?.some((item) => !["completed", "failed", "cancelled", "blocked"].includes(item.status));
       return active ? 1_000 : false;
     },
   });
 }
 
-export function useRunExecutionEventsQuery(runId, query = {}, enabled = true) {
+export function useRunExecutionEventsQuery(runId, query = {}, enabled = true, { pollWhileRunActive = false } = {}) {
   return useQuery({
     queryKey: workbenchKeys.runExecutionEvents(runId, query),
     queryFn: () => workbenchApi.listRunExecutionEvents(runId, query),
     enabled: enabled && Boolean(runId),
-    refetchInterval: 1_500,
+    refetchInterval: pollWhileRunActive ? 1_500 : false,
   });
 }
 
@@ -341,21 +558,28 @@ export function useAgentMutations() {
   const queryClient = useQueryClient();
   const createSession = useMutation({
     mutationFn: ({ data, idempotencyKey }) => workbenchApi.createAgentSession(data, { idempotencyKey }),
+    onSuccess(result, variables) {
+      queryClient.setQueryData(workbenchKeys.agentSession(variables.principal, result.data.sessionId), result);
+      queryClient.invalidateQueries({ queryKey: ["workbench", "agent-sessions"] });
+    },
   });
   const selectModel = useMutation({
     mutationFn: ({ sessionId, modelProfileId, idempotencyKey }) => (
       workbenchApi.selectAgentSessionModel(sessionId, { modelProfileId }, { idempotencyKey })
     ),
     onSuccess(result, variables) {
-      queryClient.setQueryData(workbenchKeys.agentSession(variables.sessionId), result);
+      queryClient.setQueryData(workbenchKeys.agentSession(variables.principal, variables.sessionId), result);
     },
   });
   const createTurn = useMutation({
     mutationFn: ({ sessionId, data, idempotencyKey }) => workbenchApi.createAgentTurn(sessionId, data, { idempotencyKey }),
     onSuccess(result, variables) {
-      queryClient.setQueryData(workbenchKeys.agentTurn(variables.sessionId, result.data.turnId), result);
-      queryClient.invalidateQueries({ queryKey: ["workbench", "agent-turns", variables.sessionId] });
-      queryClient.invalidateQueries({ queryKey: workbenchKeys.agentSession(variables.sessionId) });
+      queryClient.setQueryData(workbenchKeys.agentTurn(variables.principal, variables.sessionId, result.data.turnId), result);
+      queryClient.invalidateQueries({
+        queryKey: ["workbench", "agent-turns", variables.principal, variables.sessionId],
+      });
+      queryClient.invalidateQueries({ queryKey: workbenchKeys.agentSession(variables.principal, variables.sessionId) });
+      queryClient.invalidateQueries({ queryKey: ["workbench", "agent-sessions"] });
     },
   });
   const cancelTurn = useMutation({
@@ -363,12 +587,296 @@ export function useAgentMutations() {
       workbenchApi.cancelAgentTurn(sessionId, turnId, data, { idempotencyKey })
     ),
     onSuccess(result, variables) {
-      queryClient.setQueryData(workbenchKeys.agentTurn(variables.sessionId, variables.turnId), result);
-      queryClient.invalidateQueries({ queryKey: ["workbench", "agent-turns", variables.sessionId] });
-      queryClient.invalidateQueries({ queryKey: workbenchKeys.agentSession(variables.sessionId) });
+      queryClient.setQueryData(workbenchKeys.agentTurn(variables.principal, variables.sessionId, variables.turnId), result);
+      queryClient.invalidateQueries({
+        queryKey: ["workbench", "agent-turns", variables.principal, variables.sessionId],
+      });
+      queryClient.invalidateQueries({ queryKey: workbenchKeys.agentSession(variables.principal, variables.sessionId) });
+      queryClient.invalidateQueries({ queryKey: ["workbench", "agent-sessions"] });
     },
   });
-  return { createSession, selectModel, createTurn, cancelTurn };
+  const applyProposal = useMutation({
+    mutationFn: ({ sessionId, proposalId, idempotencyKey }) => (
+      workbenchApi.applyAgentProposal(sessionId, proposalId, { idempotencyKey })
+    ),
+    onSuccess(result, variables) {
+      queryClient.setQueryData(
+        workbenchKeys.agentProposal(
+          variables.principal,
+          variables.sessionId,
+          variables.proposalId,
+        ),
+        result,
+      );
+      queryClient.invalidateQueries({ queryKey: ["workbench", "inbox"] });
+      queryClient.invalidateQueries({ queryKey: ["workbench", "skills"] });
+      queryClient.invalidateQueries({ queryKey: ["workbench", "workflows"] });
+      queryClient.invalidateQueries({
+        queryKey: workbenchKeys.agentSession(variables.principal, variables.sessionId),
+      });
+      queryClient.invalidateQueries({ queryKey: ["workbench", "agent-sessions"] });
+    },
+  });
+  const rejectProposal = useMutation({
+    mutationFn: ({ sessionId, proposalId, idempotencyKey }) => (
+      workbenchApi.rejectAgentProposal(sessionId, proposalId, { idempotencyKey })
+    ),
+    onSuccess(result, variables) {
+      queryClient.setQueryData(
+        workbenchKeys.agentProposal(
+          variables.principal,
+          variables.sessionId,
+          variables.proposalId,
+        ),
+        result,
+      );
+      queryClient.invalidateQueries({ queryKey: ["workbench", "inbox"] });
+      queryClient.invalidateQueries({
+        queryKey: workbenchKeys.agentSession(variables.principal, variables.sessionId),
+      });
+      queryClient.invalidateQueries({ queryKey: ["workbench", "agent-sessions"] });
+    },
+  });
+  return {
+    createSession,
+    selectModel,
+    createTurn,
+    cancelTurn,
+    applyProposal,
+    rejectProposal,
+  };
+}
+
+export function useWorkItemPromotionParticipantsQuery(principal = {}, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.workItemPromotionParticipants(principal),
+    queryFn: () => workbenchApi.listWorkItemPromotionParticipants(),
+    enabled: enabled && Boolean(principal.workspaceId && principal.userId),
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useProjectsQuery(principal = {}, query = {}, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.projects(principal, query),
+    queryFn: ({ signal }) => workbenchApi.listProjects(query, { signal }),
+    enabled: enabled && Boolean(principal.workspaceId && principal.userId),
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useProjectDetailQuery(principal = {}, projectId = "", enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.project(principal, projectId),
+    queryFn: ({ signal }) => workbenchApi.getProject(projectId, { signal }),
+    enabled: enabled && Boolean(principal.workspaceId && principal.userId && projectId),
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+    retry(failureCount, error) {
+      return error?.code !== "project_not_found" && failureCount < 2;
+    },
+  });
+}
+
+export function useWorkItemsQuery(principal = {}, query = {}, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.workItems(principal, query),
+    queryFn: ({ signal }) => workbenchApi.listWorkItems(query, { signal }),
+    enabled: enabled && Boolean(principal.workspaceId && principal.userId),
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
+}
+
+function invalidateTeamWork(queryClient, principal, { projectId, workItemId } = {}) {
+  queryClient.invalidateQueries({ queryKey: ["workbench", "projects", principal] });
+  queryClient.invalidateQueries({ queryKey: ["workbench", "work-items", principal] });
+  if (projectId) queryClient.invalidateQueries({ queryKey: workbenchKeys.project(principal, projectId) });
+  if (workItemId) {
+    queryClient.invalidateQueries({ queryKey: workbenchKeys.workItem(principal, workItemId) });
+    queryClient.invalidateQueries({ queryKey: workbenchKeys.workItemThread(principal, workItemId) });
+  }
+}
+
+export function useTeamWorkMutations() {
+  const queryClient = useQueryClient();
+  return {
+    createProject: useMutation({
+      mutationFn: ({ data, idempotencyKey }) => workbenchApi.createProject(data, { idempotencyKey }),
+      onSuccess(result, variables) {
+        invalidateTeamWork(queryClient, variables.principal, { projectId: result.data.projectId });
+      },
+    }),
+    reviseProjectMembers: useMutation({
+      mutationFn: ({ projectId, data, ifMatch, idempotencyKey }) => (
+        workbenchApi.reviseProjectMembers(projectId, data, { ifMatch, idempotencyKey })
+      ),
+      onSuccess(_result, variables) {
+        invalidateTeamWork(queryClient, variables.principal, { projectId: variables.projectId });
+      },
+    }),
+    createTeamWorkItem: useMutation({
+      mutationFn: ({ data, idempotencyKey }) => workbenchApi.createTeamWorkItem(data, { idempotencyKey }),
+      onSuccess(result, variables) {
+        invalidateTeamWork(queryClient, variables.principal, {
+          projectId: result.data.projectId || variables.data.projectId || "",
+          workItemId: result.data.workItemId,
+        });
+      },
+    }),
+    createTeamWorkItemAgentEntry: useMutation({
+      mutationFn: ({ data, idempotencyKey }) => (
+        workbenchApi.createTeamWorkItemAgentEntry(data, { idempotencyKey })
+      ),
+      onSuccess(result, variables) {
+        invalidateTeamWork(queryClient, variables.principal, {
+          projectId: result.data.workItem.projectId || variables.data.projectId || "",
+          workItemId: result.data.workItem.workItemId,
+        });
+        queryClient.invalidateQueries({ queryKey: ["workbench", "agent-sessions", variables.principal] });
+      },
+    }),
+    updateTeamWorkItem: useMutation({
+      mutationFn: ({ workItemId, data, ifMatch, idempotencyKey }) => (
+        workbenchApi.updateTeamWorkItem(workItemId, data, { ifMatch, idempotencyKey })
+      ),
+      onSuccess(result, variables) {
+        invalidateTeamWork(queryClient, variables.principal, {
+          projectId: result.data.projectId || "",
+          workItemId: variables.workItemId,
+        });
+      },
+    }),
+  };
+}
+
+export function useWorkItemDetailQuery(principal = {}, workItemId = "", enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.workItem(principal, workItemId),
+    queryFn: () => workbenchApi.getWorkItem(workItemId),
+    enabled: enabled && Boolean(principal.workspaceId && principal.userId && workItemId),
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+    retry(failureCount, error) {
+      return error?.code !== "work_item_not_found" && failureCount < 2;
+    },
+  });
+}
+
+export function useWorkItemThreadEntriesQuery(principal = {}, workItemId = "", enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.workItemThread(principal, workItemId),
+    queryFn: () => workbenchApi.listWorkItemThreadEntries(workItemId),
+    enabled: enabled && Boolean(principal.workspaceId && principal.userId && workItemId),
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+    retry(failureCount, error) {
+      return error?.code !== "work_item_not_found" && failureCount < 2;
+    },
+  });
+}
+
+export function useRecentWorkItemThreadQuery(principal = {}, workItemId = "") {
+  return useInfiniteQuery({
+    queryKey: [...workbenchKeys.workItemThread(principal, workItemId), "recent"],
+    initialPageParam: null,
+    queryFn: ({ pageParam, signal }) => workbenchApi.listWorkItemThreadEntries(workItemId,
+      { order: "desc", limit: 10, ...(pageParam ? { cursor: pageParam } : {}) }, { signal }),
+    getNextPageParam: (lastPage) => lastPage.page?.hasMore ? lastPage.page.nextCursor : undefined,
+    enabled: Boolean(principal.workspaceId && principal.userId && workItemId),
+    refetchInterval: 5000,
+    retry: (count, error) => error?.code !== "work_item_not_found" && count < 2,
+  });
+}
+
+export function useWorkItemPromotionMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sessionId, data, idempotencyKey }) => (
+      workbenchApi.promoteAgentSessionToWorkItem(sessionId, data, { idempotencyKey })
+    ),
+    onSuccess(_result, variables) {
+      queryClient.invalidateQueries({
+        queryKey: workbenchKeys.workItemPromotionParticipants(variables.principal),
+      });
+    },
+  });
+}
+
+export function useWorkItemContinuationMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ workItemId, idempotencyKey }) => (
+      workbenchApi.createWorkItemContinuation(workItemId, { idempotencyKey })
+    ),
+    onSuccess(_result, variables) {
+      queryClient.invalidateQueries({ queryKey: ["workbench", "agent-sessions"] });
+      queryClient.invalidateQueries({
+        queryKey: workbenchKeys.workItem(variables.principal, variables.workItemId),
+      });
+    },
+  });
+}
+
+export function useWorkItemContinuationAgentEntryMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ workItemId, data, idempotencyKey }) => (
+      workbenchApi.createWorkItemContinuationAgentEntry(workItemId, data, { idempotencyKey })
+    ),
+    onSuccess(result, variables) {
+      queryClient.invalidateQueries({ queryKey: ["workbench", "agent-sessions"] });
+      queryClient.invalidateQueries({
+        queryKey: workbenchKeys.workItem(variables.principal, variables.workItemId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: workbenchKeys.workItemThread(variables.principal, variables.workItemId),
+      });
+      return result;
+    },
+  });
+}
+
+export function useWorkItemThreadCommentMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ workItemId, data, idempotencyKey }) => (
+      workbenchApi.createWorkItemThreadComment(workItemId, data, { idempotencyKey })
+    ),
+    onSuccess(_result, variables) {
+      queryClient.invalidateQueries({
+        queryKey: workbenchKeys.workItemThread(variables.principal, variables.workItemId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: workbenchKeys.workItem(variables.principal, variables.workItemId),
+      });
+    },
+  });
+}
+
+export function useWorkItemDecisionMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ workItemId, data, idempotencyKey }) => (
+      workbenchApi.recordWorkItemDecision(workItemId, data, { idempotencyKey })
+    ),
+    onSuccess(_result, variables) {
+      queryClient.invalidateQueries({
+        queryKey: workbenchKeys.workItemThread(variables.principal, variables.workItemId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: workbenchKeys.workItem(variables.principal, variables.workItemId),
+      });
+    },
+  });
 }
 
 export function useSkillsQuery(enabled = true) {
@@ -376,6 +884,24 @@ export function useSkillsQuery(enabled = true) {
     queryKey: workbenchKeys.skills(),
     queryFn: () => workbenchApi.listSkills(),
     enabled,
+  });
+}
+
+export function useSkillRuntimesQuery(enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.skillRuntimes,
+    queryFn: () => workbenchApi.listSkillRuntimes(),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useRegisteredToolPackagesQuery(enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.registeredToolPackages,
+    queryFn: () => workbenchApi.listRegisteredToolPackages(),
+    enabled,
+    staleTime: 60_000,
   });
 }
 
@@ -392,6 +918,18 @@ export function useSkillDraftQuery(skillId, draftId, enabled = true) {
     queryKey: workbenchKeys.skillDraft(skillId, draftId),
     queryFn: () => workbenchApi.getSkillDraft(skillId, draftId),
     enabled: enabled && Boolean(skillId && draftId),
+  });
+}
+
+export function useSkillTestRunQuery(skillId, testRunId) {
+  return useQuery({
+    queryKey: workbenchKeys.skillTestRun(skillId, testRunId),
+    queryFn: () => workbenchApi.getSkillTestRun(skillId, testRunId),
+    enabled: Boolean(skillId && testRunId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.data?.status;
+      return !status || ["queued", "running"].includes(status) ? 1_500 : false;
+    },
   });
 }
 
@@ -415,6 +953,12 @@ export async function loadSkillDraftConflictSnapshot(skillId, draftId) {
   };
 }
 
+export async function loadWorkflowConflictSnapshot(workflowId) {
+  const workflow = await workbenchApi.getWorkflow(workflowId);
+  const revision = await workbenchApi.getWorkflowRevision(workflowId, workflow.data.currentRevisionId);
+  return { revision: revision.data, etag: workflow.etag };
+}
+
 export function useSkillVersionsQuery(skillId, enabled = true) {
   return useQuery({
     queryKey: workbenchKeys.skillVersions(skillId),
@@ -436,14 +980,6 @@ export function useSkillVersionDiffQuery(skillId, fromVersionId, toVersionId, en
     queryKey: workbenchKeys.skillVersionDiff(skillId, fromVersionId, toVersionId),
     queryFn: () => workbenchApi.getSkillVersionDiff(skillId, fromVersionId, toVersionId),
     enabled: enabled && Boolean(skillId && fromVersionId && toVersionId && fromVersionId !== toVersionId),
-  });
-}
-
-export function useLoopSkillUpdatePreviewQuery(workflowId, skillVersionId, enabled = true) {
-  return useQuery({
-    queryKey: workbenchKeys.loopSkillUpdatePreview(workflowId, skillVersionId),
-    queryFn: () => workbenchApi.getLoopSkillUpdatePreview(workflowId, skillVersionId),
-    enabled: enabled && Boolean(workflowId && skillVersionId),
   });
 }
 
@@ -471,6 +1007,29 @@ export function useInstallationsQuery(enabled = true) {
   });
 }
 
+export function useInstallationUpdateImpactQuery(installationId, releaseId, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.installationUpdateImpact(installationId, releaseId),
+    queryFn: ({ signal }) => workbenchApi.getInstallationUpdateImpact(
+      installationId,
+      releaseId,
+      { signal },
+    ),
+    enabled: enabled && Boolean(installationId && releaseId),
+  });
+}
+
+export function useInstallationUpdateDraftQuery(updateDraftId, enabled = true) {
+  return useQuery({
+    queryKey: workbenchKeys.installationUpdateDraft(updateDraftId),
+    queryFn: ({ signal }) => workbenchApi.getInstallationUpdateDraft(
+      updateDraftId,
+      { signal },
+    ),
+    enabled: enabled && Boolean(updateDraftId),
+  });
+}
+
 export function useResourcesQuery(enabled = true) {
   return useQuery({
     queryKey: workbenchKeys.resources(),
@@ -489,7 +1048,10 @@ export function useConnectionsQuery(enabled = true) {
 
 export function useConnectionMutations() {
   const queryClient = useQueryClient();
-  const refreshConnections = () => queryClient.invalidateQueries({ queryKey: workbenchKeys.connections() });
+  const refreshConnections = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: workbenchKeys.connections() }),
+    queryClient.invalidateQueries({ queryKey: ["workbench", "inbox"] }),
+  ]);
   const createConnection = useMutation({
     mutationFn: ({ capabilityKey, label, permissionSummary, idempotencyKey }) => workbenchApi.createConnection({
       capabilityKey,
@@ -519,7 +1081,17 @@ export function useConnectionMutations() {
     },
     onSuccess: refreshConnections,
   });
-  return { createConnection, updateConnection, validateConnection };
+  const bindConnectionCredential = useMutation({
+    async mutationFn({ connectionId, secretRef, ifMatch, idempotencyKey }) {
+      const etag = ifMatch || (await workbenchApi.getConnection(connectionId)).etag;
+      return workbenchApi.bindConnectionCredential(connectionId, secretRef, {
+        ifMatch: etag,
+        idempotencyKey,
+      });
+    },
+    onSuccess: refreshConnections,
+  });
+  return { createConnection, updateConnection, bindConnectionCredential, validateConnection };
 }
 
 export function useWorkflowsQuery(enabled = true) {
@@ -551,10 +1123,7 @@ export function useWorkflowRunsQuery(workflowId, enabled = true) {
     queryKey: workbenchKeys.runs(workflowId),
     queryFn: () => workbenchApi.listWorkflowRuns(workflowId),
     enabled: enabled && Boolean(workflowId),
-    refetchInterval(query) {
-      const active = query.state.data?.data?.some((run) => !["completed", "failed", "cancelled"].includes(run.status));
-      return active ? 1_000 : false;
-    },
+    refetchInterval: workflowRunsRefetchInterval,
   });
 }
 
@@ -565,20 +1134,18 @@ export function useRunQuery(runId, enabled = true) {
     enabled: enabled && Boolean(runId),
     // SSE is the primary update path. Poll only non-terminal Runs so a proxy or
     // transient EventSource disconnect cannot leave the review surface stale.
-    refetchInterval(query) {
-      const status = query.state.data?.data?.run?.status;
-      return status && !["completed", "failed", "cancelled"].includes(status) ? 1_000 : false;
-    },
+    refetchInterval: runRefetchInterval,
   });
 }
 
-export function useRunComparisonQuery(runId, otherRunId, enabled = true) {
-  return useQuery({
-    queryKey: workbenchKeys.runComparison(runId, otherRunId),
-    queryFn: () => workbenchApi.getRunComparison(runId, otherRunId),
-    enabled: enabled && Boolean(runId && otherRunId && runId !== otherRunId),
-    staleTime: 5_000,
-  });
+export function workflowRunsRefetchInterval(query) {
+  const active = query.state.data?.data?.some((run) => !isTerminalRunStatus(run.status));
+  return active ? 1_000 : false;
+}
+
+export function runRefetchInterval(query) {
+  const status = query.state.data?.data?.run?.status;
+  return status && !isTerminalRunStatus(status) ? 1_000 : false;
 }
 
 export function useWorkbenchMutations() {
@@ -607,47 +1174,9 @@ export function useWorkbenchMutations() {
     queryClient.invalidateQueries({ queryKey: workbenchKeys.skillVersions(skillId) }),
     queryClient.invalidateQueries({ queryKey: workbenchKeys.skillUsage(skillId) }),
   ]);
-  const useTemplate = useMutation({
-    async mutationFn({ templateId, data, idempotencyKey }) {
-      const created = await workbenchApi.useTemplate(templateId, data, { idempotencyKey });
-      const detail = await workbenchApi.getWorkflow(created.data.workflow.workflowId);
-      return { ...created, etag: detail.etag };
-    },
-    onSuccess(result) {
-      upsertWorkflowList(result.data.workflow);
-      queryClient.setQueryData(workbenchKeys.workflow(result.data.workflow.workflowId), {
-        data: result.data.workflow,
-        etag: result.etag,
-      });
-      queryClient.setQueryData(
-        workbenchKeys.revision(result.data.workflow.workflowId, result.data.revision.revisionId),
-        { data: result.data.revision, etag: result.etag },
-      );
-      return refreshCatalogs();
-    },
-  });
   const createLoop = useMutation({
     async mutationFn({ data, idempotencyKey }) {
       const created = await workbenchApi.createLoop(data, { idempotencyKey });
-      const detail = await workbenchApi.getWorkflow(created.data.workflow.workflowId);
-      return { ...created, etag: detail.etag };
-    },
-    onSuccess(result) {
-      upsertWorkflowList(result.data.workflow);
-      queryClient.setQueryData(workbenchKeys.workflow(result.data.workflow.workflowId), {
-        data: result.data.workflow,
-        etag: result.etag,
-      });
-      queryClient.setQueryData(
-        workbenchKeys.revision(result.data.workflow.workflowId, result.data.revision.revisionId),
-        { data: result.data.revision, etag: result.etag },
-      );
-      return refreshCatalogs();
-    },
-  });
-  const duplicateLoop = useMutation({
-    async mutationFn({ workflowId, data, idempotencyKey }) {
-      const created = await workbenchApi.duplicateLoop(workflowId, data, { idempotencyKey });
       const detail = await workbenchApi.getWorkflow(created.data.workflow.workflowId);
       return { ...created, etag: detail.etag };
     },
@@ -671,6 +1200,12 @@ export function useWorkbenchMutations() {
   const createResource = useMutation({
     mutationFn: ({ data, idempotencyKey }) => workbenchApi.createResource(data, { idempotencyKey }),
     onSuccess: refreshCatalogs,
+  });
+  const createResourceFromAttachment = useMutation({
+    mutationFn: ({ data, idempotencyKey }) => (
+      workbenchApi.createResourceFromAttachment(data, { idempotencyKey })
+    ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["workbench", "resources"] }),
   });
   const publishSkill = useMutation({
     mutationFn: ({ skillId, data, ifMatch, idempotencyKey }) => (
@@ -713,43 +1248,38 @@ export function useWorkbenchMutations() {
   const inspectSkillPackage = useMutation({
     mutationFn: inspectResumableSkillPackage,
   });
-  const inspectLoopPackage = useMutation({
-    mutationFn: beginPortableLoopImport,
-  });
-  const loadLoopImportOptions = useMutation({
-    mutationFn: loadPortableLoopImportOptions,
-  });
-  const refreshLoopImport = useMutation({
-    mutationFn: (importId) => workbenchApi.getLoopImport(importId),
-  });
-  const commitLoopImport = useMutation({
-    mutationFn: ({ importId, data, ifMatch, idempotencyKey }) => (
-      workbenchApi.commitLoopImport(importId, data, { ifMatch, idempotencyKey })
-    ),
-    onSuccess(result) {
-      upsertWorkflowList(result.data.workflow);
-      queryClient.setQueryData(workbenchKeys.workflow(result.data.workflow.workflowId), {
-        data: result.data.workflow,
-        etag: result.etag,
-      });
-      queryClient.setQueryData(
-        workbenchKeys.revision(result.data.workflow.workflowId, result.data.revision.revisionId),
-        { data: result.data.revision, etag: result.etag },
-      );
-      return refreshCatalogs();
-    },
-  });
-  const exportLoop = useMutation({
-    mutationFn: ({ workflowId, revisionId, ifNoneMatch }) => (
-      workbenchApi.exportLoop(workflowId, revisionId, { ifNoneMatch })
+  const scaffoldSkillDraftPackage = useMutation({
+    mutationFn: ({ data, idempotencyKey }) => (
+      workbenchApi.scaffoldSkillDraftPackage(data, { idempotencyKey })
     ),
   });
   const importSkillRepository = useMutation({
     mutationFn: importSkillRepositoryPackage,
   });
+  const scanServerSkills = useMutation({
+    mutationFn: ({ data }) => workbenchApi.scanServerSkills(data),
+  });
+  const importServerSkills = useMutation({
+    mutationFn: ({ data, idempotencyKey }) => (
+      workbenchApi.importServerSkills(data, { idempotencyKey })
+    ),
+    onSuccess: refreshCatalogs,
+  });
   const createSkillFromInspectedPackage = useMutation({
     async mutationFn({ inspected, permissionAcknowledged, idempotencyKey }) {
-      const data = inspected.metadata;
+      const supplied = inspected.metadata || {};
+      const manifest = inspected.upload?.inspection?.manifest || {};
+      const data = {
+        name: String(supplied.name || manifest.name || "").trim(),
+        description: String(supplied.description || manifest.description || "").trim(),
+        category: String(supplied.category || "other").trim() || "other",
+      };
+      if (!data.name || !data.description) {
+        throw new WorkbenchApiError({
+          code: "skill_manifest_identity_missing",
+          message: "The inspected SKILL.md must declare a name and description.",
+        });
+      }
       const uploadId = inspected.upload.uploadId;
       await workbenchApi.promoteUpload(
         uploadId,
@@ -837,62 +1367,34 @@ export function useWorkbenchMutations() {
       return queryClient.invalidateQueries({ queryKey: ["workbench", "workflows"] });
     },
   });
-  const updateLoopSkill = useMutation({
-    async mutationFn({ workflowId, data, ifMatch, idempotencyKey }) {
-      const workflow = ifMatch ? null : await workbenchApi.getWorkflow(workflowId);
-      return workbenchApi.createLoopSkillUpdate(workflowId, data, {
-        ifMatch: ifMatch || workflow.etag,
-        idempotencyKey,
-      });
-    },
-    onSuccess: (result, variables) => {
-      queryClient.setQueryData(workbenchKeys.workflow(variables.workflowId), {
+  const generateStagedLoopProposal = useMutation({
+    mutationFn: ({ data, idempotencyKey }) => (
+      workbenchApi.generateStagedLoopProposal(data, { idempotencyKey })
+    ),
+  });
+  const loadStagedLoopProposal = useMutation({
+    mutationFn: ({ proposalId }) => workbenchApi.getStagedLoopProposal(proposalId),
+  });
+  const commitStagedLoopProposal = useMutation({
+    mutationFn: ({ proposalId, data, idempotencyKey }) => (
+      workbenchApi.commitStagedLoopProposal(proposalId, data, { idempotencyKey })
+    ),
+    onSuccess(result) {
+      upsertWorkflowList(result.data.workflow);
+      queryClient.setQueryData(workbenchKeys.workflow(result.data.workflow.workflowId), {
         data: result.data.workflow,
         etag: result.etag,
       });
       queryClient.setQueryData(
-        workbenchKeys.revision(variables.workflowId, result.data.revision.revisionId),
+        workbenchKeys.revision(result.data.workflow.workflowId, result.data.revision.revisionId),
         { data: result.data.revision, etag: result.etag },
       );
-      queryClient.removeQueries({ queryKey: ["workbench", "loop-skill-update", variables.workflowId] });
       return refreshCatalogs();
     },
   });
-  const generateLoopProposal = useMutation({
-    mutationFn: ({ workflowId, data, ifMatch, idempotencyKey }) => (
-      workbenchApi.generateLoopProposal(workflowId, data, { ifMatch, idempotencyKey })
-    ),
-  });
-  const applyLoopProposal = useMutation({
-    async mutationFn({ workflowId, proposalId, data, ifMatch, idempotencyKey }) {
-      const applied = await workbenchApi.applyLoopProposal(workflowId, proposalId, data, {
-        ifMatch,
-        idempotencyKey,
-      });
-      const workflow = await workbenchApi.getWorkflow(workflowId);
-      const revision = await workbenchApi.getWorkflowRevision(workflowId, workflow.data.currentRevisionId);
-      return {
-        proposal: applied.data,
-        workflow: workflow.data,
-        revision: revision.data,
-        etag: workflow.etag,
-      };
-    },
-    onSuccess(result) {
-      queryClient.setQueryData(workbenchKeys.workflow(result.workflow.workflowId), {
-        data: result.workflow,
-        etag: result.etag,
-      });
-      queryClient.setQueryData(
-        workbenchKeys.revision(result.workflow.workflowId, result.revision.revisionId),
-        { data: result.revision, etag: result.etag },
-      );
-      return queryClient.invalidateQueries({ queryKey: ["workbench", "workflows"] });
-    },
-  });
-  const dismissLoopProposal = useMutation({
-    mutationFn: ({ workflowId, proposalId, data, ifMatch, idempotencyKey }) => (
-      workbenchApi.dismissLoopProposal(workflowId, proposalId, data, { ifMatch, idempotencyKey })
+  const dismissStagedLoopProposal = useMutation({
+    mutationFn: ({ proposalId, idempotencyKey }) => (
+      workbenchApi.dismissStagedLoopProposal(proposalId, { idempotencyKey })
     ),
   });
   const compile = useMutation({
@@ -913,23 +1415,50 @@ export function useWorkbenchMutations() {
     mutationFn: ({ workflowId, data, idempotencyKey }) => workbenchApi.startRun(workflowId, data, { idempotencyKey }),
     onSuccess: (_result, variables) => queryClient.invalidateQueries({ queryKey: ["workbench", "runs", variables.workflowId] }),
   });
-  const createLoopDraftFromRun = useMutation({
-    async mutationFn({ runId, data, idempotencyKey }) {
-      const created = await workbenchApi.createLoopDraftFromRun(runId, data, { idempotencyKey });
-      const detail = await workbenchApi.getWorkflow(created.data.workflow.workflowId);
-      return { ...created, etag: detail.etag };
-    },
-    onSuccess(result) {
-      upsertWorkflowList(result.data.workflow);
-      queryClient.setQueryData(workbenchKeys.workflow(result.data.workflow.workflowId), {
-        data: result.data.workflow,
-        etag: result.etag,
-      });
-      queryClient.setQueryData(
-        workbenchKeys.revision(result.data.workflow.workflowId, result.data.revision.revisionId),
-        { data: result.data.revision, etag: result.etag },
+  const startLoopAgentTask = useMutation({
+    async mutationFn({ workflowId, data, idempotencyKey }) {
+      let resolved = data;
+      if (!resolved?.workflowRevisionId) {
+        const workflow = await workbenchApi.getWorkflow(workflowId);
+        resolved = {
+          workflowRevisionId: workflow.data.currentRevisionId,
+          inputs: {},
+          resourceRefs: [],
+          ...(data || {}),
+        };
+      }
+      const compiled = await workbenchApi.compileWorkflow(
+        workflowId,
+        resolved.workflowRevisionId,
+        { idempotencyKey: `${idempotencyKey}:compile` },
       );
-      return refreshCatalogs();
+      if (compiled.data?.status !== "ready") {
+        const diagnostics = compiled.data?.warnings || [];
+        throw new WorkbenchApiError({
+          code: "workflow_not_ready",
+          message: diagnostics.find((item) => item.severity === "error")?.message
+            || diagnostics[0]?.message || "This Loop needs changes before it can run.",
+          details: { diagnostics },
+        });
+      }
+      return workbenchApi.startLoopAgentTask(
+        workflowId,
+        resolved,
+        { idempotencyKey: `${idempotencyKey}:start` },
+      );
+    },
+    onSuccess(result, variables) {
+      queryClient.setQueryData(
+        workbenchKeys.agentSession({
+          userId: result.data.session.userId,
+          workspaceId: result.data.session.workspaceId,
+        }, result.data.session.sessionId),
+        { data: result.data.session },
+      );
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workbench", "agent-sessions"] }),
+        queryClient.invalidateQueries({ queryKey: ["workbench", "runs", variables.workflowId] }),
+      ]);
     },
   });
   const review = useMutation({
@@ -957,56 +1486,82 @@ export function useWorkbenchMutations() {
     mutationFn: ({ releaseId, data, idempotencyKey }) => workbenchApi.installTeamRelease(releaseId, data, { idempotencyKey }),
     onSuccess: refreshCatalogs,
   });
-  const adoptInstallationRelease = useMutation({
+  const createLoopFromRelease = useMutation({
+    async mutationFn({ releaseId, idempotencyKey }) {
+      const created = await workbenchApi.createLoopFromRelease(releaseId, {}, { idempotencyKey });
+      const detail = await workbenchApi.getWorkflow(created.data.workflow.workflowId);
+      return { ...created, etag: detail.etag };
+    },
+    onSuccess: refreshCatalogs,
+  });
+  const createInstallationUpdateDraft = useMutation({
     mutationFn: ({ installationId, releaseId, connectionBindings = [], idempotencyKey }) => (
-      workbenchApi.adoptInstallationRelease(
+      workbenchApi.createInstallationUpdateDraft(
         installationId,
         { releaseId, connectionBindings },
         { idempotencyKey },
       )
     ),
-    onSuccess: refreshCatalogs,
-  });
-  const useTeamReleaseAsStartingPoint = useMutation({
-    async mutationFn({ releaseId, data, idempotencyKey }) {
-      const created = await workbenchApi.useTeamReleaseAsStartingPoint(releaseId, data, { idempotencyKey });
-      const detail = await workbenchApi.getWorkflow(created.data.workflow.workflowId);
-      return { ...created, etag: detail.etag };
-    },
     onSuccess(result) {
-      upsertWorkflowList(result.data.workflow);
-      queryClient.setQueryData(workbenchKeys.workflow(result.data.workflow.workflowId), {
-        data: result.data.workflow,
-        etag: result.etag,
-      });
       queryClient.setQueryData(
-        workbenchKeys.revision(result.data.workflow.workflowId, result.data.revision.revisionId),
-        { data: result.data.revision, etag: result.etag },
+        workbenchKeys.installationUpdateDraft(result.data.updateDraftId),
+        result,
       );
-      return refreshCatalogs();
+      return Promise.all([
+        refreshCatalogs(),
+        queryClient.invalidateQueries({ queryKey: ["workbench", "inbox"] }),
+      ]);
     },
   });
-  const forkTeamLoopRelease = useMutation({
-    async mutationFn({ releaseId, data, idempotencyKey }) {
-      const created = await workbenchApi.forkTeamLoopRelease(releaseId, data, { idempotencyKey });
-      const detail = await workbenchApi.getWorkflow(created.data.workflow.workflowId);
-      return { ...created, etag: detail.etag };
-    },
+  const refreshInstallationUpdateDraft = useMutation({
+    mutationFn: ({ updateDraftId, connectionBindings, idempotencyKey }) => (
+      workbenchApi.refreshInstallationUpdateDraft(
+        updateDraftId,
+        connectionBindings ? { connectionBindings } : {},
+        { idempotencyKey },
+      )
+    ),
     onSuccess(result) {
-      upsertWorkflowList(result.data.workflow);
-      queryClient.setQueryData(workbenchKeys.workflow(result.data.workflow.workflowId), {
-        data: result.data.workflow,
-        etag: result.etag,
-      });
       queryClient.setQueryData(
-        workbenchKeys.revision(result.data.workflow.workflowId, result.data.revision.revisionId),
-        { data: result.data.revision, etag: result.etag },
+        workbenchKeys.installationUpdateDraft(result.data.updateDraftId),
+        result,
       );
-      return refreshCatalogs();
+      return queryClient.invalidateQueries({ queryKey: ["workbench", "inbox"] });
+    },
+  });
+  const confirmInstallationUpdateDraft = useMutation({
+    mutationFn: ({ updateDraftId, connectionBindings, idempotencyKey }) => (
+      workbenchApi.confirmInstallationUpdateDraft(
+        updateDraftId,
+        connectionBindings ? { connectionBindings } : {},
+        { idempotencyKey },
+      )
+    ),
+    onSuccess() {
+      return Promise.all([
+        refreshCatalogs(),
+        queryClient.invalidateQueries({ queryKey: ["workbench", "inbox"] }),
+      ]);
+    },
+  });
+  const keepCurrentInstallationVersion = useMutation({
+    mutationFn: ({ updateDraftId, idempotencyKey }) => (
+      workbenchApi.keepCurrentInstallationVersion(updateDraftId, { idempotencyKey })
+    ),
+    onSuccess() {
+      return Promise.all([
+        refreshCatalogs(),
+        queryClient.invalidateQueries({ queryKey: ["workbench", "inbox"] }),
+      ]);
     },
   });
   return {
-    useTemplate, createLoop, duplicateLoop, createSkill, createResource, publishSkill, createSkillUpdateDraft, deprecateSkill, inspectSkillPackage, inspectLoopPackage, loadLoopImportOptions, refreshLoopImport, commitLoopImport, exportLoop, importSkillRepository, createSkillFromInspectedPackage, updateSkillDraft, replaceSkillDraftPackage, runSkillTest, validateSkill, saveRevision, updateLoopSkill, generateLoopProposal, applyLoopProposal, dismissLoopProposal, compile, publishLoop, startRun, createLoopDraftFromRun, review, cancelRun, retryRun,
-    installTeamRelease, adoptInstallationRelease, useTeamReleaseAsStartingPoint, forkTeamLoopRelease,
+    createLoop, createSkill, createResource, createResourceFromAttachment, publishSkill, createSkillUpdateDraft, deprecateSkill, inspectSkillPackage, scaffoldSkillDraftPackage, importSkillRepository, scanServerSkills, importServerSkills, createSkillFromInspectedPackage, updateSkillDraft, replaceSkillDraftPackage, runSkillTest, validateSkill, saveRevision, loadStagedLoopProposal, generateStagedLoopProposal, commitStagedLoopProposal, dismissStagedLoopProposal, compile, publishLoop, startRun, startLoopAgentTask, review, cancelRun, retryRun,
+    installTeamRelease,
+    createLoopFromRelease,
+    createInstallationUpdateDraft,
+    refreshInstallationUpdateDraft,
+    confirmInstallationUpdateDraft,
+    keepCurrentInstallationVersion,
   };
 }

@@ -1,21 +1,4 @@
-import {
-  agentExecutionFabricMigration,
-  agentProposalsAndActiveBranchesMigration,
-  backfillDefaultWorkspaceMigration,
-  productMemoryMigration,
-  runnerTerminalTransitionsMigration,
-  modelRoutingMigration,
-} from "../store/migrations/index.mjs";
 import { ReadinessRegistry } from "./readiness-registry.mjs";
-
-const EXPECTED_MIGRATIONS = Object.freeze([
-  backfillDefaultWorkspaceMigration,
-  runnerTerminalTransitionsMigration,
-  agentExecutionFabricMigration,
-  productMemoryMigration,
-  agentProposalsAndActiveBranchesMigration,
-  modelRoutingMigration,
-]);
 
 export function createProductReadiness({
   store,
@@ -31,13 +14,17 @@ export function createProductReadiness({
   timeoutMs = 3000,
 } = {}) {
   if (!store || !startupState) throw new TypeError("product_readiness_dependencies_invalid");
+  if (store.persistenceDriver !== "postgres") {
+    throw new TypeError("postgres_product_store_required");
+  }
+  const postgresOperations = store.createOperationalReadiness?.();
+  if (!postgresOperations) {
+    throw new TypeError("postgres_operational_readiness_required");
+  }
   const registry = new ReadinessRegistry({ timeoutMs });
   registry.register("startup", () => ({ ok: startupState.ready === true && startupState.error == null }));
-  registry.register("mongo", async () => {
-    const result = await store.health();
-    return { ok: result?.ok === true && result?.writablePrimary === true };
-  });
-  registry.register("migrations", () => verifyMigrations(store), { required: requireMigrations });
+  registry.register("postgres", () => postgresOperations.probe());
+  registry.register("migrations", () => verifyMigrations(store, { postgresOperations }), { required: requireMigrations });
   registry.register("agent_sandbox", () => agentSandbox?.probe?.() ?? { available: false }, { required: requireAgent });
   registry.register("provider", () => providerProbe?.() ?? { available: false }, { required: requireProvider });
   registry.register("model_routing", () => verifyRequiredModelCapabilityDefaults({
@@ -53,7 +40,7 @@ export async function verifyRequiredModelCapabilityDefaults({ modelCatalog, requ
     for (const requirement of requirements) {
       if (typeof requirement?.workspaceId !== "string" || requirement.workspaceId.length === 0
         || !Array.isArray(requirement.capabilities) || requirement.capabilities.length === 0) return { ok: false };
-      const policy = await modelCatalog.getWorkspacePolicy(requirement.workspaceId);
+      const policy = await modelCatalog.getWorkspacePolicy(requirement.workspaceId, { scopeId: requirement.scopeId, userId: requirement.userId });
       if (!policy) return { ok: false };
       for (const capability of requirement.capabilities) {
         const profileId = policy.defaultProfileIdsByCapability?.[capability];
@@ -73,16 +60,9 @@ export async function verifyRequiredModelCapabilityDefaults({ modelCatalog, requ
   }
 }
 
-export async function verifyMigrations(store) {
-  const db = await store.connect();
-  const applied = await db.collection("product_schema_migrations").find(
-    { status: "applied" },
-    { projection: { version: 1, checksum: 1 } },
-  ).toArray();
-  const byVersion = new Map(applied.map((item) => [item.version, item.checksum]));
-  return {
-    ok: EXPECTED_MIGRATIONS.every((migration) => byVersion.get(migration.version) === migration.checksum),
-  };
+export async function verifyMigrations(store, { postgresOperations = null } = {}) {
+  if (store?.persistenceDriver !== "postgres") return { ok: false };
+  const operations = postgresOperations ?? store.createOperationalReadiness?.();
+  if (!operations?.verifyMigrations) return { ok: false };
+  return operations.verifyMigrations();
 }
-
-export { EXPECTED_MIGRATIONS };

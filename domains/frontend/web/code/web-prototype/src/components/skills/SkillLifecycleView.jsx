@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Check, FileText, FlaskConical, History, Pencil, ShieldCheck } from "lucide-react";
 
 import { Button } from "../shared/Button.jsx";
@@ -7,15 +7,25 @@ import { ObjectQueryState } from "../shared/ObjectQueryState.jsx";
 import { Section } from "../shared/Section.jsx";
 import { StatusPill } from "../shared/StatusPill.jsx";
 import {
+  useAttachmentMutations,
   useSkillUsageQuery,
   useSkillVersionDiffQuery,
   useSkillVersionsQuery,
 } from "../../api/queries.js";
 import { RetireSkillDialog } from "./RetireSkillDialog.jsx";
 import { SkillPackageEditor } from "./SkillPackageEditor.jsx";
+import { smokeTestInputJson } from "./draft-skill-package.js";
 import { UpdateSkillDialog } from "./UpdateSkillDialog.jsx";
+import {
+  acceptsMaterialMediaType,
+  materialAcceptAttribute,
+  materialFormatSummary,
+  materialMediaTypeForFile,
+  normalizeMaterialMediaTypes,
+} from "./material-formats.js";
 import { productDescription, productTitle } from "../../utils/productCopy.js";
 import { SkillCreatorAgentPanel } from "../agents/SkillCreatorAgentPanel.jsx";
+import { isCurrentPublishedSkill } from "../../state/server/presentationAdapters.js";
 
 const routeTabs = [
   { page: "skill-overview", label: "skillLifecycle.tabs.overview" },
@@ -35,9 +45,9 @@ const routeTestIds = {
   "skill-versions": "loopops.skill.versions",
 };
 
-function lifecycleLabel(skill, t) {
-  if (skill?.canonical?.skill?.lifecycle === "deprecated") return t("status.retired");
-  if (skill?.canonical?.version) return t("skillLifecycle.published");
+function lifecycleLabel(skill, isPublished, t) {
+  if (["deprecated", "archived"].includes(skill?.canonical?.skill?.lifecycle)) return t("status.retired");
+  if (isPublished) return t("skillLifecycle.published");
   return t("skillLifecycle.draft");
 }
 
@@ -48,8 +58,17 @@ function schemaFields(schema) {
     key,
     label: value?.title || key,
     type: value?.type || "value",
+    format: value?.format || "",
+    acceptedMediaTypes: normalizeMaterialMediaTypes(
+      value?.acceptedMediaTypes,
+      { defaultToAll: true },
+    ),
     required: required.has(key),
   }));
+}
+
+function mutationKey(kind) {
+  return `${kind}-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
 }
 
 function ReadableFields({ fields, empty, requiredLabel, optionalLabel }) {
@@ -108,11 +127,14 @@ export function SkillLifecycleView({ workspace }) {
 
   const inputFields = schemaFields(model.inputSchema);
   const outputFields = schemaFields(model.outputSchema);
-  const isPublished = Boolean(version);
+  const isPublished = isCurrentPublishedSkill(skill);
+  const currentVersion = isPublished ? version : null;
   const primary = page === "skill-overview"
     ? isPublished
       ? { label: t("actions.addToWorkflow"), action: () => workspace.addManagedSkillToLoop(skill.id) }
-      : { label: t("actions.continueEditing"), action: () => workspace.openSkill(skill.id, "skill-editor") }
+      : skill.canEdit
+        ? { label: t("actions.continueEditing"), action: () => workspace.openSkill(skill.id, "skill-editor") }
+        : null
     : null;
 
   return (
@@ -128,9 +150,9 @@ export function SkillLifecycleView({ workspace }) {
         title={productTitle({ title: model.name }, workspace.locale)}
         description={productDescription({ title: model.name, description: model.description }, workspace.locale)}
         meta={[
-          { value: lifecycleLabel(skill, t), tone: isPublished ? "success" : "info" },
+          { value: lifecycleLabel(skill, isPublished, t), tone: isPublished ? "success" : "info" },
           { label: t("skills.risk"), value: t(`risk.${model.risk?.level || "low"}`) },
-          { label: t("skillLifecycle.version"), value: version?.version || t("skillLifecycle.notPublished") },
+          { label: t("skillLifecycle.version"), value: currentVersion?.version || t("skillLifecycle.notPublished") },
         ]}
         primaryLabel={primary?.label}
         onPrimary={primary?.action}
@@ -160,7 +182,7 @@ export function SkillLifecycleView({ workspace }) {
       ) : page === "skill-tests" ? (
         <SkillTests workspace={workspace} draft={draft} />
       ) : page === "skill-versions" ? (
-        <SkillVersions workspace={workspace} skill={skill} draft={draft} version={version} />
+        <SkillVersions workspace={workspace} skill={skill} draft={draft} version={currentVersion} />
       ) : (
         <SkillOverview
           workspace={workspace}
@@ -304,24 +326,68 @@ function SkillEditor({ workspace, draft }) {
 function SkillTests({ workspace, draft }) {
   const t = workspace.t;
   const lifecycle = workspace.selectedSkillLifecycle;
-  const [form, setForm] = useState({
-    name: "",
-    purpose: "",
-    input: "{\n  \n}",
-    expectedOutput: "",
-    timeoutSeconds: "30",
+  const attachmentMutations = useAttachmentMutations();
+  const materialFields = useMemo(
+    () => schemaFields(draft?.inputSchema).filter((field) => field.format === "attachment"),
+    [draft?.inputSchema],
+  );
+  const [form, setForm] = useState(() => {
+    const handoff = workspace.pendingSkillSmokeTest?.skillId === draft?.skillId
+      ? workspace.pendingSkillSmokeTest
+      : null;
+    return {
+      name: handoff ? t("skillLifecycle.creationSmokeName") : "",
+      purpose: handoff
+        ? handoff.purpose || `${t("skillLifecycle.creationSmokePurpose")} ${handoff.expectedOutcome || ""}`.trim()
+        : "",
+      input: handoff ? smokeTestInputJson(handoff.input, draft.inputSchema) : "{\n  \n}",
+      expectedOutput: "",
+      timeoutSeconds: "30",
+    };
   });
+  const [materials, setMaterials] = useState(() => {
+    const handoff = workspace.pendingSkillSmokeTest?.skillId === draft?.skillId
+      ? workspace.pendingSkillSmokeTest
+      : null;
+    return Object.fromEntries((handoff?.materialBindings || []).map((binding) => {
+      const source = binding.source;
+      return [binding.materialKey, {
+        label: source.kind === "attachment"
+          ? source.attachment.attachmentId
+          : source.resource.label,
+        status: "ready",
+        source,
+        ...(source.kind === "attachment"
+          ? { attachmentId: source.attachment.attachmentId }
+          : {}),
+      }];
+    }));
+  });
+  const materialsRef = useRef(materials);
+  const materialUploadTokens = useRef(new Map());
+  const mounted = useRef(true);
+  const [connectionSelections, setConnectionSelections] = useState({});
   const [permissionAcknowledged, setPermissionAcknowledged] = useState(false);
   const [publish, setPublish] = useState({ version: "1.0.0", releaseNotes: "" });
   const [formError, setFormError] = useState("");
   const busy = workspace.serverState.mutations.runSkillTest.isPending
     || workspace.serverState.mutations.validateSkill.isPending
-    || workspace.serverState.mutations.publishSkill.isPending;
+    || workspace.serverState.mutations.publishSkill.isPending
+    || ["queued", "running"].includes(lifecycle.testRun?.status)
+    || attachmentMutations.createAttachment.isPending;
 
   const testRun = lifecycle.testRun;
   const validation = lifecycle.validation;
   const testPassed = testRun?.status === "passed";
   const validationPassed = validation?.status === "passed";
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      materialUploadTokens.current.clear();
+    };
+  }, []);
 
   const testCase = useMemo(() => {
     try {
@@ -335,11 +401,28 @@ function SkillTests({ workspace, draft }) {
         input,
         ...(expectedOutput ? { expectedOutput } : {}),
         timeoutSeconds: Number(form.timeoutSeconds),
+        ...(materialFields.length ? {
+          materialBindings: materialFields.flatMap((field) => (
+            materials[field.key]?.source
+              ? [{ materialKey: field.key, source: materials[field.key].source }]
+              : []
+          )),
+        } : {}),
+        ...(draft?.connectionRequirements?.length ? {
+          connectionBindings: draft.connectionRequirements.flatMap((requirement) => (
+            connectionSelections[requirement.requirementId]
+              ? [{
+                  requirementId: requirement.requirementId,
+                  connectionId: connectionSelections[requirement.requirementId],
+                }]
+              : []
+          )),
+        } : {}),
       };
     } catch {
       return null;
     }
-  }, [form]);
+  }, [form, materialFields, materials, draft?.connectionRequirements, connectionSelections]);
 
   if (!draft) return <Section title={t("skillLifecycle.noDraftTitle")}><p>{t("skillLifecycle.noDraftBody")}</p></Section>;
 
@@ -349,8 +432,148 @@ function SkillTests({ workspace, draft }) {
       setFormError(t("skillLifecycle.testFormInvalid"));
       return;
     }
+    const missingMaterial = materialFields.find(
+      (field) => field.required && !materials[field.key]?.source,
+    );
+    if (missingMaterial) {
+      setFormError(t("skillLifecycle.materialRequired", { name: missingMaterial.label }));
+      return;
+    }
+    const missingConnection = (draft.connectionRequirements ?? []).find(
+      (requirement) => requirement.required
+        && !connectionSelections[requirement.requirementId],
+    );
+    if (missingConnection) {
+      setFormError(t("skillLifecycle.connectionRequired", { name: missingConnection.label }));
+      return;
+    }
     setFormError("");
     await workspace.runSelectedSkillTest(testCase);
+  }
+
+  function setMaterial(fieldKey, value) {
+    materialsRef.current = { ...materialsRef.current, [fieldKey]: value };
+    setMaterials(materialsRef.current);
+  }
+
+  function discardAttachment(attachmentId, fieldKey) {
+    if (!attachmentId) return;
+    void attachmentMutations.deleteAttachment.mutateAsync({
+      attachmentId,
+      idempotencyKey: mutationKey(`discard-skill-material-${fieldKey}`),
+    }).catch(() => {
+      // The Product Attachment TTL remains the recovery boundary if cleanup
+      // cannot be completed immediately.
+    });
+  }
+
+  function chooseResource(field, resourceId) {
+    materialUploadTokens.current.set(field.key, mutationKey(`material-selection-${field.key}`));
+    discardAttachment(materialsRef.current[field.key]?.attachmentId, field.key);
+    const resource = workspace.resources.find((item) => (
+      item.resourceId === resourceId
+      && item.readiness?.status === "ready"
+      && item.contentHash
+      && item.version
+    ));
+    if (resource && !acceptsMaterialMediaType(field.acceptedMediaTypes, resource.mediaType)) {
+      setMaterial(field.key, {
+        label: resource.label,
+        status: "failed",
+        source: null,
+        error: t("skillLifecycle.materialFormatMismatch"),
+      });
+      return;
+    }
+    setMaterial(
+      field.key,
+      resource ? {
+        label: resource.label,
+        status: "ready",
+        source: {
+          kind: "workspace_resource",
+          resource: {
+            resourceId: resource.resourceId,
+            version: resource.version,
+            label: resource.label,
+            contentHash: resource.contentHash,
+          },
+        },
+      } : null,
+    );
+  }
+
+  function removeMaterial(field) {
+    materialUploadTokens.current.set(field.key, mutationKey(`material-removed-${field.key}`));
+    discardAttachment(materialsRef.current[field.key]?.attachmentId, field.key);
+    setMaterial(field.key, null);
+  }
+
+  async function uploadMaterial(field, file) {
+    if (!file) return;
+    const mediaType = materialMediaTypeForFile(file);
+    if (!mediaType || !acceptsMaterialMediaType(field.acceptedMediaTypes, mediaType)) {
+      setMaterial(field.key, {
+        label: file.name,
+        status: "failed",
+        source: null,
+        error: t("skillLifecycle.materialFormatMismatch"),
+      });
+      return;
+    }
+    const uploadToken = mutationKey(`material-upload-${field.key}`);
+    materialUploadTokens.current.set(field.key, uploadToken);
+    discardAttachment(materialsRef.current[field.key]?.attachmentId, field.key);
+    setFormError("");
+    setMaterial(field.key, { label: file.name, status: "processing", source: null });
+    let createdAttachmentId = null;
+    try {
+      const result = await attachmentMutations.createAttachment.mutateAsync({
+        file,
+        idempotencyKey: mutationKey(`skill-material-${field.key}`),
+      });
+      const attachment = result.data.attachment;
+      createdAttachmentId = attachment.attachmentId;
+      if (
+        !mounted.current
+        || materialUploadTokens.current.get(field.key) !== uploadToken
+      ) {
+        discardAttachment(createdAttachmentId, field.key);
+        return;
+      }
+      if (attachment.processing.status !== "ready") {
+        throw new Error(attachment.processing.message || "attachment_processing_failed");
+      }
+      setMaterial(field.key, {
+          label: attachment.fileName,
+          status: "ready",
+          attachmentId: attachment.attachmentId,
+          source: {
+            kind: "attachment",
+            attachment: {
+              attachmentId: attachment.attachmentId,
+              version: attachment.version,
+              contentHash: attachment.contentHash,
+              mediaType: attachment.mediaType,
+            },
+          },
+        });
+    } catch (error) {
+      if (
+        !mounted.current
+        || materialUploadTokens.current.get(field.key) !== uploadToken
+      ) {
+        discardAttachment(createdAttachmentId, field.key);
+        return;
+      }
+      setMaterial(field.key, {
+          label: file.name,
+          status: "failed",
+          source: null,
+          attachmentId: createdAttachmentId,
+          error: error?.message || t("skillLifecycle.materialUploadFailed"),
+        });
+    }
   }
 
   return (
@@ -364,12 +587,121 @@ function SkillTests({ workspace, draft }) {
             <label><span>{t("skillLifecycle.exampleInput")}</span><textarea data-testid="loopops.skill.tests.input" rows={7} value={form.input} onChange={(event) => setForm((current) => ({ ...current, input: event.target.value }))} spellCheck="false" /></label>
             <label><span>{t("skillLifecycle.expectedResult")}</span><textarea data-testid="loopops.skill.tests.expected" rows={7} value={form.expectedOutput} onChange={(event) => setForm((current) => ({ ...current, expectedOutput: event.target.value }))} placeholder={t("skillLifecycle.expectedOptional")} spellCheck="false" /></label>
           </div>
+          {materialFields.length ? (
+            <fieldset className="skillMaterialBindings">
+              <legend>{t("skillLifecycle.materialsTitle")}</legend>
+              <p className="muted">{t("skillLifecycle.materialsCaption")}</p>
+              {materialFields.map((field) => {
+                const selected = materials[field.key];
+                const selectedResourceId = selected?.source?.kind === "workspace_resource"
+                  ? selected.source.resource.resourceId
+                  : "";
+                return (
+                  <div className="skillMaterialBinding" key={field.key}>
+                    <label>
+                      <span>{field.label}{field.required ? ` · ${t("skillLifecycle.required")}` : ""}</span>
+                      <small>{t("skillLifecycle.acceptedFormats", { formats: materialFormatSummary(field.acceptedMediaTypes, workspace.locale) })}</small>
+                      <select
+                        value={selectedResourceId}
+                        onChange={(event) => chooseResource(field, event.target.value)}
+                        data-testid={`loopops.skill.tests.material.${field.key}.resource`}
+                      >
+                        <option value="">{t("skillLifecycle.chooseWorkspaceMaterial")}</option>
+                        {workspace.resources
+                          .filter((resource) => (
+                            resource.readiness?.status === "ready"
+                            && resource.contentHash
+                            && resource.version
+                            && acceptsMaterialMediaType(
+                              field.acceptedMediaTypes,
+                              resource.mediaType,
+                            )
+                          ))
+                          .map((resource) => (
+                            <option key={resource.resourceId} value={resource.resourceId}>
+                              {resource.label}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <label className="skillMaterialUpload">
+                      <span>{t("skillLifecycle.orUploadMaterial")}</span>
+                      <input
+                        type="file"
+                        accept={materialAcceptAttribute(field.acceptedMediaTypes)}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.currentTarget.value = "";
+                          void uploadMaterial(field, file);
+                        }}
+                        data-testid={`loopops.skill.tests.material.${field.key}.upload`}
+                      />
+                    </label>
+                    {selected ? (
+                      <div className={`skillMaterialStatus skillMaterialStatus-${selected.status}`}>
+                        <FileText size={14} />
+                        <span>{selected.label}</span>
+                        {selected.status === "processing" ? <small>{t("skillLifecycle.materialProcessing")}</small> : null}
+                        {selected.error ? <small role="alert">{selected.error}</small> : null}
+                        <button
+                          type="button"
+                          onClick={() => removeMaterial(field)}
+                        >
+                          {t("actions.remove")}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </fieldset>
+          ) : null}
+          {draft.connectionRequirements?.length ? (
+            <fieldset className="skillMaterialBindings">
+              <legend>{t("skillLifecycle.connectionsTitle")}</legend>
+              <p className="muted">{t("skillLifecycle.connectionsCaption")}</p>
+              {draft.connectionRequirements.map((requirement) => {
+                const eligible = workspace.connections.filter((connection) => (
+                  connection.capabilityKey === requirement.requirementId
+                  && connection.status === "connected"
+                  && connection.validation?.status === "valid"
+                  && connection.credentialState === "bound"
+                  && connection.driverBackend === "production"
+                ));
+                return (
+                  <label key={requirement.requirementId}>
+                    <span>
+                      {requirement.label}
+                      {requirement.required ? ` · ${t("skillLifecycle.required")}` : ""}
+                    </span>
+                    <select
+                      value={connectionSelections[requirement.requirementId] || ""}
+                      onChange={(event) => setConnectionSelections((current) => ({
+                        ...current,
+                        [requirement.requirementId]: event.target.value,
+                      }))}
+                      data-testid={`loopops.skill.tests.connection.${requirement.requirementId}`}
+                    >
+                      <option value="">{t("skillLifecycle.chooseConnection")}</option>
+                      {eligible.map((connection) => (
+                        <option key={connection.connectionId} value={connection.connectionId}>
+                          {connection.label}
+                        </option>
+                      ))}
+                    </select>
+                    <small>{requirement.permissionSummary}</small>
+                  </label>
+                );
+              })}
+            </fieldset>
+          ) : null}
           {formError ? <p className="formError" role="alert">{formError}</p> : null}
           <Button variant="primary" type="submit" icon={<FlaskConical size={15} />} disabled={busy} data-testid="loopops.skill.tests.run">
             {busy ? t("skillLifecycle.runningTest") : t("actions.runSkillTest")}
           </Button>
         </form>
         {testRun ? <ResultPanel title={t("skillLifecycle.latestTest")} status={testRun.status} diagnostics={testRun.diagnostics} output={testRun.outputPreview} t={t} testId="loopops.skill.tests.result" /> : null}
+        {lifecycle.refreshError ? <p role="alert">{t("skillLifecycle.refreshFailed")} <button type="button" onClick={() => lifecycle.refresh()}>{t("actions.retry")}</button></p> : null}
       </Section>
 
       <Section title={t("skillLifecycle.reviewPermissionsTitle")} caption={t("skillLifecycle.reviewPermissionsCaption")}>
@@ -416,8 +748,8 @@ function ResultPanel({ title, status, diagnostics = [], output, t, testId }) {
       <header><strong>{title}</strong><StatusPill>{t(`skillLifecycle.status.${status}`)}</StatusPill></header>
       {output ? <pre>{JSON.stringify(output, null, 2)}</pre> : null}
       {diagnostics.length ? (
-        <ul className="issueList">{diagnostics.map((item, index) => <li key={`${item.code || "issue"}-${index}`}>{item.message}</li>)}</ul>
-      ) : <p className="muted">{t("skillLifecycle.noIssues")}</p>}
+        <ul className="issueList">{diagnostics.map((item, index) => <li key={`${item.code || "issue"}-${index}`}>{t(`skillLifecycle.diagnostic.${item.code}`) === `skillLifecycle.diagnostic.${item.code}` ? item.message : t(`skillLifecycle.diagnostic.${item.code}`)}</li>)}</ul>
+      ) : <p className="muted" role="status">{t(["queued", "running"].includes(status) ? "skillLifecycle.awaitingResult" : "skillLifecycle.noIssues")}</p>}
     </div>
   );
 }
@@ -517,18 +849,21 @@ function SkillVersions({ workspace, skill, draft, version }) {
               <StatusPill tone="info">{t("skillLifecycle.draft")}</StatusPill>
             </li>
           ) : null}
-          {versions.map((item, index) => (
-            <li key={item.skillVersionId} data-testid={`loopops.skill-version.${item.skillVersionId}`} data-version={item.version}>
-              <History size={16} />
-              <span>
-                <strong>{item.version}</strong>
-                <small>{t("skillLifecycle.publishedAt", { date: localizedDate(item.publishedAt) })}</small>
-              </span>
-              <StatusPill tone={index === 0 ? "success" : "neutral"}>
-                {index === 0 ? t("skillLifecycle.currentPublished") : t("skillLifecycle.published")}
-              </StatusPill>
-            </li>
-          ))}
+          {versions.map((item) => {
+            const isCurrent = version?.skillVersionId === item.skillVersionId;
+            return (
+              <li key={item.skillVersionId} data-testid={`loopops.skill-version.${item.skillVersionId}`} data-version={item.version}>
+                <History size={16} />
+                <span>
+                  <strong>{item.version}</strong>
+                  <small>{t("skillLifecycle.publishedAt", { date: localizedDate(item.publishedAt) })}</small>
+                </span>
+                <StatusPill tone={isCurrent ? "success" : "neutral"}>
+                  {isCurrent ? t("skillLifecycle.currentPublished") : t("skillLifecycle.published")}
+                </StatusPill>
+              </li>
+            );
+          })}
         </ol>
         {!versionsQuery.isLoading && !versionsQuery.error && !draft && !versions.length ? (
           <p className="muted">{t("skillLifecycle.noVersionHistory")}</p>
@@ -604,14 +939,6 @@ function SkillVersions({ workspace, skill, draft, version }) {
               {usage.affectedWorkflows.map((workflow) => (
                 <li key={workflow.workflowId} data-testid={`loopops.skill-versions.usage.${workflow.workflowId}`}>
                   <span><strong>{workflow.name}</strong><small>{t("skillLifecycle.workflowKeepsVersion")}</small></span>
-                  <Button
-                    variant="secondary"
-                    disabled={!usage.latestVersionId || workspace.readOnlyWorkspace}
-                    onClick={() => workspace.openLoopSkillUpdate(workflow.workflowId, usage.latestVersionId)}
-                    data-testid={`loopops.skill-versions.review-update.${workflow.workflowId}`}
-                  >
-                    {t("actions.reviewUpdate")}
-                  </Button>
                 </li>
               ))}
             </ul>

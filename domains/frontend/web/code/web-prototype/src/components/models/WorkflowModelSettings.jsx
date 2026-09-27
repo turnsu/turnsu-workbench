@@ -1,4 +1,4 @@
-import { ModelPicker } from "./ModelPicker.jsx";
+import { ModelSwitch } from "./ModelSwitch.jsx";
 import { useModelCatalog } from "../../state/models/index.js";
 
 export function WorkflowModelSettings({ settings = {}, onChange, t, disabled = false, testId = "loopops.workflow.models" }) {
@@ -16,7 +16,8 @@ export function WorkflowModelSettings({ settings = {}, onChange, t, disabled = f
     <section className="modelSettingsPanel" data-testid={testId}>
       <header><h3>{t("model.runSettings")}</h3><p>{t("model.runSettingsHint")}</p></header>
       <div className="modelSettingsGrid">
-        <ModelPicker
+        <div className="modelSettingsField"><span>{t("model.workflowController")}</span>
+        <ModelSwitch
           options={controller.options}
           selectionKind="profile"
           requiredCapabilities={["chat", "tool_calling"]}
@@ -29,9 +30,12 @@ export function WorkflowModelSettings({ settings = {}, onChange, t, disabled = f
           loading={controller.isLoading}
           unavailableLabel={t("model.unavailable")}
           historicalLabel={t("model.historical")}
+          groupLabels={{ text: t("model.groupText"), image: t("model.groupImage") }}
           testId={`${testId}.controller`}
         />
-        <ModelPicker
+        </div>
+        <div className="modelSettingsField"><span>{t("model.workflowImage")}</span>
+        <ModelSwitch
           options={images.options}
           selectionKind="profile"
           requiredCapabilities={["image_generation"]}
@@ -44,8 +48,10 @@ export function WorkflowModelSettings({ settings = {}, onChange, t, disabled = f
           loading={images.isLoading}
           unavailableLabel={t("model.unavailable")}
           historicalLabel={t("model.historical")}
+          groupLabels={{ text: t("model.groupText"), image: t("model.groupImage") }}
           testId={`${testId}.image`}
         />
+        </div>
       </div>
       <label className="modelFallbackField">
         <input
@@ -68,7 +74,7 @@ export function NodeModelOverride({ capability, value, onChange, t, disabled = f
     selectionKind: "profile",
   });
   return (
-    <ModelPicker
+    <ModelSwitch
       options={catalog.options}
       selectionKind="profile"
       requiredCapabilities={[capability]}
@@ -82,6 +88,7 @@ export function NodeModelOverride({ capability, value, onChange, t, disabled = f
       loading={catalog.isLoading}
       unavailableLabel={t("model.unavailable")}
       historicalLabel={t("model.historical")}
+      groupLabels={{ text: t("model.groupText"), image: t("model.groupImage") }}
       testId={testId}
     />
   );

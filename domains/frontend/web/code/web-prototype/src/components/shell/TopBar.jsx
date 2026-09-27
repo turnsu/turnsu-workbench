@@ -11,13 +11,15 @@ const titles = {
   "skill-files": ["page.skillFiles.title", "page.skillFiles.caption"],
   "skill-tests": ["page.skillTests.title", "page.skillTests.caption"],
   "skill-versions": ["page.skillVersions.title", "page.skillVersions.caption"],
+  "create-skill": ["page.skills.title", "page.skills.caption"],
   builder: ["page.builder.title", "page.builder.caption"],
   library: ["page.library.title", "page.library.caption"],
+  automations: ["page.automations.title", "page.automations.caption"],
+  work: ["page.work.title", "page.work.caption"],
   runs: ["page.runs.title", "page.runs.caption"],
   "loop-overview": ["page.loopOverview.title", "page.loopOverview.caption"],
   "run-preflight": ["page.runPreflight.title", "page.runPreflight.caption"],
   "loop-publish": ["page.loopPublish.title", "page.loopPublish.caption"],
-  "loop-update": ["page.loopUpdate.title", "page.loopUpdate.caption"],
   "create-loop": ["page.loops.title", "page.loops.caption"],
   "library-loop-detail": ["page.libraryLoop.title", "page.libraryLoop.caption"],
   "library-skill-detail": ["page.librarySkill.title", "page.librarySkill.caption"],
@@ -33,6 +35,7 @@ function primaryForPage(workspace) {
     case "builder":
       return ["actions.saveCurrentWorkflow", workspace.saveWorkspace, "loopops.topbar.primary.save-workflow", <Save size={15} />];
     case "library":
+    case "automations":
       return null;
     case "runs":
       return ["actions.openLoops", () => workspace.setActivePage("loops"), "loopops.topbar.primary.open-loops", <LayoutTemplate size={15} />];
@@ -45,7 +48,6 @@ function primaryForPage(workspace) {
     case "skill-versions":
     case "run-preflight":
     case "loop-publish":
-    case "loop-update":
     case "create-loop":
     case "library-loop-detail":
     case "library-skill-detail":
@@ -56,7 +58,7 @@ function primaryForPage(workspace) {
 }
 
 export function TopBar({ workspace }) {
-  if (["loops", "workflows", "create-loop", "builder"].includes(workspace.activePage)) return null;
+  if (["agent", "work", "loops", "workflows", "create-loop", "create-skill", "builder", "automations", "library", "library-skill-detail", "library-loop-detail"].includes(workspace.activePage)) return null;
 
   const [titleKey, captionKey] = titles[workspace.activePage] || titles.workflows;
   const primary = primaryForPage(workspace);

@@ -40,7 +40,13 @@ export class SkillUploadService {
     clock = () => new Date().toISOString(),
     idFactory = (kind) => `${kind}-${randomUUID()}`,
   } = {}) {
-    if (!store?.connect || !store?.authorizeWorkspace || !store?.runIdempotentMutation || !store?.withTransaction) {
+    if (
+      !store?.connect
+      || !store?.authorizeWorkspace
+      || !store?.runIdempotentMutation
+      || !store?.runIdempotentExternalMutation
+      || !store?.withTransaction
+    ) {
       throw new TypeError("skill_upload_store_required");
     }
     if (!objectStore?.put || !objectStore?.promote || !objectStore?.stat || !objectStore?.read) {
@@ -66,6 +72,7 @@ export class SkillUploadService {
     assetKind = "skill",
     ingestMethod = "files",
     idempotencyContext = null,
+    uploadId = null,
   }) {
     await this.#authorize(workspaceId, requestedBy, "member");
     assertText(filename, "upload_filename_required");
@@ -89,12 +96,13 @@ export class SkillUploadService {
       scope: "create-skill-upload",
       key: idempotencyKey,
       workspaceId,
-      request: { filename, sizeBytes, mediaType, assetKind, ingestMethod, idempotencyContext },
+      effectivePrincipalId: requestedBy,
+      request: { requestedBy, filename, sizeBytes, mediaType, assetKind, ingestMethod, idempotencyContext },
     }, async (session) => {
       const now = timestamp(this.#clock);
       const upload = {
         schemaVersion: "workbench-v1",
-        uploadId: this.#idFactory("upload"),
+        uploadId: uploadId || this.#idFactory("upload"),
         assetKind,
         workspaceId,
         requestedBy,
@@ -122,7 +130,7 @@ export class SkillUploadService {
 
   async uploadChunk({ workspaceId, requestedBy, uploadId, idempotencyKey, chunkIndex, content }) {
     await this.#authorize(workspaceId, requestedBy, "member");
-    const upload = await this.#readUpload({ workspaceId, uploadId });
+    const upload = await this.#readUpload({ workspaceId, requestedBy, uploadId });
     if (upload.state !== "selecting" || upload.ingestMethod !== "resumable") {
       throw error("upload_state_invalid", "This upload is not waiting for resumable package data.");
     }
@@ -138,19 +146,21 @@ export class SkillUploadService {
       scope: `upload-skill-chunk:${uploadId}:${chunkIndex}`,
       key: idempotencyKey,
       workspaceId,
-      request: { uploadId, chunkIndex, sizeBytes: bytes.byteLength },
+      effectivePrincipalId: requestedBy,
+      request: { requestedBy, uploadId, chunkIndex, sizeBytes: bytes.byteLength },
     }, async (session) => {
+      const current = await this.#readUpload({ workspaceId, requestedBy, uploadId, session });
       const transfer = await this.#objectStore.writeUploadChunk({
         workspaceId,
         uploadId,
         chunkIndex,
-        totalChunks: upload.transfer.totalChunks,
-        expectedSizeBytes: upload.sizeBytes,
+        totalChunks: current.transfer.totalChunks,
+        expectedSizeBytes: current.sizeBytes,
         bytes,
       });
       const next = await this.#store.repositories.uploads.patch(uploadId, {
         transfer: {
-          ...upload.transfer,
+          ...current.transfer,
           receivedChunks: transfer.receivedChunkIndexes,
           receivedBytes: transfer.receivedBytes,
           complete: transfer.complete,
@@ -163,7 +173,7 @@ export class SkillUploadService {
 
   async completeUpload({ workspaceId, requestedBy, uploadId, idempotencyKey }) {
     await this.#authorize(workspaceId, requestedBy, "member");
-    const upload = await this.#readUpload({ workspaceId, uploadId });
+    const upload = await this.#readUpload({ workspaceId, requestedBy, uploadId });
     if (upload.state !== "selecting" || upload.ingestMethod !== "resumable") {
       throw error("upload_state_invalid", "This upload cannot be completed from resumable data.");
     }
@@ -174,6 +184,7 @@ export class SkillUploadService {
     if ((upload.assetKind ?? "skill") === "loop") {
       const result = await this.#completePortableLoopUpload({
         workspaceId,
+        requestedBy,
         upload,
         idempotencyKey,
         bytes: assembled.bytes,
@@ -210,38 +221,54 @@ export class SkillUploadService {
     if (!this.#repositorySource?.readSkillFiles) {
       throw error("repository_import_unavailable", "Repository import is not configured for this Workbench.");
     }
-    const imported = await this.#repositorySource.readSkillFiles({ repositoryUrl, ref, skillDirectory });
-    const packageBytes = formatSkillPackage(imported.files);
-    const upload = await this.createUpload({
+    return this.#store.runIdempotentExternalMutation({
+      scope: "import-skill-repository",
+      key: idempotencyKey,
+      request: { requestedBy, repositoryUrl, ref, skillDirectory },
       workspaceId,
-      requestedBy,
-      idempotencyKey: `${idempotencyKey}:session`,
-      filename: imported.filename,
-      sizeBytes: packageBytes.byteLength,
-      mediaType: SKILL_PACKAGE_MEDIA_TYPE,
-      ingestMethod: "repository",
-      idempotencyContext: { repositoryUrl, ref, skillDirectory },
-    });
-    const current = await this.getUpload({ workspaceId, requestedBy, uploadId: upload.uploadId });
-    if (current.state !== "selecting") return current;
-    return this.inspectUpload({
-      workspaceId,
-      requestedBy,
-      uploadId: upload.uploadId,
-      idempotencyKey: `${idempotencyKey}:inspection`,
-      files: imported.files,
+      effectivePrincipalId: requestedBy,
+      operationIdKind: "upload",
+      recover: async (uploadId) => {
+        const upload = await this.#store.repositories.uploads.get(uploadId, { workspaceId });
+        return upload && upload.requestedBy === requestedBy && upload.state !== "selecting"
+          ? publicUpload(upload)
+          : null;
+      },
+    }, async (uploadId) => {
+      const imported = await this.#repositorySource.readSkillFiles({ repositoryUrl, ref, skillDirectory });
+      const packageBytes = formatSkillPackage(imported.files);
+      const upload = await this.createUpload({
+        workspaceId,
+        requestedBy,
+        idempotencyKey: `${idempotencyKey}:session`,
+        filename: imported.filename,
+        sizeBytes: packageBytes.byteLength,
+        mediaType: SKILL_PACKAGE_MEDIA_TYPE,
+        ingestMethod: "repository",
+        idempotencyContext: { repositoryUrl, ref, skillDirectory },
+        uploadId,
+      });
+      const current = await this.getUpload({ workspaceId, requestedBy, uploadId: upload.uploadId });
+      if (current.state !== "selecting") return current;
+      return this.inspectUpload({
+        workspaceId,
+        requestedBy,
+        uploadId: upload.uploadId,
+        idempotencyKey: `${idempotencyKey}:inspection`,
+        files: imported.files,
+      });
     });
   }
 
   async getUpload({ workspaceId, requestedBy, uploadId }) {
     await this.#authorize(workspaceId, requestedBy, "viewer");
-    const upload = await this.#readUpload({ workspaceId, uploadId });
+    const upload = await this.#readUpload({ workspaceId, requestedBy, uploadId });
     return publicUpload(upload);
   }
 
   async resolvePortableLoopUpload({ workspaceId, requestedBy, uploadId }) {
     await this.#authorize(workspaceId, requestedBy, "member");
-    const upload = await this.#readUpload({ workspaceId, uploadId });
+    const upload = await this.#readUpload({ workspaceId, requestedBy, uploadId });
     if (
       (upload.assetKind ?? "skill") !== "loop"
       || upload.state !== "ready_draft"
@@ -272,6 +299,9 @@ export class SkillUploadService {
   async getDraftPackage({ workspaceId, requestedBy, skillId, draftId }) {
     await this.#authorize(workspaceId, requestedBy, "viewer");
     const { skill, draft } = await this.#store.getSkillDraft({ skillId, draftId, workspaceId });
+    if (skill.ownerId !== requestedBy) {
+      throw error("skill_owner_required", "Only the private Skill owner can access this draft.");
+    }
     if (skill.currentDraftId !== draftId) {
       throw error("skill_draft_stale", "Only the current Skill draft can be edited.");
     }
@@ -296,7 +326,7 @@ export class SkillUploadService {
 
   async resolvePromotedPackage({ workspaceId, requestedBy, uploadId }) {
     await this.#authorize(workspaceId, requestedBy, "member");
-    const upload = await this.#readUpload({ workspaceId, uploadId });
+    const upload = await this.#readUpload({ workspaceId, requestedBy, uploadId });
     if (upload.state !== "promoted" || !upload.objectId) {
       throw error("skill_package_not_promoted", "Promote this Skill package before using it in a draft.");
     }
@@ -312,7 +342,7 @@ export class SkillUploadService {
 
   async inspectUpload({ workspaceId, requestedBy, uploadId, idempotencyKey, files }) {
     await this.#authorize(workspaceId, requestedBy, "member");
-    const upload = await this.#readUpload({ workspaceId, uploadId });
+    const upload = await this.#readUpload({ workspaceId, requestedBy, uploadId });
     if ((upload.assetKind ?? "skill") !== "skill") {
       throw error("upload_asset_kind_invalid", "This upload is not a Skill package.");
     }
@@ -338,10 +368,10 @@ export class SkillUploadService {
         scope: `inspect-skill-upload:${uploadId}`,
         key: idempotencyKey,
         workspaceId,
-        request: { uploadId, packageContentHash: inspection.contentHash, objectContentHash: object.contentHash },
+        effectivePrincipalId: requestedBy,
+        request: { requestedBy, uploadId, packageContentHash: inspection.contentHash, objectContentHash: object.contentHash },
       }, async (session) => {
-        const current = await this.#store.repositories.uploads.get(uploadId, { workspaceId, session });
-        if (!current) throw error("upload_not_found", "The upload was not found.");
+        const current = await this.#readUpload({ workspaceId, requestedBy, uploadId, session });
         if (current.state !== "selecting") {
           throw error("upload_state_invalid", "This upload is no longer waiting for package files.");
         }
@@ -392,7 +422,7 @@ export class SkillUploadService {
     permissionAcknowledged = false,
   }) {
     await this.#authorize(workspaceId, requestedBy, "member");
-    const upload = await this.#readUpload({ workspaceId, uploadId });
+    const upload = await this.#readUpload({ workspaceId, requestedBy, uploadId });
     if ((upload.assetKind ?? "skill") !== "skill") {
       throw error("upload_asset_kind_invalid", "Loop packages are committed through Loop import review.");
     }
@@ -405,10 +435,10 @@ export class SkillUploadService {
       scope: `promote-skill-upload:${uploadId}`,
       key: idempotencyKey,
       workspaceId,
-      request: { uploadId, objectContentHash: object.contentHash, permissionAcknowledged },
+      effectivePrincipalId: requestedBy,
+      request: { requestedBy, uploadId, objectContentHash: object.contentHash, permissionAcknowledged },
     }, async (session) => {
-      const current = await this.#store.repositories.uploads.get(uploadId, { workspaceId, session });
-      if (!current) throw error("upload_not_found", "The upload was not found.");
+      const current = await this.#readUpload({ workspaceId, requestedBy, uploadId, session });
       if (current.state === "promoted") return publicUpload(current);
       assertPromotable(current, permissionAcknowledged);
       if (current.objectId !== upload.objectId) {
@@ -429,10 +459,13 @@ export class SkillUploadService {
     return this.#store.authorizeWorkspace({ userId, workspaceId, minimumRole });
   }
 
-  async #readUpload({ workspaceId, uploadId }) {
+  async #readUpload({ workspaceId, requestedBy, uploadId, session = undefined }) {
     assertText(uploadId, "upload_id_required");
-    const upload = await this.#store.repositories.uploads.get(uploadId, { workspaceId });
-    if (!upload) throw error("upload_not_found", "The upload was not found.");
+    assertText(requestedBy, "user_id_required");
+    const upload = await this.#store.repositories.uploads.get(uploadId, { workspaceId, session });
+    if (!upload || upload.requestedBy !== requestedBy) {
+      throw error("upload_not_found", "The upload was not found.");
+    }
     return upload;
   }
 
@@ -461,7 +494,7 @@ export class SkillUploadService {
     return { object: stored.object, files };
   }
 
-  async #completePortableLoopUpload({ workspaceId, upload, idempotencyKey, bytes }) {
+  async #completePortableLoopUpload({ workspaceId, requestedBy, upload, idempotencyKey, bytes }) {
     if (upload.mediaType !== PORTABLE_LOOP_PACKAGE_MEDIA_TYPE) {
       throw error("loop_package_invalid", "Choose a supported Loop package file.");
     }
@@ -486,10 +519,15 @@ export class SkillUploadService {
         scope: `complete-loop-upload:${upload.uploadId}`,
         key: idempotencyKey,
         workspaceId,
-        request: { uploadId: upload.uploadId, contentHash },
+        effectivePrincipalId: requestedBy,
+        request: { requestedBy, uploadId: upload.uploadId, contentHash },
       }, async (session) => {
-        const current = await this.#store.repositories.uploads.get(upload.uploadId, { workspaceId, session });
-        if (!current) throw error("upload_not_found", "The upload was not found.");
+        const current = await this.#readUpload({
+          workspaceId,
+          requestedBy,
+          uploadId: upload.uploadId,
+          session,
+        });
         if (current.state !== "selecting" || (current.assetKind ?? "skill") !== "loop") {
           throw error("upload_state_invalid", "This Loop upload is no longer waiting for package data.");
         }

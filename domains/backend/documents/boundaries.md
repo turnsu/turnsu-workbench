@@ -5,9 +5,9 @@
 - Product persistence.
 - Product-safe read models.
 - Runtime command/query/mutation bridge.
-- Daemon process boundary.
-- Local auth/path/env handling.
-- App/Web API shape once Web exists.
+- Product API and Worker process boundaries.
+- Cloud auth, secret-reference, path and environment handling.
+- Web/Desktop/connector API shape.
 - Storage lifecycle and migration notes.
 
 ## Backend Does Not Own
@@ -26,7 +26,7 @@
 
 ## Separation From Agent
 
-Backend should answer:
+Backend must answer:
 
 - Where is the data?
 - How is it stored?

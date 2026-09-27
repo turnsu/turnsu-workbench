@@ -14,9 +14,9 @@ const DETECTORS = Object.freeze([
   { rule: "github_token", expression: /\b(?:ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g },
   { rule: "provider_key", expression: /\bsk-[A-Za-z0-9_-]{20,}\b/g },
   {
-    rule: "mongodb_password_uri",
-    expression: /mongodb(?:\+srv)?:\/\/([^:\s/@'"`]+):([^@\s/'"`]+)@([^\s/'"`:]+)/g,
-    accept: (match) => !isMongoPlaceholder(match[1], match[2], match[3]),
+    rule: "postgres_password_uri",
+    expression: /postgres(?:ql)?:\/\/([^:\s/@'"`]+):([^@\s/'"`]+)@([^\s/'"`:]+)/g,
+    accept: (match) => !isDatabasePlaceholder(match[1], match[2], match[3]),
   },
   {
     rule: "bearer_literal",
@@ -74,7 +74,7 @@ export async function scanReleaseSecrets({ root, sourceCommit } = {}) {
   });
 }
 
-function isMongoPlaceholder(username, password, host) {
+function isDatabasePlaceholder(username, password, host) {
   if ([username, password, host].some((value) => /[$\{\}]/.test(value))) return true;
   const pair = `${username.toLowerCase()}:${password.toLowerCase()}`;
   return ["username:password", "user:password", "user:pass"].includes(pair)

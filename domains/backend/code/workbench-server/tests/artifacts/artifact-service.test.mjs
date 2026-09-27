@@ -61,6 +61,11 @@ class ExecutionChecker {
       invocationId: "invocation-1",
       attemptId: "attempt-1",
       workspaceId: "workspace-alpha",
+      controller: { kind: "agent_turn", controllerId: "turn-1", fence: 1 },
+      request: {
+        actor: { userId: "user-alpha" },
+        lineage: { sessionId: "session-1" },
+      },
       executionFence: 1,
       status: "running",
     };
@@ -221,17 +226,26 @@ test("governed image commit quarantines, fences, promotes, and exposes only read
     "workspaceId",
   ]);
   const serialized = JSON.stringify(artifact);
-  for (const forbidden of ["objectId", "execution", "capabilityLeaseId", "path", "bytes", "base64", "provider", "generation"]) {
+  for (const forbidden of [
+    "objectId", "execution", "capabilityLeaseId", "ownerUserId", "objectScope",
+    "path", "bytes", "base64", "provider", "generation",
+  ]) {
     assert.equal(serialized.includes(forbidden), false, `public artifact exposed ${forbidden}`);
   }
 
   const internal = metadataRepository.records.get(artifact.artifactId);
   assert.equal(internal.state, "ready");
+  assert.equal(internal.ownerUserId, "user-alpha");
+  assert.deepEqual(internal.objectScope, { objectKind: "agent_session", objectId: "session-1" });
   assert.equal(internal.objectId.startsWith("object-artifact-"), true);
   assert.equal(JSON.stringify(internal).includes(png().toString("base64")), false);
   assert.equal((await objectStore.stat({ workspaceId: "workspace-alpha", objectId: internal.objectId })).state, "promoted");
 
-  const content = await service.readContent({ workspaceId: "workspace-alpha", artifactId: artifact.artifactId });
+  const content = await service.readContent({
+    workspaceId: "workspace-alpha",
+    artifactId: artifact.artifactId,
+    requestedBy: "user-alpha",
+  });
   assert.deepEqual(content.bytes, png());
   assert.equal(content.headers["Content-Type"], "image/png");
   assert.equal(content.headers["Content-Length"], String(png().byteLength));
@@ -248,9 +262,10 @@ test("artifact lookup makes cross-workspace and non-ready records indistinguisha
   metadataRepository.records.set("artifact-pending", { ...internal, artifactId: "artifact-pending", state: "pending" });
 
   for (const request of [
-    { workspaceId: "workspace-beta", artifactId: ready.artifactId },
-    { workspaceId: "workspace-alpha", artifactId: "artifact-missing" },
-    { workspaceId: "workspace-alpha", artifactId: "artifact-pending" },
+    { workspaceId: "workspace-beta", artifactId: ready.artifactId, requestedBy: "user-alpha" },
+    { workspaceId: "workspace-alpha", artifactId: ready.artifactId, requestedBy: "user-beta" },
+    { workspaceId: "workspace-alpha", artifactId: "artifact-missing", requestedBy: "user-alpha" },
+    { workspaceId: "workspace-alpha", artifactId: "artifact-pending", requestedBy: "user-alpha" },
   ]) {
     await assert.rejects(
       service.getMetadata(request),
@@ -259,6 +274,77 @@ test("artifact lookup makes cross-workspace and non-ready records indistinguisha
         && error.message === "The requested artifact was not found.",
     );
   }
+});
+
+test("artifact content is read only by its owner or an exact trusted object scope", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "looloomi-artifact-access-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const base = await createFilesystemObjectStore({ rootDir: root, maxObjectBytes: 2048 });
+  let objectReads = 0;
+  const objectStore = new Proxy(base, {
+    get(target, property) {
+      if (property !== "read") {
+        return typeof target[property] === "function" ? target[property].bind(target) : target[property];
+      }
+      return async (...args) => {
+        objectReads += 1;
+        return target.read(...args);
+      };
+    },
+  });
+  const { service } = await fixture(t, { objectStore });
+  const artifact = await service.commitImage({
+    workspaceId: "workspace-alpha", execution: execution(), ...modelMetadata(), bytes: png(), mediaType: "image/png",
+  });
+  assert.deepEqual(
+    await service.getAuthorizationDescriptor({
+      workspaceId: "workspace-alpha",
+      artifactId: artifact.artifactId,
+    }),
+    {
+      ownerUserId: "user-alpha",
+      objectScope: { objectKind: "agent_session", objectId: "session-1" },
+    },
+  );
+  await assert.rejects(
+    service.getAuthorizationDescriptor({
+      workspaceId: "workspace-beta",
+      artifactId: artifact.artifactId,
+    }),
+    { code: "artifact_not_found" },
+  );
+
+  await assert.rejects(
+    service.readContent({
+      workspaceId: "workspace-alpha",
+      artifactId: artifact.artifactId,
+      requestedBy: "user-beta",
+      authorizedObjectScopes: [{ objectKind: "agent_session", objectId: "session-other" }],
+    }),
+    { code: "artifact_not_found" },
+  );
+  assert.equal(objectReads, 0, "denial must happen before ObjectStore content is read");
+
+  const shared = await service.readContent({
+    workspaceId: "workspace-alpha",
+    artifactId: artifact.artifactId,
+    requestedBy: "user-beta",
+    authorizedObjectScopes: [{ objectKind: "agent_session", objectId: "session-1" }],
+  });
+  assert.deepEqual(shared.bytes, png());
+  assert.equal(objectReads, 1);
+});
+
+test("artifact commit derives its owner from the persisted execution principal", async (t) => {
+  const { service, executionPersistence, objectStore } = await fixture(t);
+  delete executionPersistence.invocation.request.actor;
+  await assert.rejects(
+    service.commitImage({
+      workspaceId: "workspace-alpha", execution: execution(), ...modelMetadata(), bytes: png(), mediaType: "image/png",
+    }),
+    { code: "artifact_execution_owner_invalid" },
+  );
+  assert.deepEqual(await objectStore.list({ workspaceId: "workspace-alpha" }), []);
 });
 
 test("PNG, JPEG, and WebP signatures and dimensions are validated against declared MIME", () => {
@@ -463,7 +549,11 @@ test("retention and failed-attempt cleanup hide metadata and delete promoted byt
     deleted: 1,
   });
   assert.equal(await metadataRepository.get({ workspaceId: "workspace-alpha", artifactId: expiring.artifactId }), null);
-  await assert.rejects(service.getMetadata({ workspaceId: "workspace-alpha", artifactId: expiring.artifactId }), {
+  await assert.rejects(service.getMetadata({
+    workspaceId: "workspace-alpha",
+    artifactId: expiring.artifactId,
+    requestedBy: "user-alpha",
+  }), {
     code: "artifact_not_found",
   });
 
@@ -488,7 +578,11 @@ test("content-addressed duplicate Artifacts retain shared bytes until the last r
   assert.equal((await objectStore.list({ workspaceId: "workspace-alpha" })).length, 1);
 
   assert.deepEqual(await service.delete({ workspaceId: "workspace-alpha", artifactId: first.artifactId }), { deleted: true });
-  assert.deepEqual((await service.readContent({ workspaceId: "workspace-alpha", artifactId: second.artifactId })).bytes, png());
+  assert.deepEqual((await service.readContent({
+    workspaceId: "workspace-alpha",
+    artifactId: second.artifactId,
+    requestedBy: "user-alpha",
+  })).bytes, png());
   assert.equal((await objectStore.list({ workspaceId: "workspace-alpha" })).length, 1);
 
   assert.deepEqual(await service.delete({ workspaceId: "workspace-alpha", artifactId: second.artifactId }), { deleted: true });
@@ -510,8 +604,16 @@ test("ready Artifact metadata and content survive service and object-store resta
     maxArtifactBytes: 1024,
   });
 
-  assert.equal((await restarted.getMetadata({ workspaceId: "workspace-alpha", artifactId: artifact.artifactId })).artifactId, artifact.artifactId);
-  assert.deepEqual((await restarted.readContent({ workspaceId: "workspace-alpha", artifactId: artifact.artifactId })).bytes, jpeg());
+  assert.equal((await restarted.getMetadata({
+    workspaceId: "workspace-alpha",
+    artifactId: artifact.artifactId,
+    requestedBy: "user-alpha",
+  })).artifactId, artifact.artifactId);
+  assert.deepEqual((await restarted.readContent({
+    workspaceId: "workspace-alpha",
+    artifactId: artifact.artifactId,
+    requestedBy: "user-alpha",
+  })).bytes, jpeg());
 });
 
 function hash(value) {

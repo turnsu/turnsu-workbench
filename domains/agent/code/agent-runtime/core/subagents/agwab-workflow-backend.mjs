@@ -68,7 +68,16 @@ export function createAgwaWorkflowBackend({
           status,
           output,
           summary: status === "completed" ? "Agent orchestration completed inside the pinned outer node." : "Agent orchestration did not complete cleanly.",
-          evidence: [{ kind: "agwab_workflow", ref: `agwab-workflow:${run.runId}` }],
+          evidence: [],
+          workerTranscript: {
+            mediaType: "application/json",
+            content: JSON.stringify({
+              schemaVersion: "worker-transcript-v1",
+              backend: "pi-workflow",
+              runId: run.runId,
+              finalRun,
+            }),
+          },
           usage: rollupUsage(children, request, output),
           children,
           outerGraphChanged: false,
@@ -106,7 +115,13 @@ async function startOrRecoverRun({ runtime, request, cwd, provider }) {
         model: safeString(request.metadata?.model) ?? safeString(provider?.model),
         thinking: normalizeThinking(request.metadata?.thinking),
         tools: [...request.capabilities.toolAllowlist],
-        maxConcurrency: request.limits.maxChildren,
+        maxConcurrency: Math.max(
+          1,
+          Math.min(
+            request.limits.maxChildren,
+            Number(request.metadata?.admittedChildConcurrency ?? 0),
+          ),
+        ),
         maxRuntimeMs: request.limits.timeoutMs,
         approvalMode: "non-interactive",
         worktreePolicy: "off",
@@ -128,6 +143,7 @@ function productChild(task, request, runId) {
   const taskRef = String(task.taskId || task.specId || "agwab-task").slice(0, 128);
   return {
     childRef: productChildRef(task, runId, taskRef),
+    role: String(task.role || task.specId || "worker").slice(0, 128),
     goal: String(task.displayName || task.specId || "AgwaB workflow task").slice(0, 8000),
     status,
     output: {
@@ -136,7 +152,7 @@ function productChild(task, request, runId) {
       summary: safeString(task.lastMessage)?.slice(0, 2000) ?? "Task finished.",
     },
     summary: status === "completed" ? "Orchestrator child completed." : `Orchestrator child ${status}.`,
-    evidence: [{ kind: "agwab_task_output", ref: `agwab-task:${String(task.taskId || "task").slice(0, 128)}:output` }],
+    evidence: [],
     usage: {
       steps: 1,
       modelRequests: task.status === "skipped" ? 0 : 1,

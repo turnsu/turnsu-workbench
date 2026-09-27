@@ -13,6 +13,9 @@ import {
   WorkbenchSchemaVersionSchema,
 } from "./common.js";
 import { strictObject, stringEnum } from "./schema.js";
+import {
+  AttachmentRefSchema,
+} from "./attachments.js";
 
 export const ModelProviderSchema = stringEnum([
   "deepseek",
@@ -25,6 +28,7 @@ export const ModelProviderSchema = stringEnum([
 
 export const ModelProtocolSchema = stringEnum([
   "openai_compatible_chat",
+  "openai_realtime",
   "anthropic_messages",
   "gemini_generate_content",
   "stability_image_v2",
@@ -34,7 +38,12 @@ export const ModelCapabilitySchema = stringEnum([
   "chat",
   "tool_calling",
   "structured_output",
+  "image_input",
   "image_generation",
+  "realtime_audio_input",
+  "realtime_audio_output",
+  "realtime_turn_detection",
+  "realtime_barge_in",
 ]);
 
 export const ModelReadinessSchema = stringEnum([
@@ -50,6 +59,7 @@ export const ModelSelectionContextSchema = stringEnum([
   "workflow_agent",
   "workflow_model_task",
   "direct_model_task",
+  "skill_creation",
 ]);
 
 export const ModelErrorCodeSchema = stringEnum([
@@ -85,6 +95,7 @@ export const ChatModelCapabilitySchema = stringEnum([
   "chat",
   "tool_calling",
   "structured_output",
+  "image_input",
 ]);
 
 export const ChatParameterSupportSchema = strictObject({
@@ -109,9 +120,25 @@ export const ImageGenerationParameterSupportSchema = strictObject({
   }),
 });
 
+export const RealtimeParameterSupportSchema = strictObject({
+  kind: Type.Literal("realtime"),
+  voices: Type.Array(Type.String({ minLength: 1, maxLength: 64 }), {
+    minItems: 1,
+    maxItems: 32,
+    uniqueItems: true,
+  }),
+  turnDetection: Type.Array(
+    stringEnum(["semantic_vad", "server_vad"]),
+    { minItems: 1, maxItems: 2, uniqueItems: true },
+  ),
+  toolCalling: Type.Boolean(),
+  reasoningEffort: Type.Boolean(),
+});
+
 export const ModelParameterSupportSchema = Type.Union([
   ChatParameterSupportSchema,
   ImageGenerationParameterSupportSchema,
+  RealtimeParameterSupportSchema,
 ]);
 
 export const ChatModelLimitsSchema = strictObject({
@@ -127,9 +154,27 @@ export const ImageGenerationModelLimitsSchema = strictObject({
   maxCostUsdMicros: Type.Integer({ minimum: 0, maximum: 1_000_000_000_000 }),
 });
 
+export const RealtimeTokenPricingSchema = strictObject({
+  pricingVersion: VersionSchema,
+  basis: Type.Literal("aggregate_token_ceiling"),
+  currency: Type.Literal("USD"),
+  inputUsdMicrosPerMillionTokens: Type.Integer({ minimum: 1, maximum: 1_000_000_000_000 }),
+  outputUsdMicrosPerMillionTokens: Type.Integer({ minimum: 1, maximum: 1_000_000_000_000 }),
+});
+
+export const RealtimeModelLimitsSchema = strictObject({
+  kind: Type.Literal("realtime"),
+  maxSessionSeconds: Type.Integer({ minimum: 60, maximum: 3600 }),
+  maxInputTokens: Type.Optional(Type.Integer({ minimum: 1, maximum: 10_000_000 })),
+  maxOutputTokens: Type.Integer({ minimum: 1, maximum: 1_000_000 }),
+  maxCostUsdMicros: Type.Integer({ minimum: 0, maximum: 1_000_000_000_000 }),
+  pricing: Type.Optional(RealtimeTokenPricingSchema),
+});
+
 export const ModelRevisionLimitsSchema = Type.Union([
   ChatModelLimitsSchema,
   ImageGenerationModelLimitsSchema,
+  RealtimeModelLimitsSchema,
 ]);
 
 const ModelRevisionIdentityProperties = {
@@ -148,7 +193,7 @@ const ChatRevisionProperties = {
   ...ModelRevisionIdentityProperties,
   capabilities: Type.Array(ChatModelCapabilitySchema, {
     minItems: 1,
-    maxItems: 3,
+    maxItems: 4,
     uniqueItems: true,
     contains: Type.Literal("chat"),
     minContains: 1,
@@ -184,12 +229,50 @@ export const StabilityModelProfileRevisionSchema = strictObject({
   limits: ImageGenerationModelLimitsSchema,
 });
 
+export const OpenAiRealtimeModelProfileRevisionSchema = strictObject({
+  ...ModelRevisionIdentityProperties,
+  provider: Type.Literal("openai"),
+  protocol: Type.Literal("openai_realtime"),
+  capabilities: Type.Intersect([
+    Type.Array(ModelCapabilitySchema, {
+      minItems: 6,
+      maxItems: 7,
+      uniqueItems: true,
+      contains: Type.Literal("chat"),
+      minContains: 1,
+    }),
+    Type.Array(ModelCapabilitySchema, {
+      contains: Type.Literal("tool_calling"),
+      minContains: 1,
+    }),
+    Type.Array(ModelCapabilitySchema, {
+      contains: Type.Literal("realtime_audio_input"),
+      minContains: 1,
+    }),
+    Type.Array(ModelCapabilitySchema, {
+      contains: Type.Literal("realtime_audio_output"),
+      minContains: 1,
+    }),
+    Type.Array(ModelCapabilitySchema, {
+      contains: Type.Literal("realtime_turn_detection"),
+      minContains: 1,
+    }),
+    Type.Array(ModelCapabilitySchema, {
+      contains: Type.Literal("realtime_barge_in"),
+      minContains: 1,
+    }),
+  ]),
+  parameterSupport: RealtimeParameterSupportSchema,
+  limits: RealtimeModelLimitsSchema,
+});
+
 export const ModelProfileRevisionSchema = Type.Union(
   [
     OpenAiCompatibleModelProfileRevisionSchema,
     AnthropicModelProfileRevisionSchema,
     GeminiModelProfileRevisionSchema,
     StabilityModelProfileRevisionSchema,
+    OpenAiRealtimeModelProfileRevisionSchema,
   ],
   { $id: "ModelProfileRevision" },
 );
@@ -209,7 +292,7 @@ export const PublicModelProfileRevisionSummarySchema = strictObject(
     providerDisplay: PublicModelProviderDisplaySchema,
     capabilities: Type.Array(ModelCapabilitySchema, {
       minItems: 1,
-      maxItems: 4,
+      maxItems: 9,
       uniqueItems: true,
     }),
     parameterSupport: ModelParameterSupportSchema,
@@ -234,7 +317,7 @@ const PublicModelProfileSummaryProperties = {
   selectable: Type.Boolean(),
   defaultForCapabilities: Type.Array(ModelCapabilitySchema, {
     uniqueItems: true,
-    maxItems: 4,
+    maxItems: 9,
   }),
   createdAt: UtcTimestampSchema,
   updatedAt: UtcTimestampSchema,
@@ -260,7 +343,12 @@ export const DefaultModelProfileIdsByCapabilitySchema = strictObject({
   chat: Type.Optional(ModelProfileIdSchema),
   tool_calling: Type.Optional(ModelProfileIdSchema),
   structured_output: Type.Optional(ModelProfileIdSchema),
+  image_input: Type.Optional(ModelProfileIdSchema),
   image_generation: Type.Optional(ModelProfileIdSchema),
+  realtime_audio_input: Type.Optional(ModelProfileIdSchema),
+  realtime_audio_output: Type.Optional(ModelProfileIdSchema),
+  realtime_turn_detection: Type.Optional(ModelProfileIdSchema),
+  realtime_barge_in: Type.Optional(ModelProfileIdSchema),
 });
 
 export const WorkspaceModelRoutingPolicySchema = strictObject(
@@ -275,10 +363,43 @@ export const WorkspaceModelRoutingPolicySchema = strictObject(
   { $id: "WorkspaceModelRoutingPolicy" },
 );
 
+export const ChatTextContentPartSchema = strictObject({
+  type: Type.Literal("text"),
+  text: Type.String({ minLength: 1, maxLength: 100_000 }),
+  attachment: Type.Optional(AttachmentRefSchema),
+});
+
+export const ChatImageContentPartSchema = strictObject({
+  type: Type.Literal("image"),
+  mediaType: Type.Union([
+    Type.Literal("image/png"),
+    Type.Literal("image/jpeg"),
+    Type.Literal("image/webp"),
+  ]),
+  dataBase64: Type.String({
+    minLength: 1,
+    maxLength: 22_369_624,
+    pattern: "^[A-Za-z0-9+/]*={0,2}$",
+  }),
+  attachment: AttachmentRefSchema,
+});
+
+export const ChatUserContentPartSchema = Type.Union([
+  ChatTextContentPartSchema,
+  ChatImageContentPartSchema,
+]);
+
 export const ChatMessageSchema = Type.Union([
   strictObject({
-    role: stringEnum(["system", "user", "assistant"]),
+    role: stringEnum(["system", "assistant"]),
     content: Type.String({ minLength: 1, maxLength: 100_000 }),
+  }),
+  strictObject({
+    role: Type.Literal("user"),
+    content: Type.Union([
+      Type.String({ minLength: 1, maxLength: 100_000 }),
+      Type.Array(ChatUserContentPartSchema, { minItems: 1, maxItems: 64 }),
+    ]),
   }),
   strictObject({
     role: Type.Literal("tool"),

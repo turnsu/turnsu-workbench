@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { mergeWorkflowProposal } from "../../src/proposals/three-way-proposal-merge.mjs";
+import {
+  applyWorkflowAgentOperations,
+  mergeWorkflowProposal,
+} from "../../src/proposals/three-way-proposal-merge.mjs";
 import { makeRevision } from "../compiler/fixtures.mjs";
 
 test("three-way merge rebases non-overlapping node, Definition, settings, Resource, and Skill pin changes", () => {
@@ -57,6 +60,25 @@ test("concurrent edits to different fields on the same node do not conflict", ()
   assert.equal(result.status, "merged");
   assert.equal(result.merged.graph.nodes[1].title, "Canonical title");
   assert.equal(result.merged.graph.nodes[1].description, "Agent description");
+});
+
+test("Agent JSON operations are applied only to mergeable Workflow units", () => {
+  const base = makeRevision();
+  base.definition = definition("Base goal", "Base context");
+  const proposed = applyWorkflowAgentOperations(base, [
+    { op: "replace", path: "/definition/goal", value: "Agent goal" },
+    { op: "replace", path: `/graph/nodes/${base.graph.nodes[1].nodeId}/description`, value: "Agent description" },
+  ]);
+
+  assert.equal(proposed.definition.goal, "Agent goal");
+  assert.equal(proposed.graph.nodes[1].description, "Agent description");
+  assert.equal(base.definition.goal, "Base goal");
+  assert.throws(
+    () => applyWorkflowAgentOperations(base, [
+      { op: "replace", path: "/workflowId", value: "workflow-attacker" },
+    ]),
+    (error) => error.code === "builder_proposal_invalid",
+  );
 });
 
 function definition(goal, context) {

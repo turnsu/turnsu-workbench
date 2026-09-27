@@ -11,14 +11,14 @@ test("release secret scan reports only rule IDs and paths and excludes its evide
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(`${root}/release-evidence`, { recursive: true });
   await writeFile(`${root}/safe.mjs`, "export const endpoint = 'https://provider.example/v1';\n");
-  const leakedSecret = ["mongodb://user", "actual-password@127.0.0.1:27017"].join(":");
-  const ignoredSecret = ["mongodb://ignored", "secret@localhost"].join(":");
-  await writeFile(`${root}/leak.env`, `MONGODB_URI=${leakedSecret}\n`);
+  const leakedSecret = ["postgresql://user", "actual-password@127.0.0.1:5432/workbench"].join(":");
+  const ignoredSecret = ["postgresql://ignored", "secret@localhost/workbench"].join(":");
+  await writeFile(`${root}/leak.env`, `WORKBENCH_POSTGRES_URL=${leakedSecret}\n`);
   await writeFile(`${root}/release-evidence/secret-scan.json`, `${ignoredSecret}\n`);
   await writeFile(`${root}/dependency-examples.mjs`, [
     "const generatedPem = `-----BEGIN PRIVATE KEY-----\\n${key}\\n-----END PRIVATE KEY-----`;",
     "const documentedAwsId = 'AKIAIOSFODNN7EXAMPLE';",
-    "const documentedMongo = 'mongodb://username:password@host:1234';",
+    "const documentedPostgres = 'postgresql://username:password@host:5432/workbench';",
   ].join("\n"));
   await writeFile(`${root}/private-key.pem`, [
     "-----BEGIN PRIVATE KEY-----", "A".repeat(64), "-----END PRIVATE KEY-----", "",
@@ -32,7 +32,7 @@ test("release secret scan reports only rule IDs and paths and excludes its evide
   assert.equal(report.oversizedFilesSkipped, 0);
   assert.equal(report.findings, 2);
   assert.deepEqual(report.matches, [
-    { path: "leak.env", rule: "mongodb_password_uri" },
+    { path: "leak.env", rule: "postgres_password_uri" },
     { path: "private-key.pem", rule: "private_key" },
   ]);
   assert.equal(JSON.stringify(report).includes("actual-password"), false);

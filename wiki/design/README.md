@@ -1,25 +1,13 @@
-# Design Index
+# 设计索引
 
-## Target V1 UI/UX Design
+## 当前迭代
 
-- [Skill & Loop Cloud Workbench V1 design package](skill-loop-cloud-workbench-v1/README.md)
-- [UI/UX foundation](skill-loop-cloud-workbench-v1/docs/UI_UX_FOUNDATION.md)
-- [Information architecture and user flows](skill-loop-cloud-workbench-v1/docs/INFORMATION_ARCHITECTURE_AND_USER_FLOWS.md)
-- [Screen and component specification](skill-loop-cloud-workbench-v1/docs/SCREEN_AND_COMPONENT_SPECIFICATION.md)
-- [Interaction, states, accessibility, and responsive rules](skill-loop-cloud-workbench-v1/docs/INTERACTION_STATES_ACCESSIBILITY.md)
-- [Design acceptance](skill-loop-cloud-workbench-v1/docs/DESIGN_ACCEPTANCE.md)
-- [Design handoff after rejected visual directions](skill-loop-cloud-workbench-v1/HANDOFF.md)
-- [Visual directions](skill-loop-cloud-workbench-v1/visual-directions/README.md)
+- [工作台、Skill OS 与极简 LOOP 迭代方案](2026-09-28-workbench-skillos-iteration-plan.md)：当前导航、公司脚手架整合、阶段和验收。
+- [桌面框架与 WorkBuddy 内存调研](2026-09-28-desktop-framework-memory-research.md)：Tauri / Electron 候选、资源归因、macOS / Windows 实测方案；没有预先选定框架或诊断出 WorkBuddy 的根因。
+- [团队与多 Agent 协作研究](2026-09-22-team-agent-collaboration-research.md)：本机工作与云端共享的产品边界。
+- [工作流交互研究](2026-09-22-workflow-interaction-research.md)：复杂依赖编辑时保留图形画布；管理首页遵循本轮极简方案。
+- [当前界面约束](../../DESIGN.md)：桌面黄金路径与已有 Web 界面的不同验收范围。
 
-The target V1 package defines the future product experience. It does not claim the current P0
-Web has implemented those screens or interactions.
+## 既有 Web 设计证据
 
-## Current P0 Design
-
-Current active design constraints are:
-
-- [../../DESIGN.md](../../DESIGN.md)
-- [../../domains/frontend/documents/current-skill-workflow-loop-workbench.md](../../domains/frontend/documents/current-skill-workflow-loop-workbench.md)
-- [../../domains/frontend/web/code/web-prototype/INTERACTION_QA.md](../../domains/frontend/web/code/web-prototype/INTERACTION_QA.md)
-
-Old design research and prototype packets are archived in [../history/](../history/) and [../../domains/frontend/documents/history/design/](../../domains/frontend/documents/history/design/).
+[Skill & Loop Cloud Workbench V1 包](skill-loop-cloud-workbench-v1/README.md)和 [Web 当前工作台说明](../../domains/frontend/documents/current-skill-workflow-loop-workbench.md)用于理解已有实现；它们不覆盖 Master PRD v0.6 的桌面入口和本轮信息架构。旧稿保留于[历史资料](../history/)及[前端历史资料](../../domains/frontend/documents/history/)。

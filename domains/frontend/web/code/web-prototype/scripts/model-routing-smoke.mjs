@@ -5,6 +5,25 @@ import { workbenchKeys } from "../src/api/queryKeys.js";
 import { defaultModelSelection, modelPickerOptions, normalizeModelFilters } from "../src/state/models/modelCatalog.js";
 
 const requests = [];
+let selectionAttempts = 0;
+const modelSession = {
+  schemaVersion: "workbench-v1",
+  sessionId: "session-main",
+  definitionId: "main",
+  userId: "user-model-routing",
+  workspaceId: "workspace-model-routing",
+  scope: { kind: "main" },
+  title: "Main task",
+  source: { kind: "manual" },
+  taskStatus: "idle",
+  archived: false,
+  status: "active",
+  lastUsedModelProfileId: "profile-chat",
+  modelPreferenceState: "preference_only",
+  activeTurnId: null,
+  createdAt: "2026-07-10T09:00:00.000Z",
+  updatedAt: "2026-07-10T09:00:00.000Z",
+};
 function response(data, { status = 200, headers = {} } = {}) {
   return new Response(JSON.stringify({ data }), {
     status,
@@ -15,14 +34,69 @@ function response(data, { status = 200, headers = {} } = {}) {
 const fetchImpl = async (url, options = {}) => {
   requests.push({ url: String(url), options });
   if (String(url).endsWith("/workspace")) {
-    return response({ session: { csrfToken: "csrf-model-routing" } });
+    return new Response(JSON.stringify({
+      schemaVersion: "workbench-api-v1",
+      data: {
+        workspace: {
+          workspaceId: "workspace-model-routing",
+          name: "Model routing workspace",
+          capabilities: {
+            builderProposal: false,
+            resources: false,
+            maxParallelism: 1,
+          },
+          createdAt: "2026-07-10T09:00:00.000Z",
+          updatedAt: "2026-07-10T09:00:00.000Z",
+        },
+        session: {
+          csrfToken: "c".repeat(32),
+          expiresAt: "2026-07-10T10:00:00.000Z",
+          userId: "user-model-routing",
+          workspaceId: "workspace-model-routing",
+        },
+      },
+      requestId: "request-model-routing",
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json", "cache-control": "no-store" },
+    });
   }
-  if (String(url).includes("/model-profiles")) return response([]);
+  if (String(url).includes("/model-profiles")) {
+    return new Response(JSON.stringify({
+      schemaVersion: "workbench-api-v1",
+      data: [],
+      page: { nextCursor: null, hasMore: false },
+      requestId: "request-model-list",
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }
   if (String(url).endsWith("/agent-sessions")) {
     return response({ sessionId: "session-main", activeTurnId: null }, { status: 201 });
   }
   if (String(url).endsWith("/agent-sessions/session-main/model")) {
-    return response({ sessionId: "session-main", lastUsedModelProfileId: "profile-chat" });
+    selectionAttempts += 1;
+    if (selectionAttempts === 1) {
+      return new Response(JSON.stringify({
+        code: "csrf_invalid",
+        message: "Refresh the browser session.",
+        details: {},
+        retryable: false,
+        requestId: "request-model-csrf",
+      }), {
+        status: 403,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({
+      schemaVersion: "workbench-api-v1",
+      data: modelSession,
+      requestId: "request-model-select",
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
   }
   if (String(url).endsWith("/agent-sessions/session-main/turns")) {
     return response({ turnId: "turn-1", status: "queued" }, { status: 202 });
@@ -35,41 +109,51 @@ const fetchImpl = async (url, options = {}) => {
 
 const api = createWorkbenchApiClient({ fetchImpl });
 await api.bootstrap();
+const catalogController = new AbortController();
 await api.listModelProfiles({
   capabilities: ["structured_output", "chat", "tool_calling"],
   context: "builder",
   selectedRevisionId: "revision-history",
-});
+  cursor: "cursor-model-2",
+  limit: 25,
+}, { signal: catalogController.signal });
 const catalogRequest = requests.at(-1);
 assert.match(catalogRequest.url, /capabilities=structured_output%2Cchat%2Ctool_calling/);
 assert.match(catalogRequest.url, /context=builder/);
 assert.match(catalogRequest.url, /selectedRevisionId=revision-history/);
+assert.match(catalogRequest.url, /cursor=cursor-model-2/);
+assert.match(catalogRequest.url, /limit=25/);
+assert.equal(catalogRequest.options.signal, catalogController.signal);
 
 await api.createAgentSession({ definitionId: "main" }, { idempotencyKey: "session-key" });
 await api.selectAgentSessionModel("session-main", { modelProfileId: "profile-chat" }, { idempotencyKey: "model-key" });
 const preferenceRequest = requests.at(-1);
 assert.deepEqual(JSON.parse(preferenceRequest.options.body).data, { modelProfileId: "profile-chat" });
+const preferenceRequests = requests.filter(({ url }) => url.endsWith("/agent-sessions/session-main/model"));
+assert.equal(preferenceRequests.length, 2);
+assert.equal(preferenceRequests[0].options.headers.get("Idempotency-Key"), "model-key");
+assert.equal(preferenceRequests[1].options.headers.get("Idempotency-Key"), "model-key");
 await api.createAgentTurn("session-main", {
   kind: "agent_message",
-  modelProfileRevisionId: "revision-chat-7",
+  modelProfileId: "profile-chat",
   input: { message: "Prepare a concise plan." },
 }, { idempotencyKey: "turn-key" });
 const chatRequest = requests.at(-1);
 assert.deepEqual(JSON.parse(chatRequest.options.body).data, {
   kind: "agent_message",
-  modelProfileRevisionId: "revision-chat-7",
+  modelProfileId: "profile-chat",
   input: { message: "Prepare a concise plan." },
 });
 
 await api.createAgentTurn("session-main", {
   kind: "model_task",
-  modelProfileRevisionId: "revision-image-3",
+  modelProfileId: "profile-image",
   input: { task: "image_generation", prompt: "A calm blue workspace", aspectRatio: "16:9", outputFormat: "png" },
 }, { idempotencyKey: "image-key" });
 const imageRequest = requests.at(-1);
 assert.deepEqual(JSON.parse(imageRequest.options.body).data, {
   kind: "model_task",
-  modelProfileRevisionId: "revision-image-3",
+  modelProfileId: "profile-image",
   input: { task: "image_generation", prompt: "A calm blue workspace", aspectRatio: "16:9", outputFormat: "png" },
 });
 
@@ -92,6 +176,11 @@ assert.notDeepEqual(
   workbenchKeys.modelProfiles(filters),
   workbenchKeys.modelProfiles({ ...filters, selectedRevisionId: "revision-other" }),
   "historical selections must not share catalog cache entries",
+);
+assert.notDeepEqual(
+  workbenchKeys.modelProfiles(filters),
+  workbenchKeys.modelProfiles({ ...filters, profileId: "profile-target" }),
+  "exact recovery targets must not share catalog cache entries",
 );
 
 const profiles = [{

@@ -67,6 +67,21 @@ test("Skill package inspection rejects unsafe paths, binary content, missing ins
   assert.ok(invalidFrontmatter.diagnostics.some((entry) => entry.code === "skill_frontmatter_invalid"));
 });
 
+test("standard license and allowed-tools metadata import without granting Product tools", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "turnsu-standard-skill-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const source = "---\nname: standard-notes\ndescription: Summarize provided notes.\nlicense: MIT\nallowed-tools: Read Bash(git:*)\nmetadata:\n  author: Example\n---\nSummarize only supplied notes.\n";
+  await writeFile(join(root, "SKILL.md"), source);
+  const product = inspectSkillPackage({ files: [{ path: "SKILL.md", content: source }] });
+  assert.equal(product.status, "passed", JSON.stringify(product.diagnostics));
+  assert.equal(loadPiSkillsFromDir({ dir: root, source: "path" }).skills.length, 1);
+  assert.equal(product.manifest.tools, undefined, "author metadata is not a Product tool grant");
+  assert.equal(product.manifest.runtime, undefined, "author metadata cannot authorize script execution");
+  const malformed = inspectSkillPackage({ files: [{ path: "SKILL.md", content: source.replace("allowed-tools: Read Bash(git:*)", "allowed-tools: [Read, Bash]") }] });
+  assert.equal(malformed.status, "failed");
+  assert.ok(malformed.diagnostics.some((entry) => entry.code === "skill_frontmatter_invalid"));
+});
+
 test("Skill package inspection blocks credentials and dangerous scripts while preserving a reviewable executable inventory", () => {
   const result = inspectSkillPackage({
     files: [
@@ -146,5 +161,115 @@ test("valid executable inspection retains the validated runtime manifest", () =>
     entrypoint: "scripts/main.py",
     protocol: { stdin: "json", stdout: "json" },
     permissions: { network: false, connections: [], externalActions: false, filesystem: "scratch-only" },
+    limits: { timeoutSeconds: 30, memoryMiB: 128 },
   });
+});
+
+test("real Lark metadata and exact product Tool actions produce a bounded manifest preview", () => {
+  const result = inspectSkillPackage({
+    files: [{
+      path: "SKILL.md",
+      content: `---
+name: lark-calendar
+version: 1.0.0
+description: Read calendar events and create an event after confirmation.
+metadata:
+  requires:
+    bins: ["lark-cli"]
+  cliHelp: "lark-cli calendar --help"
+inputs:
+  - name: date
+    type: string
+    description: Calendar date
+outputs:
+  - name: agenda
+    type: markdown
+tools:
+  - action: lark.calendar.agenda
+  - action: lark.calendar.create
+dependencies:
+  - type: cli
+    name: lark-cli
+---
+`,
+    }],
+  });
+  assert.equal(result.status, "passed");
+  assert.equal(result.manifest.version, "1.0.0");
+  assert.deepEqual(result.manifest.dependencies, [{ type: "cli", name: "lark-cli" }]);
+  assert.deepEqual(result.manifest.tools, [
+    { action: "lark.calendar.agenda", effect: "read", confirm: false },
+    { action: "lark.calendar.create", effect: "write", confirm: true },
+  ]);
+  assert.deepEqual(result.manifest.inputs, [{
+    name: "date",
+    type: "string",
+    required: false,
+    description: "Calendar date",
+  }]);
+});
+
+test("Skill file inputs retain accepted media types and reject unsupported formats", () => {
+  const valid = inspectSkillPackage({
+    files: [{
+      path: "SKILL.md",
+      content: `---
+name: document-reader
+description: Read a governed document.
+inputs:
+  - name: source_document
+    title: Source document
+    type: file
+    required: true
+    acceptedMediaTypes: [text/markdown, application/pdf]
+    description: The document to analyze.
+---
+`,
+    }],
+  });
+  assert.equal(valid.status, "passed");
+  assert.deepEqual(valid.manifest.inputs[0].acceptedMediaTypes, [
+    "text/markdown",
+    "application/pdf",
+  ]);
+
+  const invalid = inspectSkillPackage({
+    files: [{
+      path: "SKILL.md",
+      content: `---
+name: binary-reader
+description: Invalid unsupported material contract.
+inputs:
+  - name: binary
+    type: file
+    required: true
+    acceptedMediaTypes: [application/octet-stream]
+---
+`,
+    }],
+  });
+  assert.equal(invalid.status, "failed");
+  assert.ok(invalid.diagnostics.some((entry) => entry.code === "skill_interface_invalid"));
+});
+
+test("wildcard command patterns and cross-Skill Lark actions are never an authorization boundary", () => {
+  for (const tools of [
+    '- binary: lark-cli\n    args: ["calendar", "*"]',
+    "- action: lark.im.send_message",
+  ]) {
+    const result = inspectSkillPackage({
+      files: [{
+        path: "SKILL.md",
+        content: `---
+name: lark-calendar
+description: Invalid broad tool declaration.
+tools:
+  ${tools}
+---
+`,
+      }],
+    });
+    assert.equal(result.status, "failed");
+    assert.ok(result.diagnostics.some((entry) => entry.code === "skill_tool_declaration_invalid"));
+  }
 });

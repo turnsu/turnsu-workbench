@@ -2,7 +2,7 @@ import { ModelProviderError } from "./openai-compatible-model-executor.mjs";
 
 const DEFAULT_TIMEOUT_MS = 90_000;
 const DEFAULT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
-const CHAT_CAPABILITIES = Object.freeze(["chat", "tool_calling", "structured_output"]);
+const CHAT_CAPABILITIES = Object.freeze(["chat", "tool_calling", "structured_output", "image_input"]);
 const BLOCKED_FINISH_REASONS = new Set([
   "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "IMAGE_SAFETY",
 ]);
@@ -138,13 +138,14 @@ function providerRequest(input) {
 }
 
 function normalizeTool(tool) {
-  if (!isPlainObject(tool) || typeof tool.name !== "string" || tool.name.length < 1 || !isPlainObject(tool.parameters)) {
+  const parameters = tool?.inputSchema ?? tool?.parameters;
+  if (!isPlainObject(tool) || typeof tool.name !== "string" || tool.name.length < 1 || !isPlainObject(parameters)) {
     throw providerError("provider_request_invalid");
   }
   return {
     name: tool.name,
     description: typeof tool.description === "string" ? tool.description.slice(0, 4000) : "",
-    parameters: structuredClone(tool.parameters),
+    parameters: structuredClone(parameters),
   };
 }
 
@@ -152,7 +153,9 @@ function normalizeMessage(message, toolNames) {
   if (!isPlainObject(message) || typeof message.role !== "string") throw providerError("provider_request_invalid");
   if (message.role === "user") return { role: "user", parts: textParts(message.content) };
   if (message.role === "assistant") {
-    const blocks = Array.isArray(message.content) ? message.content : [];
+    const blocks = typeof message.content === "string"
+      ? [{ type: "text", text: message.content }]
+      : Array.isArray(message.content) ? message.content : [];
     return {
       role: "model",
       parts: blocks.map((item) => {
@@ -163,6 +166,9 @@ function normalizeMessage(message, toolNames) {
           toolNames.set(item.id, item.name);
           return {
             functionCall: { id: item.id.slice(0, 256), name: item.name, args: structuredClone(item.arguments) },
+            ...(validThoughtSignature(item.thoughtSignature)
+              ? { thoughtSignature: item.thoughtSignature }
+              : {}),
           };
         }
         throw providerError("provider_request_invalid");
@@ -182,8 +188,36 @@ function normalizeMessage(message, toolNames) {
 }
 
 function textParts(content) {
-  const text = textContent(content);
-  return text ? [{ text }] : [];
+  if (typeof content === "string") return content ? [{ text: content }] : [];
+  if (!Array.isArray(content) || content.length === 0) throw providerError("provider_request_invalid");
+  return content.map((item) => {
+    if (item?.type === "text" && typeof item.text === "string" && item.text.length > 0) {
+      return { text: item.text };
+    }
+    if (item?.type === "image") {
+      const image = validImagePart(item);
+      return {
+        inlineData: {
+          mimeType: image.mediaType,
+          data: image.dataBase64,
+        },
+      };
+    }
+    throw providerError("provider_request_invalid");
+  });
+}
+
+function validImagePart(item) {
+  if (
+    !["image/png", "image/jpeg", "image/webp"].includes(item?.mediaType) ||
+    typeof item?.dataBase64 !== "string" ||
+    item.dataBase64.length < 1 ||
+    item.dataBase64.length > 22_369_624 ||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(item.dataBase64)
+  ) {
+    throw providerError("provider_request_invalid");
+  }
+  return item;
 }
 
 function textContent(content) {
@@ -218,9 +252,19 @@ function normalizeProviderResponse(payload, allowedTools, { structuredOutput }) 
         id: typeof call.id === "string" ? call.id.slice(0, 256) : `gemini-tool-${toolIndex}`,
         name: call.name,
         arguments: structuredClone(call.args ?? {}),
+        ...(validThoughtSignature(part.thoughtSignature)
+          ? { thoughtSignature: part.thoughtSignature }
+          : {}),
       };
       content.push(normalized);
-      toolCalls.push({ id: normalized.id, name: normalized.name, arguments: structuredClone(normalized.arguments) });
+      toolCalls.push({
+        id: normalized.id,
+        name: normalized.name,
+        arguments: structuredClone(normalized.arguments),
+        ...(normalized.thoughtSignature
+          ? { thoughtSignature: normalized.thoughtSignature }
+          : {}),
+      });
       continue;
     }
     throw providerError("provider_response_invalid");
@@ -243,6 +287,10 @@ function normalizeProviderResponse(payload, allowedTools, { structuredOutput }) 
 function parseStructuredOutput(content) {
   const source = content.filter((item) => item.type === "text").map((item) => item.text).join("\n");
   try { return JSON.parse(source); } catch { throw providerError("provider_response_invalid"); }
+}
+
+function validThoughtSignature(value) {
+  return typeof value === "string" && value.length > 0 && value.length <= 65_536;
 }
 
 async function withProviderDeadline({ signal, timeoutMs }, operation) {

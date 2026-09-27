@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 
 import {
+  isCurrentPublishedSkill,
   latestTeamReleaseIds,
+  skillAssetSummaryToView,
   skillDefinitionToView,
   workflowRevisionToCanvas,
   workflowTemplateToView,
@@ -40,7 +42,7 @@ const skill = skillDefinitionToView({
   name: "Workflow conformance",
   description: "Echo text.",
   category: "test",
-  status: "ready",
+  readiness: { status: "ready", diagnostics: [] },
   inputSchema: { type: "object", properties: { text: stringSchema }, required: ["text"] },
   outputSchema: { type: "object", properties: { echo: stringSchema } },
   risk: { level: "low", externalAction: false, summary: "No external action." },
@@ -51,6 +53,56 @@ const skill = skillDefinitionToView({
 assert.equal(skill.id, "workflow-conformance");
 assert.deepEqual(skill.inputs, ["text"]);
 assert.equal(skill.setupState, "Ready");
+
+const skillDraft = {
+  name: "Draft echo",
+  description: "Echo a draft value.",
+  category: "test",
+  inputSchema: { type: "object", properties: { text: stringSchema }, required: ["text"] },
+  outputSchema: { type: "object", properties: { echo: stringSchema } },
+  risk: { level: "low", externalAction: false, summary: "No external action." },
+  dependencies: [],
+};
+const testedSkill = skillAssetSummaryToView({
+  skill: { skillId: "skill-draft-echo", lifecycle: "tested" },
+  draft: skillDraft,
+  latestVersion: null,
+});
+assert.equal(testedSkill.title, "Draft echo");
+assert.equal(testedSkill.setupState, "Needs source");
+const testedUpdate = skillAssetSummaryToView({
+  skill: { skillId: "skill-draft-echo", lifecycle: "tested" },
+  draft: { ...skillDraft, name: "Tested update" },
+  latestVersion: { ...skillDraft, name: "Old published echo", version: "1.0.0", validation: { status: "passed", diagnostics: [] } },
+});
+assert.equal(testedUpdate.title, "Tested update");
+assert.equal(testedUpdate.version, null);
+assert.equal(testedUpdate.setupState, "Needs source");
+const publishedSkill = skillAssetSummaryToView({
+  skill: { skillId: "skill-draft-echo", lifecycle: "published" },
+  draft: skillDraft,
+  latestVersion: { ...skillDraft, version: "1.0.0", validation: { status: "passed", diagnostics: [] } },
+});
+assert.equal(publishedSkill.version, "1.0.0");
+assert.equal(publishedSkill.setupState, "Ready");
+
+for (const lifecycle of ["draft", "validating", "tested", "deprecated", "archived"]) {
+  assert.equal(isCurrentPublishedSkill({
+    canonical: {
+      skill: { lifecycle },
+      version: { skillVersionId: "historical-version", version: "1.0.0" },
+    },
+  }), false, `${lifecycle} must not expose its historical version as current published state`);
+}
+assert.equal(isCurrentPublishedSkill({
+  canonical: {
+    skill: { lifecycle: "published" },
+    version: { skillVersionId: "current-version", version: "1.0.0" },
+  },
+}), true);
+assert.equal(isCurrentPublishedSkill({
+  canonical: { skill: { lifecycle: "published" }, version: null },
+}), false, "published without the pinned version fails closed");
 
 const canvas = workflowRevisionToCanvas(revision);
 assert.equal(canvas.nodes[0].id, "node-skill");

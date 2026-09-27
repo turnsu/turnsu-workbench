@@ -2,36 +2,30 @@
   "name": "@looloomi/workbench-server",
   "version": "0.1.0",
   "private": true,
-  "description": "Local-first Product API, compiler, and runner for the Skill / Workflow / Loop workbench.",
+  "description": "PostgreSQL-authoritative Product API, compiler, and runner for the team intelligence workspace.",
   "type": "module",
   "scripts": {
-    "proof:first-slice": "../../../../.tooling/node/bin/node --no-warnings scripts/proof-first-slice.mjs",
-    "proof:v1-workspace": "../../../../.tooling/node/bin/node --env-file-if-exists=../../../../.env --no-warnings scripts/proof-v1-workspace.mjs",
     "provider:check": "../../../../.tooling/node/bin/node --env-file-if-exists=../../../../.env --no-warnings scripts/check-builder-provider.mjs",
-    "provider:smoke:chat": "../../../../.tooling/node/bin/node ../../operations/local/workbench-local.mjs smoke-chat",
-    "provider:smoke:stability": "../../../../.tooling/node/bin/node ../../operations/local/workbench-local.mjs smoke-stability",
     "ops:local": "../../../../.tooling/node/bin/node ../../operations/local/workbench-local.mjs",
-    "audit:docs": "node scripts/audit-v1-doc-links.mjs",
-    "test": "node --test tests/server.test.mjs tests/agents/*.test.mjs tests/application/*.test.mjs tests/artifacts/*.test.mjs tests/compiler/*.test.mjs tests/execution/*.test.mjs tests/http/*.test.mjs tests/loops/*.test.mjs tests/models/*.test.mjs tests/operations/*.test.mjs tests/resources/*.test.mjs tests/runner/workflow-runner.test.mjs tests/runtime/*.test.mjs tests/skills/*.test.mjs tests/storage/*.test.mjs tests/store/migrations/*.test.mjs tests/store/product-store.unit.test.mjs tests/validation/*.test.mjs",
-    "test:storage": "node --test tests/storage/*.test.mjs",
-    "test:migrations": "node --test tests/store/migrations/*.test.mjs",
-    "migrate:product-store": "node scripts/migrate-product-store.mjs",
-    "test:store:integration": "WORKBENCH_MONGO_INTEGRATION=1 MONGODB_DB=looloomi_workbench_test node --test tests/store/product-store.integration.test.mjs",
-    "test:skill-upload": "WORKBENCH_MONGO_INTEGRATION=1 MONGODB_DB=looloomi_workbench_skill_upload_test node --test tests/skills/skill-upload-service.integration.test.mjs",
-    "test:http:integration": "WORKBENCH_MONGO_INTEGRATION=1 MONGODB_DB=looloomi_workbench_test node --test tests/http/product-api.integration.test.mjs",
-    "test:connections:integration": "WORKBENCH_MONGO_INTEGRATION=1 MONGODB_DB=looloomi_workbench_connection_test node --test tests/http/connections.integration.test.mjs",
-    "test:loops:integration": "WORKBENCH_MONGO_INTEGRATION=1 MONGODB_DB=looloomi_workbench_loop_portability_test node --test tests/http/loop-portability.integration.test.mjs",
-    "test:runner:integration": "WORKBENCH_MONGO_INTEGRATION=1 MONGODB_DB=looloomi_workbench_test node --test tests/runner/workflow-runner.integration.test.mjs",
-    "test:runner:process-kill": "WORKBENCH_MONGO_INTEGRATION=1 node --test tests/runner/workflow-runner-process-kill.integration.test.mjs",
-    "test:docker:integration": "WORKBENCH_DOCKER_INTEGRATION=1 node --test tests/runtime/docker-skill-executor.integration.test.mjs",
-    "test:all": "npm test && npm run test:store:integration && npm run test:runner:integration"
+    "audit:docs": "../../../../.tooling/node/bin/node scripts/audit-v1-doc-links.mjs",
+    "test": "../../../../.tooling/node/bin/node --test tests/server.test.mjs tests/agents/*.test.mjs tests/application/*.test.mjs tests/architecture/*.test.mjs tests/artifacts/*.test.mjs tests/attachments/*.test.mjs tests/auth/*.test.mjs tests/authorization/*.test.mjs tests/compiler/*.test.mjs tests/connections/*.test.mjs tests/coordination/*.test.mjs tests/devices/*.test.mjs tests/execution/*.test.mjs tests/http/*.test.mjs tests/inbox/*.test.mjs tests/loops/*.test.mjs tests/memory/*.test.mjs tests/models/*.test.mjs tests/observability/*.test.mjs tests/operations/*.test.mjs tests/resources/*.test.mjs tests/runner/workflow-runner.test.mjs tests/runner/workflow-runner-postgres-recovery.test.mjs tests/runner/postgres-workflow-run-persistence.test.mjs tests/runtime/*.test.mjs tests/skills/*.test.mjs tests/storage/*.test.mjs tests/store/migrations/*.test.mjs tests/store/postgres-baseline-schema.test.mjs tests/store/postgres-foundation.test.mjs tests/store/postgres-operational-readiness.test.mjs tests/tools/*.test.mjs tests/validation/*.test.mjs",
+    "test:architecture": "../../../../.tooling/node/bin/node --test tests/architecture/*.test.mjs",
+    "test:storage": "../../../../.tooling/node/bin/node --test tests/storage/*.test.mjs",
+    "test:migrations": "../../../../.tooling/node/bin/node --test tests/store/migrations/*.test.mjs",
+    "migrate:product-store": "../../../../.tooling/node/bin/node scripts/migrate-product-store.mjs",
+    "test:postgres:foundation": "../../../../.tooling/node/bin/node --test tests/store/postgres-baseline-schema.test.mjs tests/store/postgres-foundation.test.mjs",
+    "test:postgres:isolated": "../../../../.tooling/node/bin/node tests/store/run-isolated-postgres.mjs",
+    "test:docker:integration": "WORKBENCH_DOCKER_INTEGRATION=1 ../../../../.tooling/node/bin/node --test tests/runtime/docker-skill-executor.integration.test.mjs",
+    "test:all": "npm test && npm run test:postgres:isolated"
   },
   "engines": {
     "node": ">=22.19.0"
   },
   "dependencies": {
     "@looloomi/workbench-contracts": "file:../workbench-contracts",
-    "mongodb": "6.16.0",
-    "yaml": "2.8.1"
+    "bcryptjs": "3.0.2",
+    "pg": "8.22.0",
+    "ws": "8.21.1",
+    "yaml": "2.9.0"
   }
 }

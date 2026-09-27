@@ -1,25 +1,7 @@
-# PRD Index
+# 需求索引
 
-## Target Product Requirements
+1. [Turnsu 工作台 Master PRD v0.6](2026-08-04-looloomi-team-intelligence-workspace-master-prd.md) 是当前产品权威。优先执行 2026-09-22 的桌面优先修订；同文档里与它冲突的早期 Web / 移动顺序只保留为历史。
+2. [Master PRD 与 Blueprint 交叉审查](2026-08-04-cross-review-master-prd-vs-blueprint.md)记录早期裁决，不构成另一份当前 PRD。
+3. [产品摘要](../../PRODUCT.md)用于快速理解工作台、Skill OS 和 Loop；遇到歧义回到 Master PRD。
 
-Read in this order:
-
-1. [Skill & Loop Cloud Workbench Master PRD](2026-07-10-skill-loop-cloud-workbench-master-prd.md)
-2. [Skill Lifecycle and Creator PRD](2026-07-10-skill-lifecycle-and-creator-prd.md)
-3. [Loop Authoring, Orchestration, and Runtime PRD](2026-07-10-loop-authoring-orchestration-runtime-prd.md)
-4. [Team Cloud Library and Governance PRD](2026-07-10-team-cloud-library-governance-prd.md)
-5. [Web Product Experience PRD](2026-07-10-web-product-experience-prd.md)
-6. [Backend and Agent Platform PRD](2026-07-10-backend-agent-platform-prd.md)
-
-These documents define the target product. They do not claim that team cloud, upload,
-creation, or publishing requirements are implemented today.
-
-## Current Implementation Truth
-
-- [../../PRODUCT.md](../../PRODUCT.md)
-- [../architecture/CURRENT_SYSTEM_ARCHITECTURE.md](../architecture/CURRENT_SYSTEM_ARCHITECTURE.md)
-- [../../DESIGN.md](../../DESIGN.md) for the current P0 UI implementation
-- [../../domains/frontend/documents/current-skill-workflow-loop-workbench.md](../../domains/frontend/documents/current-skill-workflow-loop-workbench.md)
-
-Old PRDs remain archived in [../history/prd/](../history/prd/) and
-[../../domains/frontend/documents/history/prd/](../../domains/frontend/documents/history/prd/).
+当前实现与验收差距看[架构现状](../architecture/CURRENT_SYSTEM_ARCHITECTURE.md)，本轮实施看[工作台迭代方案](../design/2026-09-28-workbench-skillos-iteration-plan.md)。旧 Skill / Loop PRD 是不冲突部分的实现背景，归档资料见[历史需求](../history/prd/)。

@@ -168,6 +168,39 @@ const reverted = editorReducer(changed, {
 });
 assert.equal(reverted.dirty, false, "returning to the saved content must clear dirty state");
 
+// Undo is one complete document snapshot, so dependencies and run inputs recover together.
+const destructiveDraft = structuredClone(changed.draft);
+destructiveDraft.graph.nodes.shift();
+destructiveDraft.graph.edges = [];
+destructiveDraft.inputForm.fields = [];
+const deleted = editorReducer(changed, { type: EDITOR_ACTIONS.REPLACE_DRAFT, draft: destructiveDraft });
+const undoDelete = editorReducer(deleted, { type: EDITOR_ACTIONS.UNDO });
+assert.deepEqual(undoDelete.draft, changed.draft);
+assert.deepEqual(editorReducer(undoDelete, { type: EDITOR_ACTIONS.REDO }).draft, destructiveDraft);
+const undoTitle = editorReducer(undoDelete, { type: EDITOR_ACTIONS.UNDO });
+assert.deepEqual(undoTitle.draft, initial.draft);
+assert.equal(undoTitle.dirty, false, "undo to the saved document clears unsaved state");
+const alternateDraft = structuredClone(undoDelete.draft);
+alternateDraft.graph.nodes[0].position = { x: 123, y: 456 };
+const alternate = editorReducer(undoDelete, { type: EDITOR_ACTIONS.REPLACE_DRAFT, draft: alternateDraft });
+assert.equal(alternate.future.length, 0, "a new edit after undo invalidates redo");
+assert.deepEqual(editorReducer(alternate, { type: EDITOR_ACTIONS.UNDO }).draft, changed.draft);
+const undoSaved = editorReducer(saved, { type: EDITOR_ACTIONS.UNDO });
+assert.equal(undoSaved.baseRevision.revisionId, savedRevision.revisionId);
+assert.equal(undoSaved.serverEtag, saved.serverEtag, "undo never rolls back optimistic concurrency authority");
+assert.equal(undoSaved.dirty, true, "undo across a save creates a new local edit");
+assert.equal(editorReducer(undoSaved, { type: EDITOR_ACTIONS.REDO }).dirty, false);
+assert.equal(editorReducer(conflict, { type: EDITOR_ACTIONS.UNDO }), conflict, "undo cannot erase an unresolved server conflict");
+const saving = editorReducer(changed, { type: EDITOR_ACTIONS.SAVE_STARTED });
+assert.equal(editorReducer(saving, { type: EDITOR_ACTIONS.UNDO }), saving);
+assert.equal(editorReducer(changed, { type: EDITOR_ACTIONS.REPLACE_DRAFT, draft: changed.draft }), changed, "no-op edits do not consume history");
+assert.equal(editorReducer(saving, { type: EDITOR_ACTIONS.SYNC_REVISION, revision: savedRevision, etag: '"workflow-1:4"' }), saving, "a save refetch cannot erase pending history before mutation completion");
+assert.equal(editorReducer(saved, { type: EDITOR_ACTIONS.SYNC_REVISION, revision, etag: '"workflow-1:3"' }), saved, "stale query data cannot roll the editor back after saving");
+assert.equal(editorReducer(changed, { type: EDITOR_ACTIONS.SYNC_REVISION, revision: savedRevision, etag: '"workflow-1:4"' }), changed, "a remote revision cannot replace unsaved local work");
+const refreshed = editorReducer(saved, { type: EDITOR_ACTIONS.SYNC_REVISION, revision: savedRevision, etag: '"workflow-1:4-compiled"' });
+assert.deepEqual(refreshed.past, saved.past, "refreshing current authority preserves undo");
+assert.equal(refreshed.serverEtag, '"workflow-1:4-compiled"');
+
 const payload = createEditorDraftPayload({
   ...changed,
   skills: [{ id: "must-not-persist" }],

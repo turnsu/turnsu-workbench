@@ -18,6 +18,9 @@ import {
   WORKFLOW_CONFORMANCE_SKILL_ID,
 } from "../../../../../agent/code/agent-runtime/extensions/workflow-conformance/binding.mjs";
 import {
+  MEETING_ACTION_EXTRACTOR_EXECUTION_REF,
+} from "../../../../../agent/code/agent-runtime/extensions/meeting-action-extractor/binding.mjs";
+import {
   createPiBackedAgentRuntime,
   createPiKernelAdapter,
 } from "../../../../../agent/code/agent-runtime/kernels/pi/pi-kernel-adapter.mjs";
@@ -30,6 +33,7 @@ import {
   AgentRuntimePortError,
   assertAgentRuntimePort,
   createInProcessAgentAdapter,
+  createLegacyAgentRuntimeBundle,
 } from "../../src/runtime/index.mjs";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
@@ -87,7 +91,7 @@ test("in-process workflow bridge uses real PI discovery and Core authority", asy
   const core = createAgentRuntimeCore({
     router: {},
     gateEngine: createGateEngine({ now: () => "2026-07-10T00:00:00.000Z" }),
-    piKernel,
+    runtimeKernel: piKernel,
     finalOutput: {
       buildAgentFinalReadModelV1(args) {
         authoritativeFinal = buildAgentFinalReadModelV1(args);
@@ -106,7 +110,7 @@ test("in-process workflow bridge uses real PI discovery and Core authority", asy
   );
   const adapter = createInProcessAgentAdapter({
     agentRuntimeCore: core,
-    piKernel,
+    runtimeKernel: piKernel,
     executorRegistry,
     defaultTimeoutMs: 5000,
     maxTimeoutMs: 5000,
@@ -277,7 +281,7 @@ test("in-process workflow bridge delegates proposal generation and maps model fa
         return { summary: "Update the goal.", operations: [], diagnostics: [], permissionImpact: [] };
       },
     },
-    piKernel: { ensure() {}, status() { return { registeredTools: [] }; } },
+    runtimeKernel: { ensure() {}, status() { return { registeredTools: [] }; } },
     executorRegistry: {
       resolve() {}, acceptsInput() {}, readKernelOutput() {},
     },
@@ -315,6 +319,64 @@ test("in-process workflow bridge delegates proposal generation and maps model fa
   }
 });
 
+test("production deterministic Meeting and Uploaded Skills use first-party plugins without starting a Pi extension", async (t) => {
+  const isolatedRuntimeRoot = mkdtempSync(join(tmpdir(), "looloomi-first-party-business-"));
+  t.after(() => rmSync(isolatedRuntimeRoot, { recursive: true, force: true }));
+  const uploadedCalls = [];
+  const bundle = createLegacyAgentRuntimeBundle({
+    env: {
+      ...process.env,
+      WORKBENCH_TEST_MODE: "1",
+      WORKBENCH_TEST_BUSINESS_SKILL: "1",
+      WECHAT_AGENT_TEST_MODE: "1",
+      WECHAT_AGENT_RUNTIME_ROOT: isolatedRuntimeRoot,
+    },
+    uploadedSkillRuntime: {
+      async probeExecution({ workspaceId }) {
+        return { ready: workspaceId === "workspace-first-party" };
+      },
+      async executePublished(request) {
+        uploadedCalls.push(request);
+        return { summary: request.input.transcript };
+      },
+    },
+  });
+  t.after(() => bundle.dispose());
+
+  assert.deepEqual(await bundle.agentRuntime.probeSkill(MEETING_ACTION_EXTRACTOR_EXECUTION_REF), {
+    status: "ready",
+    ready: true,
+    code: "first_party_meeting_ready",
+  });
+  assert.deepEqual(await bundle.agentRuntime.invokeSkillNode({
+    invocationId: "first-party-meeting-invocation",
+    executionRef: MEETING_ACTION_EXTRACTOR_EXECUTION_REF,
+    input: { transcript: "Mia will send the draft. TODO: Leo should confirm the launch owner." },
+  }), {
+    actionItems: [
+      { text: "Mia will send the draft." },
+      { text: "TODO: Leo should confirm the launch owner." },
+    ],
+    summary: "2 follow-up actions found.",
+  });
+  const uploadedRef = {
+    capabilityId: `uploaded-${"b".repeat(48)}`,
+    taskIntent: "execute",
+    adapterVersion: "1",
+    executionMode: "deterministic",
+  };
+  assert.equal((await bundle.agentRuntime.probeSkill(uploadedRef, { workspaceId: "workspace-first-party" })).ready, true);
+  assert.deepEqual(await bundle.agentRuntime.invokeSkillNode({
+    invocationId: "first-party-uploaded-invocation",
+    workspaceId: "workspace-first-party",
+    executionRef: uploadedRef,
+    input: { transcript: "Published package result" },
+  }), { summary: "Published package result" });
+  assert.equal(uploadedCalls.length, 1);
+  assert.equal(existsSync(join(isolatedRuntimeRoot, "agent", "pi-agent-home")), false,
+    "the Product skill path never initialized Pi or loaded an extension");
+});
+
 test("uploaded Skill bridge remains workspace-scoped and executes through the generic PI tool", async () => {
   const executionRef = {
     capabilityId: `uploaded-${"a".repeat(48)}`,
@@ -333,7 +395,7 @@ test("uploaded Skill bridge remains workspace-scoped and executes through the ge
       buildFinalReadModel() {},
       generateBuilderProposal() {},
     },
-    piKernel: {
+    runtimeKernel: {
       async ensure() {},
       status() { return { registeredTools: ["workflow.uploaded_skill.execute"] }; },
     },

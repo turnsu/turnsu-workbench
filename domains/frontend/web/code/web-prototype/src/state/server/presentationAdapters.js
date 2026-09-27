@@ -1,5 +1,10 @@
 const titleCase = (value) => value ? `${value[0].toUpperCase()}${value.slice(1)}` : "";
 
+export function isCurrentPublishedSkill(skill) {
+  return skill?.canonical?.skill?.lifecycle === "published"
+    && Boolean(skill?.canonical?.version);
+}
+
 export function latestTeamReleaseIds(releases = []) {
   const latestByAsset = new Map();
   for (const release of releases) {
@@ -79,7 +84,7 @@ function revisionDetails(revision) {
 }
 
 export function skillDefinitionToView(skill) {
-  const execution = skill.execution || skill.executionRef || {};
+  const execution = skill.execution || {};
   return {
     id: skill.skillId,
     version: skill.version,
@@ -87,7 +92,7 @@ export function skillDefinitionToView(skill) {
     source: "Installed",
     title: skill.name,
     description: skill.description,
-    setupState: readiness(skill.status),
+    setupState: readiness(skill.readiness?.status),
     risk: titleCase(skill.risk?.level || "low"),
     inputs: schemaFields(skill.inputSchema),
     outputs: schemaFields(skill.outputSchema),
@@ -109,16 +114,18 @@ export function skillDefinitionToView(skill) {
 export function skillAssetSummaryToView(summary) {
   const skill = summary?.skill;
   const sourceDraft = summary?.draft;
-  const draft = skill?.lifecycle === "draft" ? sourceDraft : null;
+  const draft = ["draft", "validating", "tested"].includes(skill?.lifecycle) ? sourceDraft : null;
   const version = summary?.latestVersion;
-  const definition = version || draft;
-  const execution = definition?.execution || definition?.executionRef || {};
+  // A current personal branch is the asset being edited/tested even when an
+  // older immutable published version remains available for existing pins.
+  const definition = draft || version;
+  const execution = definition?.execution || {};
   if (!skill || !definition) return null;
-  const retired = skill.lifecycle === "deprecated";
-  const ready = Boolean(version && skill.lifecycle === "ready");
+  const retired = ["deprecated", "archived"].includes(skill.lifecycle);
+  const ready = Boolean(version && skill.lifecycle === "published");
   return {
     id: skill.skillId,
-    version: version?.version || null,
+    version: draft ? null : (version?.version || null),
     kind: "SkillAsset",
     source: "Workspace",
     title: definition.name,
@@ -133,11 +140,11 @@ export function skillAssetSummaryToView(summary) {
     scenarios: [definition.category].filter(Boolean),
     actionBoundary: definition.risk?.externalAction ? definition.risk.summary : "No external action",
     externalAction: definition.risk?.externalAction ? definition.risk.summary : "No external action",
-    evidence: version?.validation?.status === "passed"
+    evidence: !draft && version?.validation?.status === "passed"
       ? "This published version passed its readiness check."
       : "Finish preparing this Skill before using it in a workflow.",
     usageCount: 0,
-    readinessDiagnostics: version?.validation?.diagnostics || [],
+    readinessDiagnostics: draft ? [] : (version?.validation?.diagnostics || []),
     executionMode: execution.executionMode || "deterministic",
     requiredModelCapability: execution.requiredModelCapability || null,
     canAddToWorkflow: ready,
@@ -160,7 +167,6 @@ export function publishedSkillAssetToDefinition(summary) {
     name: version.name,
     description: version.description,
     category: version.category,
-    status: "ready",
     inputSchema: structuredClone(version.inputSchema),
     outputSchema: structuredClone(version.outputSchema),
     risk: structuredClone(version.risk),
@@ -226,6 +232,7 @@ export function runToView(run, readModel = null) {
     reviewPacket: readModel?.reviewPacket || null,
     reviewDecisions: readModel?.reviewDecisions || run.reviewDecisions || [],
     failure: readModel?.failure || null,
+    recoveryActions: readModel?.recoveryActions || [],
     canonical: run,
     readModel,
   };

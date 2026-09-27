@@ -210,6 +210,12 @@ test("portable Loop import never silently substitutes Skill, Material, or Connec
     ["Connection capability", async () => ({ ...fixture.connection, capabilityKey: "different-capability" }), "connection_capability_mismatch"],
     ["Connection status", async () => ({ ...fixture.connection, status: "disabled" }), "connection_not_valid"],
     ["Connection validation", async () => ({ ...fixture.connection, validation: { status: "invalid" } }), "connection_not_valid"],
+    ["Connection credential", async () => ({ ...fixture.connection, credentialState: "unbound" }), "connection_not_valid"],
+    ["Connection backend", async () => ({ ...fixture.connection, driverBackend: "test" }), "connection_not_valid"],
+    ["Connection expiry", async () => ({
+      ...fixture.connection,
+      validation: { status: "valid", expiresAt: "2020-01-01T00:00:00.000Z" },
+    }), "connection_not_valid"],
   ]) {
     await t.test(label, async () => {
       const report = await inspect({ resolveConnection: resolver });
@@ -396,6 +402,8 @@ function projectorFixture() {
     connectionId: "connection-local-1",
     workspaceId: workflow.workspaceId,
     capabilityKey: "evidence-catalog-read",
+    credentialState: "bound",
+    driverBackend: "production",
     status: "connected",
     validation: { status: "valid" },
   };

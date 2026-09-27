@@ -58,11 +58,17 @@ elif mode == "isolation":
     except OSError:
         egress_denied = True
 
+    mount_sources = ""
+    for mount_file in ("/proc/self/mountinfo", "/proc/mounts"):
+        with open(mount_file, "r", encoding="utf-8") as handle:
+            mount_sources += handle.read()
+
     result = {
-        "package_write_denied": write_denied("/skill/host-write"),
+        "package_write_denied": write_denied("/workspace/skill/host-write"),
         "root_write_denied": write_denied("/root/root-write"),
         "egress_denied": egress_denied,
         "non_root": os.getuid() != 0,
+        "host_bind_source_hidden": request["host_path_token"] not in mount_sources,
     }
 else:
     result = {"ok": True, "echo": request}
@@ -101,6 +107,8 @@ test("real Docker executor enforces uploaded Skill isolation and cleanup", {
   t.after(async () => {
     for (const name of containerNames) {
       await executeFile("docker", ["rm", "--force", name], { timeout: 5_000 }).catch(() => {});
+      await executeFile("docker", ["rm", "--force", `${name}-staging`], { timeout: 5_000 }).catch(() => {});
+      await executeFile("docker", ["volume", "rm", `${name}-input`], { timeout: 5_000 }).catch(() => {});
     }
     await rm(root, { recursive: true, force: true });
   });
@@ -148,11 +156,15 @@ test("real Docker executor enforces uploaded Skill isolation and cleanup", {
     ok: true,
     echo: { mode: "happy", value: 7 },
   });
-  assert.deepEqual(await executor.execute({ ...baseRequest, input: { mode: "isolation" } }), {
+  assert.deepEqual(await executor.execute({
+    ...baseRequest,
+    input: { mode: "isolation", host_path_token: executionRoot.split("/").at(-1) },
+  }), {
     package_write_denied: true,
     root_write_denied: true,
     egress_denied: true,
     non_root: true,
+    host_bind_source_hidden: true,
   });
 
   await assert.rejects(
@@ -174,6 +186,10 @@ test("real Docker executor enforces uploaded Skill isolation and cleanup", {
     "ps", "--all", "--filter", "name=looloomi-skill-docker-integration", "--format", "{{.Names}}",
   ], { timeout: 5_000 });
   assert.equal(remaining.trim(), "");
+  const { stdout: remainingVolumes } = await executeFile("docker", [
+    "volume", "ls", "--filter", "name=looloomi-skill-docker-integration", "--format", "{{.Name}}",
+  ], { timeout: 5_000 });
+  assert.equal(remainingVolumes.trim(), "");
 });
 
 function isCode(code) {
