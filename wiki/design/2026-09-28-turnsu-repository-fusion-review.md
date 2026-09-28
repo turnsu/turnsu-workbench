@@ -10,7 +10,9 @@
 | [`assets`](https://github.com/turnsu/assets/tree/14e01d547d01fc7cacfd0e9e27af0ff2a491371e/logo) | 品牌 `turnsu-lockup.svg` / `turnsu-symbol.svg` 与工作台 Web 品牌文件逐字一致，桌面构建已从 Web 复制这些素材 | 维持现有唯一品牌文件来源，不再复制一份到桌面；需要更新品牌时核对公司素材版本 |
 | [`linkcode`](https://github.com/turnsu/linkcode/tree/22c337f197665e1c53cc717b88859a45cfd8a43d) | 桌面会话与 Agent 生命周期参考；上游 [`LICENSE`](https://github.com/turnsu/linkcode/blob/22c337f197665e1c53cc717b88859a45cfd8a43d/LICENSE) 是 BUSL 1.1，包含竞争性产品限制；其加载态针对连接 Host，而非工作台本地草稿 | 只把「本机会话身份稳定、冷会话可继续、加载阶段有明确含义」作为设计参考；不复制主体代码或 UI 实现 |
 | [`llm-gateway`](https://github.com/turnsu/llm-gateway/tree/9051eebc7be08f63311b44193234b83f71b89acb) | React 管理端围绕 New API 的认证、渠道和计费；根 LICENSE 是 MIT，但检查到的加载组件仍带上游 AGPL 头 | 可参考已有视觉语言，但不把网关管理页或带 AGPL 头文件挪进工作台；模型网关也不成为本机启动依赖 |
-| `new-api`、`owl`、`ShotSeek`、`homepage`、`doc-templates`、`turndo-website`、`book-template` 等 | 分别是模型网关后端/框架、独立 Swift 产品、站点与模板用途；本轮没有发现可替换本机会话状态所有者的模块 | 保持独立；有明确跨产品消费场景时再评估协议或设计规范，不为“融合”引入新运行时 |
+| [`ShotSeek`](https://github.com/turnsu/ShotSeek/tree/c27ea5c0be24debcdabb088e59b8a0c0129877e5) | 独立 Swift/macOS 工作区；其 [`AnalysisCore`](https://github.com/turnsu/ShotSeek/blob/c27ea5c0be24debcdabb088e59b8a0c0129877e5/docs/analysis-core.md) 把 Core ML 图片分类与 SwiftUI 分离，并定义后台准备、推理和释放生命周期；仓库未见根 LICENSE | 可在确有图片资料检索任务时评估为**可选本机 Tool/Skill**，先核对授权、模型资源体积/内存及 Windows 等价路径；不把 ShotSeek 的登录、存储或 SwiftUI 外壳合并进工作台 |
+| [`doc-templates`](https://github.com/turnsu/doc-templates/tree/c7beaf10bb4b7e7dd331c513cec5c620e96201cd) | MIT 的 Typst 中文商务文档库，已有 Plain / MOU 模板、`docgen` 编译器及报告、需求、报价等内容示例；字体和素材另有各自许可 | 当用户选择“生成规范商务文档”时，可把固定版本模板和编译命令封装为 **Skill OS 的可选输出方法**；不将 Typst/Rust 编译器变成桌面启动依赖，也不把历史客户内容当通用模板 |
+| `new-api`、`owl`、`homepage`、`turndo-website`、`book-template`、`archive` 等 | 用途分别偏向模型网关后端/框架、站点、书籍模板和历史存档；本轮没有可直接替换本机会话所有者的证据 | 保持独立；出现明确跨产品消费场景再按协议、授权和实际运行路径评估 |
 
 当前桌面实际问题来自本仓调用链：SQLite 的 `workspace.read` 已按 `updated_at` 返回会话，但侧栏仅显示单行标题和 Agent 缩写；切换会话在草稿与历史读取期间把 `session` 清空，于是临时渲染「今天想完成什么？」；启动时也会在恢复上次选择前显示欢迎页；长对话滚动离底后没有回到最新的就近操作。以上应在桌面 UI 与本机 Host 的既有职责内修正。
 
