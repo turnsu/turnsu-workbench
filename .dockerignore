@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/host-dist
+.git
+.build
+.tooling
+runtime
+.env*
+**/*.key
+**/*.pem

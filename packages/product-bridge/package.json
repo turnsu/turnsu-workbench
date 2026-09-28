@@ -1,0 +1,10 @@
+{
+  "name": "@turnsu/agent-kernel-product-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Narrow Product ports for the Agent Harness; no Product database implementation lives in the Kernel.",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

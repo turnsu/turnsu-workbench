@@ -1,35 +1,17 @@
 .DS_Store
-
-# Swift build artifacts
-.build/
-.swiftpm/
-DerivedData/
-
-# Node dependencies and local package state
 node_modules/
-agent-runtime/node_modules/
-agent-runtime/.pi-agent/
-.npm-cache/
 dist/
-domains/frontend/web/code/web-prototype/product-design-audit-web-mobile/
-
-# Local runtime artifacts, logs, generated sessions, and auth state
+host-dist/
+.build/
+.tooling/
+.npm-cache/
 /runtime/
 *.log
-
-# Local environment and secret files
 .env
 .env.*
 !.env.example
 *.pem
 *.key
 *.p12
-
-# Editor / OS noise
 .vscode/
 .idea/
-.tooling/
-.superpowers/
-
-# Generated Electron Host bundles
-host-dist/

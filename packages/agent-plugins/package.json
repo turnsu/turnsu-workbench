@@ -1,0 +1,7 @@
+{
+  "name": "@turnsu/agent-business-plugins",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "First-party business plugins for the minimal Agent Kernel."
+}

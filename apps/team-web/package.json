@@ -1,0 +1,48 @@
+{
+  "name": "@turnsu/team-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node node_modules/vite/bin/vite.js --host 127.0.0.1",
+    "review": "VITE_REVIEW_MODE=visual-only node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5184",
+    "prebuild": "node scripts/prepare-product-client.mjs",
+    "build": "node node_modules/vite/bin/vite.js build && node scripts/build-native-connector.mjs && node scripts/build-identity.mjs && node scripts/bundle-budget-audit.mjs",
+    "connector:check": "node scripts/native-connector-smoke.mjs",
+    "bundle:audit": "node scripts/bundle-budget-audit.mjs",
+    "preview": "node node_modules/vite/bin/vite.js preview --host 127.0.0.1",
+    "smoke": "npm run state:smoke && npm run boundary:audit",
+    "action:smoke": "node scripts/action-smoke.mjs",
+    "api:smoke": "node scripts/api-client-smoke.mjs",
+    "editor:smoke": "node scripts/editor-state-smoke.mjs && node scripts/workflow-draft-smoke.mjs",
+    "run-stream:smoke": "node scripts/run-stream-smoke.mjs",
+    "server-model:smoke": "node scripts/server-model-smoke.mjs",
+    "routing:smoke": "node scripts/routing-smoke.mjs",
+    "model-routing:smoke": "node scripts/model-routing-smoke.mjs",
+    "work-create:smoke": "node scripts/work-create-intent-smoke.mjs",
+    "zip:smoke": "node scripts/zip-skill-package-smoke.mjs",
+    "definition:smoke": "node scripts/skill-definition-package-smoke.mjs",
+    "state:smoke": "node scripts/agent-session-polling-smoke.mjs && node scripts/agent-markdown-smoke.mjs && node scripts/api-client-smoke.mjs && node scripts/editor-state-smoke.mjs && node scripts/workflow-draft-smoke.mjs && node scripts/run-stream-smoke.mjs && node scripts/server-model-smoke.mjs && node scripts/routing-smoke.mjs && node scripts/model-routing-smoke.mjs && node scripts/work-create-intent-smoke.mjs && node scripts/zip-skill-package-smoke.mjs && node scripts/skill-definition-package-smoke.mjs && node scripts/native-skill-download-smoke.mjs",
+    "boundary:audit": "node scripts/web-boundary-audit.mjs"
+  },
+  "dependencies": {
+    "@astryxdesign/core": "^0.1.3",
+    "@astryxdesign/theme-neutral": "^0.1.3",
+    "@flowgram.ai/editor": "^1.0.12",
+    "@turnsu/product-client": "file:../../packages/product-client",
+    "@stylexjs/stylex": "^0.18.3",
+    "@tanstack/react-query": "^5.101.2",
+    "@vitejs/plugin-react": "5.0.4",
+    "fflate": "0.8.2",
+    "lucide-react": "^1.18.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
+    "vite": "6.4.2"
+  },
+  "devDependencies": {
+    "postcss": "8.5.15"
+  },
+  "description": "Turnsu team collaboration web interface"
+}

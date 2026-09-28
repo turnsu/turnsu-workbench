@@ -1,75 +1,32 @@
-# Repository Development Rules
+# Turnsu 工作台开发约束
 
-## Required architecture preflight
+先阅读 [PRODUCT.md](PRODUCT.md)、[DESIGN.md](DESIGN.md) 和 [系统架构](wiki/architecture.md)，再核对实际调用链。当前用户已确认的方向优先于旧文档。
 
-Before changing code in this repository:
+## 产品边界
 
-1. Read `wiki/prd/2026-08-04-looloomi-team-intelligence-workspace-master-prd.md` for target product authority.
-2. Read `wiki/architecture/CURRENT_SYSTEM_ARCHITECTURE.md` for implemented-system truth.
-3. Read the nearest domain or package `AGENTS.md` that applies to the files you will edit.
-4. Capture `git status --short` and treat existing changes as user-owned work.
+- 核心路径：打开本地项目 → 选择 Pi / Claude Code / Codex → 完成任务 → 查看结果与文件 → 继续会话。
+- 主导航只有工作台与 Skill OS；Loop 是 Skill OS 中可复用的方法，不作为独立的复杂控制台。
+- 不内置行业业务、行情分析、消息采集或示例业务模块。扩展以用户安装的 Skill 或原生 Agent 能力进入。
+- 桌面使用 Electron、React 和私有 Node Host。渲染器隔离、沙箱、窄 IPC、系统凭据存储必须保留。
+- 可选团队服务拥有成员权限、共享工作与发布版本；私有会话、原生上下文、密钥和本机文件不自动上传。
 
-The active product is **Turnsu 工作台** under Master PRD v0.6: local desktop work first,
-then governed team collaboration. The existing Web workbench and Product API remain working
-assets, not the desktop entry. New shared product logic must follow this dependency direction:
+## 工程边界
 
-```text
-Web / Desktop / Connector / Scheduler
-  -> Workbench Product API
-  -> CommandIntakeService
-  -> PostgreSQL Product Store / AgentTurnRunner / WorkflowRunner
-  -> AdmissionController
-  -> ExecutionBroker
-  -> WorkerTransport
-```
+- `apps/desktop` 是桌面入口；`packages/agent-host` 持有 SQLite 与原生 Agent 生命周期。
+- `apps/team-web` 与 `services/product-api` 提供可选团队管理；桌面构建不可依赖团队 Web 的资源、node_modules 或服务端实现。
+- `packages/contracts` 是共享接口定义；业务授权留在服务端，不能用 UI 缓存代替。
+- 检查 git 状态并保留已有工作。不要删除或重置用户的 runtime、会话数据库、凭据和项目文件。
+- 测试使用临时目录；PostgreSQL 测试只能使用明确以 `_test` 结尾的数据库。
+- 每个保留模块必须有当前消费者。删除失效实现、重复文档和生成物，不另建历史归档目录；历史由 Git 保存。
+- 许可证和第三方声明保存在 NOTICE / LICENSE 中，产品文档只解释本项目的行为与使用方式。
 
-Workers may call Model, Tool and Connection only through the Product Gateway. The browser must
-not call the Agent daemon, Runner, Broker or Provider directly and must not receive their secrets.
-Workflow readiness, execution order and final answers remain server-derived.
+## 资源与交互
 
-The desktop renderer talks only to its private local Host; native Agent execution, sessions and
-drafts belong locally. Product/PostgreSQL owns team membership, shared Work Items, releases and
-receipts. Do not copy private native history or credentials into team storage, infer authorization
-from cached UI state, or replay Agent execution after an uncertain cloud response. See
-`wiki/architecture/desktop-cloud-boundary.md`.
+- 会话索引按项目分页；历史按页读取。打开项目或切换会话不能恢复全部原生会话。
+- 已结束且闲置的原生连接必须可回收；正在执行、等待权限和停止中的任务不能误杀。恢复时复用持久化会话 ID。
+- 切换项目、会话和退出前保存已加载草稿；过期异步响应不能覆盖当前选择。
+- 错误必须可理解、可恢复；禁止静默更换模型、伪造成功或改变原生 Agent 全局配置。
+- UI 改动检查真实渲染与操作；后端改动检查真实入口及持久化。构建通过不能代替原生 Agent、模型服务和跨平台验收。
+- 内存结论必须注明进程范围与工作负载。分页和回收测试不等于 macOS / Windows 长时间运行的内存结论。
 
-## Working in the migrated tree
-
-- Do not restore the deleted root `Sources/` or root `agent-runtime/` trees.
-- Do not reset, clean, move, delete, or overwrite existing `runtime/**` artifacts.
-- Do not revert unrelated dirty files. Work with concurrent changes and stay inside the
-  file ownership assigned for the current work package.
-- Tests that need runtime or PostgreSQL state must use an isolated temporary runtime and an
-  explicitly named `_test` database. Mongo is not a supported test or runtime dependency.
-- Historical artifacts and browser fixtures are not proof of a current backend-backed run.
-
-## Current implementation program
-
-The Master PRD owns product scope; the 2026-09-28 workbench/Skill OS iteration plan owns the
-current order. `wiki/architecture/CURRENT_SYSTEM_ARCHITECTURE.md` owns implemented truth, verified
-consumers and gaps. Preserve the implemented Product API, Runner, Agent Runtime and Pi boundaries.
-Do not create a second Goal/Plan/State ledger for the same program.
-
-For the current desktop iteration:
-
-- Keep the main navigation focused on 工作台 and Skill OS; Loop management is a concise secondary
-  Skill OS view. Keep advanced graph editing reachable when dependencies require it.
-- Reuse the company `turnsu/frontend-scaffold` at a pinned revision by selecting components and
-  design tokens. Preserve its license and upstream attribution. Do not import its demo routes,
-  SSR server, fixture data or a second React application merely to share controls.
-- The desktop shell uses Electron after the product-directed Tauri 2 replacement (2026-09-28).
-  Keep React and the private Node Host; do not add another Tauri implementation or copy LinkCode.
-  Use sandboxed, isolated renderers, a narrow preload bridge and OS-protected local credentials.
-  Gateway selection is explicit per task; never rewrite native Agent global configuration, silently
-  fall back to another provider, or share private keys through Product storage.
-  Measure the full app/Agent process group on macOS and Windows before claiming a memory win.
-- Company reuse is scoped to frontend-scaffold, brand assets and llm-gateway protocol integration.
-  ShotSeek and doc-templates are excluded from this workbench iteration.
-- A UI pass is complete only when the real local project → native Agent → result/file → reopen path
-  remains usable. Changes to draft, permission, sharing or receipt behavior require proportional
-  SQLite/filesystem and Product authorization checks. A green build is not native GUI acceptance.
-
-M5 design files remain implementation evidence for current Web routes, not target-product
-authority. Do not use old LoopOps/Swift harnesses, deleted goals, screenshot inventories,
-visual-only fixtures, static source assertions or historical approval records as functional
-completion evidence.
+开发和验证命令见 [开发指南](wiki/development.md)。

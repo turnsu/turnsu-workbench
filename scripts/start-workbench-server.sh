@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-NODE_BIN="${WORKBENCH_NODE_BIN:-$ROOT_DIR/.tooling/node/bin/node}"
-NPM_BIN="${WORKBENCH_NPM_BIN:-$(dirname "$NODE_BIN")/npm}"
+NODE_BIN="${WORKBENCH_NODE_BIN:-$(command -v node)}"
+NPM_BIN="${WORKBENCH_NPM_BIN:-$(command -v npm)}"
 ENV_FILE="${WORKBENCH_ENV_FILE:-$ROOT_DIR/.env}"
 
 if [[ ! -x "$NODE_BIN" ]]; then
@@ -45,7 +45,7 @@ export WORKBENCH_POSTGRES_URL="$POSTGRES_URL"
 export WORKBENCH_OBJECT_STORE_ROOT="$OBJECT_STORE_ROOT"
 
 "$NODE_BIN" \
-  "$ROOT_DIR/domains/backend/code/workbench-server/scripts/migrate-product-store.mjs" \
+  "$ROOT_DIR/services/product-api/scripts/migrate-product-store.mjs" \
   --confirm-write
 echo "postgres_migrations_ready"
 
@@ -53,7 +53,7 @@ if [[ "${1:-}" == "--database-only" ]]; then
   exit 0
 fi
 
-ENTRYPOINT="${WORKBENCH_SERVER_ENTRYPOINT:-$ROOT_DIR/domains/backend/code/workbench-server/bin/workbench-server.mjs}"
+ENTRYPOINT="${WORKBENCH_SERVER_ENTRYPOINT:-$ROOT_DIR/services/product-api/bin/workbench-server.mjs}"
 if [[ "$ENTRYPOINT" != /* ]]; then
   ENTRYPOINT="$ROOT_DIR/$ENTRYPOINT"
 fi
@@ -63,7 +63,7 @@ if [[ ! -f "$ENTRYPOINT" ]]; then
 fi
 
 if [[ "${WORKBENCH_SKIP_WEB_BUILD:-0}" != "1" ]]; then
-  WEB_DIR="$ROOT_DIR/domains/frontend/web/code/web-prototype"
+  WEB_DIR="$ROOT_DIR/apps/team-web"
   if [[ ! -x "$NPM_BIN" || ! -f "$WEB_DIR/package.json" ]]; then
     echo "workbench_web_build_tooling_missing:$NPM_BIN:$WEB_DIR" >&2
     exit 1
