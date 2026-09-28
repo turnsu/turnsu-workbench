@@ -1,6 +1,7 @@
 import { tmpdir } from 'node:os';
 // Synthetic load measurement through the real private stdio entry. No provider or cloud calls.
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
@@ -30,7 +31,9 @@ try {
  const workspace = await call('workspace.read'); if (workspace.error) throw new Error(workspace.error);
  const startupMs = performance.now() - started, reads = [];
  const index = await call('workspace.read', { projectId: 'project' }); if (index.error) throw new Error(index.error);
- const rssKiB = () => process.platform === 'win32' ? null : Number(execFileSync('ps', ['-o', 'rss=', '-p', String(child.pid)], { encoding: 'utf8' }).trim());
+ const rssKiB = () => process.platform === 'win32' ? null : process.platform === 'linux'
+   ? Number(readFileSync(`/proc/${child.pid}/status`, 'utf8').match(/^VmRSS:\s+(\d+) kB$/m)?.[1])
+   : Number(execFileSync('ps', ['-o', 'rss=', '-p', String(child.pid)], { encoding: 'utf8' }).trim());
  const rssBeforeReads = rssKiB();
  for (let i = 0; i < 5; i++) { const start = performance.now(); const result = await call('session.read', { sessionId: 'session' }); if (result.error) throw new Error(result.error); reads.push({ ms: performance.now() - start, bytes: result.bytes, returnedMessages: result.result.messages.length }); }
  console.log(JSON.stringify({ fixture: 'synthetic-no-provider', sessionCount, messageCount: count, entry, startupMs, startupBytes: workspace.bytes, returnedStartupSessions: workspace.result.sessions.length, indexBytes: index.bytes, returnedIndexSessions: index.result.sessions.length, rssBeforeReadsKiB: rssBeforeReads, rssAfterReadsKiB: rssKiB(), reads }, null, 2));
