@@ -475,6 +475,13 @@ export class LocalAgentHost {
         this.project(args.projectId); if (!["codex", "pi", "claude"].includes(args.agent)) throw new Error("这个 Agent 的桌面接入尚未完成。");
         const id = randomUUID(); this.db.prepare("INSERT INTO sessions(id,project_id,native_id,title,status,error,updated_at,agent) VALUES(?,?,NULL,?,'idle',NULL,?,?)").run(id, args.projectId, "新任务", Date.now(), args.agent); this.changed(id); return this.readSession(id);
       }
+      case "session.rename": {
+        const session = this.session(args.sessionId);
+        const title = text(args.title, 80).trim().replace(/\s+/g, " ");
+        this.db.prepare("UPDATE sessions SET title=? WHERE id=?").run(title, session.id);
+        this.changed(session.id);
+        return this.readSession(session.id);
+      }
       case "references.read": {
         this.session(args.sessionId);
         const snapshot = this.references.snapshot(text(args.inputId, 128));

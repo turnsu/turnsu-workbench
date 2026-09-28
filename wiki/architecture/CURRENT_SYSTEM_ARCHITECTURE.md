@@ -33,6 +33,15 @@ macOS 开发包构建及空目录的真实 GUI 导航/目测通过。已填充�
 资源优势。[本轮方案](../design/2026-09-28-workbench-skillos-iteration-plan.md)与
 [内存调研](../design/2026-09-28-desktop-framework-memory-research.md)记录尚需验证的决策。
 
+**2026-09-28 会话与加载交互增量：**本机 Host 新增会话重命名，直接更新原 SQLite
+会话标题，保留原生会话身份、最近活动时间和草稿；桌面侧栏对当前项目会话提供名称查找、
+待回应/中断/失败状态和原处重命名。启动恢复、草稿保存及切换读取采用不同加载提示；
+读取失败可重试且不解锁未读取的输入，重复点击当前会话不触发重载。对话离底后提供
+回到底部入口，收到新内容时提示，但不强制打断阅读位置。来源和未采用的公司仓库见
+[融合核查](../design/2026-09-28-turnsu-repository-fusion-review.md)。本机 SQLite 重开、
+草稿隔离和导航失败检查已通过；macOS 开发窗口中确认启动加载、既有会话与草稿恢复、
+重命名保存并恢复原名。长历史新消息提示、Windows 窗口和多日内存仍需独立 GUI 验证。
+
 The [desktop/cloud ownership boundary](desktop-cloud-boundary.md) defines separate code, databases,
 execution responsibility and independent-development/integration checks. Native execution belongs to
 the local host; cloud collaboration remains a separately authorized Product API.

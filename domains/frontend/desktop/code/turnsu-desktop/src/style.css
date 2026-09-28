@@ -95,3 +95,30 @@
 
 .referenceSource { display:flex; align-items:center; gap:12px; margin:12px 0; font-size:13px; }
 .referenceSource select { flex:1; min-width:0; }
+
+/* Conversation navigation keeps secondary actions discoverable without widening the rail. */
+.sessionListHeading{display:flex;justify-content:space-between;margin:14px 10px 5px;color:#898d83;font-size:11px}
+.sessionListHeading span{font-variant-numeric:tabular-nums}
+.sessionSearch{display:flex;align-items:center;gap:5px;margin:9px 5px 3px;padding:4px 7px;border:1px solid #dfe1da;border-radius:7px;background:#fafaf8;color:#8d9286}
+.sessionSearch input{min-width:0;flex:1;border:0;outline:0;background:transparent;color:#262625;font-size:12px}
+.sessionSearch input:focus-visible{outline:0}
+.sessionSearch:focus-within{outline:2px solid #c86632;outline-offset:2px}
+.sessionSearch button{padding:2px;color:#7e8478}
+.sessionRow{display:flex;align-items:center;min-width:0;margin-top:3px;border-radius:7px}
+.sessionRow.current{background:#fff}
+.sessionRow .sessionButton{flex:1;min-width:0;margin-top:0;padding-right:2px}
+.sessionRow .renameTrigger{flex:none;padding:5px;margin-right:3px;color:#858b7e;opacity:.55}
+.sessionRow:hover .renameTrigger,.sessionRow:focus-within .renameTrigger{opacity:1}
+.taskAgent.attention{color:#9a6338}
+.statusDot.attention{background:#c78443;box-shadow:0 0 0 3px #f6eadc}
+.sessionRename{display:flex;gap:2px;align-items:center;margin:4px 0 4px 12px;padding:3px;border:1px solid #d8dcd2;border-radius:7px;background:#fff}
+.sessionRename input{width:100%;min-width:0;border:0;background:transparent;padding:5px 6px;font-size:12px}
+.sessionRename input:focus-visible{outline:0}
+.sessionRename:focus-within{outline:2px solid #c86632;outline-offset:2px}
+.sessionRename button{padding:4px;color:#64745a}
+.workbenchLoading{display:flex;flex:1;min-height:220px;height:100%;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:26px;text-align:center;color:#858d7d}
+.workbenchLoading strong{font-size:15px;font-weight:560;color:#384036}
+.workbenchLoading span{font-size:12px}
+.workbenchLoading button{margin-top:5px;border:1px solid #dce1d5;background:#fff;font-size:12px}
+.latestJump{z-index:1;align-self:center;position:relative;margin:-45px 0 8px;padding:7px 13px;border:1px solid #dfe4d8;border-radius:999px;background:#fcfcfb;box-shadow:0 4px 16px #2630211c;color:#4e6143;font-size:12px}
+.fileLoading{display:flex;align-items:center;gap:8px;padding:20px 7px;color:#818a78;font-size:12px}

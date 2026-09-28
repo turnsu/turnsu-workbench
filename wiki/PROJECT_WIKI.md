@@ -12,6 +12,7 @@ Turnsu 工作台以本地桌面项目为入口：打开真实目录，使用自�
 | 现在真正实现了什么、证据与缺口 | [Current System Architecture](architecture/CURRENT_SYSTEM_ARCHITECTURE.md) |
 | 下一轮工作台、Skill OS、极简 Loop 怎样迭代 | [2026-09-28 迭代方案](design/2026-09-28-workbench-skillos-iteration-plan.md) |
 | 桌面外壳和 WorkBuddy 内存如何判断 | [2026-09-28 专项调研](design/2026-09-28-desktop-framework-memory-research.md) |
+| turnsu 其他仓库能融合什么 | [组织仓库融合核查](design/2026-09-28-turnsu-repository-fusion-review.md) |
 | 本机与云端谁持有数据和执行 | [桌面 / 云端职责边界](architecture/desktop-cloud-boundary.md) |
 | 开发与验收必须遵守什么 | [仓库开发约束](../AGENTS.md)；[界面约束](../DESIGN.md) |
 

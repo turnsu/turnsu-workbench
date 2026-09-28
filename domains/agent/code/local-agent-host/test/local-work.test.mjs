@@ -54,6 +54,22 @@ test("a local project and draft survive closing without any cloud or provider", 
   assert.equal(f.sends, 0);
 });
 
+test("renaming a conversation persists without changing its native session or draft", async (t) => {
+  const f = await fixture(t);
+  const before = (await f.host.command("session.read", { sessionId: f.session.id })).updated_at;
+  await f.host.command("draft.save", { projectId: f.project.id, sessionId: f.session.id, text: "尚未发送的内容" });
+  await assert.rejects(f.host.command("session.rename", { sessionId: f.session.id, title: "   " }), /内容为空/);
+  await assert.rejects(f.host.command("session.rename", { sessionId: f.session.id, title: "a".repeat(81) }), /长度限制/);
+  await f.host.command("session.rename", { sessionId: f.session.id, title: "  周报\n整理  " });
+  await f.reopen();
+  const renamed = await f.host.command("session.read", { sessionId: f.session.id });
+  assert.equal(renamed.title, "周报 整理");
+  assert.equal(renamed.updated_at, before);
+  assert.equal((await f.host.command("workspace.read")).sessions.find(s => s.id === f.session.id).title, "周报 整理");
+  assert.equal((await f.host.command("draft.read", { projectId: f.project.id, sessionId: f.session.id })).text, "尚未发送的内容");
+  assert.equal(f.sends, 0);
+});
+
 test("retrying a submitted prompt never starts a second native turn, including after restart", async (t) => {
   const f = await fixture(t);
   const args = { sessionId: f.session.id, inputId: "input-1", text: "生成结果" };

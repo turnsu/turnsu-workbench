@@ -10,7 +10,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { FolderOpen, Plus, ArrowUp, Square, Files, X, ChevronRight, ChevronLeft, FileText, Folder, RotateCcw, LoaderCircle, Check, ShieldCheck, MessageSquare, BookOpen, Laptop } from "lucide-react";
+import { FolderOpen, Plus, ArrowUp, ArrowDown, Square, Files, X, ChevronRight, ChevronLeft, FileText, Folder, RotateCcw, LoaderCircle, Check, ShieldCheck, MessageSquare, BookOpen, Laptop, Pencil, Search } from "lucide-react";
 import "./style.css";
 import "./scaffold.css";
 import "./skill-os.css";
@@ -22,6 +22,8 @@ const invoke = (...args) => window.__TAURI__.core.invoke(...args);
 const command = (method, args = {}) => invoke("local_command", { method, args });
 const labels = { idle: "可以继续", starting: "正在连接 Agent", running: "正在处理", waiting: "需要你的回应", stopping: "正在停止", interrupted: "可以恢复", failed: "需要处理" };
 const active = (status) => ["starting", "running", "waiting", "stopping"].includes(status);
+const agentName = (agent) => agent === "pi" ? "Pi" : agent === "claude" ? "Claude Code" : "Codex";
+const sessionState = (status) => ({ starting: "连接中", running: "进行中", waiting: "待回应", stopping: "停止中", interrupted: "已中断", failed: "需处理" })[status] || "";
 
 function Markdown({ children }) {
   return <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: ({ alt }) => <span>[图片：{alt || "未加载外部图片"}]</span>, a: ({ children }) => <span className="reference">{children}</span> }}>{children}</ReactMarkdown>;
@@ -58,7 +60,11 @@ function App() {
   const teamButton = useRef(null), wasCloudOpen = useRef(false);
   useEffect(() => { if (!cloudOpen && wasCloudOpen.current) teamButton.current?.focus(); wasCloudOpen.current = cloudOpen; }, [cloudOpen]);
   const [workspace, setWorkspace] = useState({ projects: [], sessions: [], agents: [] });
+  const [booting, setBooting] = useState(true);
   const [projectId, setProjectId] = useState(null), [sessionId, setSessionId] = useState(null), [session, setSession] = useState(null);
+  const [sessionSearch, setSessionSearch] = useState("");
+  const [editingSessionId, setEditingSessionId] = useState(null), [editedTitle, setEditedTitle] = useState(""), [renameSaving, setRenameSaving] = useState(false);
+  const renameButtons = useRef(new Map());
   const [historyPage, setHistoryPage] = useState(null), [historyLoading, setHistoryLoading] = useState(false);
   const historyVersion = useRef(0);
   const [references, setReferences] = useState([]), [referencePicker, setReferencePicker] = useState(false);
@@ -66,7 +72,7 @@ function App() {
   const navigation = useRef(null);
   if (!navigation.current) navigation.current = new LocalDraftNavigation(command);
   const [draftLoadFailed, setDraftLoadFailed] = useState(false);
-  const [draft, setDraft] = useState(""), [draftLoading, setDraftLoading] = useState(false), [draftStatus, setDraftStatus] = useState("");
+  const [draft, setDraft] = useState(""), [draftLoading, setDraftLoading] = useState(false), [navigationStage, setNavigationStage] = useState(null), [draftStatus, setDraftStatus] = useState("");
   const [error, setError] = useState(""), [ready, setReady] = useState(false), [sending, setSending] = useState(false);
   const [filePanel, setFilePanel] = useState(false), [folder, setFolder] = useState(""), [fileList, setFileList] = useState(null), [preview, setPreview] = useState(null);
   const [agentId, setAgentId] = useState("codex");
@@ -77,7 +83,11 @@ function App() {
   const selected = useRef(null), draftTimer = useRef(null), draftVersion = useRef(0), fileVersion = useRef(0), refreshTimer = useRef(null), composing = useRef(false);
   const refreshQueue = useRef(null);
   const transcript = useRef(null), atBottom = useRef(true), pendingSend = useRef(null);
+  const lastMessageSignature = useRef(null);
+  const [awayFromBottom, setAwayFromBottom] = useState(false), [hasNewContent, setHasNewContent] = useState(false);
   const project = workspace.projects.find((p) => p.id === projectId);
+  const projectSessions = workspace.sessions.filter((s) => s.project_id === projectId);
+  const filteredSessions = projectSessions.filter((s) => s.title.toLocaleLowerCase().includes(sessionSearch.trim().toLocaleLowerCase()));
   const visibleMessages = historyPage?.messages || session?.messages || [];
   const historyNavigation = historyPage?.page || session?.messagePage;
   const chosenAgent = workspace.agents.find((a) => a.id === agentId);
@@ -89,7 +99,7 @@ function App() {
     try {
       if (direction === 'latest') {
         const value = await command('session.read', { sessionId: id });
-        if (selected.current === id && version === historyVersion.current) { atBottom.current = true; setHistoryPage(null); setSession(value); }
+        if (selected.current === id && version === historyVersion.current) { atBottom.current = true; setAwayFromBottom(false); setHasNewContent(false); setHistoryPage(null); setSession(value); }
       } else {
         const page = await command('session.history', { sessionId: id, [direction]: cursor });
         if (selected.current === id && version === historyVersion.current) { atBottom.current = false; setHistoryPage(page); }
@@ -114,23 +124,41 @@ function App() {
     if (!refreshQueue.current) refreshQueue.current = createRefreshQueue(readSnapshot);
     return refreshQueue.current();
   }
+  async function initialize() {
+    setBooting(true); setError("");
+    try {
+      const data = await refresh();
+      let saved; try { saved = JSON.parse(localStorage.getItem("turnsu.lastSelection")); } catch {}
+      if (navigation.current.version === 0 && saved && data.projects.some((p) => p.id === saved.projectId)) {
+        const previous = data.sessions.find((s) => s.id === saved.sessionId && s.project_id === saved.projectId);
+        await selectProject(saved.projectId, previous?.id || null);
+      }
+    } catch (e) { setError(String(e)); setReady(false); }
+    finally { setBooting(false); }
+  }
   useEffect(() => {
     let dispose, mounted = true;
     window.__TAURI__.event.listen("local-host-event", ({ payload }) => {
       if (payload.type === "disconnected") { setError("本地服务已停止。请重新打开 Turnsu，已保存的内容仍在本机。"); return; }
       if (!refreshTimer.current) refreshTimer.current = setTimeout(() => { refreshTimer.current = null; refresh().catch((e) => setError(String(e))); }, 100);
     }).then((fn) => { if (!mounted) fn(); else dispose = fn; });
-    refresh().then(async (data) => {
-      let saved; try { saved = JSON.parse(localStorage.getItem("turnsu.lastSelection")); } catch {}
-      if (navigation.current.version === 0 && saved && data.projects.some((p) => p.id === saved.projectId)) {
-        const previous = data.sessions.find((s) => s.id === saved.sessionId && s.project_id === saved.projectId);
-        await selectProject(saved.projectId, previous?.id || null);
-      }
-    }).catch((e) => { setError(String(e)); setReady(true); });
+    initialize();
     return () => { mounted = false; dispose?.(); clearTimeout(refreshTimer.current); };
   }, []);
   useEffect(() => { if (projectId) localStorage.setItem("turnsu.lastSelection", JSON.stringify({ projectId, sessionId })); }, [projectId, sessionId]);
-  useEffect(() => { if (atBottom.current && transcript.current) transcript.current.scrollTop = transcript.current.scrollHeight; }, [session]);
+  useEffect(() => {
+    if (!session) return;
+    const last = session.messages?.at(-1);
+    const signature = `${session.id}:${last?.id || ""}:${last?.text?.length || 0}:${session.status}:${session.interactions?.length || 0}`;
+    if (lastMessageSignature.current && lastMessageSignature.current !== signature && !atBottom.current) setHasNewContent(true);
+    lastMessageSignature.current = signature;
+    if (atBottom.current && transcript.current) transcript.current.scrollTop = transcript.current.scrollHeight;
+  }, [session]);
+
+  function goToLatest() {
+    atBottom.current = true; setAwayFromBottom(false); setHasNewContent(false);
+    if (transcript.current) transcript.current.scrollTop = transcript.current.scrollHeight;
+  }
 
   useEffect(() => {
     if (!filePanel || !preview?.path || !project?.sharing?.syncedAt) return;
@@ -141,21 +169,23 @@ function App() {
 
   async function selectProject(id, nextSession = null) {
     if (sending || creatingSession) return;
-    clearTimeout(draftTimer.current); setDraftLoading(true); setDraftLoadFailed(false);
+    clearTimeout(draftTimer.current); setDraftLoading(true); setDraftLoadFailed(false); setNavigationStage("saving");
     try {
       await navigation.current.select(id, nextSession, {
         start() {
           ++historyVersion.current; setHistoryPage(null); setHistoryLoading(false);
+          setNavigationStage("reading"); setSessionSearch(""); setEditingSessionId(null);
           ++draftVersion.current; ++fileVersion.current; ++modelRequest.current; setModelsLoading(false); setFileList(null); setPreview(null); setModel(""); setModels(null); setAgentId("codex");
-          setView('workbench'); setWorkOpen(false); setSyncOpen(false); setProjectId(id); selected.current = nextSession; setSessionId(nextSession); setSession(null); setError(""); setDraft(""); setReferences([]); setReferencePicker(false); setDraftStatus(""); setFilePanel(false); pendingSend.current = null; atBottom.current = true;
+          setView('workbench'); setWorkOpen(false); setSyncOpen(false); setProjectId(id); selected.current = nextSession; setSessionId(nextSession); setSession(null); setError(""); setDraft(""); setReferences([]); setReferencePicker(false); setDraftStatus(""); setFilePanel(false); pendingSend.current = null; atBottom.current = true; lastMessageSignature.current = null; setAwayFromBottom(false); setHasNewContent(false);
         },
         loaded({ draft: saved, session: value }) {
-          setDraft(saved.text); setReferences(saved.references); setDraftLoading(false); setDraftLoadFailed(false);
+          setDraft(saved.text); setReferences(saved.references); setDraftLoading(false); setDraftLoadFailed(false); setNavigationStage(null);
           if (value) { setSession(value); pendingSend.current = value.pendingInput || null; setModel(value.model || ""); setAgentId(value.agent); }
         },
       });
     } catch (e) {
       const loaded = Boolean(navigation.current.current?.loaded);
+      setNavigationStage(null);
       setError(loaded ? `草稿未能保存，已保留当前输入。请重试切换任务。${String(e)}` : String(e));
       setDraftLoading(!loaded); setDraftLoadFailed(!loaded);
     }
@@ -219,15 +249,35 @@ function App() {
     catch (e) { setError(String(e)); }
   }
   async function control(method) { setError(""); try { await command(method, { sessionId }); await refresh(); } catch (e) { setError(String(e)); } }
+  async function renameSession(event) {
+    event.preventDefault();
+    const title = editedTitle.trim();
+    if (!title || !editingSessionId || renameSaving) return;
+    setRenameSaving(true); setError("");
+    try {
+      const id = editingSessionId;
+      const renamed = await command("session.rename", { sessionId: id, title });
+      setWorkspace(current => ({ ...current, sessions: current.sessions.map(item => item.id === id ? { ...item, title: renamed.title } : item) }));
+      setSession(current => current?.id === id ? { ...current, title: renamed.title } : current);
+      finishRename();
+      await refresh().catch(e => setError(`名称已保存，列表刷新暂时失败：${String(e)}`));
+    } catch (e) { setError(`会话名称未保存：${String(e)}`); }
+    finally { setRenameSaving(false); }
+  }
+  function finishRename() {
+    const id = editingSessionId;
+    setEditingSessionId(null); setEditedTitle("");
+    requestAnimationFrame(() => renameButtons.current.get(id)?.focus());
+  }
   async function listFiles(path = "") {
-    const version = ++fileVersion.current; setFileLoading(true); setPreview(null); setFileError(""); setFolder(path);
+    const version = ++fileVersion.current; setFileLoading(true); setPreview(null); setFileList(null); setFileError(""); setFolder(path);
     try { const result = await command("files.list", { projectId, path }); if (version === fileVersion.current) setFileList(result); }
     catch (e) { if (version === fileVersion.current) setFileError(String(e)); }
     finally { if (version === fileVersion.current) setFileLoading(false); }
   }
   async function readFile(file) {
     if (file.directory) return listFiles(file.path);
-    const version = ++fileVersion.current; setFileLoading(true); setFileError("");
+    const version = ++fileVersion.current; setFileLoading(true); setPreview(null); setFileError("");
     try { const result = await command("files.read", { projectId, path: file.path }); if (version === fileVersion.current) setPreview(result); }
     catch (e) { if (version === fileVersion.current) setFileError(String(e)); }
     finally { if (version === fileVersion.current) setFileLoading(false); }
@@ -239,9 +289,15 @@ function App() {
       <nav className="productNav" aria-label="主要区域"><Button variant={view === 'workbench' ? 'secondary' : 'ghost'} aria-current={view === 'workbench' ? 'page' : undefined} onClick={() => setView('workbench')}><MessageSquare size={17}/>工作台</Button><Button variant={view === 'skills' ? 'secondary' : 'ghost'} aria-current={view === 'skills' ? 'page' : undefined} onClick={() => setView('skills')}><BookOpen size={17}/>Skill OS</Button></nav>
       <Button variant="outline" className="openProject" disabled={sending || creatingSession} onClick={openProject}><FolderOpen size={17} />打开项目<span>＋</span></Button>
       <div className="railHeading">项目</div>
-      <nav aria-label="项目与任务">{workspace.projects.map((p) => <div className="projectGroup" key={p.id}>
+      <nav aria-label="项目与任务">{!ready && <p className="railEmpty" role="status">{booting ? "正在读取本机项目…" : "本地项目暂不可用"}</p>}{workspace.projects.map((p) => <div className="projectGroup" key={p.id}>
         <button className={`projectButton ${projectId === p.id ? "selected" : ""}`} disabled={sending || creatingSession} onClick={() => selectProject(p.id)}><Folder size={16} /><span>{p.sharing?.title || p.name}</span></button>
-        {projectId === p.id && <><button className={`sessionButton newTask ${!sessionId ? "current" : ""}`} disabled={sending || creatingSession} onClick={() => selectProject(p.id)}><Plus size={15} />新任务</button>{workspace.sessions.filter((s) => s.project_id === p.id).map((s) => <button key={s.id} className={`sessionButton ${sessionId === s.id ? "current" : ""}`} disabled={sending || creatingSession} onClick={() => selectProject(p.id, s.id)}><span className={`statusDot ${active(s.status) ? "live" : ""}`} /><span className="sessionTitle">{s.title}</span><small className="taskAgent">{s.agent === "pi" ? "Pi" : s.agent === "claude" ? "CC" : "C"}</small></button>)}</>}
+        {projectId === p.id && <>
+          <button className={`sessionButton newTask ${!sessionId ? "current" : ""}`} disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { if (sessionId || view !== 'workbench' || draftLoadFailed) selectProject(p.id); }}><Plus size={15} />新任务</button>
+          {projectSessions.length > 5 && <label className="sessionSearch"><Search size={14}/><input aria-label="查找当前项目会话" placeholder="查找会话" value={sessionSearch} onChange={e => setSessionSearch(e.target.value)}/>{sessionSearch && <button aria-label="清除会话搜索" onClick={() => setSessionSearch("")}><X size={13}/></button>}</label>}
+          <div className="sessionListHeading">最近会话 <span>{filteredSessions.length}{sessionSearch ? ` / ${projectSessions.length}` : ""}</span></div>
+          {filteredSessions.map((s) => editingSessionId === s.id ? <form className="sessionRename" key={s.id} onSubmit={renameSession} onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); finishRename(); } }}><input autoFocus aria-label="会话名称" maxLength={80} required value={editedTitle} disabled={renameSaving} onChange={e => setEditedTitle(e.target.value)}/><button aria-label="保存会话名称" disabled={renameSaving || !editedTitle.trim()} type="submit"><Check size={14}/></button><button aria-label="取消重命名" disabled={renameSaving} type="button" onClick={finishRename}><X size={14}/></button></form> : <div className={`sessionRow ${sessionId === s.id ? "current" : ""}`} key={s.id}><button className="sessionButton" aria-current={sessionId === s.id ? 'page' : undefined} aria-label={`${s.title}，${agentName(s.agent)}${sessionState(s.status) ? `，${sessionState(s.status)}` : ""}`} title={`${s.title} · ${agentName(s.agent)} · ${new Date(s.updated_at).toLocaleString()}`} disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { if (sessionId !== s.id || view !== 'workbench' || draftLoadFailed) selectProject(p.id, s.id); }}><span className={`statusDot ${active(s.status) ? "live" : ""} ${['waiting', 'failed', 'interrupted'].includes(s.status) ? "attention" : ""}`} /><span className="sessionTitle">{s.title}</span><small className={`taskAgent ${['waiting', 'failed', 'interrupted'].includes(s.status) ? "attention" : ""}`}>{sessionState(s.status) || (s.agent === "pi" ? "Pi" : s.agent === "claude" ? "CC" : "C")}</small></button><button ref={element => { if (element) renameButtons.current.set(s.id, element); else renameButtons.current.delete(s.id); }} className="renameTrigger" aria-label={`重命名会话：${s.title}`} title="重命名" disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { setEditingSessionId(s.id); setEditedTitle(s.title); }}><Pencil size={13}/></button></div>)}
+          {sessionSearch && filteredSessions.length === 0 && <p className="railEmpty">当前项目没有匹配的会话。</p>}
+        </>}
       </div>)}</nav>
       {!workspace.projects.length && ready && <p className="railEmpty">打开一个文件夹，<br />从已有资料开始工作。</p>}
       <button ref={teamButton} className="teamConnection" onClick={() => setCloudOpen(true)}><Plus size={15}/>连接团队</button>
@@ -252,18 +308,17 @@ function App() {
     {syncOpen && project?.sharing && <SyncDialog project={project} onClose={() => setSyncOpen(false)}/> }
     {cloudOpen && <CloudDialog localProject={project} onClose={() => setCloudOpen(false)} onJoin={async p => { await refresh(); await selectProject(p.id, p.id === projectId ? sessionId : null); }}/>}
     {view === 'skills' ? <main className="skillMain"><SkillOSPanel project={project} agents={workspace.agents} workSession={session?.sharedWork?.workItemId ? { id: session.sharedWork.workItemId, title: session.title } : null} onOpen={async s => { await refresh(); await selectProject(s.project_id, s.id); }} onReturn={() => setView('workbench')}/></main> : <main>
-      <header><div>{project ? <><span className="breadcrumb">{project.sharing?.title || project.name}<ChevronRight size={13} /></span><strong>{session?.title || "新任务"}</strong></> : <strong>我的工作台</strong>}</div>
+      <header><div>{project ? <><span className="breadcrumb">{project.sharing?.title || project.name}<ChevronRight size={13} /></span><strong>{session?.title || (sessionId ? workspace.sessions.find(s => s.id === sessionId)?.title : null) || "新任务"}</strong></> : <strong>我的工作台</strong>}</div>
         {project?.sharing && <button ref={workButton} onClick={() => setWorkOpen(true)}>团队工作</button>}
         {project?.sharing && <button ref={syncButton} className={`syncBadge ${project.sharing.status}`} onClick={() => setSyncOpen(true)}>{syncLabels[project.sharing.status]}</button>}
         {project && <button aria-pressed={filePanel} onClick={() => { setFilePanel(!filePanel); if (!filePanel) listFiles(); }}><Files size={16} />项目文件</button>}
       </header>
       <div className="workArea"><section className="conversation">
-        {draftLoadFailed && <div className="error" role="status"><span>暂时无法读取草稿，原内容仍保存在本机。</span><button onClick={() => selectProject(projectId, sessionId)}>重新读取草稿</button></div>}
         {error && <div className="error" role="alert"><span>{error}</span><button aria-label="关闭提示" onClick={() => setError("")}><X size={15} /></button></div>}
-        {!project ? <div className="welcome"><img src="./brand/turnsu-symbol.svg" alt="" /><h1>从手边的项目开始</h1><p>用你自己的 Agent，处理文件、推进工作。<br />不需要先配置云端工作台。</p><button className="primary" onClick={openProject}><FolderOpen size={18} />打开本地项目</button><small>文件保留在原来的位置</small></div> : <>
+        {booting ? <div className="workbenchLoading" role="status"><LoaderCircle className="spin" size={22}/><strong>正在恢复本机工作台</strong><span>读取项目、上次会话与草稿…</span></div> : !ready ? <div className="workbenchLoading" role="alert"><strong>暂时无法读取本机工作台</strong><span>项目和会话仍保存在这台电脑。</span><button onClick={initialize}>重新读取</button></div> : !project ? <div className="welcome"><img src="./brand/turnsu-symbol.svg" alt="" /><h1>从手边的项目开始</h1><p>用你自己的 Agent，处理文件、推进工作。<br />不需要先配置云端工作台。</p><button className="primary" onClick={openProject}><FolderOpen size={18} />打开本地项目</button><small>文件保留在原来的位置</small></div> : <>
           {(historyNavigation?.older || historyPage) && <nav className="historyNavigation" aria-label="对话记录"><button disabled={historyLoading || !historyNavigation?.older} onClick={() => readHistory('before', historyNavigation.older)}><ChevronLeft size={14}/>查看更早</button>{historyPage && <><span>较早的对话</span><button disabled={historyLoading || !historyNavigation?.newer} onClick={() => readHistory('after', historyNavigation.newer)}>查看较新<ChevronRight size={14}/></button><button disabled={historyLoading} onClick={() => readHistory('latest')}>回到最新</button></>}{historyLoading && <span role="status">读取中…</span>}</nav>}
-          <div className="transcript" ref={transcript} onScroll={() => { const el = transcript.current; atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 90; }}>
-            {!visibleMessages.length ? <div className="taskWelcome"><span className="eyebrow">{project.sharing?.title || project.name}</span><h1>今天想完成什么？</h1><p>说说目标，Agent 会在这个项目里与你一起完成。</p></div> : <div className="messageColumn">{visibleMessages.map((m) => <article key={m.id} className={`message ${m.role}`}>
+          <div className="transcript" ref={transcript} onScroll={() => { const el = transcript.current; const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 90; atBottom.current = nearBottom; setAwayFromBottom(!nearBottom && el.scrollHeight > el.clientHeight + 90); if (nearBottom) setHasNewContent(false); }}>
+            {navigationStage ? <div className="workbenchLoading" role="status"><LoaderCircle className="spin" size={20}/><strong>{navigationStage === "saving" ? "正在保存当前草稿" : "正在打开会话"}</strong><span>{navigationStage === "saving" ? "保存完成后继续切换" : "读取会话、引用资料与草稿…"}</span></div> : draftLoadFailed ? <div className="workbenchLoading" role="status"><strong>这段会话暂时打不开</strong><span>草稿仍保存在本机。可以重试读取。</span><button onClick={() => selectProject(projectId, sessionId)}>重新读取</button></div> : !visibleMessages.length ? <div className="taskWelcome"><span className="eyebrow">{project.sharing?.title || project.name}</span><h1>今天想完成什么？</h1><p>说说目标，Agent 会在这个项目里与你一起完成。</p>{session && active(session.status) && <div className="activity"><LoaderCircle className="spin" size={14}/>{labels[session.status]}</div>}</div> : <div className="messageColumn">{visibleMessages.map((m) => <article key={m.id} className={`message ${m.role}`}>
               {m.role === "tool" ? <details><summary>{m.kind === "file" ? <FileText size={14} /> : <ChevronRight size={14} />}<span>{m.kind === "file" ? "文件变更" : "执行操作"}</span></summary><pre>{m.text}</pre></details> : m.role === "user" ? <><p>{m.text}</p>{m.references?.map(file => <SentFileReference key={referenceKey(file)} sessionId={sessionId} inputId={m.id} file={file}/>)}</> : <Markdown>{m.text}</Markdown>}
               {m.role === "assistant" && m.kind === "text" && session.status === "idle" && session.lastSubmission?.status === "completed" && !session.capture && !session.loopCapture && !session.localLoopTrial && <><button className="captureAction" onClick={e => { captureTrigger.current = e.currentTarget; setCaptureOpen({ session, message: m }); }}>整理为技能</button><button className="captureAction" onClick={e => { captureTrigger.current = e.currentTarget; setCaptureOpen({ session, message: m, kind: 'loop' }); }}>整理为 Loop</button></>}
             </article>)}{session.interactions?.map((item) => <Interaction key={item.id} item={item} sessionId={sessionId} report={setError} />)}
@@ -271,6 +326,7 @@ function App() {
             {session.error && <div className="inlineError">{session.error}</div>}
             </div>}
           </div>
+          {!navigationStage && !historyPage && !draftLoadFailed && awayFromBottom && <button className="latestJump" onClick={goToLatest}><ArrowDown size={14}/>{hasNewContent ? "有新内容 · 回到底部" : "回到底部"}</button>}
           <div className="composerArea">
             {session?.localLoopTrial && <div className="methodNotice"><span>本机试做 · {session.localLoopTrial.name}</span><button disabled={active(session.status)} onClick={e => { captureTrigger.current = e.currentTarget; setCaptureOpen({ session, kind: 'local-trial' }); }}>核对试做结果</button></div>}
             {session?.loopCapture && <div className="methodNotice"><span>正在整理可复用 Loop</span><button disabled={active(session.status)} onClick={e => { captureTrigger.current = e.currentTarget; setCaptureOpen({ session, kind: 'loop' }); }}>查看流程草稿</button></div>}
@@ -287,8 +343,8 @@ function App() {
       </section>
       {filePanel && project && <aside className="filePanel"><div className="fileHeader"><strong>{preview ? basename(preview.path) : "项目文件"}</strong><button aria-label="关闭文件面板" onClick={() => setFilePanel(false)}><X size={16} /></button></div><div className="fileTools"><button onClick={() => preview ? setPreview(null) : listFiles(folder.split("/").slice(0, -1).join("/"))} disabled={!preview && !folder}><ChevronLeft size={15} />返回</button><button aria-label="刷新项目文件" onClick={() => listFiles(folder)}><RotateCcw size={15} /></button></div>
         {preview && <div className="referencePreviewAction"><button disabled={sending || creatingSession || draftLoading || references.length >= 4 || references.includes(preview.path)} onClick={() => addReference(preview.path)}><FileText size={14}/>{references.includes(preview.path) ? '已引用到任务' : '引用到任务'}</button></div>}
-        {fileError && <div className="inlineError" role="alert">{fileError}</div>}{fileLoading && <p className="muted">正在读取…</p>}
-        {preview ? <div className="filePreview">{/\.md$/i.test(preview.path) ? <Markdown>{preview.text}</Markdown> : <pre>{preview.text}</pre>}</div> : <div className="fileList"><p className="filePath">{folder || project.sharing?.title || project.name}</p>{fileList?.entries.map((f) => <button key={f.path} onClick={() => readFile(f)}>{f.directory ? <Folder size={16} /> : <FileText size={16} />}<span>{f.name}</span>{f.directory && <ChevronRight size={13} />}</button>)}{fileList?.entries.length === 0 && <p className="muted">这个文件夹还没有文件。</p>}{fileList?.truncated && <p className="muted">当前显示前 500 项，请进入子文件夹查看。</p>}</div>}
+        {fileError && <div className="inlineError" role="alert">{fileError}</div>}
+        {fileLoading ? <div className="fileLoading" role="status"><LoaderCircle className="spin" size={16}/>正在读取项目文件…</div> : preview ? <div className="filePreview">{/\.md$/i.test(preview.path) ? <Markdown>{preview.text}</Markdown> : <pre>{preview.text}</pre>}</div> : <div className="fileList"><p className="filePath">{folder || project.sharing?.title || project.name}</p>{fileList?.entries.map((f) => <button key={f.path} onClick={() => readFile(f)}>{f.directory ? <Folder size={16} /> : <FileText size={16} />}<span>{f.name}</span>{f.directory && <ChevronRight size={13} />}</button>)}{fileList?.entries.length === 0 && <p className="muted">这个文件夹还没有文件。</p>}{fileList?.truncated && <p className="muted">当前显示前 500 项，请进入子文件夹查看。</p>}</div>}
       </aside>}
       </div>
     </main>}
