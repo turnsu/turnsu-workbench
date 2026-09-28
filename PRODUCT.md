@@ -25,4 +25,4 @@ Skill 是固定版本的可复用能力，Loop 是包含目标、步骤、输入
 
 ## 当前实施边界
 
-[本轮方案](wiki/design/2026-09-28-workbench-skillos-iteration-plan.md)先改善桌面工作台和 Skill OS，再收敛 Loop 管理，持续验证跨平台资源和团队真实接力。Web 与后端已实现的能力继续保留，但不能用 Web 页面或受控 provider 测试替代本机 GUI、真实 Agent、Windows 和团队试点验收。Tauri 2 可以被替换，是否迁移由同负载测量决定。
+[本轮方案](wiki/design/2026-09-28-workbench-skillos-iteration-plan.md)先改善桌面工作台和 Skill OS，再收敛 Loop 管理，持续验证跨平台资源和团队真实接力。Web 与后端已实现的能力继续保留，但不能用 Web 页面或受控 provider 测试替代本机 GUI、真实 Agent、Windows 和团队试点验收。桌面底层已确定迁移 Electron；选择性复用公司组件、品牌与 llm-gateway 协议，不加入 ShotSeek 或 doc-templates。资源收益以实测为准。

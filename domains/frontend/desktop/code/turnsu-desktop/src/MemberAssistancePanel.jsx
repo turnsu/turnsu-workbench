@@ -1,7 +1,8 @@
+import { invoke } from "./desktop-bridge.mjs";
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { ChevronLeft, Plus, RotateCcw } from 'lucide-react';
-const command = (method, args) => window.__TAURI__.core.invoke('local_command', { method, args });
+const command = (method, args) => invoke('local_command', { method, args });
 const operationKinds = { createMemberAgentRequest: 'create', acceptMemberAgentRequest: 'accept', declineMemberAgentRequest: 'decline', cancelMemberAgentRequest: 'cancel' };
 function stateLabel(item) {
   if (item.consent === 'revoked') return '已撤回';

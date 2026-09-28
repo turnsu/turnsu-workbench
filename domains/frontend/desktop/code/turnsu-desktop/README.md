@@ -9,15 +9,14 @@ and keeps Loop management as a secondary view. A selected project Skill is hashe
 before native send; viewing or preparing never invokes a model. The team catalog and existing
 Product publication/Run paths remain authoritative for shared versions. Selected Button, Badge,
 Input and Textarea primitives/tokens are adapted from the pinned company scaffold; see
-[third-party notice](THIRD_PARTY_NOTICES.md). This is a bounded desktop UI iteration, not
-framework selection or Windows acceptance.
+[third-party notice](THIRD_PARTY_NOTICES.md). The shell is Electron 44.4.5. Windows packaging is separate from real Windows acceptance.
 
 Local and cloud development/data ownership is defined in
 [Desktop and cloud ownership](../../../../../wiki/architecture/desktop-cloud-boundary.md).
 
 ## Current path
 
-The Tauri window opens a project through the native folder picker. The private local Node host owns
+The Electron window opens a project through the native folder picker. The private local Node host owns
 SQLite project/session metadata, drafts and visible conversation output, and drives **installed Codex
 CLI** through its official App Server protocol. Native history/credentials remain with Codex. The
 desktop renders real native approval/question requests and provides project file listing/text preview.
@@ -291,27 +290,73 @@ model quality still need acceptance.
 There is no team runtime, binary-file preview, terminal panel or historical CLI-session import in this
 slice. The full v0.6 destination remains unchanged.
 
-## Build / run (macOS)
+## Build / run (Electron)
 
-Requires the repository Node runtime, Rust/Cargo, Xcode command-line tools and an installed/logged-in
-CLI for the chosen Agent. Install the local host's pinned dependencies with `npm ci` in
-`domains/agent/code/local-agent-host` before packaging. Desktop UI dependencies may be installed in this package; the build also supports
-the existing Web package's matching React/Markdown/icon/esbuild dependencies in this checkout.
+Requires Node >=22.19, npm, and the chosen user's Agent CLI. Install pinned dependencies with
+`npm ci` in this package and in `domains/agent/code/local-agent-host`. The existing Agent Runtime
+SDK dependencies used by the Host bundle must also be installed. No Rust/Cargo or local Web server
+is required. Electron supplies the Host's Node runtime through a utility process.
 
 ```sh
-bash domains/frontend/desktop/code/turnsu-desktop/scripts/build-macos.sh
+cd domains/frontend/desktop/code/turnsu-desktop
+npm ci
+npx install-electron  # if the package manager deferred Electron's runtime download
+npm start
+npm run package -- --platform=darwin --arch=arm64
+npm run package -- --platform=win32 --arch=x64
 ```
 
-Output: `.build/turnsu-desktop/Turnsu.app`. Its Node runtime, host and Claude SDK are bundled; user
-Agent CLIs remain external. It does not
-need a running Web server or Docker. The first build uses Cargo's pinned lockfile and network access
-to download missing crates. The app is locally ad-hoc signed, not notarized for distribution.
+Outputs are under `.build/turnsu-electron/Turnsu 工作台-<platform>-<arch>/` at repository root. macOS builds
+use local ad-hoc signing; neither notarization nor Windows release signing is claimed. `build-macos.sh`
+is a convenience wrapper. Original artwork is in `resources/`; `build-icons.mjs` compiles it on macOS.
 
-Local data defaults to Tauri's per-app data directory. `TURNSU_DESKTOP_STATE` selects a separate
-private data directory for acceptance. `TURNSU_DESKTOP_NODE` and `TURNSU_DESKTOP_HOST` allow explicit
-development paths; none of these settings contains provider credentials.
+`TURNSU_DESKTOP_STATE` selects an isolated absolute state directory. Default state keeps the previous
+`ai.turnsu.desktop` directory (macOS Application Support / Windows AppData). The new app identifier is
+`org.turnsu.workbench`, avoiding launch ambiguity with an old development bundle while retaining that
+explicit data path. Its SQLite lock prevents
+an old app and new app from using it at once. Closing the window saves the draft, asks before stopping
+active work, and closes Host/owned native processes. An uncertain request is never retried automatically.
+The former `TURNSU_DESKTOP_NODE` / `TURNSU_DESKTOP_HOST` overrides and Tauri build are retired.
+
+## Model connections
+
+**模型连接** adds company Gateway or another compatible endpoint. Keys are encrypted with Electron
+`safeStorage` and are never returned by saved-connection reads or put into SQLite/Product. Unavailable
+OS encryption blocks saving; there is no plaintext fallback. The default remains native Agent settings.
+New tasks and never-started prepared Skill/Loop tasks choose a source explicitly. After connection or
+submission the source is fixed. Connection endpoint/protocol changes require a new connection;
+key rotation preserves identity and waits until related tasks stop. Historical task bindings prevent
+removing their connection. No user-wide Codex/Claude/Pi configuration file is rewritten.
+
+- Codex uses a dedicated App Server per selected Responses connection, with process-local environment
+  credentials and explicit thread provider configuration.
+- Claude Code uses Messages through the official SDK and a process-local environment.
+- Pi >=0.87 loads a process-local provider extension (Responses, Messages or Chat Completions). The
+  initial compatibility budget is 32K context / 4K output; gateway prices and quotas remain authoritative.
+
+`/v1/models` discovery proves catalog access only. Model inference and tool compatibility must be
+checked independently. SDK file-level licenses are preserved; no llm-gateway admin UI source was copied.
 
 ## Verification
+
+Current Electron and model-connection checks (run from repository root):
+
+```sh
+npm --prefix domains/frontend/desktop/code/turnsu-desktop test
+npm --prefix domains/frontend/desktop/code/turnsu-desktop run test:electron
+.tooling/node/bin/node --test domains/agent/code/local-agent-host/test/model-connections.test.mjs domains/agent/code/local-agent-host/test/native-process.test.mjs
+.tooling/node/bin/node domains/agent/code/local-agent-host/test/verify-native-gateway.mjs codex
+.tooling/node/bin/node domains/agent/code/local-agent-host/test/verify-native-gateway.mjs claude
+TURNSU_TEST_PI_BIN=/path/to/pi .tooling/node/bin/node domains/agent/code/local-agent-host/test/verify-native-gateway.mjs pi responses
+```
+
+The Electron smoke check uses real OS encryption and an actual utility process without a renderer.
+Native gateway checks isolate native configuration in temporary directories and use a controlled local
+HTTP service, not paid inference. Pi accepts `responses`, `messages` and `chat`; use Pi >=0.87 without
+changing the user's global install. macOS UI verification and real Windows/provider acceptance are
+recorded separately in the [current architecture](../../../../../wiki/architecture/CURRENT_SYSTEM_ARCHITECTURE.md).
+
+Existing persistence, native adapter and cloud-boundary checks:
 
 ```sh
 .tooling/node/bin/node --test domains/agent/code/local-agent-host/test/local-work.test.mjs

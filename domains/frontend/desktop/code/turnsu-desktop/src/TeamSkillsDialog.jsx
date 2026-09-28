@@ -1,6 +1,7 @@
+import { invoke } from "./desktop-bridge.mjs";
 import React, { useEffect, useRef, useState } from 'react';
 import { X, ChevronLeft, ChevronRight, RotateCcw, Search } from 'lucide-react';
-const command = (method, args) => window.__TAURI__.core.invoke('local_command', { method, args });
+const command = (method, args) => invoke('local_command', { method, args });
 export function TeamSkillsDialog({ project, agents, workSession, onOpen, onClose, inline = false, initialAgent, sourceDraft, onBeforeUse, onBusyChange }) {
   const dialog = useRef(null), mounted = useRef(true), intent = useRef(null);
   const [items, setItems] = useState(null), [page, setPage] = useState(null), [selected, setSelected] = useState(null);

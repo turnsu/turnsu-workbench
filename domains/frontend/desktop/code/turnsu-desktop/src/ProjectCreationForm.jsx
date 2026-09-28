@@ -1,5 +1,6 @@
+import { invoke } from "./desktop-bridge.mjs";
 import React, { useEffect, useRef, useState } from 'react';
-const command = (action, args) => window.__TAURI__.core.invoke('local_command', { method: 'cloud.projectCreation.' + action, args });
+const command = (action, args) => invoke('local_command', { method: 'cloud.projectCreation.' + action, args });
 
 export function ProjectCreationForm({ localProject, onCreated, onClose, onBusyChange }) {
   const [record, setRecord] = useState(null), [people, setPeople] = useState([]), [title, setTitle] = useState(''), [objective, setObjective] = useState(''), [members, setMembers] = useState([]);

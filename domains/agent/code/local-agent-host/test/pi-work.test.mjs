@@ -95,6 +95,18 @@ test('Pi RPC preserves Unicode separators and split UTF-8 records while correlat
 });
 
 
+test('closing during the real version process prevents a later Pi RPC launch', { skip: process.platform === 'win32', timeout: 5000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-pi-closing-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const binary = join(directory, 'pi');
+  await writeFile(binary, '#!/usr/bin/env node\nsetTimeout(() => console.log("0.87.0"), 1000);\n', { mode: 0o700 });
+  let launches = 0;
+  const connection = new PiConnection({ cwd: directory, binary, onEvent() {}, onExit() {}, spawnProcess() { launches++; throw new Error('Must not launch after close'); } });
+  const rejected = assert.rejects(connection.ready, /已关闭/);
+  await connection.close(); await rejected;
+  assert.equal(launches, 0); assert.equal(connection.closed, true);
+});
+
 test('stopping Pi while it asks a question cancels that dialog before interrupting', async (t) => {
   const f = await fixture(t); const id = f.session.id;
   await f.host.command('session.send', { sessionId: id, inputId: 'cancel-dialog', text: 'Run' }); await f.start;

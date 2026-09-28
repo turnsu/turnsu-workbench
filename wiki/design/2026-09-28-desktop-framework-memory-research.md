@@ -1,16 +1,14 @@
 # 桌面框架与 WorkBuddy 内存调研
 
 - 日期：2026-09-28
-- 状态：调研与选型建议；已获准实验，迁移仍取决于实测
+- 状态：保留调研证据；产品负责人已排除 Tauri，确定迁移 Electron，资源表现待实测
 - 关联：[工作台、Skill OS 与 LOOP 迭代方案](2026-09-28-workbench-skillos-iteration-plan.md)
 
 ## 1. 当前判断
 
-桌面底层可以替换，Tauri 2 只是当前实现，不是约束。建议进入实测候选的是 **React + Tauri** 与 **React + Electron**；Flutter、SwiftUI + WinUI 保留为需要重做渲染层时的候选。现阶段证据不足以宣布某个框架在本产品上更省内存。
+2026-09-28 最新决策：桌面底层迁移 **Electron + React + 私有 Node Host**。产品负责人明确排除 Tauri 2，不再开展“是否保留 Tauri”的选型。该决定优先公司 React/Node 生态复用、统一渲染版本和后续桌面能力扩展，并不表示 Electron 更省内存。
 
-原因：公司脚手架和现有界面都以 React 为基础，前两个候选可以共享同一份真实界面和工作负载，直接比较桌面外壳带来的差异。若瓶颈来自消息渲染、长驻 Agent 进程或文件同步，优化应落在实际责任模块；可以修改 Host 或 IPC，不必把调整限制在 CSS 和组件。
-
-当前仅完成官方文档、仓库源码与本机安装包元数据调查。后文的基准、预算和工程措施均为待验证方案，不是已实现的能力。
+本文件后续候选表与 WorkBuddy 分析保留为研究依据；其中“待选型”“保留 Tauri”的历史建议已被[Electron 与模型网关迁移决策](2026-09-28-electron-gateway-migration.md)覆盖。性能、进程生命周期、macOS / Windows 的验收门槛继续有效。
 
 ## 2. 本次直接核实的事实
 
@@ -28,7 +26,7 @@
 先前白屏仅代表当时打开的旧开发包，仍不能作为资源基线。刷新请求的串行与末次合并已在
 本轮代码中接入并通过聚焦测试；是否改善长期内存曲线仍待同负载实测。
 
-Turnsu 源码依据：[桌面说明](../../domains/frontend/desktop/code/turnsu-desktop/README.md)、[Rust 入口](../../domains/frontend/desktop/code/turnsu-desktop/src-tauri/src/main.rs)、[本地 Host](../../domains/agent/code/local-agent-host/host.mjs)、[数据与权限职责](../architecture/desktop-cloud-boundary.md)。
+Turnsu 源码依据：[桌面说明](../../domains/frontend/desktop/code/turnsu-desktop/README.md)、[Rust 入口](https://github.com/turnsu/turnsu-workbench/blob/3f0f6be9819fd28f9f1bb245cdbd802d798d2bd0/domains/frontend/desktop/code/turnsu-desktop/src-tauri/src/main.rs)、[本地 Host](../../domains/agent/code/local-agent-host/host.mjs)、[数据与权限职责](../architecture/desktop-cloud-boundary.md)。
 
 ## 3. WorkBuddy 官方资料能支持什么结论
 
@@ -126,7 +124,7 @@ Turnsu 源码依据：[桌面说明](../../domains/frontend/desktop/code/turnsu-
 
 ## 7. macOS 与 Windows 必须分别解决的工作
 
-当前 [Rust 入口](../../domains/frontend/desktop/code/turnsu-desktop/src-tauri/src/main.rs)调用 `/usr/bin/open`，默认运行时文件名为 `node`；[打包脚本](../../domains/frontend/desktop/code/turnsu-desktop/scripts/build-macos.sh)只组装 `.app`；[Agent 发现](../../domains/agent/code/local-agent-host/codex.mjs)按无扩展名可执行文件查找。它们证明存在平台工作，不能用“Tauri 支持 Windows”替代。
+当前 [Rust 入口](https://github.com/turnsu/turnsu-workbench/blob/3f0f6be9819fd28f9f1bb245cdbd802d798d2bd0/domains/frontend/desktop/code/turnsu-desktop/src-tauri/src/main.rs)调用 `/usr/bin/open`，默认运行时文件名为 `node`；[打包脚本](../../domains/frontend/desktop/code/turnsu-desktop/scripts/build-macos.sh)只组装 `.app`；[Agent 发现](../../domains/agent/code/local-agent-host/codex.mjs)按无扩展名可执行文件查找。它们证明存在平台工作，不能用“Tauri 支持 Windows”替代。
 
 | 方面 | macOS | Windows |
 | --- | --- | --- |
@@ -142,4 +140,4 @@ Turnsu 源码依据：[桌面说明](../../domains/frontend/desktop/code/turnsu-
 
 本轮调研到此可以支撑候选与实验设计，仍不能选出性能赢家或宣布 WorkBuddy 泄漏根因。后续在方案获准进入实验后，交付同 UI / 同 Host 的候选结果表、进程归因、真实双平台操作录像或截图，以及一份明确的保留 / 迁移决策。
 
-当前没有运行该对照实验，没有改桌面底层，没有升级 WorkBuddy，也没有修改 Product 或本地数据职责。
+调研时没有运行同负载对照实验。后续按迁移决策替换外壳；不升级 WorkBuddy，不改变 Product 与本地数据职责，结果以架构现状记录为准。

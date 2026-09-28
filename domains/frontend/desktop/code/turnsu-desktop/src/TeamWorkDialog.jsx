@@ -1,3 +1,4 @@
+import { invoke } from "./desktop-bridge.mjs";
 import { WorkDecisionEditor } from "./WorkDecisionEditor.jsx";
 import { WorkHandoffEditor } from "./WorkHandoffEditor.jsx";
 import { TeamLoopsPanel } from "./TeamLoopsPanel.jsx";
@@ -6,7 +7,7 @@ import { WorkResultPanel } from './WorkResultPanel.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { X, Plus, ChevronLeft, ChevronRight, RotateCcw, Users } from 'lucide-react';
-const command = (method, args) => window.__TAURI__.core.invoke('local_command', { method, args });
+const command = (method, args) => invoke('local_command', { method, args });
 const status = { draft: '草稿', ready: '待开始', active: '进行中', waiting_review: '待确认', completed: '已完成', blocked: '需要帮助', cancelled: '已取消' };
 function Text({ children }) { return <ReactMarkdown components={{ img: ({ alt }) => <span>[图片：{alt || '未加载'}]</span>, a: ({ children }) => <span className="reference">{children}</span> }}>{children}</ReactMarkdown>; }
 export function TeamWorkDialog({ project, agents, onOpen, onClose }) {

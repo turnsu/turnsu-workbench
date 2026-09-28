@@ -1,6 +1,7 @@
+import { invoke, listen } from "./desktop-bridge.mjs";
 import React, { useEffect, useRef, useState } from 'react';
 import { X, RotateCcw, Pause, Play, FileText } from 'lucide-react';
-const command = (method, args) => window.__TAURI__.core.invoke('local_command', { method, args });
+const command = (method, args) => invoke('local_command', { method, args });
 export const syncLabels = { pending: '等待同步', syncing: '正在同步', working: '完成本次工作后同步', synced: '文件已同步', conflict: '有不同版本待处理', attention: '有文件需要处理', offline: '等待连接恢复', access: '需要重新连接', paused: '同步已暂停' };
 
 export function SyncDialog({ project, onClose }) {
@@ -10,7 +11,7 @@ export function SyncDialog({ project, onClose }) {
   async function read() { const s = await command('sync.status', args); if (mounted.current) setState(s); }
   useEffect(() => {
     mounted.current = true; dialog.current.showModal(); let dispose;
-    window.__TAURI__.event.listen('local-host-event', ({ payload }) => { if (payload.type === 'sync-changed' && payload.projectId === project.id) read().catch(e => setError(String(e))); }).then(fn => { if (mounted.current) dispose = fn; else fn(); });
+    listen(({ payload }) => { if (payload.type === 'sync-changed' && payload.projectId === project.id) read().catch(e => setError(String(e))); }).then(fn => { if (mounted.current) dispose = fn; else fn(); });
     read().catch(e => setError(String(e)));
     return () => { mounted.current = false; dispose?.(); };
   }, [project.id]);

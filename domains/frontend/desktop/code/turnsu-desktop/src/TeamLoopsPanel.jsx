@@ -1,8 +1,9 @@
+import { invoke } from "./desktop-bridge.mjs";
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Play, RotateCcw, ChevronLeft } from 'lucide-react';
 import { LoopRunActions } from './LoopRunActions.jsx';
-const command=(method,args)=>window.__TAURI__.core.invoke('local_command',{method,args});
+const command=(method,args)=>invoke('local_command',{method,args});
 const labels={queued:'排队中',running:'正在执行',completed:'结果待验收',failed:'执行失败',cancelled:'已取消',cancellation_requested:'正在取消',waiting_review:'等待复核',partial:'部分完成',effect_outcome_unknown:'需要核对外部结果',paused:'已暂停'};
 function Answer({children}) { return <ReactMarkdown components={{img:({alt})=><span>[图片：{alt || '未加载'}]</span>,a:({children})=><span>{children}</span>}}>{children}</ReactMarkdown>; }
 export function TeamLoopsPanel({projectId,workItem,canRun}) {

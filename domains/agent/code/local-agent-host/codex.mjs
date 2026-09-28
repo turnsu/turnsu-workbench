@@ -3,10 +3,12 @@ import { createInterface } from "node:readline";
 import { accessSync, statSync, constants } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname, delimiter, isAbsolute } from "node:path";
+import { nativeCommand, closeNativeProcess } from './native-process.mjs';
 
 export function executable(name, env = process.env) {
-  const dirs = [...(env.PATH || "").split(delimiter), join(homedir(), ".nvm/current/bin"), "/opt/homebrew/bin", "/usr/local/bin"];
-  return dirs.filter((dir) => isAbsolute(dir)).map((dir) => join(dir, name)).find((path) => {
+  const dirs = [...(env.PATH || "").split(delimiter), ...(process.platform === 'win32' ? [env.APPDATA ? join(env.APPDATA, 'npm') : ''] : [join(homedir(), ".nvm/current/bin"), "/opt/homebrew/bin", "/usr/local/bin"])];
+  const names = process.platform === 'win32' ? [name + '.exe', name + '.cmd', name] : [name];
+  return dirs.filter((dir) => isAbsolute(dir)).flatMap(dir => names.map(name => join(dir, name))).find((path) => {
     try { accessSync(path, constants.X_OK); return statSync(path).isFile(); } catch { return false; }
   }) || null;
 }
@@ -20,10 +22,16 @@ export function discoverAgents() {
 }
 
 export class CodexConnection {
-  constructor({ onEvent, onRequest, onExit, binary = executable("codex"), spawnProcess = spawn }) {
+  constructor({ onEvent, onRequest, onExit, gateway = null, binary = executable("codex"), spawnProcess = spawn }) {
     if (!binary) throw new Error("请先安装 Codex CLI，再重新打开 Agent 列表。");
     this.pending = new Map(); this.sequence = 0; this.closed = false;
-    this.child = spawnProcess(binary, ["app-server"], { stdio: ["pipe", "pipe", "pipe"], shell: false, env: { ...process.env, PATH: `${dirname(process.execPath)}${delimiter}${process.env.PATH || ""}` } });
+    const args = ['app-server'];
+    if (gateway) {
+      const provider = `turnsu_${gateway.id.replaceAll('-', '')}`;
+      for (const [key, value] of Object.entries({ model_provider: provider, [`model_providers.${provider}.name`]: gateway.name, [`model_providers.${provider}.base_url`]: gateway.baseUrl, [`model_providers.${provider}.wire_api`]: 'responses', [`model_providers.${provider}.env_key`]: 'TURNSU_GATEWAY_KEY', [`model_providers.${provider}.requires_openai_auth`]: false, [`model_providers.${provider}.supports_websockets`]: false })) args.push('-c', `${key}=${JSON.stringify(value)}`);
+    }
+    const launch = nativeCommand(binary, args, executable('node'));
+    this.child = spawnProcess(launch.file, launch.args, { stdio: ["pipe", "pipe", "pipe"], shell: false, detached: process.platform !== 'win32', env: { ...process.env, ...(gateway ? { TURNSU_GATEWAY_KEY: gateway.apiKey } : {}), PATH: `${dirname(binary)}${delimiter}${dirname(process.execPath)}${delimiter}${process.env.PATH || ""}` } });
     this.child.stderr.on("data", () => {}); // Native diagnostics may contain private paths; never dump them into the UI.
     createInterface({ input: this.child.stdout }).on("line", (line) => {
       let message;
@@ -62,7 +70,6 @@ export class CodexConnection {
   respond(id, result) { this.write({ id, result }); }
   reject(id) { this.write({ id, error: { code: -32601, message: "This interaction is not supported by Turnsu Desktop yet." } }); }
   async close() {
-    this.child.stdin.end();
-    this.child.kill("SIGTERM");
+    await closeNativeProcess(this.child);
   }
 }

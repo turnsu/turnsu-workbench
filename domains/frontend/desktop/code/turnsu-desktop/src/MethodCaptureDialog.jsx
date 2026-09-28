@@ -1,7 +1,8 @@
+import { invoke } from "./desktop-bridge.mjs";
 import React, { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { SkillTrialPanel } from './SkillTrialPanel.jsx';
-const command = (method, args) => window.__TAURI__.core.invoke('local_command', { method, args });
+const command = (method, args) => invoke('local_command', { method, args });
 
 export function MethodCaptureDialog({ session, message, onOpen, onClose }) {
   const dialog = useRef(null), lock = useRef(false), requestId = useRef(crypto.randomUUID());

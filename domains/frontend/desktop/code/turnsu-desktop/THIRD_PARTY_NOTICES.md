@@ -6,6 +6,10 @@ at commit `02203ea4ecdd2da3a2c22e7accc196f5b5e7ab35`. The upstream application u
 Tailwind and Base UI; this adaptation uses the existing desktop React/esbuild entry and native
 HTML controls. Upstream demo routes, data and SSR services are not included.
 
+Electron runtime licenses are distributed by the Electron packager alongside the application.
+Bundled Host dependencies and their notices are under `host-dist/notices/` inside the development
+package. Company llm-gateway is integrated over its API; its admin UI source is not bundled.
+
 MIT License
 
 Copyright (c) 2026 Mohammed Arham Khan

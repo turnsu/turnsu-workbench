@@ -1,5 +1,6 @@
+import { invoke } from "./desktop-bridge.mjs";
 import React, { useEffect, useRef, useState } from 'react';
-const command = (method, args) => window.__TAURI__.core.invoke('local_command', { method, args });
+const command = (method, args) => invoke('local_command', { method, args });
 const active = status => ['queued', 'running'].includes(status);
 const labels = { queued: '等待执行', running: '正在试运行', passed: '执行完成，请检查结果', failed: '试运行失败', blocked: '暂时无法执行', cancelled: '已取消' };
 

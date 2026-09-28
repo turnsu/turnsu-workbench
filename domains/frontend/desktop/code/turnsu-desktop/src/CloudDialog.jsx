@@ -1,9 +1,9 @@
+import { invoke, listen } from "./desktop-bridge.mjs";
 import React, { useEffect, useRef, useState } from 'react';
 import { X, ExternalLink, RotateCcw, ChevronRight, ChevronLeft, LoaderCircle } from 'lucide-react';
 import { ShareScopePicker } from './ShareScopePicker.jsx';
 import { ProjectMembersForm } from './ProjectMembersForm.jsx';
 import { ProjectCreationForm } from './ProjectCreationForm.jsx';
-const invoke = (...args) => window.__TAURI__.core.invoke(...args);
 const command = (method, args = {}) => invoke('local_command', { method, args });
 
 export function CloudDialog({ onClose, onJoin, localProject }) {
@@ -17,7 +17,7 @@ export function CloudDialog({ onClose, onJoin, localProject }) {
   async function read() { const value = await command('cloud.status'); if (mounted.current) { setState(value); if (value.origin) setOrigin(value.origin); } return value; }
   useEffect(() => {
     mounted.current = true; dialog.current.showModal(); let dispose;
-    window.__TAURI__.event.listen('local-host-event', ({ payload }) => { if (payload.type === 'cloud-changed') read().catch(e => setError(String(e))); }).then(fn => { if (mounted.current) dispose = fn; else fn(); });
+    listen(({ payload }) => { if (payload.type === 'cloud-changed') read().catch(e => setError(String(e))); }).then(fn => { if (mounted.current) dispose = fn; else fn(); });
     read().then(value => { if (value.status === 'connected') return command('cloud.projects').then(value => { if (mounted.current) setState(value); }); }).catch(e => { if (mounted.current) setError(String(e)); });
     return () => { mounted.current = false; dispose?.(); };
   }, []);

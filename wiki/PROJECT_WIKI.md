@@ -12,6 +12,7 @@ Turnsu 工作台以本地桌面项目为入口：打开真实目录，使用自�
 | 现在真正实现了什么、证据与缺口 | [Current System Architecture](architecture/CURRENT_SYSTEM_ARCHITECTURE.md) |
 | 下一轮工作台、Skill OS、极简 Loop 怎样迭代 | [2026-09-28 迭代方案](design/2026-09-28-workbench-skillos-iteration-plan.md) |
 | 桌面外壳和 WorkBuddy 内存如何判断 | [2026-09-28 专项调研](design/2026-09-28-desktop-framework-memory-research.md) |
+| Electron 迁移与公司模型网关怎样接入 | [迁移决策与验收](design/2026-09-28-electron-gateway-migration.md) |
 | turnsu 其他仓库能融合什么 | [组织仓库融合核查](design/2026-09-28-turnsu-repository-fusion-review.md) |
 | 本机与云端谁持有数据和执行 | [桌面 / 云端职责边界](architecture/desktop-cloud-boundary.md) |
 | 开发与验收必须遵守什么 | [仓库开发约束](../AGENTS.md)；[界面约束](../DESIGN.md) |
@@ -25,7 +26,7 @@ PRD 定义目标，不证明已交付；架构文档记录现状，不替代产�
 - **Loop**：Skill OS 下的可复用流程。管理首页保持简洁；复杂依赖才打开图形编辑。本机试做与团队云端运行的授权、状态和执行位置必须分别显示。
 - **共享项目**：Product API / PostgreSQL 管理成员、Work Item、授权、版本和共享结果；本机 Host 管理原生 Agent 进程、会话、草稿与待同步状态。同步和接力不等于上传私人原生历史。
 
-现有独立桌面客户端、Web 工作台、Product API 和 Agent Runtime 的具体能力与未验证项目，见[架构现状](architecture/CURRENT_SYSTEM_ARCHITECTURE.md)。Tauri 2 是当前桌面实现，不是长期架构限制；外壳决策须经过同工作负载的 macOS / Windows 验证。
+现有独立桌面客户端、Web 工作台、Product API 和 Agent Runtime 的具体能力与未验证项目，见[架构现状](architecture/CURRENT_SYSTEM_ARCHITECTURE.md)。当前桌面底层为 Electron + React + 私有 Node Host；macOS 开发包与 Windows 构建、Windows 实机验收是不同证据。模型连接显式选用公司 llm-gateway 或自有兼容服务，原生 Agent 配置保持独立。
 
 ## 文档导航
 

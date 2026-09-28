@@ -78,6 +78,16 @@ test('SDK callback passes the exact approved input and cancels pending approval 
   await c.close();
 });
 
+test('closing during SDK loading prevents a later native process launch', async () => {
+  let release, queries = 0;
+  const loaded = new Promise(resolve => { release = resolve; });
+  const connection = new ClaudeConnection({ cwd: '/test', sessionId: 'closing', binary: '/test/claude', onEvent() {}, onExit() {}, sdkLoader: () => loaded });
+  const rejected = assert.rejects(connection.ready, /已关闭/);
+  await connection.close();
+  release({ query() { queries++; throw new Error('Must not launch after close'); } });
+  await rejected; assert.equal(queries, 0);
+});
+
 test('a late Claude permission during cancellation is declined without reopening the task', async (t) => {
   const f = await fixture(t); const sessionId = f.session.id;
   await f.host.command('session.send', { sessionId, inputId: 'late-question', text: 'Start' });

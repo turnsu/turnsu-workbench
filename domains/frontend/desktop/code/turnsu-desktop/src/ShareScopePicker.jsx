@@ -1,6 +1,7 @@
+import { invoke } from "./desktop-bridge.mjs";
 import React, { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Folder, FileText, X } from 'lucide-react';
-const command = (method, args) => window.__TAURI__.core.invoke('local_command', { method, args });
+const command = (method, args) => invoke('local_command', { method, args });
 
 export function ShareScopePicker({ project, busy, onConfirm, onCancel }) {
   const [folder, setFolder] = useState(''), [files, setFiles] = useState(null), [error, setError] = useState('');

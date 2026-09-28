@@ -1,23 +1,42 @@
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { dirname, delimiter } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { executable } from './codex.mjs';
+import { nativeCommand, closeNativeProcess } from './native-process.mjs';
 
 const run = promisify(execFile);
 export class PiConnection {
-  constructor({ cwd, sessionPath, onEvent, onExit, binary = executable('pi'), spawnProcess = spawn, checkVersion = true }) {
+  constructor({ cwd, sessionPath, onEvent, onExit, gateway = null, model = null, binary = executable('pi'), spawnProcess = spawn, checkVersion = true }) {
     this.pending = new Map(); this.dialogs = new Map(); this.closed = false; this.sequence = 0;
+    this.startController = new AbortController();
+    this.disconnect = () => {
+      if (this.closed) return; this.closed = true;
+      for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new Error('Pi 连接已断开，请恢复任务后检查结果。')); }
+      this.pending.clear(); onExit();
+      for (const timer of this.dialogs.values()) clearTimeout(timer); this.dialogs.clear();
+    };
     this.ready = (async () => {
       if (!binary) throw new Error('请先安装 Pi CLI，再重新打开 Turnsu。');
-      const env = { ...process.env, PATH: `${dirname(process.execPath)}${delimiter}${process.env.PATH || ''}` };
+      const env = { ...process.env, PATH: `${dirname(binary)}${delimiter}${dirname(process.execPath)}${delimiter}${process.env.PATH || ''}` };
+      const providerArgs = [];
+      if (gateway) {
+        const provider = `turnsu-${gateway.id}`;
+        if (!model?.startsWith(provider + '/')) throw new Error('请先为此 Pi 连接选择模型。');
+        env.TURNSU_GATEWAY_KEY = gateway.apiKey;
+        env.TURNSU_GATEWAY_PROFILE = JSON.stringify({ provider, baseUrl: gateway.protocol === 'messages' ? gateway.baseUrl.replace(/\/v1$/, '') : gateway.baseUrl, api: { responses: 'openai-responses', messages: 'anthropic-messages', chat: 'openai-completions' }[gateway.protocol], model: model.slice(provider.length + 1) });
+        providerArgs.push('--extension', process.env.TURNSU_GATEWAY_EXTENSION || fileURLToPath(new URL('./pi-gateway-extension.mjs', import.meta.url)), '--provider', provider, '--model', model.slice(provider.length + 1));
+      }
       if (checkVersion) {
         let stdout;
-        try { ({ stdout } = await run(binary, ['--version'], { env, timeout: 30_000 })); }
-        catch { throw new Error('暂时无法启动 Pi。请确认本机 Pi CLI 可以打开，再重试；任务草稿已保留。'); }
+        try { const launch = nativeCommand(binary, ['--version'], executable('node')); ({ stdout } = await run(launch.file, launch.args, { env, timeout: 30_000, signal: this.startController.signal })); }
+        catch { throw new Error(this.closed ? 'Pi 连接已关闭。' : '暂时无法启动 Pi。请确认本机 Pi CLI 可以打开，再重试；任务草稿已保留。'); }
         const version = stdout.trim().match(/(?:^|\s)(\d+)\.(\d+)\.(\d+)/);
         if (!version || (Number(version[1]) === 0 && Number(version[2]) < 87)) throw new Error('桌面接入需要 Pi 0.87.0 或更新版本。请更新本机 Pi，现有配置和会话可继续使用。');
       }
-      this.child = spawnProcess(binary, ['--mode', 'rpc', ...(sessionPath ? ['--session', sessionPath] : ['--no-session'])], { cwd, env, shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
+      if (this.closed) throw new Error('Pi 连接已关闭。');
+      const launch = nativeCommand(binary, ['--mode', 'rpc', ...providerArgs, ...(sessionPath ? ['--session', sessionPath] : ['--no-session'])], executable('node'));
+      this.child = spawnProcess(launch.file, launch.args, { cwd, env, shell: false, detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'] });
       this.child.stderr.on('data', () => {});
       let buffer = '';
       this.child.stdout.setEncoding('utf8');
@@ -42,13 +61,7 @@ export class PiConnection {
           }
         }
       });
-      const exit = () => {
-        if (this.closed) return; this.closed = true;
-        for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new Error('Pi 连接已断开，请恢复任务后检查结果。')); }
-        this.pending.clear(); onExit();
-        for (const timer of this.dialogs.values()) clearTimeout(timer); this.dialogs.clear();
-      };
-      this.child.on('error', exit); this.child.on('exit', exit);
+      this.child.on('error', this.disconnect); this.child.on('exit', this.disconnect);
       return this.request('get_state');
     })();
   }
@@ -73,11 +86,9 @@ export class PiConnection {
   }
   async respond(id, response) { await this.write({ type: 'extension_ui_response', id, ...response }); this.dialogClosed(id); }
   async close() {
-    if (!this.child || this.closed) return;
-    this.child.stdin.end();
-    await new Promise((resolve) => {
-      const timer = setTimeout(() => { this.child.kill('SIGTERM'); resolve(); }, 700);
-      this.child.once('exit', () => { clearTimeout(timer); resolve(); });
-    });
+    if (this.closePromise) return this.closePromise;
+    this.disconnect(); this.startController.abort();
+    this.closePromise = (async () => { await closeNativeProcess(this.child); await this.ready.catch(() => {}); })();
+    return this.closePromise;
   }
 }

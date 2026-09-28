@@ -1,6 +1,7 @@
+import { invoke } from "./desktop-bridge.mjs";
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-const command = (method, args) => window.__TAURI__.core.invoke('local_command', { method, args });
+const command = (method, args) => invoke('local_command', { method, args });
 const labels = { pending: '等待负责人验收', accepted: '已验收完成', changes_requested: '需要修改' };
 function ResultText({ children }) { return <ReactMarkdown components={{ img: ({ alt }) => <span>[{alt || '图片'}]</span>, a: ({ children }) => <span>{children}</span> }}>{children}</ReactMarkdown>; }
 

@@ -1,5 +1,6 @@
+import { invoke } from "./desktop-bridge.mjs";
 import React, { useEffect, useRef, useState } from 'react';
-const command = (method, args) => window.__TAURI__.core.invoke('local_command', { method, args });
+const command = (method, args) => invoke('local_command', { method, args });
 
 export function WorkHandoffEditor({ projectId, workItemId, onSaved, onClose }) {
   const [record, setRecord] = useState(null), [people, setPeople] = useState([]), [recipientId, setRecipient] = useState(''), [nextAction, setAction] = useState('');

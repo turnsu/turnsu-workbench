@@ -8,16 +8,19 @@ independently in this repository, then integrated through the public Product API
 
 | Owner | Code | Authoritative data | Must not own |
 | --- | --- | --- | --- |
-| Desktop UI and shell | `domains/frontend/desktop/code/turnsu-desktop` | Window state and user interactions | Provider tokens, team permissions, SQL access |
+| Desktop renderer | `domains/frontend/desktop/code/turnsu-desktop/src` | Window state and user interactions; transient key entry for explicit save | Saved provider secrets, team permissions, direct SQL/filesystem/Node access |
+| Desktop main process | `domains/frontend/desktop/code/turnsu-desktop/electron` | Window/Host lifecycle, native dialogs, OS-encrypted local model connection keys | Team ACL, native Agent global credentials/settings, business SQL |
 | Private local host | `domains/agent/code/local-agent-host` | Local SQLite: projects, native session references, drafts, exact pending submissions and sync receipts; project files remain in their actual directory | Team ACL, publication decisions, direct PostgreSQL connections |
-| Native adapters | `domains/agent/code/agent-runtime/integrations/native` and local host Codex/CC/Pi adapters | Native processes and protocol interactions; credentials and original sessions remain with the user's installed Agent | Automatic access to another member's machine or account |
+| Native adapters | `domains/agent/code/agent-runtime/integrations/native` and local host Codex/CC/Pi adapters | Native processes and protocol interactions; native credentials/history stay with the user's Agent; explicitly selected gateway keys exist only in that private execution path | Automatic access to another member's machine or account |
 | Cloud Product | `domains/backend/code/workbench-server` | PostgreSQL: workspaces, membership, shared work, decisions, file revisions, immutable releases and delivery receipts; object storage: explicitly shared/versioned content | Local directories, private native history, execution merely because a task was assigned |
 | Shared protocol | `domains/backend/code/workbench-contracts` and `domains/frontend/shared/code/product-client` | Request/response schemas and HTTP client mapping | A second store, permission service or execution engine |
 
 The desktop build bundles public contracts and the HTTP client, but rejects dependencies on backend
 implementation packages and PostgreSQL drivers. No local HTTP server or local PostgreSQL is required.
-The renderer talks to its private host through Tauri commands/stdin; the host alone holds the optional
-rotating Product credential. Neither side opens the other's database.
+The renderer talks to its private host through a sandboxed Electron preload and private utility-process messages; the host alone holds the optional
+rotating Product credential. Explicit model connection keys are decrypted in the main process and
+passed only to the private Host and selected native Agent; saved-profile reads expose metadata only.
+They are not Product credentials and grant no team permissions. Neither side opens the other's database.
 
 ## Interaction rules
 

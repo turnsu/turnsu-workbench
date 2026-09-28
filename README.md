@@ -15,16 +15,16 @@ Turnsu 工作台是桌面优先的本地 Agent 工作台：在真实项目中用
 
 | 部分 | 路径 | 责任 |
 | --- | --- | --- |
-| 桌面工作台 | [turnsu-desktop](domains/frontend/desktop/code/turnsu-desktop/README.md) | 当前 Tauri 2 + React 开发客户端；本地项目、对话和文件界面 |
+| 桌面工作台 | [turnsu-desktop](domains/frontend/desktop/code/turnsu-desktop/README.md) | Electron + React 开发客户端；本地项目、对话和文件界面 |
 | 本机 Agent Host | [local-agent-host](domains/agent/code/local-agent-host/) | 原生 Agent 协议、SQLite 会话关联、草稿与同步回执 |
 | Product API | [workbench-server](domains/backend/code/workbench-server/) | PostgreSQL 中的团队授权、共享工作、固定版本和运行记录 |
 | Web 工作台 | [web-prototype](domains/frontend/web/code/web-prototype/) | 已有 Web 功能；本轮不作为本地桌面主入口 |
 
-Tauri 2 是现状而非固定架构。公司前端脚手架的组件与主题按固定版本选择性接入；完整应用路由、SSR 服务和演示数据不直接搬入桌面。平台迁移和内存优势须由相同工作负载的 macOS / Windows 实测决定。
+桌面已按产品方向迁移 Electron，具体边界见[迁移决策](wiki/design/2026-09-28-electron-gateway-migration.md)。公司前端脚手架的组件与主题按固定版本选择性接入；完整应用路由、SSR 服务和演示数据不直接搬入桌面。macOS / Windows 的交付与内存表现仍须分别实测。
 
 ## 本地桌面开发
 
-先阅读[桌面构建与验证说明](domains/frontend/desktop/code/turnsu-desktop/README.md#build--run-macos)。目前有 macOS 开发包脚本，尚无经过真实设备验收的 Windows 分发。需要仓库 Node、Rust/Cargo、Xcode 命令行工具，以及用户自行安装并登录的 Agent CLI；本地任务不要求启动 Web、Docker 或 Turnsu 云端。开发包不等于签名公证的发行版。
+先阅读[桌面构建与验证说明](domains/frontend/desktop/code/turnsu-desktop/README.md#build--run-electron)。当前可构建 macOS 和 Windows 开发包，Windows 尚未经过真实设备验收。开发需要 Node >=22.19、npm 和用户安装的 Agent CLI；Electron 提供打包后 Host 的 Node 运行时。macOS 本地签名需要 Xcode 命令行工具。本地任务不要求启动 Web、Docker 或 Turnsu 云端；开发包不等于签名公证的发行版。
 
 ## 团队 Product 服务
 

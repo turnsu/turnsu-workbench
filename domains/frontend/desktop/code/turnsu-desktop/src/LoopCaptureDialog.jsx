@@ -1,6 +1,7 @@
+import { invoke } from "./desktop-bridge.mjs";
 import React, { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
-const command = (method, args) => window.__TAURI__.core.invoke('local_command', { method, args });
+const command = (method, args) => invoke('local_command', { method, args });
 const kinds = { Input: '资料', Skill: '技能', Transform: '整理', Material: '参考资料', ReviewGate: '人工确认', Output: '结果' };
 function checkIssue(warning) {
   const code = warning.code || '';

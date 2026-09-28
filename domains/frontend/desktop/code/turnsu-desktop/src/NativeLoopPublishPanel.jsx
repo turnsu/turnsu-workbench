@@ -1,5 +1,6 @@
+import { invoke } from "./desktop-bridge.mjs";
 import React, { useState } from 'react';
-const command = (method, args) => window.__TAURI__.core.invoke('local_command', { method, args });
+const command = (method, args) => invoke('local_command', { method, args });
 function orderedSteps(recipe) {
   const result = [], visited = new Set(); let node = recipe.graph.nodes.find(n => n.kind === 'Input');
   while (node && !visited.has(node.nodeId)) {

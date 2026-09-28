@@ -30,3 +30,6 @@ domains/frontend/web/code/web-prototype/product-design-audit-web-mobile/
 .idea/
 .tooling/
 .superpowers/
+
+# Generated Electron Host bundles
+host-dist/

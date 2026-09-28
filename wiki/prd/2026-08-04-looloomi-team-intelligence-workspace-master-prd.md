@@ -1433,11 +1433,15 @@ measured load or reliability requirements justify them.
 
 ### 13.1 Accepted direction
 
+2026-09-28 product correction: Electron replaces Tauri 2 as the desktop shell. Preserve the
+local-first v0.6 Host and native Agent ownership; see [migration decision](../design/2026-09-28-electron-gateway-migration.md).
+This is an extensibility decision, not a measured memory claim.
+
 | Layer | Direction |
 |---|---|
 | Shared UI | React 19, Vite, strict TypeScript |
-| Desktop shell | Tauri 2 for the single macOS/Windows desktop product; minimal Rust security/system bridge |
-| Desktop Worker | compiled TypeScript/ESM on a bundled signed Node runtime |
+| Desktop shell | Electron for macOS/Windows; sandboxed React renderer, narrow preload, Node utility-process Host |
+| Desktop Worker | TypeScript/ESM on Electron’s bundled Node runtime; private Host separate from the renderer |
 | Cloud services | Node.js with progressive strict TypeScript migration |
 | Public schemas | Authoritative TypeBox schema source; TypeScript types use `Static<>`, and client/OpenAPI artifacts are generated from it |
 | Agent Runtime | PI Kernel and existing Agent Runtime behind public typed package exports |
@@ -1500,12 +1504,12 @@ cloud-worker / desktop-worker -> worker-core + agent-runtime + protocols
 web / desktop -> product-client + workbench-ui
 ```
 
-`agent-runtime` cannot import Product Store, Product HTTP, or Tauri internals. `web` and `desktop`
+`agent-runtime` cannot import Product Store, Product HTTP, or desktop-shell internals. `web` and `desktop`
 cannot import server or Agent internals. Cross-package deep-path imports are forbidden.
 
 ### 13.4 Desktop packaging and protocol gate
 
-Before local Worker distribution is committed as production-ready, the Tauri 2 release candidate
+Before local Worker distribution is committed as production-ready, the Electron release candidate
 must prove:
 
 - macOS arm64 and x64 packaging;
@@ -1517,7 +1521,7 @@ must prove:
 
 The gate records platform credential-store/file-broker/IPC security, Node Worker supervision,
 signing, updater, memory, package size, cold start, and eight-person TypeScript-team maintenance
-evidence. Tauri 2 is the fixed desktop shell; the gate determines release readiness, while product
+evidence. Electron is the selected desktop shell; the gate determines release readiness, while product
 contracts and `ProductClient` remain shell-neutral.
 
 If the gate fails, the desktop cloud client ships first and the local Worker is delayed. The
@@ -1530,8 +1534,8 @@ includes a signed schema/version/hash and is not trusted as arbitrary device str
 
 - destructive replacement without preserved authority and behavior (see §0 rebuild amendment);
 - OpenWorker Python sidecar;
-- keeping SwiftUI and Tauri as two active desktop products;
-- Electron as the long-term default merely to avoid a small Rust shell;
+- keeping parallel Tauri and Electron desktop products;
+- exposing Node/Electron objects directly to the renderer;
 - WebView direct access to Node, a fixed localhost Agent port, or a long-lived daemon token;
 - Node Single Executable Application as a release dependency before a compatibility spike passes;
 - immediate Fastify migration combined with TypeScript and domain migration;
@@ -2002,7 +2006,7 @@ Possible later work:
 - cloud deployment adapters;
 - Automation/Scheduler Product domain;
 - device enrollment and real RemoteWorkerTransport;
-- Tauri 2 macOS/Windows desktop shell and shared ProductClient;
+- Electron macOS/Windows desktop shell and shared ProductClient;
 - organization-learning and evaluation loop;
 - channel connector adapter.
 
@@ -2017,7 +2021,7 @@ Possible later work:
   binding; one credential reference never resolves from two stores or silently falls back;
 - deep backend-to-Agent relative imports with package exports;
 - new-domain `.mjs/.js/.jsx` with strict TypeScript at stable boundaries;
-- legacy SwiftUI client with the Tauri product after the desktop acceptance gate.
+- legacy SwiftUI client with the Electron product after the desktop acceptance gate.
 
 ### 20.4 Do not replace yet
 
@@ -2090,7 +2094,7 @@ These decisions are fixed, including the cross-review rulings D1 and D2 recorded
    replacing them.
 5. Automations pin published Loop revisions and run through Product Command, Admission, and Runner.
 6. Desktop is the first real RemoteWorkerTransport implementation, not a local Agent control plane.
-7. React/TypeScript + TypeScript Worker is fixed; Tauri 2 is the single macOS/Windows desktop shell,
+7. React/TypeScript + TypeScript Worker is fixed; Electron is the single macOS/Windows desktop shell,
    subject to the security, packaging, and maintenance release gate.
 8. Existing behavior is preserved during the authorized rewrite; migrate stable boundaries to TypeScript.
 9. PostgreSQL is the single cloud store, migrated one-shot under a characterization-test gate;

@@ -57,9 +57,14 @@ For the current desktop iteration:
 - Reuse the company `turnsu/frontend-scaffold` at a pinned revision by selecting components and
   design tokens. Preserve its license and upstream attribution. Do not import its demo routes,
   SSR server, fixture data or a second React application merely to share controls.
-- Tauri 2 is the current shell, not a mandated final framework. Compare any migration using the
-  same real UI, Host and workload on macOS and Windows; measure the full app/Agent process group.
-  Fix measured rendering, IPC or Host costs at their owner before claiming a shell-level memory win.
+- The desktop shell uses Electron after the product-directed Tauri 2 replacement (2026-09-28).
+  Keep React and the private Node Host; do not add another Tauri implementation or copy LinkCode.
+  Use sandboxed, isolated renderers, a narrow preload bridge and OS-protected local credentials.
+  Gateway selection is explicit per task; never rewrite native Agent global configuration, silently
+  fall back to another provider, or share private keys through Product storage.
+  Measure the full app/Agent process group on macOS and Windows before claiming a memory win.
+- Company reuse is scoped to frontend-scaffold, brand assets and llm-gateway protocol integration.
+  ShotSeek and doc-templates are excluded from this workbench iteration.
 - A UI pass is complete only when the real local project → native Agent → result/file → reopen path
   remains usable. Changes to draft, permission, sharing or receipt behavior require proportional
   SQLite/filesystem and Product authorization checks. A green build is not native GUI acceptance.

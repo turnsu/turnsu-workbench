@@ -1,5 +1,6 @@
+import { invoke } from "./desktop-bridge.mjs";
 import React, { useRef, useState } from 'react';
-const command=(method,args)=>window.__TAURI__.core.invoke('local_command',{method,args});
+const command=(method,args)=>invoke('local_command',{method,args});
 const actionLabel=data=>({approve:'通过复核',revise:'要求修改',reject:'不通过并结束'})[data?.decision];
 
 export function LoopRunActions({scope,run,pending,onChange}) {

@@ -1,3 +1,6 @@
+import { ModelConnectionsDialog } from "./ModelConnectionsDialog.jsx";
+import "./model-connections.css";
+import { invoke, listen, beforeClose } from "./desktop-bridge.mjs";
 import { LocalDraftNavigation } from "./local-draft-navigation.mjs";
 import { createRefreshQueue } from "./refresh-queue.mjs";
 import { LocalLoopTrialDialog } from './LocalLoopTrialDialog.jsx';
@@ -10,7 +13,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { FolderOpen, Plus, ArrowUp, ArrowDown, Square, Files, X, ChevronRight, ChevronLeft, FileText, Folder, RotateCcw, LoaderCircle, Check, ShieldCheck, MessageSquare, BookOpen, Laptop, Pencil, Search } from "lucide-react";
+import { FolderOpen, Plus, ArrowUp, ArrowDown, Square, Files, X, ChevronRight, ChevronLeft, FileText, Folder, RotateCcw, LoaderCircle, Check, ShieldCheck, MessageSquare, BookOpen, Laptop, Pencil, Search, Settings2 } from "lucide-react";
 import "./style.css";
 import "./scaffold.css";
 import "./skill-os.css";
@@ -18,7 +21,6 @@ import { TeamWorkDialog } from "./TeamWorkDialog.jsx";
 import { CloudDialog } from "./CloudDialog.jsx";
 import { SyncDialog, syncLabels } from "./SyncDialog.jsx";
 
-const invoke = (...args) => window.__TAURI__.core.invoke(...args);
 const command = (method, args = {}) => invoke("local_command", { method, args });
 const labels = { idle: "可以继续", starting: "正在连接 Agent", running: "正在处理", waiting: "需要你的回应", stopping: "正在停止", interrupted: "可以恢复", failed: "需要处理" };
 const active = (status) => ["starting", "running", "waiting", "stopping"].includes(status);
@@ -48,6 +50,12 @@ function Interaction({ item, sessionId, report }) {
 
 function App() {
   const [view, setView] = useState('workbench');
+  const [connectionsOpen, setConnectionsOpen] = useState(false), [connections, setConnections] = useState([]), [connectionId, setConnectionId] = useState('');
+  const connectionButton = useRef(null), connectionTrigger = useRef(null);
+  function openConnections(event) { connectionTrigger.current = event.currentTarget; setConnectionsOpen(true); }
+  async function readConnections() { const value = await invoke('connection_list'); setConnections(value.connections); }
+  function closeConnections() { setConnectionsOpen(false); (connectionTrigger.current || connectionButton.current)?.focus(); }
+  useEffect(() => { readConnections().catch(() => {}); }, []);
   const [captureOpen, setCaptureOpen] = useState(null);
   const captureTrigger = useRef(null);
   function closeCapture() { setCaptureOpen(null); captureTrigger.current?.focus(); }
@@ -90,6 +98,8 @@ function App() {
   const filteredSessions = projectSessions.filter((s) => s.title.toLocaleLowerCase().includes(sessionSearch.trim().toLocaleLowerCase()));
   const visibleMessages = historyPage?.messages || session?.messages || [];
   const historyNavigation = historyPage?.page || session?.messagePage;
+  const chosenConnectionId = session?.connection_id || (!sessionId ? connectionId : "");
+  const chosenConnection = connections.find(c => c.id === chosenConnectionId);
   const chosenAgent = workspace.agents.find((a) => a.id === agentId);
 
   useLayoutEffect(() => { if (historyPage && transcript.current) transcript.current.scrollTop = 0; }, [historyPage]);
@@ -136,9 +146,11 @@ function App() {
     } catch (e) { setError(String(e)); setReady(false); }
     finally { setBooting(false); }
   }
+  useEffect(() => beforeClose(async () => { clearTimeout(draftTimer.current); await navigation.current.save(); }), []);
   useEffect(() => {
     let dispose, mounted = true;
-    window.__TAURI__.event.listen("local-host-event", ({ payload }) => {
+    listen(({ payload }) => {
+      if (payload.type === "open-project-requested") { openProject(); return; }
       if (payload.type === "disconnected") { setError("本地服务已停止。请重新打开 Turnsu，已保存的内容仍在本机。"); return; }
       if (!refreshTimer.current) refreshTimer.current = setTimeout(() => { refreshTimer.current = null; refresh().catch((e) => setError(String(e))); }, 100);
     }).then((fn) => { if (!mounted) fn(); else dispose = fn; });
@@ -175,12 +187,12 @@ function App() {
         start() {
           ++historyVersion.current; setHistoryPage(null); setHistoryLoading(false);
           setNavigationStage("reading"); setSessionSearch(""); setEditingSessionId(null);
-          ++draftVersion.current; ++fileVersion.current; ++modelRequest.current; setModelsLoading(false); setFileList(null); setPreview(null); setModel(""); setModels(null); setAgentId("codex");
+          ++draftVersion.current; ++fileVersion.current; ++modelRequest.current; setModelsLoading(false); setFileList(null); setPreview(null); setModel(""); setModels(null); setAgentId("codex"); setConnectionId("");
           setView('workbench'); setWorkOpen(false); setSyncOpen(false); setProjectId(id); selected.current = nextSession; setSessionId(nextSession); setSession(null); setError(""); setDraft(""); setReferences([]); setReferencePicker(false); setDraftStatus(""); setFilePanel(false); pendingSend.current = null; atBottom.current = true; lastMessageSignature.current = null; setAwayFromBottom(false); setHasNewContent(false);
         },
         loaded({ draft: saved, session: value }) {
           setDraft(saved.text); setReferences(saved.references); setDraftLoading(false); setDraftLoadFailed(false); setNavigationStage(null);
-          if (value) { setSession(value); pendingSend.current = value.pendingInput || null; setModel(value.model || ""); setAgentId(value.agent); }
+          if (value) { setSession(value); pendingSend.current = value.pendingInput || null; setModel(value.model || ""); setAgentId(value.agent); setConnectionId(value.connection_id || ""); }
         },
       });
     } catch (e) {
@@ -210,19 +222,27 @@ function App() {
   }
   async function send(continueOffline = false) {
     if (!draft.trim() || draftLoading || modelsLoading || sending || active(session?.status)) return;
+    if (chosenConnectionId && !model) { setError("请先读取此连接的模型目录并选择模型。"); return; }
     ++historyVersion.current; setHistoryPage(null); setHistoryLoading(false); atBottom.current = true;
     setSending(true); setError(""); clearTimeout(draftTimer.current);
     const submitted = draft;
     try {
       await command("draft.save", { projectId, sessionId, text: submitted, references });
       let id = selected.current;
-      if (!id) { const s = await command("session.create", { projectId, agent: agentId }); id = s.id; await command("draft.save", { projectId, sessionId: id, text: submitted, references }); await command("draft.save", { projectId, text: "", references: [] }); navigation.current.adopt(projectId, id, submitted, references); selected.current = id; setSessionId(id); setSession(s); }
+      if (!id) { const s = await command("session.create", { projectId, agent: agentId, connectionId: chosenConnectionId || null }); id = s.id; await command("draft.save", { projectId, sessionId: id, text: submitted, references }); await command("draft.save", { projectId, text: "", references: [] }); navigation.current.adopt(projectId, id, submitted, references); selected.current = id; setSessionId(id); setSession(s); }
       if (model && !sessionId) await command("session.model", { sessionId: id, model });
       if (!pendingSend.current || pendingSend.current.text !== submitted || pendingSend.current.sessionId !== id || JSON.stringify(pendingSend.current.references || []) !== JSON.stringify(references)) pendingSend.current = { inputId: crypto.randomUUID(), sessionId: id, text: submitted, references };
       const result = await command("session.send", { ...pendingSend.current, ...(continueOffline === true ? { continueOffline: true } : {}) });
       if (selected.current === id) { navigation.current.adopt(projectId, id, "", []); setSession(result); setDraft(""); setReferences([]); setDraftStatus(""); }
       await command("draft.save", { projectId, sessionId: id, text: "", references: [] }); pendingSend.current = null; await refresh();
-    } catch (e) { setError(String(e)); await refresh().catch(() => {}); }
+    } catch (e) {
+      setError(String(e));
+      if (pendingSend.current) {
+        const latest = await command('session.read', { sessionId: pendingSend.current.sessionId }).catch(() => null);
+        if (latest?.lastSubmission?.id === pendingSend.current.inputId && latest.lastSubmission.status === 'failed') pendingSend.current = null;
+      }
+      await refresh().catch(() => {});
+    }
     finally { setSending(false); }
   }
   async function loadModels() {
@@ -231,22 +251,35 @@ function App() {
     setModelsLoading(true); setError("");
     try {
       let id = sessionId;
-      if (["pi", "claude"].includes(agentId) && !id) {
+      if (["pi", "claude"].includes(agentId) && !id && !chosenConnectionId) {
         setCreatingSession(true);
-        const s = await command("session.create", { projectId, agent: agentId });
+        const s = await command("session.create", { projectId, agent: agentId, connectionId: chosenConnectionId || null });
         await command("draft.save", { projectId, sessionId: s.id, text: draft, references });
         await command("draft.save", { projectId, text: "", references: [] });
         id = s.id; navigation.current.adopt(projectId, id, draft, references); selected.current = id; setSessionId(id); setSession(s); setCreatingSession(false); await refresh();
       }
       if (request !== modelRequest.current) return;
-      const available = await command("models.list", { agent: agentId, sessionId: id });
+      const available = await command("models.list", { agent: agentId, sessionId: id, connectionId: chosenConnectionId || null });
       if (request === modelRequest.current) setModels(available);
     } catch (e) { if (request === modelRequest.current) setError(String(e)); }
     finally { if (request === modelRequest.current) { setCreatingSession(false); setModelsLoading(false); } }
   }
   async function chooseModel(value) {
-    try { if (sessionId) setSession(await command("session.model", { sessionId, model: value || null })); setModel(value); }
-    catch (e) { setError(String(e)); }
+    const id = selected.current, version = modelRequest.current;
+    try {
+      const next = id ? await command("session.model", { sessionId: id, model: value || null }) : null;
+      if (selected.current !== id || version !== modelRequest.current) return;
+      if (next) setSession(next); setModel(value);
+    } catch (e) { if (selected.current === id && version === modelRequest.current) setError(String(e)); }
+  }
+  async function chooseConnection(value) {
+    if (creatingSession || sending) return;
+    setCreatingSession(true); setError('');
+    try {
+      if (sessionId) setSession(await command('session.connection', { sessionId, connectionId: value || null }));
+      ++modelRequest.current; setConnectionId(value); setModels(null); setModel('');
+    } catch (e) { setError(String(e)); }
+    finally { setCreatingSession(false); }
   }
   async function control(method) { setError(""); try { await command(method, { sessionId }); await refresh(); } catch (e) { setError(String(e)); } }
   async function renameSession(event) {
@@ -301,8 +334,10 @@ function App() {
       </div>)}</nav>
       {!workspace.projects.length && ready && <p className="railEmpty">打开一个文件夹，<br />从已有资料开始工作。</p>}
       <button ref={teamButton} className="teamConnection" onClick={() => setCloudOpen(true)}><Plus size={15}/>连接团队</button>
+      <button ref={connectionButton} className="teamConnection" onClick={openConnections}><Settings2 size={15}/>模型连接</button>
       <div className="localFoot"><Laptop size={15} /><span>本地工作台<small>项目与会话保存在这台电脑</small></span></div>
     </aside>
+    {connectionsOpen && <ModelConnectionsDialog onClose={closeConnections} onChanged={readConnections}/>}
     {captureOpen && (captureOpen.kind === 'local-trial' ? <LocalLoopTrialDialog session={captureOpen.session} onClose={closeCapture}/> : captureOpen.kind === 'loop' ? <LoopCaptureDialog session={captureOpen.session} message={captureOpen.message} onClose={closeCapture} onOpen={async s => { await refresh(); await selectProject(s.project_id, s.id); }}/> : <MethodCaptureDialog session={captureOpen.session} message={captureOpen.message} onClose={closeCapture} onOpen={async s => { await refresh(); await selectProject(s.project_id, s.id); }}/> )}
     {workOpen && project?.sharing && <TeamWorkDialog project={project} agents={workspace.agents} onClose={() => setWorkOpen(false)} onOpen={async s => { await refresh(); await selectProject(s.project_id, s.id); }}/> }
     {syncOpen && project?.sharing && <SyncDialog project={project} onClose={() => setSyncOpen(false)}/> }
@@ -335,8 +370,8 @@ function App() {
             {session?.method && <div className="methodNotice"><span>已选择技能：<strong>{session.method.skillName}</strong> · v{session.method.version}</span><small>描述任务后发送，由你的 Agent 使用</small></div>}
             {session?.sharedWork && <div className="sharedWorkNotice"><span>{session.sharedWork.canContinueOffline ? `团队暂时无法连接。上次资料：${new Date(session.sharedWork.contextFetchedAt).toLocaleString()}。新内容先保存在本机，恢复后核验权限并同步。` : session.sharedWork.error || (session.sharedWork.pending ? '请求与答复正在同步到团队…' : '本次请求与最终答复对工作成员可见')}</span>{(session.sharedWork.error || session.sharedWork.pending > 0 || session.sharedWork.canContinueOffline) && <button onClick={() => control(session.sharedWork.workItemId ? 'work.retry' : 'work.finish')}>重试共享</button>}{session.sharedWork.canContinueOffline && !active(session.status) && <button disabled={!draft.trim() || sending || modelsLoading || draftLoading || !chosenAgent?.installed || session.status === 'interrupted'} onClick={() => send(true)}>用上次资料在本机继续</button>}</div>}
             {session?.status === "interrupted" && <div className="resume"><span>上次执行已中断。恢复后检查结果，再继续。</span><button onClick={() => control("session.resume")}><RotateCcw size={14} />恢复会话</button></div>}
-            <div className="composer">{references.length > 0 && <div className="referenceChips" aria-label="已引用资料">{references.map(selection => <span key={referenceKey(selection)}><FileText size={14}/><span title={referenceLabel(selection)}>{referenceLabel(selection)}{typeof selection !== "string" && <small> · {selection.kind === "work-decision" ? "决定" : selection.kind === "work-entry" ? "共享进展" : "历史版本"}</small>}</span><button disabled={sending || creatingSession || draftLoading} aria-label={`移除引用 ${referenceLabel(selection)}`} onClick={() => changeDraft(draft, references.filter(item => referenceKey(item) !== referenceKey(selection)))}><X size={13}/></button></span>)}</div>}<Textarea ref={composerInput} aria-label="任务描述" placeholder={sessionId ? "继续这项工作…" : "描述你想完成的工作…"} value={draft} disabled={draftLoading || sending || creatingSession} onChange={(e) => changeDraft(e.target.value)} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={(e) => { if (e.key === "@" && !composing.current && !e.nativeEvent.isComposing && (!e.currentTarget.selectionStart || /\s/.test(draft[e.currentTarget.selectionStart - 1]))) { e.preventDefault(); setReferencePicker(true); return; } if (e.key === "Enter" && !e.shiftKey && !composing.current && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
-              <div className="composerToolbar"><button className="referenceTrigger" aria-label="引用资料" title="引用资料（@）" disabled={sending || creatingSession || draftLoading} onClick={() => setReferencePicker(true)}>＠</button><span className="agentChoice"><select aria-label="执行 Agent" value={agentId} disabled={Boolean(sessionId) || sending || draftLoading || modelsLoading} onChange={(e) => { setAgentId(e.target.value); setModels(null); setModel(""); }}><option value="codex">Codex</option><option value="pi">Pi</option><option value="claude">Claude Code</option></select> {models ? <select aria-label="执行模型" value={model} disabled={draftLoading || sending || active(session?.status)} onChange={(e) => chooseModel(e.target.value)}><option value="">沿用会话配置</option>{models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select> : <button className="modelChoice" disabled={draftLoading || sending || modelsLoading || active(session?.status)} onClick={loadModels}>{modelsLoading ? "读取模型…" : (model || "选择模型")}</button>}</span><span className="composerHint">{chosenAgent?.installed ? (agentId === "pi" ? "使用 Pi 本机权限" : "在此项目工作") : `请先安装 ${chosenAgent?.name || agentId} CLI`}</span>{active(session?.status) ? <button className="send" aria-label="停止执行" onClick={() => control("session.stop")}><Square size={15} /></button> : <button className="send" aria-label="发送任务" disabled={!draft.trim() || sending || modelsLoading || draftLoading || !chosenAgent?.installed || session?.status === "interrupted"} onClick={send}>{sending ? <LoaderCircle className="spin" size={17} /> : <ArrowUp size={18} />}</button>}</div>
+            <div className="composer"><div className="connectionSource"><label htmlFor="connection-source">模型来源</label><select id="connection-source" value={chosenConnectionId} disabled={Boolean(sessionId && (!session || session.native_id || session.lastSubmission)) || draftLoading || sending || modelsLoading || creatingSession} onChange={e => chooseConnection(e.target.value)}><option value="">跟随原生 Agent</option>{connections.filter(c => c.agents.includes(agentId)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}{chosenConnectionId && !chosenConnection && <option value={chosenConnectionId}>连接不可用</option>}</select>{chosenConnection && <code title={chosenConnection.baseUrl}>{chosenConnection.baseUrl}</code>}<button onClick={openConnections}>管理连接</button></div>{references.length > 0 && <div className="referenceChips" aria-label="已引用资料">{references.map(selection => <span key={referenceKey(selection)}><FileText size={14}/><span title={referenceLabel(selection)}>{referenceLabel(selection)}{typeof selection !== "string" && <small> · {selection.kind === "work-decision" ? "决定" : selection.kind === "work-entry" ? "共享进展" : "历史版本"}</small>}</span><button disabled={sending || creatingSession || draftLoading} aria-label={`移除引用 ${referenceLabel(selection)}`} onClick={() => changeDraft(draft, references.filter(item => referenceKey(item) !== referenceKey(selection)))}><X size={13}/></button></span>)}</div>}<Textarea ref={composerInput} aria-label="任务描述" placeholder={sessionId ? "继续这项工作…" : "描述你想完成的工作…"} value={draft} disabled={draftLoading || sending || creatingSession} onChange={(e) => changeDraft(e.target.value)} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={(e) => { if (e.key === "@" && !composing.current && !e.nativeEvent.isComposing && (!e.currentTarget.selectionStart || /\s/.test(draft[e.currentTarget.selectionStart - 1]))) { e.preventDefault(); setReferencePicker(true); return; } if (e.key === "Enter" && !e.shiftKey && !composing.current && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
+              <div className="composerToolbar"><button className="referenceTrigger" aria-label="引用资料" title="引用资料（@）" disabled={sending || creatingSession || draftLoading} onClick={() => setReferencePicker(true)}>＠</button><span className="agentChoice"><select aria-label="执行 Agent" value={agentId} disabled={Boolean(sessionId) || sending || draftLoading || modelsLoading} onChange={(e) => { setAgentId(e.target.value); setConnectionId(""); setModels(null); setModel(""); }}><option value="codex">Codex</option><option value="pi">Pi</option><option value="claude">Claude Code</option></select> {models ? <select aria-label="执行模型" value={model} disabled={draftLoading || sending || active(session?.status)} onChange={(e) => chooseModel(e.target.value)}><option value="" disabled={Boolean(chosenConnectionId)}>{chosenConnectionId ? "请选择网关模型" : "沿用会话配置"}</option>{models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select> : <button className="modelChoice" disabled={draftLoading || sending || modelsLoading || active(session?.status)} onClick={loadModels}>{modelsLoading ? "读取模型…" : (model || "选择模型")}</button>}</span><span className="composerHint">{chosenAgent?.installed ? (agentId === "pi" ? "使用 Pi 本机权限" : "在此项目工作") : `请先安装 ${chosenAgent?.name || agentId} CLI`}</span>{active(session?.status) ? <button className="send" aria-label="停止执行" onClick={() => control("session.stop")}><Square size={15} /></button> : <button className="send" aria-label="发送任务" disabled={!draft.trim() || sending || modelsLoading || draftLoading || !chosenAgent?.installed || session?.status === "interrupted"} onClick={send}>{sending ? <LoaderCircle className="spin" size={17} /> : <ArrowUp size={18} />}</button>}</div>
             </div><div className="composerMeta"><span>{draftStatus || (session?.sharedWork ? "团队工作 · 工具日志和原生历史保留在本机" : project.sharing ? "文件与团队共享 · 对话仅在本机" : agentId === "pi" ? "Pi 按本机配置运行 · 扩展请求会在这里显示" : "仅在本机 · 需要权限时会询问你")}</span><span>@ 资料和方法 · Enter 发送</span></div>
           </div>
         </>}

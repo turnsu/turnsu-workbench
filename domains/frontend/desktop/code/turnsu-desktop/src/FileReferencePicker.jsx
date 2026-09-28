@@ -1,8 +1,9 @@
+import { invoke } from "./desktop-bridge.mjs";
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, FileText, Folder, X } from 'lucide-react';
 import { WorkReferenceChoices } from './WorkReferenceChoices.jsx';
 import { TeamSkillsDialog } from './TeamSkillsDialog.jsx';
-const command = (method, args) => window.__TAURI__.core.invoke('local_command', { method, args });
+const command = (method, args) => invoke('local_command', { method, args });
 
 export const referenceLabel = selection => typeof selection === 'string' ? selection : selection.label || selection.path;
 export const referenceKey = selection => typeof selection === 'string' ? selection : selection.kind ? `${selection.kind}:${selection.workItemId}:${selection.objectId}` : selection.revisionId ? `${selection.projectId}:${selection.revisionId}` : selection.path;

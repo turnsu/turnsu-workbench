@@ -1,6 +1,6 @@
 # Turnsu 工作台 — Current System Architecture
 
-- Updated: 2026-09-28 (名称与当前迭代入口；下文实现证据仍以各自日期为准)
+- Updated: 2026-09-28 (Electron 外壳、公司模型连接；较早实现证据保留各自验收边界)
 - Status: current implementation truth
 - Baseline: isolated PostgreSQL standard-startup gate green; external production release remains `NO-GO`
 - Product authority: [Master PRD v0.6](../prd/2026-08-04-looloomi-team-intelligence-workspace-master-prd.md)
@@ -28,8 +28,8 @@ are historical target decisions, not implemented consumers or the current priori
 Work Item Loop 运行接口没有被替换。桌面选择性移植公司脚手架的按钮、输入、徽标与主题
 token，并保留上游 MIT 归属；Host 刷新按顺序读取且保留末次事件，避免重叠序列化。
 本轮真实 SQLite/文件及受控 Agent 检查覆盖技能读取、软链接拒绝、版本变化与重开准备；
-macOS 开发包构建及空目录的真实 GUI 导航/目测通过。已填充技能的 GUI 使用、真实 Agent
-成果、Electron 同负载对照和 Windows 设备操作尚未完成，不能据此声称跨平台发布或
+macOS 开发包构建及空目录的真实 GUI 导航/目测通过。已填充技能的 GUI 使用、迁移后真实模型
+成果、桌面进程组同负载内存测量和 Windows 设备操作尚未完成，不能据此声称跨平台发布或
 资源优势。[本轮方案](../design/2026-09-28-workbench-skillos-iteration-plan.md)与
 [内存调研](../design/2026-09-28-desktop-framework-memory-research.md)记录尚需验证的决策。
 
@@ -46,17 +46,40 @@ The [desktop/cloud ownership boundary](desktop-cloud-boundary.md) defines separa
 execution responsibility and independent-development/integration checks. Native execution belongs to
 the local host; cloud collaboration remains a separately authorized Product API.
 
-[`turnsu-desktop`](../../domains/frontend/desktop/code/turnsu-desktop/README.md) is a Tauri 2 macOS
-development app with its own bundled React entry, not a browser pointed at the Web workbench. Its
-Rust process owns a private stdio connection to
-[`local-agent-host`](../../domains/agent/code/local-agent-host/host.mjs). Local SQLite stores project
-references, task drafts, native thread references, visible messages and submission receipts. Native
-Codex retains its credentials and original history. There is no local HTTP listener or cloud login
-dependency in this path; online model inference still requires the provider.
+**2026-09-28 Electron 与模型连接：**
+[`turnsu-desktop`](../../domains/frontend/desktop/code/turnsu-desktop/README.md) now uses Electron
+44.4.5, React and the existing private
+[`local-agent-host`](../../domains/agent/code/local-agent-host/host.mjs) in a utility process.
+The sandboxed renderer has no Node access; a narrow preload bridge and sender validation mediate
+commands. The shell serves bundled files through a restricted app protocol and opens no HTTP listener.
+The former Tauri entry and build are removed. The old `ai.turnsu.desktop` state path and exclusive
+SQLite lock remain; projects, drafts, native session references, visible messages and receipts survive.
+Cloud login is optional; online model inference still requires its provider.
+
+The company llm-gateway is consumed through its model catalog and inference protocols. Connection
+keys are OS-encrypted asynchronously by the Electron main process, never returned in saved-profile reads and never
+stored in SQLite or Product. Users explicitly select a connection for a new or never-started prepared
+task. Once connected/submitted, its source is fixed. Codex uses Responses through a separate App Server
+per connection; Claude Code uses Messages through its native SDK; Pi >=0.87 uses a process-local
+provider extension. Native account configuration and original history remain with the user's Agent.
+Unavailable connections fail visibly without switching accounts. No gateway admin code, ShotSeek or
+doc-templates functionality is included. See the [decision and constraints](../design/2026-09-28-electron-gateway-migration.md).
+
+The macOS arm64 development app and Windows x64 package build. Actual Electron runtime checks cover
+system encryption/reopen, bounded Keychain waits without blocking the main event loop, utility-process
+transport, real SQLite and graceful Host exit. Closing during Agent initialization prevents a later
+process launch. Empty connection configuration does not request Keychain access at startup. The macOS
+window restored the previous selection, history, model and unsent draft; native folder selection and
+the repository README preview also worked. The connection form was operated for address validation,
+readable errors and Escape/focus restoration. Installed Codex and
+Claude Code, plus an isolated official Pi 0.87, reached a local controlled gateway using their actual
+processes, expected authorization headers and streaming protocols. This is transport evidence, not
+company inference acceptance. Real company credentials/inference, Windows device behavior, long-run
+memory curves and release signing/notarization remain unverified; no memory reduction is claimed.
 
 The installed Codex CLI is driven through App Server: initialize, thread start/resume, turn
 start/interrupt, events, approval/question responses and model discovery. Model selection is scoped
-to the Turnsu task and does not modify global Codex configuration. An actual desktop operation opened
+to the Turnsu task and does not modify global Codex configuration. Before the Electron migration, an actual desktop operation opened
 an isolated project through the native folder picker, resumed a native thread after restarting the
 app, selected GPT-5.6-Sol and created `result.md`; the desktop file preview and filesystem both showed
 the requested Chinese heading and two bullets. The initially configured GPT-6-Astra was rejected by
@@ -79,7 +102,7 @@ A reproducible synthetic load check through the actual private stdio host entry 
 `domains/agent/code/local-agent-host/test/benchmark-history.mjs`. With 2,400 synthetic messages, before/
 after runs on this Mac reduced a session read from 9,915,027 to 165,706 serialized bytes and the median
 of five reads from 43.2 to 1.3 ms. Host spawn-to-first-workspace response was approximately 0.4 seconds
-in both runs. These are host/transport measurements, not Tauri launch or rendered scrolling evidence.
+in both runs. These are host/transport measurements, not desktop launch or rendered scrolling evidence.
 The changed native history controls remain visually unaccepted while the Mac is locked.
 
 Task switching now saves only the currently loaded editor, ignores stale selection responses and
@@ -100,7 +123,7 @@ to Pi's own local tool configuration. The installed 0.74.0 CLI remains unchanged
 to update. An isolated official 0.87.0 install passed actual RPC handshake/model discovery and native
 extension select/confirm/cancel checks through the host. The native desktop selector and old-version
 recovery message were visually verified. No Pi provider inference or file-writing acceptance has
-passed on this adapter yet.
+passed on this adapter yet. The later controlled gateway test above verifies Pi transport only.
 
 Claude Code is connected through official Agent SDK 0.2.132 to the user's installed CLI, using its
 native settings, account and session files. The adapter implements model selection, streaming text,
@@ -576,10 +599,10 @@ No alternate Session truth, Tool executor, Product Gateway bypass, or runtime fa
 | Inbox | recipient-scoped PostgreSQL read model; explicit database `target_kind` to public `objectKind` mapping; unknown kinds fail closed; Run review decisions dismiss their matching item through the canonical review/cancellation command | partial | no generic Inbox decision command; Automation attention is a recovery route, not yet an approval-and-resume flow |
 | Automation | public Scope Policy and Automation lifecycle (`create/list/detail/revise/activate/pause/archive/occurrences`); immutable Loop, Resource and Connection pins; PostgreSQL scheduler -> decision -> Workflow Runner Command Intake; occurrence acceptance is atomic with Command/Run creation | implemented+verified locally through the PostgreSQL owner path | approval-bearing Automation resume from Inbox, signed webhook/internal-event triggers, multi-workspace worker composition and real browser acceptance |
 | Storage and operations | filesystem Object Store for local execution; PostgreSQL migrate/start/doctor/release/backup/restore and fixed-digest local container; canonical startup owns identity/secret composition, attachment TTL recovery and realtime restart fencing | implemented+verified locally, including isolated standard startup and HTTP readiness | S3-compatible Object Store, managed PostgreSQL, cloud backup target and telemetry |
-| ProductClient | typed Web leaves for Auth, Workspace, Readiness, Inbox, Model, Work Item, Scope, Automation and Run paths; browser and native bearer transports share JSON contract validation | partial | one composed cross-client surface plus typed SSE cursor and binary transfer support for Web, Tauri and connectors |
+| ProductClient | typed Web leaves for Auth, Workspace, Readiness, Inbox, Model, Work Item, Scope, Automation and Run paths; browser and native bearer transports share JSON contract validation | partial | one composed cross-client surface plus typed SSE cursor and binary transfer support for Web, desktop and connectors |
 | Agent Harness | Product Worker runs `product-pi-first-party-v1`: Pi adapter, Product Session bridge, immutable Profile, Tool Pipeline, Inbox approval/resume, T2 business plugins and RenderIntent; DSH is an experimental conformance-only adapter | real Pi 0.85.1 in a digest-pinned network-disabled container completed browser tasks and read private materials through the Product Gateway; tool results, model-visible events and encrypted transcript persisted | external write/approval effects, signed workspace-plugin release path and a real Cordis/DSH provider remain deferred/experimental |
-| Device control plane | native bearer authorization, Device register/list/heartbeat/revoke, execution leases, outbound authenticated WebSocket gateway and RemoteWorker registry are mounted by the real server | partial; module and PostgreSQL HTTP paths verified | no Tauri client, real remote Worker/Rust capability broker, reconnect UX, or signed-device end-to-end receipt |
-| Desktop, mobile and channels | Product directions are fixed to one Tauri 2 macOS/Windows client, an Expo development-build companion, and Feishu/Lark first | not-started as shipped product consumers | signed desktop packages, Expo app, real Lark tenant adapter and cross-surface acceptance |
+| Device control plane | native bearer authorization, Device register/list/heartbeat/revoke, execution leases, outbound authenticated WebSocket gateway and RemoteWorker registry are mounted by the real server | partial; module and PostgreSQL HTTP paths verified | general desktop remote Worker/capability broker, reconnect UX and signed-device end-to-end receipt |
+| Desktop, mobile and channels | Electron macOS/Windows desktop is the active direction; Expo and Feishu/Lark are earlier cross-surface directions | desktop development slice above; shipped cross-surface acceptance pending | signed desktop packages, real Windows operation, Expo app and real Lark tenant adapter |
 
 ## 3. Old-owner exit
 
@@ -633,8 +656,8 @@ Status meanings: `implemented+verified`, `implemented-unverified`, `partial`, `n
 | Phase 0 — authority/no bypass | partial; golden-path boundaries implemented+verified | operation decisions, explicit Command Intake, scope/object isolation, admitted execution, cross-user and cross-workspace Private Task denial | complete mutation-family boundary matrix and deployed policy telemetry |
 | Phase 0.5 — PostgreSQL one-shot | implemented+verified for the repository/local runtime; production cutover environment-deferred | PG-only defaults and operations, same-manifest regression, real SIGKILL/fence recovery, backup/restore, Mongo consumer-zero guard and immutable cutover receipt | managed deployment and maintenance-window rollback rehearsal |
 | Phase 1 — cloud core | partial | PostgreSQL identity, Sessions, authority, execution, Memory, Inbox foundation, invitation outbox, native token auth, scope-policy lifecycle, Automation lifecycle/pins, a real daily Automation poller and the Product Agent Harness bridge | complete four-kind Session ledger, cross-domain outbox, composed ProductClient with SSE/binary, cloud stores and tracing |
-| Phase 2 — eight-person golden path | partial | private Task, Project-backed Team Work, explicit promotion, Handoff, teammate continuation, comment, owner Decision, Web Automation management and constrained offline daily Run execution | Activity projection, approval-bearing daily Automation, real browser acceptance, Tauri clients and eight-person pilot |
-| Phase 3 — Device and channel | partial backend control plane | native authorization, Device lifecycle, execution leases, outbound WebSocket gateway and Lark policy tests | real Tauri Remote Worker/Rust capability broker and Feishu tenant connector |
+| Phase 2 — eight-person golden path | partial | private Task, Project-backed Team Work, explicit promotion, Handoff, teammate continuation, comment, owner Decision, Web Automation management and constrained offline daily Run execution | Activity projection, approval-bearing daily Automation, real browser acceptance, desktop team acceptance and eight-person pilot |
+| Phase 3 — Device and channel | partial backend control plane | native authorization, Device lifecycle, execution leases, outbound WebSocket gateway and Lark policy tests | general desktop remote Worker/capability broker and Feishu tenant connector |
 | Phase 4 — compounding/mobile | not-started as a product path | Expo companion boundary is specified only | evidence-based proposals, Expo implementation/approval receipt, WeCom and Slack |
 | Phase 5 — scale | not-started by design | none | pilot telemetry threshold has not been reached |
 
@@ -719,7 +742,7 @@ continuation context and owner comments have local browser evidence; actual team
 real LinkCode loading, Jev's measured contribution and native cross-client acceptance remain open.
 
 The existing Project-backed Team Work and Automation lifecycles remain reusable Product owners.
-Multi-workspace Worker composition must be verified before Tauri or Expo execution. Automation
+Multi-workspace Worker composition must be verified before desktop or Expo remote Worker execution. Automation
 includes the explicit Owner policy revision and immutable Resource/Connection pins:
 
 ```text

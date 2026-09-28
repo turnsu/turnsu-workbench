@@ -1,0 +1,41 @@
+.connectionDialog { width: min(660px, calc(100vw - 48px)); max-height: calc(100vh - 64px); padding: 0; border: 1px solid var(--border, #dededb); border-radius: 14px; background: var(--background, #fff); color: inherit; box-shadow: 0 16px 64px #0002; }
+.connectionDialog::backdrop { background: #17171755; }
+.connectionHeader { display: flex; align-items: flex-start; justify-content: space-between; padding: 24px 26px 18px; border-bottom: 1px solid #e9e9e6; }
+.connectionHeader h2 { font-size: 20px; margin: 0 0 8px; letter-spacing: -.4px; }
+.connectionHeader p, .nativeConnection p { margin: 0; color: #777; font-size: 13px; line-height: 1.6; }
+.connectionHeader > button { padding: 5px; }
+.connectionBody { padding: 22px 26px; max-height: calc(100vh - 252px); overflow-y: auto; }
+.nativeConnection { display: flex; align-items: flex-start; gap: 11px; padding: 16px; border: 1px solid #deded8; border-radius: 9px; background: #f7f7f3; }
+.nativeConnection > svg { color: #3b6f4b; flex-shrink: 0; margin-top: 2px; }
+.nativeConnection > span { margin-left: auto; font-size: 11px; color: #72726c; }
+.nativeConnection strong, .savedConnection strong { font-size: 14px; }
+.connectionSectionHeading { display: flex; align-items: center; justify-content: space-between; margin-top: 25px; margin-bottom: 12px; }
+.connectionSectionHeading h3, .connectionForm h3 { font-size: 14px; margin: 0; }
+.connectionEmpty { text-align: center; padding: 24px 12px; border: 1px dashed #dededb; border-radius: 9px; }
+.connectionEmpty strong { font-size: 14px; font-weight: 500; }
+.connectionEmpty p, .connectionHelp { color: #74746e; font-size: 12px; line-height: 1.7; }
+.savedConnection { padding: 15px 0; border-bottom: 1px solid #e9e9e6; }
+.savedConnection > div:first-child { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.savedConnection span { color: #777; font-size: 11px; }
+.savedConnection code { flex-basis: 100%; overflow-wrap: anywhere; font-size: 12px; color: #777; }
+.connectionActions { display: flex; gap: 12px; margin-top: 10px; }
+.connectionActions button { font-size: 12px; padding: 3px 0; }
+.connectionCheck { font-size: 12px; color: #45634d; margin-top: 12px; overflow-wrap: anywhere; }
+.connectionCheck p { color: #777; line-height: 1.6; }
+.connectionForm { margin-top: 18px; padding: 20px; border: 1px solid #d8d8d2; border-radius: 9px; background: #fafaf8; }
+.connectionForm label { display: flex; flex-direction: column; gap: 7px; font-size: 12px; color: #555; margin-top: 16px; }
+.connectionForm input, .connectionForm select { width: 100%; font-size: 13px; background: #fff; border: 1px solid #d8d8d2; border-radius: 6px; padding: 9px 10px; }
+.connectionFormActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.connectionFooter { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px 26px; border-top: 1px solid #e9e9e6; color: #777; font-size: 11px; line-height: 1.6; }
+.connectionFooter button { display: flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 12px; }
+.connectionStatus { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #777; }
+.connectionSource { display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 0 2px 8px; color: #75756e; font-size: 11px; }
+.connectionSource select { background: transparent; border: 0; padding: 4px; max-width: 240px; font-size: 11px; }
+.connectionSource button { margin-left: auto; padding: 4px; font-size: 11px; }
+.connectionSource code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px; }
+.connectionDialog :focus-visible { outline: 2px solid #58704e; outline-offset: 2px; }
+@media (max-width: 900px) { .connectionSource code { display: none; } .connectionFooter { flex-wrap: wrap; gap: 8px; } }
+
+:root { color-scheme: light; }
+.agentChoice select:disabled, .connectionSource select:disabled { opacity: 1; color: #686860; -webkit-text-fill-color: #686860; }
+.connectionForm:first-child { margin-top: 0; }

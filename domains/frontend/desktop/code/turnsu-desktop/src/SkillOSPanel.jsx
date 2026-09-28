@@ -1,8 +1,9 @@
+import { invoke } from "./desktop-bridge.mjs";
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, BookOpen, Layers3, RotateCcw, Search } from 'lucide-react';
 import { Badge, Button, Input } from './ScaffoldControls.jsx';
 
-const command = (method, args = {}) => window.__TAURI__.core.invoke('local_command', { method, args });
+const command = (method, args = {}) => invoke('local_command', { method, args });
 const agentName = { codex: 'Codex', claude: 'Claude Code', pi: 'Pi' };
 
 export function SkillOSPanel({ project, agents, workSession, onOpen, onReturn }) {

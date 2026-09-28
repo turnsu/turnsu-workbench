@@ -9,7 +9,7 @@ let require;
 try { require = createRequire(resolve(root, 'package.json')); require.resolve('esbuild'); }
 catch { require = createRequire(resolve(root, '../../../web/code/web-prototype/package.json')); }
 await mkdir(out, { recursive: true });
-const result = await require('esbuild').build({ entryPoints: { entry: resolve(host, 'entry.mjs') }, outdir: out, outExtension: { '.js': '.mjs' }, chunkNames: 'chunks/[name]-[hash]', splitting: true, bundle: true, platform: 'node', target: 'node22', format: 'esm', minify: true, write: false, metafile: true,
+const result = await require('esbuild').build({ entryPoints: { entry: resolve(host, 'entry.mjs'), 'desktop-entry': resolve(host, 'desktop-entry.mjs'), 'model-connections': resolve(host, 'model-connections.mjs') }, outdir: out, outExtension: { '.js': '.mjs' }, chunkNames: 'chunks/[name]-[hash]', splitting: true, bundle: true, platform: 'node', target: 'node22', format: 'esm', minify: true, write: false, metafile: true,
   banner: { js: 'import { createRequire as turnsuRequire } from "node:module"; const require = turnsuRequire(import.meta.url);' } });
 // The desktop may consume public contracts; Product services and PostgreSQL stay in the cloud build.
 const forbidden = Object.keys(result.metafile.inputs).filter(path => /(?:^|\/)domains\/backend\/code\/(?!workbench-contracts\/)|(?:^|\/)node_modules\/(?:pg|pg-pool|postgres)\//.test(path.replaceAll('\\', '/')));
@@ -37,3 +37,6 @@ for (const path of packages) {
 }
 await writeFile(resolve(notices, 'bundled-packages.json'), JSON.stringify(inventory, null, 2));
 console.log('Turnsu local host bundled; the isolated Pi SDK loads on demand. User CLIs remain external.');
+
+await cp(resolve(host, 'pi-gateway-extension.mjs'), resolve(out, 'pi-gateway-extension.mjs'));
+await cp(resolve(host, 'pi-gateway-extension.mjs'), resolve(out, 'chunks/pi-gateway-extension.mjs'));

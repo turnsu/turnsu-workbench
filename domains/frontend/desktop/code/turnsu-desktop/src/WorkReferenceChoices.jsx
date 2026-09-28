@@ -1,6 +1,7 @@
+import { invoke } from "./desktop-bridge.mjs";
 import React, { useEffect, useRef, useState } from 'react';
 import { referenceKey } from './FileReferencePicker.jsx';
-const command = (method, args) => window.__TAURI__.core.invoke('local_command', { method, args });
+const command = (method, args) => invoke('local_command', { method, args });
 
 export function WorkReferenceChoices({ sessionId, kind, selected, onSelect }) {
   const [data, setData] = useState(null), [query, setQuery] = useState(''), [preview, setPreview] = useState(null);

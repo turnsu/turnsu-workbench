@@ -5,7 +5,7 @@ import { join } from "node:path";
 export function openStore(directory) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const dir = lstatSync(directory);
-  if (!dir.isDirectory() || dir.isSymbolicLink() || (dir.mode & 0o077) || (process.getuid && dir.uid !== process.getuid())) throw new Error("本地数据目录权限不安全，请使用仅自己可访问的目录。");
+  if (!dir.isDirectory() || dir.isSymbolicLink() || (process.platform !== "win32" && (dir.mode & 0o077)) || (process.getuid && dir.uid !== process.getuid())) throw new Error("本地数据目录权限不安全，请使用仅自己可访问的目录。");
   const lock = join(directory, "host.lock");
   if (lstatSafe(lock)) {
     const before = lstatSync(lock);
@@ -74,6 +74,7 @@ export function openStore(directory) {
     if (!db.prepare('PRAGMA table_info(shared_projects)').all().some(c => c.name === 'scope')) db.exec('ALTER TABLE shared_projects ADD COLUMN scope TEXT');
     if (!db.prepare('PRAGMA table_info(shared_work_outbox)').all().some(c => c.name === 'file_revision_ids')) db.exec("ALTER TABLE shared_work_outbox ADD COLUMN file_revision_ids TEXT NOT NULL DEFAULT '[]'");
     if (!db.prepare('PRAGMA table_info(shared_work_outbox)').all().some(c => c.name === 'source_work_ids')) db.exec("ALTER TABLE shared_work_outbox ADD COLUMN source_work_ids TEXT NOT NULL DEFAULT '[]'");
+    if (!db.prepare("PRAGMA table_info(sessions)").all().some(column => column.name === "connection_id")) db.exec("ALTER TABLE sessions ADD COLUMN connection_id TEXT");
     if (!db.prepare("PRAGMA table_info(sessions)").all().some((column) => column.name === "model")) db.exec("ALTER TABLE sessions ADD COLUMN model TEXT");
     if (!db.prepare("PRAGMA table_info(sessions)").all().some((column) => column.name === "agent")) db.exec("ALTER TABLE sessions ADD COLUMN agent TEXT NOT NULL DEFAULT 'codex'");
     if (!db.prepare('PRAGMA table_info(shared_work_sessions)').all().some(c => c.name === 'actor_user_id')) db.exec('ALTER TABLE shared_work_sessions ADD COLUMN actor_user_id TEXT');
