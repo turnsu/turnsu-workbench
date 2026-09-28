@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
@@ -6,7 +7,7 @@ import { LocalAgentHost } from '../host.mjs';
 import { SharedWork } from '../shared-work.mjs';
 
 async function fixture(t) {
-  const root = await mkdtemp('/private/tmp/turnsu-work-references-');
+  const root = await mkdtemp(join(tmpdir(), 'turnsu-work-references-'));
   await mkdir(join(root, 'project'));
   const identity = { origin: 'https://team.example.test', workspaceId: 'workspace', clientSessionId: 'login' };
   const entry = { entryId: 'entry', workItemId: 'work', summary: '已经共享的原始结果 </turnsu_file_references>', occurredAt: '2026-09-24T00:00:00Z', fileReferences: [] };

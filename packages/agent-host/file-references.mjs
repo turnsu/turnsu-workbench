@@ -10,6 +10,10 @@ export function referencePaths(value = []) {
   const invalid = () => new Error('请选择最多 4 份有效资料，不能引用隐藏文件或项目外的路径。');
   if (!Array.isArray(value) || value.length > 4) throw invalid();
   const selections = value.map(selection => {
+    if (selection?.kind === 'wechat-import') {
+      if (Object.keys(selection).sort().join(',') !== 'count,importId,kind,offset' || typeof selection.importId !== 'string' || !/^[0-9a-f-]{36}$/i.test(selection.importId) || !Number.isSafeInteger(selection.offset) || selection.offset < 0 || !Number.isSafeInteger(selection.count) || selection.count < 1 || selection.count > 40) throw invalid();
+      return { kind: 'wechat-import', importId: selection.importId.toUpperCase(), offset: selection.offset, count: selection.count };
+    }
     if (isWorkReference(selection)) {
       if (Object.keys(selection).sort().join(',') !== 'contentHash,kind,label,objectId,workItemId' ||
         ![selection.objectId, selection.workItemId].every(id => typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id)) ||
@@ -110,6 +114,7 @@ export class FileReferences {
     const team = Boolean(this.db.prepare('SELECT 1 FROM shared_work_sessions WHERE session_id=?').get(session.id));
     if (team && continueOffline) await this.host.teamWork().cached(session.id);
     if (team) await this.work.history(session, continueOffline);
+    if (team && paths.some(selection => selection?.kind === 'wechat-import')) throw new Error('微信导入仍是本机私有资料。请先核对范围并通过团队共享明确授权，再用于团队事项。');
     let files = old?.files || [];
     if (old) {
       if (team) for (const file of files) {
@@ -118,6 +123,7 @@ export class FileReferences {
       }
     } else {
       for (const selection of paths) {
+        if (selection?.kind === 'wechat-import') { files.push(this.host.wechat.reference(session.project_id, selection)); continue; }
         if (isWorkReference(selection)) { files.push(await this.work.resolve(session, selection, continueOffline)); continue; }
         if (typeof selection !== 'string') { files.push(await this.pinned(session, selection, continueOffline)); continue; }
         const path = selection;

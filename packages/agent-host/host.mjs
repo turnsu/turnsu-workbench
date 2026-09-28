@@ -1,4 +1,6 @@
 import { sessionIndex } from './session-index.mjs';
+import { AgentPreferences } from './agent-preferences.mjs';
+import { WeChatImports } from './wechat-imports.mjs';
 import { ModelConnections, normalizeConnection } from './model-connections.mjs';
 import { ProjectMembers } from './project-members.mjs';
 import { messageHistory } from "./message-history.mjs";
@@ -40,11 +42,13 @@ export function readableError(value) {
 }
 
 export class LocalAgentHost {
-  constructor({ directory, notify = () => {}, clock = () => Date.now(), idleTimeoutMs = 300_000, idleConnectionLimit = 2, connectionFactory = (options) => new CodexConnection(options), piFactory = (options) => new PiConnection(options), claudeFactory = (options) => new ClaudeConnection(options) }) {
+  constructor({ directory, notify = () => {}, clock = () => Date.now(), idleTimeoutMs = 300_000, idleConnectionLimit = 2, connectionFactory = (options) => new CodexConnection(options), piFactory = (options) => new PiConnection(options), claudeFactory = (options) => new ClaudeConnection(options), wechatRoot = undefined, wechatGroupRoot = undefined }) {
     this.modelConnections = new ModelConnections(); this.codexConnections = new Map();
     this.claudeFactory = claudeFactory; this.claudeConnections = new Map(); this.claudeStreams = new Map();
     this.directory = directory; this.piFactory = piFactory; this.piConnections = new Map(); this.piErrors = new Map(); this.modelCatalogs = new Map();
     this.store = openStore(directory); this.db = this.store.db;
+    this.agentPreferences = new AgentPreferences(this.db);
+    this.wechat = new WeChatImports(this, { ...(wechatRoot === undefined ? {} : { bridgeRoot: wechatRoot }), ...(wechatGroupRoot === undefined ? {} : { groupRoot: wechatGroupRoot }) });
     this.references = new FileReferences(this);
     this.notify = notify; this.connectionFactory = connectionFactory; this.capture = new MethodCapture(this); this.loopCapture = new LoopCapture(this);
     this.localLoopTrials = new LocalLoopTrials(this);
@@ -145,10 +149,11 @@ export class LocalAgentHost {
   }
   snapshot(args = {}) {
     if (args.projectId) this.project(args.projectId);
+    const agents = discoverAgents();
     return { projects: this.db.prepare("SELECT * FROM projects ORDER BY updated_at DESC").all().map(p => ({ ...p, sharing: this.shared?.snapshot(p.id) || null })),
       ...sessionIndex(this.db, args),
       activeSessionCount: this.db.prepare("SELECT count(*) AS count FROM sessions WHERE status IN ('starting','running','waiting','stopping')").get().count,
-      agents: discoverAgents() };
+      agents, agentPreference: this.agentPreferences.read(args.projectId, agents) };
   }
   readSession(id) {
     const session = this.session(id); session.error = readableError(session.error);
@@ -522,6 +527,20 @@ export class LocalAgentHost {
     }
     switch (method) {
       case "workspace.read": return this.snapshot(args);
+      case "agent.preference.read": {
+        if (args.projectId) this.project(args.projectId);
+        return this.agentPreferences.read(args.projectId, discoverAgents());
+      }
+      case "agent.preference.save": {
+        this.agentPreferences.save(args);
+        this.changed();
+        return this.agentPreferences.read(args.projectId, discoverAgents());
+      }
+      case 'wechat.handoffs': return this.wechat.listHandoffs();
+      case 'wechat.preview': return this.wechat.preview(args.id, { offset: args.offset });
+      case 'wechat.import': return this.wechat.import(args.projectId, args.id);
+      case 'wechat.imports': return this.wechat.list(args.projectId, { before: args.before });
+      case 'wechat.records': return this.wechat.records(args.projectId, args.id, args.offset || 0);
       case "session.locate": { const s = this.session(args.sessionId); return { id: s.id, projectId: s.project_id }; }
       case "connections.list": return this.modelConnections.list();
       case "connections.usage": return { sessions: this.db.prepare("SELECT count(*) AS count FROM sessions WHERE connection_id=?").get(text(args.id, 64)).count };
@@ -606,7 +625,7 @@ export class LocalAgentHost {
         this.session(args.sessionId);
         const snapshot = this.references.snapshot(text(args.inputId, 128));
         if (!snapshot || snapshot.session_id !== args.sessionId || !this.db.prepare('SELECT 1 FROM submissions WHERE id=? AND session_id=?').get(args.inputId, args.sessionId)) throw new Error("找不到这次发送的引用文件。");
-        const file = snapshot.files.find(file => args.objectId ? file.objectId === args.objectId && file.kind === args.kind : file.path === args.path && !file.kind);
+        const file = snapshot.files.find(file => args.kind === 'wechat-import' ? file.kind === 'wechat-import' && file.importId === args.importId && file.offset === args.offset : args.objectId ? file.objectId === args.objectId && file.kind === args.kind : file.path === args.path && !file.kind);
         if (!file) throw new Error("找不到这次发送的引用文件。");
         return file;
       }

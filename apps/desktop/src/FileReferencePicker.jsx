@@ -5,8 +5,8 @@ import { WorkReferenceChoices } from './WorkReferenceChoices.jsx';
 import { TeamSkillsDialog } from './TeamSkillsDialog.jsx';
 const command = (method, args) => invoke('local_command', { method, args });
 
-export const referenceLabel = selection => typeof selection === 'string' ? selection : selection.label || selection.path;
-export const referenceKey = selection => typeof selection === 'string' ? selection : selection.kind ? `${selection.kind}:${selection.workItemId}:${selection.objectId}` : selection.revisionId ? `${selection.projectId}:${selection.revisionId}` : selection.path;
+export const referenceLabel = selection => typeof selection === 'string' ? selection : selection.kind === 'wechat-import' ? (selection.path || `微信记录 · 第 ${selection.offset + 1}–${selection.offset + selection.count} 条`) : selection.label || selection.path;
+export const referenceKey = selection => typeof selection === 'string' ? selection : selection.kind === 'wechat-import' ? `wechat-import:${selection.importId}:${selection.offset}` : selection.kind ? `${selection.kind}:${selection.workItemId}:${selection.objectId}` : selection.revisionId ? `${selection.projectId}:${selection.revisionId}` : selection.path;
 
 export function FileReferencePicker({ projectId, sessionId, team, selected, onSelect, onClose, methodContext }) {
   const dialog = useRef(null);
@@ -38,7 +38,7 @@ export function SentFileReference({ sessionId, inputId, file }) {
   async function read() {
     if (content !== null || loading.current) return;
     loading.current = true; setError('');
-    try { const value = await command('references.read', { sessionId, inputId, ...(file.kind ? { kind: file.kind, objectId: file.objectId } : { path: file.path }) }); setContent(value.text); }
+    try { const value = await command('references.read', { sessionId, inputId, ...(file.kind === 'wechat-import' ? { kind: file.kind, importId: file.importId, offset: file.offset } : file.kind ? { kind: file.kind, objectId: file.objectId } : { path: file.path }) }); setContent(value.text); }
     catch (e) { setError(String(e)); } finally { loading.current = false; }
   }
   return <details className="sentReference" onToggle={e => { if (e.currentTarget.open) read(); }}><summary><FileText size={14}/>{referenceLabel(file)}<small>发送时内容</small></summary>{error ? <p role="alert">{error}<button onClick={read}>重试读取</button></p> : <pre tabIndex={0}>{content ?? '正在读取…'}</pre>}</details>;

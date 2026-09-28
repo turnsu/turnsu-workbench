@@ -20,6 +20,8 @@ import "./skill-os.css";
 import { TeamWorkDialog } from "./TeamWorkDialog.jsx";
 import { CloudDialog } from "./CloudDialog.jsx";
 import { SyncDialog, syncLabels } from "./SyncDialog.jsx";
+import { WeChatImportDialog } from './WeChatImportDialog.jsx';
+import './wechat-import.css';
 
 const command = (method, args = {}) => invoke("local_command", { method, args });
 const labels = { idle: "可以继续", starting: "正在连接 Agent", running: "正在处理", waiting: "需要你的回应", stopping: "正在停止", interrupted: "可以恢复", failed: "需要处理" };
@@ -86,7 +88,10 @@ function App() {
   const [draft, setDraft] = useState(""), [draftLoading, setDraftLoading] = useState(false), [navigationStage, setNavigationStage] = useState(null), [draftStatus, setDraftStatus] = useState("");
   const [error, setError] = useState(""), [ready, setReady] = useState(false), [sending, setSending] = useState(false);
   const [filePanel, setFilePanel] = useState(false), [folder, setFolder] = useState(""), [fileList, setFileList] = useState(null), [preview, setPreview] = useState(null);
+  const [wechatOpen, setWechatOpen] = useState(false);
   const [agentId, setAgentId] = useState("codex");
+  const [agentPreference, setAgentPreference] = useState(null), [preferenceSaving, setPreferenceSaving] = useState(false);
+  const manualAgentVersion = useRef(0);
   const [creatingSession, setCreatingSession] = useState(false);
   const modelRequest = useRef(0);
   const [models, setModels] = useState(null), [model, setModel] = useState(""), [modelsLoading, setModelsLoading] = useState(false);
@@ -225,14 +230,19 @@ function App() {
             setSessionSearch(""); setWorkspace(w => ({ ...w, sessions: [], sessionPage: {} }));
             loadSessionIndex({ projectId: id });
           }
-          ++draftVersion.current; ++fileVersion.current; ++modelRequest.current; setModelsLoading(false); setFileList(null); setPreview(null); setModel(""); setModels(null); setAgentId("codex"); setConnectionId("");
-          setView('workbench'); setWorkOpen(false); setSyncOpen(false); setProjectId(id); selected.current = nextSession; setSessionId(nextSession); setSession(null); setError(""); setDraft(""); setReferences([]); setReferencePicker(false); setDraftStatus(""); setFilePanel(false); pendingSend.current = null; atBottom.current = true; lastMessageSignature.current = null; setAwayFromBottom(false); setHasNewContent(false);
+          ++draftVersion.current; ++fileVersion.current; ++modelRequest.current; setModelsLoading(false); setFileList(null); setPreview(null); setModel(""); setModels(null); setAgentId(indexQuery.current.projectId === id ? workspace.agentPreference?.agentId || 'codex' : workspace.agents.find(agent => agent.installed)?.id || 'codex'); setAgentPreference(null); setConnectionId("");
+          setView('workbench'); setWorkOpen(false); setSyncOpen(false); setWechatOpen(false); setProjectId(id); selected.current = nextSession; setSessionId(nextSession); setSession(null); setError(""); setDraft(""); setReferences([]); setReferencePicker(false); setDraftStatus(""); setFilePanel(false); pendingSend.current = null; atBottom.current = true; lastMessageSignature.current = null; setAwayFromBottom(false); setHasNewContent(false);
         },
         loaded({ draft: saved, session: value }) {
           setDraft(saved.text); setReferences(saved.references); setDraftLoading(false); setDraftLoadFailed(false); setNavigationStage(null);
           if (value) { setSession(value); pendingSend.current = value.pendingInput || null; setModel(value.model || ""); setAgentId(value.agent); setConnectionId(value.connection_id || ""); }
         },
       });
+      if (!nextSession && navigation.current.current?.projectId === id && !selected.current) {
+        const choiceVersion = manualAgentVersion.current;
+        const preference = await command('agent.preference.read', { projectId: id });
+        if (navigation.current.current?.projectId === id && !selected.current) { setAgentPreference(preference); if (choiceVersion === manualAgentVersion.current) setAgentId(preference.agentId); }
+      }
     } catch (e) {
       const loaded = Boolean(navigation.current.current?.loaded);
       setNavigationStage(null);
@@ -243,6 +253,15 @@ function App() {
   async function openProject() {
     try { const p = await invoke("open_project"); if (p) { await refresh(); await selectProject(p.id); } }
     catch (e) { setError(String(e)); }
+  }
+  async function saveAgentPreference(scope) {
+    if (!projectId || sessionId || preferenceSaving) return;
+    setPreferenceSaving(true); setError('');
+    try {
+      const preference = await command('agent.preference.save', { scope, projectId, agentId });
+      setAgentPreference(preference);
+    } catch (e) { setError(String(e)); }
+    finally { setPreferenceSaving(false); }
   }
   function changeDraft(value, nextReferences = references) {
     if (!navigation.current.current?.loaded) return;
@@ -388,10 +407,12 @@ function App() {
     {workOpen && project?.sharing && <TeamWorkDialog project={project} agents={workspace.agents} onClose={() => setWorkOpen(false)} onOpen={async s => { await refresh(); await selectProject(s.project_id, s.id); }}/> }
     {syncOpen && project?.sharing && <SyncDialog project={project} onClose={() => setSyncOpen(false)}/> }
     {cloudOpen && <CloudDialog localProject={project} onClose={() => setCloudOpen(false)} onJoin={async p => { await refresh(); await selectProject(p.id, p.id === projectId ? sessionId : null); }}/>}
+    {wechatOpen && project && <WeChatImportDialog projectId={projectId} team={Boolean(session?.sharedWork)} selected={references} onReference={selection => { addReference(selection); setWechatOpen(false); }} onClose={() => setWechatOpen(false)}/>}
     {view === 'skills' ? <main className="skillMain"><SkillOSPanel project={project} agents={workspace.agents} workSession={session?.sharedWork?.workItemId ? { id: session.sharedWork.workItemId, title: session.title } : null} onOpen={async s => { await refresh(); await selectProject(s.project_id, s.id); }} onReturn={() => setView('workbench')}/></main> : <main>
       <header><div>{project ? <><span className="breadcrumb">{project.sharing?.title || project.name}<ChevronRight size={13} /></span><strong>{session?.title || (sessionId ? workspace.sessions.find(s => s.id === sessionId)?.title : null) || "新任务"}</strong></> : <strong>我的工作台</strong>}</div>
         {project?.sharing && <button ref={workButton} onClick={() => setWorkOpen(true)}>团队工作</button>}
         {project?.sharing && <button ref={syncButton} className={`syncBadge ${project.sharing.status}`} onClick={() => setSyncOpen(true)}>{syncLabels[project.sharing.status]}</button>}
+        {project && <button onClick={() => setWechatOpen(true)}><FileText size={16}/>微信资料</button>}
         {project && <button aria-pressed={filePanel} onClick={() => { setFilePanel(!filePanel); if (!filePanel) listFiles(); }}><Files size={16} />项目文件</button>}
       </header>
       <div className="workArea"><section className="conversation">
@@ -416,9 +437,11 @@ function App() {
             {session?.method && <div className="methodNotice"><span>已选择技能：<strong>{session.method.skillName}</strong> · v{session.method.version}</span><small>描述任务后发送，由你的 Agent 使用</small></div>}
             {session?.sharedWork && <div className="sharedWorkNotice"><span>{session.sharedWork.canContinueOffline ? `团队暂时无法连接。上次资料：${new Date(session.sharedWork.contextFetchedAt).toLocaleString()}。新内容先保存在本机，恢复后核验权限并同步。` : session.sharedWork.error || (session.sharedWork.pending ? '请求与答复正在同步到团队…' : '本次请求与最终答复对工作成员可见')}</span>{(session.sharedWork.error || session.sharedWork.pending > 0 || session.sharedWork.canContinueOffline) && <button onClick={() => control(session.sharedWork.workItemId ? 'work.retry' : 'work.finish')}>重试共享</button>}{session.sharedWork.canContinueOffline && !active(session.status) && <button disabled={!draft.trim() || sending || modelsLoading || draftLoading || !chosenAgent?.installed || session.status === 'interrupted'} onClick={() => send(true)}>用上次资料在本机继续</button>}</div>}
             {session?.status === "interrupted" && <div className="resume"><span>上次执行已中断。恢复后检查结果，再继续。</span><button onClick={() => control("session.resume")}><RotateCcw size={14} />恢复会话</button></div>}
-            <div className="composer"><div className="connectionSource"><label htmlFor="connection-source">模型来源</label><select id="connection-source" value={chosenConnectionId} disabled={Boolean(sessionId && (!session || session.native_id || session.lastSubmission)) || draftLoading || sending || modelsLoading || creatingSession} onChange={e => chooseConnection(e.target.value)}><option value="">跟随原生 Agent</option>{connections.filter(c => c.agents.includes(agentId)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}{chosenConnectionId && !chosenConnection && <option value={chosenConnectionId}>连接不可用</option>}</select>{chosenConnection && <code title={chosenConnection.baseUrl}>{chosenConnection.baseUrl}</code>}<button onClick={openConnections}>管理连接</button></div>{references.length > 0 && <div className="referenceChips" aria-label="已引用资料">{references.map(selection => <span key={referenceKey(selection)}><FileText size={14}/><span title={referenceLabel(selection)}>{referenceLabel(selection)}{typeof selection !== "string" && <small> · {selection.kind === "work-decision" ? "决定" : selection.kind === "work-entry" ? "共享进展" : "历史版本"}</small>}</span><button disabled={sending || creatingSession || draftLoading} aria-label={`移除引用 ${referenceLabel(selection)}`} onClick={() => changeDraft(draft, references.filter(item => referenceKey(item) !== referenceKey(selection)))}><X size={13}/></button></span>)}</div>}<Textarea ref={composerInput} aria-label="任务描述" placeholder={sessionId ? "继续这项工作…" : "描述你想完成的工作…"} value={draft} disabled={draftLoading || sending || creatingSession} onChange={(e) => changeDraft(e.target.value)} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={(e) => { if (e.key === "@" && !composing.current && !e.nativeEvent.isComposing && (!e.currentTarget.selectionStart || /\s/.test(draft[e.currentTarget.selectionStart - 1]))) { e.preventDefault(); setReferencePicker(true); return; } if (e.key === "Enter" && !e.shiftKey && !composing.current && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
-              <div className="composerToolbar"><button className="referenceTrigger" aria-label="引用资料" title="引用资料（@）" disabled={sending || creatingSession || draftLoading} onClick={() => setReferencePicker(true)}>＠</button><span className="agentChoice"><select aria-label="执行 Agent" value={agentId} disabled={Boolean(sessionId) || sending || draftLoading || modelsLoading} onChange={(e) => { setAgentId(e.target.value); setConnectionId(""); setModels(null); setModel(""); }}><option value="codex">Codex</option><option value="pi">Pi</option><option value="claude">Claude Code</option></select> {models ? <select aria-label="执行模型" value={model} disabled={draftLoading || sending || active(session?.status)} onChange={(e) => chooseModel(e.target.value)}><option value="" disabled={Boolean(chosenConnectionId)}>{chosenConnectionId ? "请选择网关模型" : "沿用会话配置"}</option>{models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select> : <button className="modelChoice" disabled={draftLoading || sending || modelsLoading || active(session?.status)} onClick={loadModels}>{modelsLoading ? "读取模型…" : (model || "选择模型")}</button>}</span><span className="composerHint">{chosenAgent?.installed ? (agentId === "pi" ? "使用 Pi 本机权限" : "在此项目工作") : `请先安装 ${chosenAgent?.name || agentId} CLI`}</span>{active(session?.status) ? <button className="send" aria-label="停止执行" onClick={() => control("session.stop")}><Square size={15} /></button> : <button className="send" aria-label="发送任务" disabled={!draft.trim() || sending || modelsLoading || draftLoading || !chosenAgent?.installed || session?.status === "interrupted"} onClick={send}>{sending ? <LoaderCircle className="spin" size={17} /> : <ArrowUp size={18} />}</button>}</div>
-            </div><div className="composerMeta"><span>{draftStatus || (session?.sharedWork ? "团队工作 · 工具日志和原生历史保留在本机" : project.sharing ? "文件与团队共享 · 对话仅在本机" : agentId === "pi" ? "Pi 按本机配置运行 · 扩展请求会在这里显示" : "仅在本机 · 需要权限时会询问你")}</span><span>@ 资料和方法 · Enter 发送</span></div>
+            <div className="composer"><div className="connectionSource"><label htmlFor="connection-source">模型来源</label><select id="connection-source" value={chosenConnectionId} disabled={Boolean(sessionId && (!session || session.native_id || session.lastSubmission)) || draftLoading || sending || modelsLoading || creatingSession} onChange={e => chooseConnection(e.target.value)}><option value="">跟随原生 Agent</option>{connections.filter(c => c.agents.includes(agentId)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}{chosenConnectionId && !chosenConnection && <option value={chosenConnectionId}>连接不可用</option>}</select>{chosenConnection && <code title={chosenConnection.baseUrl}>{chosenConnection.baseUrl}</code>}<button onClick={openConnections}>管理连接</button></div>{references.length > 0 && <div className="referenceChips" aria-label="已引用资料">{references.map(selection => <span key={referenceKey(selection)}><FileText size={14}/><span title={referenceLabel(selection)}>{referenceLabel(selection)}{typeof selection !== "string" && <small> · {selection.kind === "work-decision" ? "决定" : selection.kind === "work-entry" ? "共享进展" : selection.kind === "wechat-import" ? "微信导入" : "历史版本"}</small>}</span><button disabled={sending || creatingSession || draftLoading} aria-label={`移除引用 ${referenceLabel(selection)}`} onClick={() => changeDraft(draft, references.filter(item => referenceKey(item) !== referenceKey(selection)))}><X size={13}/></button></span>)}</div>}<Textarea ref={composerInput} aria-label="任务描述" placeholder={sessionId ? "继续这项工作…" : "描述你想完成的工作…"} value={draft} disabled={draftLoading || sending || creatingSession} onChange={(e) => changeDraft(e.target.value)} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={(e) => { if (e.key === "@" && !composing.current && !e.nativeEvent.isComposing && (!e.currentTarget.selectionStart || /\s/.test(draft[e.currentTarget.selectionStart - 1]))) { e.preventDefault(); setReferencePicker(true); return; } if (e.key === "Enter" && !e.shiftKey && !composing.current && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
+              <div className="composerToolbar"><button className="referenceTrigger" aria-label="引用资料" title="引用资料（@）" disabled={sending || creatingSession || draftLoading} onClick={() => setReferencePicker(true)}>＠</button><span className="agentChoice"><select aria-label="执行 Agent" value={agentId} disabled={Boolean(sessionId) || sending || draftLoading || modelsLoading} onChange={(e) => { ++manualAgentVersion.current; setAgentId(e.target.value); setConnectionId(""); setModels(null); setModel(""); }}>
+                {workspace.agents.map(agent => <option key={agent.id} value={agent.id}>{agent.name}{agent.installed ? '' : ' · 未安装'}</option>)}
+              </select> {models ? <select aria-label="执行模型" value={model} disabled={draftLoading || sending || active(session?.status)} onChange={(e) => chooseModel(e.target.value)}><option value="" disabled={Boolean(chosenConnectionId)}>{chosenConnectionId ? "请选择网关模型" : "沿用会话配置"}</option>{models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select> : <button className="modelChoice" disabled={draftLoading || sending || modelsLoading || active(session?.status)} onClick={loadModels}>{modelsLoading ? "读取模型…" : (model || "选择模型")}</button>}</span><span className="composerHint">{chosenAgent?.installed ? (agentId === "pi" ? "使用 Pi 本机权限" : "在此项目工作") : `请先安装 ${chosenAgent?.name || agentId} CLI`}</span>{active(session?.status) ? <button className="send" aria-label="停止执行" onClick={() => control("session.stop")}><Square size={15} /></button> : <button className="send" aria-label="发送任务" disabled={!draft.trim() || sending || modelsLoading || draftLoading || !chosenAgent?.installed || session?.status === "interrupted"} onClick={send}>{sending ? <LoaderCircle className="spin" size={17} /> : <ArrowUp size={18} />}</button>}</div>
+            </div><div className="composerMeta"><span>{draftStatus || (session?.sharedWork ? "团队工作 · 工具日志和原生历史保留在本机" : project.sharing ? "文件与团队共享 · 对话仅在本机" : agentId === "pi" ? "Pi 按本机配置运行 · 扩展请求会在这里显示" : "仅在本机 · 需要权限时会询问你")}</span>{!sessionId && agentPreference ? <span className="agentPreferenceActions"><button disabled={preferenceSaving || agentPreference.project === agentId} onClick={() => saveAgentPreference('project')}>{agentPreference.project === agentId ? '本项目默认' : '设为本项目默认'}</button><button disabled={preferenceSaving || agentPreference.personal === agentId} onClick={() => saveAgentPreference('personal')}>{agentPreference.personal === agentId ? '个人默认' : '设为个人默认'}</button></span> : <span>@ 资料和方法 · Enter 发送</span>}</div>
           </div>
         </>}
       </section>

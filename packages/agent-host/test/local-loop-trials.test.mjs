@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
@@ -8,7 +9,7 @@ import { Check } from '../../contracts/dist/index.js';
 import { NATIVE_PRODUCT_TOOLS } from '../../agent-runtime/integrations/native/product-tools.mjs';
 
 async function fixture(t) {
-  const root = await mkdtemp('/private/tmp/turnsu-local-loop-trial-'), path = join(root, 'project'); await mkdir(path);
+  const root = await mkdtemp(join(tmpdir(), 'turnsu-local-loop-trial-')), path = join(root, 'project'); await mkdir(path);
   let host; const calls = [];
   const open = () => { host = new LocalAgentHost({ directory: join(root, 'state'), connectionFactory: () => ({ ready: Promise.resolve(), closed: false, close: async () => {}, async request(method, params) {
     calls.push({ method, params });

@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -7,7 +9,7 @@ import { NATIVE_PRODUCT_TOOLS } from '../../agent-runtime/integrations/native/pr
 import { Check } from '../../contracts/dist/index.js';
 
 test('owner decision drafts and uncertain submissions survive restart without duplicating or changing an accepted decision', async t => {
-  const root = await mkdtemp('/private/tmp/turnsu-decision-test-'); let store = openStore(root), actor = 'owner', lose = true;
+  const root = await mkdtemp(join(tmpdir(), 'turnsu-decision-test-')); let store = openStore(root), actor = 'owner', lose = true;
   const identity = { origin: 'https://team.example.test', workspaceId: 'workspace', clientSessionId: 'login' }, accepted = new Map();
   store.db.prepare('INSERT INTO projects VALUES(?,?,?,?)').run('local', '/private/tmp/not-read', 'Project', 1);
   const cloud = { identity: async () => identity, async fileCall(binding, name, args) {

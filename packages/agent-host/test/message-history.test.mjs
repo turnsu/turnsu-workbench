@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
@@ -5,7 +6,7 @@ import { join } from 'node:path';
 import { LocalAgentHost } from '../host.mjs';
 
 async function fixture(t) {
-  const root = await mkdtemp('/private/tmp/turnsu-history-test-'); await mkdir(join(root, 'project'));
+  const root = await mkdtemp(join(tmpdir(), 'turnsu-history-test-')); await mkdir(join(root, 'project'));
   const host = new LocalAgentHost({ directory: join(root, 'state'), connectionFactory: () => { throw new Error('history must not start an Agent'); } });
   const project = await host.command('project.open', { path: join(root, 'project') });
   const session = await host.command('session.create', { projectId: project.id, agent: 'codex' });

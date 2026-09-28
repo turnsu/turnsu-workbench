@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile, rm, symlink, readdir, rename } from 'node:fs/promises';
@@ -34,7 +35,7 @@ function product() {
   return { cloud, versions, heads, identity, fail: value => { fault = value; }, afterRead: fn => { afterRead = fn; } };
 }
 async function fixture(t) {
-  const directory = await mkdtemp('/private/tmp/turnsu-file-sync-'), remote = product(), clients = [];
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-file-sync-')), remote = product(), clients = [];
   async function client(name, { scope, setup, attach = true } = {}) {
     const path = join(directory, name), data = join(directory, name + '-private'); await mkdir(path); await mkdir(data, { mode: 0o700 });
     await setup?.(path);
@@ -47,6 +48,39 @@ async function fixture(t) {
   t.after(async () => { for (const c of clients) await c.close(); await rm(directory, { recursive: true, force: true }); });
   return { directory, remote, client, a: await client('a'), b: await client('b') };
 }
+test('unchanged shared files are not reread every cycle, while edits and a forced sweep still reach the team', async t => {
+  const { a, remote } = await fixture(t);
+  const original = a.sync.bytes.bind(a.sync); let reads = 0;
+  a.sync.bytes = async (...args) => { reads++; return original(...args); };
+  await writeFile(join(a.path, 'result.md'), 'first');
+  await a.sync.sync(a.id);
+  const afterFirst = reads;
+  assert.ok(afterFirst >= 1);
+  await a.sync.sync(a.id);
+  assert.equal(reads, afterFirst);
+  await writeFile(join(a.path, 'result.md'), 'second version');
+  await a.sync.sync(a.id);
+  assert.ok(reads > afterFirst);
+  assert.equal(Buffer.from(remote.heads.get('result.md').contentBase64, 'base64').toString(), 'second version');
+  const afterEdit = reads;
+  a.sync.deepScanAt.set(a.id, 0);
+  await a.sync.sync(a.id);
+  assert.ok(reads > afterEdit);
+  assert.equal(remote.versions.size, 2);
+});
+test('automatic project polling bounds concurrent file syncs and does not start a duplicate sweep', async () => {
+  const ids = ['one', 'two', 'three', 'four', 'five']; let active = 0, peak = 0;
+  const sync = new SharedFiles({ db: { prepare: () => ({ all: () => ids.map(project_id => ({ project_id })) }) } });
+  const visited = [];
+  sync.sync = async id => {
+    active++; peak = Math.max(peak, active); visited.push(id);
+    await new Promise(resolve => setTimeout(resolve, 8)); active--;
+  };
+  await Promise.all([sync.pollProjects(), sync.pollProjects()]);
+  assert.deepEqual(visited.sort(), ids.slice().sort());
+  assert.ok(peak <= 2);
+  await sync.close();
+});
 test('two real local folders converge, conflicting edits remain available, and choosing a version converges both', async t => {
   const { a, b, remote } = await fixture(t);
   await writeFile(join(a.path, 'result.md'), '初稿'); assert.equal((await a.sync.sync(a.id)).status, 'synced');

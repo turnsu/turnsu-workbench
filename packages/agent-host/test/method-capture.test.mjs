@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, readdir } from 'node:fs/promises';
@@ -5,7 +6,7 @@ import { join } from 'node:path';
 import { LocalAgentHost } from '../host.mjs';
 
 async function fixture(t, agent = 'codex') {
-  const root = await mkdtemp('/private/tmp/turnsu-capture-'), projectPath = join(root, 'project');
+  const root = await mkdtemp(join(tmpdir(), 'turnsu-capture-')), projectPath = join(root, 'project');
   await mkdir(projectPath);
   const calls = [];
   let host;

@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -7,7 +9,7 @@ import { NATIVE_PRODUCT_TOOLS } from '../../agent-runtime/integrations/native/pr
 import { Check } from '../../contracts/dist/index.js';
 
 async function offlineFixture(t) {
-  const directory = await mkdtemp('/private/tmp/turnsu-work-offline-');
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-work-offline-'));
   let store = openStore(directory), failure = null;
   const identity = { origin: 'https://team.example.test', workspaceId: 'workspace', clientSessionId: 'device' };
   const context = { viewerUserId: 'member', workItem: { workItemId: 'work', projectId: 'remote', title: '团队任务', objective: '整理反馈', status: 'active', members: [{ userId: 'member', accessGrant: { status: 'active', access: 'contribute' } }] }, decisions: [], entries: [], page: {}, fetchedAt: '2026-09-23T00:00:00.000Z' };
@@ -86,7 +88,7 @@ test('retry sharing refreshes stale context even before the member queues a mess
 });
 
 test('shared reply receipts survive restart; a different account cannot publish the previous actor’s queue', async t => {
-  const directory = await mkdtemp('/private/tmp/turnsu-work-recovery-');
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-work-recovery-'));
   let store = openStore(directory), identity = { origin: 'https://team.example.test', workspaceId: 'workspace-one', clientSessionId: 'login-one' }, actor = 'user-one', loseReceipt = true, writes = 0;
   const receipts = new Map();
   const cloud = { identity: async () => ({ ...identity }), viewer: async () => ({ userId: actor }), async fileCall(binding, name, args) {
@@ -119,7 +121,7 @@ test('shared reply receipts survive restart; a different account cannot publish 
 });
 
 test('long declared messages retain Unicode and exact contents across bounded Product comments', async t => {
-  const directory = await mkdtemp('/private/tmp/turnsu-work-chunks-'), store = openStore(directory);
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-work-chunks-')), store = openStore(directory);
   const work = new SharedWork({ db: store.db, cloud: {}, projectBinding: () => {}, session: () => ({ agent: 'codex' }) });
   t.after(async () => { await work.close(); store.close(); await rm(directory, { recursive: true, force: true }); });
   store.db.prepare('INSERT INTO projects VALUES(?,?,?,?)').run('project', '/private/tmp/not-read', 'project', 1);
@@ -133,7 +135,7 @@ test('long declared messages retain Unicode and exact contents across bounded Pr
 });
 
 test('a shared file reference retains its exact revision identifiers after an uncertain receipt and reopening', async t => {
-  const directory = await mkdtemp('/private/tmp/turnsu-work-ref-recovery-');
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-work-ref-recovery-'));
   let store = openStore(directory), lost = true;
   const identity = { origin: 'https://team.example.test', workspaceId: 'one', clientSessionId: 'one' }, accepted = new Map();
   const cloud = { identity: async () => identity, async fileCall(binding, name, args) {

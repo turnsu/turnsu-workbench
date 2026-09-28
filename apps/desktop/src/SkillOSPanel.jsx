@@ -24,13 +24,16 @@ export function SkillOSPanel({ project, agents, workSession, onOpen, onReturn })
     command('skills.list', { projectId: project.id })
       .then(value => { if (current) setLocal(value); })
       .catch(e => { if (current) { setLocal({ items: [], truncated: false }); setError(String(e)); } });
-    for (const type of ['skill', 'loop']) {
-      command(type === 'skill' ? 'methods.list' : 'nativeLoops.list')
-        .then(value => { if (current) { setTeam(old => ({ ...old, [type]: value.items })); setTeamPage(old => ({ ...old, [type]: value.page })); } })
-        .catch(e => { if (current) { setTeam(old => ({ ...old, [type]: [] })); setTeamError(old => ({ ...old, [type]: String(e) })); } });
-    }
     return () => { current = false; };
   }, [project?.id, revision]);
+  useEffect(() => {
+    if (!project || team[kind] !== null) return;
+    let current = true;
+    command(kind === 'skill' ? 'methods.list' : 'nativeLoops.list')
+      .then(value => { if (current) { setTeam(old => ({ ...old, [kind]: value.items })); setTeamPage(old => ({ ...old, [kind]: value.page })); } })
+      .catch(e => { if (current) { setTeam(old => ({ ...old, [kind]: [] })); setTeamError(old => ({ ...old, [kind]: String(e) })); } });
+    return () => { current = false; };
+  }, [project?.id, revision, kind, team[kind]]);
 
   if (!project) return <section className="skillOSNoProject">
     <BookOpen size={28}/><h2>先打开一个项目</h2><p>Skill OS 会展示这个项目的本机技能和你能访问的团队固定版本。</p>
@@ -107,7 +110,8 @@ export function SkillOSPanel({ project, agents, workSession, onOpen, onReturn })
             {item.version && <small>v{item.version}</small>}{item.agent && <small>{agentName[item.agent] || item.agent}</small>}
             <ArrowRight size={14}/></span>
         </button>)}
-      </div> : <div className="skillOSEmpty">{query ? '已加载的方法里没有匹配项。' : kind === 'skill' ? '这个项目还没有可用技能。完成一项任务后，可从答复整理为技能。' : '还没有流程。可以从一项完成的任务整理多步骤方法。'}</div>}
+      </div> : <div className="skillOSEmpty">{team[kind] === null ? '正在读取团队方法…' : query ? '已加载的方法里没有匹配项。' : kind === 'skill' ? '这个项目还没有可用技能。完成一项任务后，可从答复整理为技能。' : '还没有流程。可以从一项完成的任务整理多步骤方法。'}</div>}
+      {team[kind] === null && filtered.length > 0 && <p className="skillOSMuted" role="status">正在读取团队方法…</p>}
       {local?.truncated && <p className="skillOSMuted">本机目录较大，当前只显示每个 Agent 目录的前 100 项。</p>}
       {teamError[kind] && <p className="skillOSMuted">团队版本暂不可读取；本机方法仍可使用。<Button size="sm" onClick={() => setRevision(value => value + 1)}>重试连接</Button></p>}
       {teamPage[kind]?.hasMore && <Button variant="outline" size="sm" disabled={busy} onClick={more}>加载更多团队版本</Button>}

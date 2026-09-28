@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
@@ -6,7 +7,7 @@ import { LocalAgentHost } from '../host.mjs';
 import { Check, CreateProjectDataSchema } from '../../contracts/dist/index.js';
 
 async function fixture(t) {
-  const root = await mkdtemp('/private/tmp/turnsu-project-creation-'), directory = join(root, 'state'), path = join(root, 'local'); await mkdir(path);
+  const root = await mkdtemp(join(tmpdir(), 'turnsu-project-creation-')), directory = join(root, 'state'), path = join(root, 'local'); await mkdir(path);
   const identity = { origin: 'https://team.example.test', workspaceId: 'workspace', clientSessionId: 'native' };
   const people = [{ userId: 'alice', displayName: '小艾', username: 'alice' }, { userId: 'bob', displayName: '小博', username: 'bob' }];
   let actor = 'owner', lose = false, deny = false, host; const accepted = new Map(), calls = [];

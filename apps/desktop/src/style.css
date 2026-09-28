@@ -127,3 +127,6 @@
 .sessionPagination { display: flex; align-items: center; justify-content: space-between; gap: 2px; padding: 7px 0 12px; }
 .sessionPagination button { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; padding: 5px 3px; color: var(--muted); }
 .sessionPagination button:disabled { opacity: .4; cursor: default; }
+.agentPreferenceActions { display: flex; align-items: center; gap: 2px; }
+.agentPreferenceActions button { font-size: 10px; color: #697064; padding: 2px 5px; white-space: nowrap; }
+.agentPreferenceActions button:disabled { opacity: .72; }

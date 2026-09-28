@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, symlink, rm } from 'node:fs/promises';
@@ -11,7 +12,7 @@ const definition = { goal: '整理反馈', context: '团队反馈', constraints:
 const document = () => ({ name: '反馈分类', description: '保留依据', definition, ...initialLoopDraft(), resourceRefs: [] });
 
 async function fixture(t) {
-  const root = await mkdtemp('/private/tmp/turnsu-loop-capture-'), path = join(root, 'project'); await mkdir(path);
+  const root = await mkdtemp(join(tmpdir(), 'turnsu-loop-capture-')), path = join(root, 'project'); await mkdir(path);
   let host, calls = [];
   const open = () => { host = new LocalAgentHost({ directory: join(root, 'state'), connectionFactory: () => ({ ready: Promise.resolve(), closed: false, close: async () => {}, async request(method, params) {
     calls.push({ method, params });

@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
@@ -7,7 +9,7 @@ import {Check} from '../../contracts/dist/index.js';
 import {NATIVE_PRODUCT_TOOLS} from '../../agent-runtime/integrations/native/product-tools.mjs';
 
 async function fixture(t){
-  const dir=await mkdtemp('/private/tmp/turnsu-run-actions-');let store,loops,actor='owner',denied=false,lose=true;
+  const dir=await mkdtemp(join(tmpdir(), 'turnsu-run-actions-'));let store,loops,actor='owner',denied=false,lose=true;
   const identity={origin:'https://example.test',workspaceId:'team'};
   const receipts=new Map(),calls=[];
   const run={runId:'run-one',requestedByUserId:'owner',status:'waiting_review'};

@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 // Synthetic load measurement through the real private stdio entry. No provider or cloud calls.
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -5,7 +6,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { performance } from 'node:perf_hooks';
 import { openStore } from '../store.mjs';
-const root = await mkdtemp('/private/tmp/turnsu-history-benchmark-'), directory = join(root, 'state');
+const root = await mkdtemp(join(tmpdir(), 'turnsu-history-benchmark-')), directory = join(root, 'state');
 await mkdir(join(root, 'project'));
 const store = openStore(directory), db = store.db, count = 2400;
 const sessionCount = Number(process.env.TURNSU_BENCH_SESSIONS || 10000);

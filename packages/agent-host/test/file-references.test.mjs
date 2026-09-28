@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm, symlink, link } from 'node:fs/promises';
@@ -5,7 +6,7 @@ import { join } from 'node:path';
 import { LocalAgentHost } from '../host.mjs';
 
 async function fixture(t) {
-  const root = await mkdtemp('/private/tmp/turnsu-references-'), directory = join(root, 'state'), projectPath = join(root, 'project');
+  const root = await mkdtemp(join(tmpdir(), 'turnsu-references-')), directory = join(root, 'state'), projectPath = join(root, 'project');
   await mkdir(projectPath); const sent = [];
   const connectionFactory = () => ({ ready: Promise.resolve(), close: async () => {}, request: async (method, params) => {
     if (method === 'thread/start' || method === 'thread/resume') return { thread: { id: 'native-one', turns: [] } };

@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
@@ -7,7 +8,7 @@ import { LocalAgentHost } from '../host.mjs';
 import { canonicalRequestHash } from '../../../services/product-api/src/store/serialization.mjs';
 
 async function fixture(t) {
-  const root = await mkdtemp('/private/tmp/turnsu-native-loop-method-'), path = join(root, 'project'); await mkdir(path);
+  const root = await mkdtemp(join(tmpdir(), 'turnsu-native-loop-method-')), path = join(root, 'project'); await mkdir(path);
   const content = '---\nname: feedback\ndescription: Preserve feedback evidence\n---\nKeep original quotes.';
   const bytes = Buffer.from(JSON.stringify({ format: 'workbench-skill-package-v1', files: [{ path: 'SKILL.md', content: Buffer.from(content).toString('base64') }] }));
   const bundle = { releaseId: 'skill-release', versionId: 'skill-version', version: '1.0.0', skillName: 'feedback', packageContentBase64: bytes.toString('base64'), packageObjectHash: 'sha256:' + createHash('sha256').update(bytes).digest('hex'), packageHash: 'sha256:fixture', contentHash: 'sha256:definition', compatibility: null };

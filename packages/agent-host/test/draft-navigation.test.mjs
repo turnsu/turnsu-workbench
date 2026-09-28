@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
@@ -7,7 +8,7 @@ import { LocalDraftNavigation } from '../../../apps/desktop/src/local-draft-navi
 
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
 async function fixture(t) {
-  const root = await mkdtemp('/private/tmp/turnsu-draft-navigation-'); await mkdir(join(root, 'project'));
+  const root = await mkdtemp(join(tmpdir(), 'turnsu-draft-navigation-')); await mkdir(join(root, 'project'));
   let host = new LocalAgentHost({ directory: join(root, 'state'), connectionFactory: () => { throw new Error('No provider should start for navigation'); } });
   const project = await host.command('project.open', { path: join(root, 'project') });
   const sessions = [];

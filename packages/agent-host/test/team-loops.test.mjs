@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp,rm } from 'node:fs/promises';
@@ -7,7 +9,7 @@ import { Check } from '../../contracts/dist/index.js';
 import { NATIVE_PRODUCT_TOOLS } from '../../agent-runtime/integrations/native/product-tools.mjs';
 
 async function fixture(t) {
-  const dir=await mkdtemp('/private/tmp/turnsu-team-loops-');let store,loops,actor='member',denied=false,ready=false,loseCopy=true,loseRun=true;
+  const dir=await mkdtemp(join(tmpdir(), 'turnsu-team-loops-'));let store,loops,actor='member',denied=false,ready=false,loseCopy=true,loseRun=true;
   const copies=new Map(),runs=new Map(),calls=[];
   const identity={origin:'https://example.test',workspaceId:'workspace',clientSessionId:'client'};
   const prepared={workflow:{workflowId:'workflow-one',name:'团队反馈',sourceRelease:{releaseId:'release-one'}},revision:{revisionId:'revision-one',resourceRefs:[],inputForm:{fields:[{fieldId:'goal',label:'目标',schema:{type:'string'},required:true}]}}};

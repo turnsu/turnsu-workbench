@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -5,7 +7,7 @@ import { openStore } from '../store.mjs';
 import { WorkResults } from '../work-results.mjs';
 
 async function fixture(t) {
-  const directory = await mkdtemp('/private/tmp/turnsu-result-actions-');
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-result-actions-'));
   let store = openStore(directory), actor = 'owner', etag = '"version-one"', lose = false;
   const accepted = new Map(), calls = [], identity = { origin: 'https://team.example.test', workspaceId: 'workspace', clientSessionId: 'device' };
   const work = { get db() { return store.db; }, async context() { return { etag, viewerUserId: actor, workItem: { workItemId: 'work', accountableOwnerUserId: 'owner', members: [{ userId: actor, accessGrant: { status: 'active', access: actor === 'owner' ? 'owner' : 'contribute' } }] } }; }, cloud: {

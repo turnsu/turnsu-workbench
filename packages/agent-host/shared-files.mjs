@@ -4,6 +4,8 @@ import { lstat, readdir, open, mkdir, rename, link, realpath, unlink } from 'nod
 import { join, dirname } from 'node:path';
 
 const MAX_BYTES = 8 * 1024 * 1024;
+const DEEP_SCAN_MS = 10 * 60 * 1000;
+const MAX_CACHED_PROJECTS = 8;
 const hash = bytes => 'sha256:' + createHash('sha256').update(bytes).digest('hex');
 function validPath(path) {
   return typeof path === 'string' && path.length > 0 && path.length <= 512 && path === path.normalize('NFC') && path.split('/').every(p => p && p.length <= 128 && !p.startsWith('.') && !/[\\\x00-\x1f\x7f:<>"|?*]/u.test(p) && !/[. ]$/u.test(p) && !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu.test(p));
@@ -21,6 +23,8 @@ function explain(error) {
 export class SharedFiles {
   constructor({ db, cloud, project, notify = () => {}, isBusy = () => false }) {
     Object.assign(this, { db, cloud, project, notify, isBusy }); this.running = new Map(); this.closed = false;
+    // Metadata only. File bodies and Agent history must not accumulate in the Host.
+    this.fingerprints = new Map(); this.deepScanAt = new Map(); this.polling = null;
   }
   binding(id) { const b = this.db.prepare('SELECT * FROM shared_projects WHERE project_id=?').get(id); if (!b) throw new Error('这个项目尚未加入团队共享。'); return b; }
   includes(b, path, ancestors = false) {
@@ -87,6 +91,37 @@ export class SharedFiles {
       if (used !== before.size || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) throw new Error('sync_file_changing');
       return buffer.subarray(0, used);
     } finally { await file.close(); }
+  }
+  fingerprint(info) { return `${info.dev}:${info.ino}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`; }
+  async localContent(b, path, previous, force = false) {
+    let target;
+    try { target = await this.target(b, path); } catch (e) { if (e.code === 'ENOENT') return null; throw e; }
+    let cache = this.fingerprints.get(b.project_id);
+    if (!cache && this.fingerprints.size < MAX_CACHED_PROJECTS) {
+      cache = new Map(); this.fingerprints.set(b.project_id, cache);
+    }
+    let before;
+    try { before = await lstat(target); } catch (e) { if (e.code === 'ENOENT') { cache?.delete(path); return null; } throw e; }
+    if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1) { cache?.delete(path); throw new Error('sync_unsafe_path'); }
+    if (before.size > MAX_BYTES) { cache?.delete(path); throw new Error('sync_file_too_large'); }
+    const fingerprint = this.fingerprint(before), saved = cache?.get(path);
+    if (!force && previous && !previous.deleted && !previous.conflict_id && !previous.conflict_deleted &&
+      saved?.fingerprint === fingerprint && saved.contentHash === previous.content_hash) return { contentHash: saved.contentHash, bytes: null };
+    const bytes = await this.bytes(b, path);
+    if (!bytes) { cache?.delete(path); return null; }
+    let after;
+    try { after = await lstat(target); } catch (e) { if (e.code === 'ENOENT') throw new Error('sync_file_changing'); throw e; }
+    if (!after.isFile() || after.isSymbolicLink() || after.nlink !== 1 || this.fingerprint(after) !== fingerprint) {
+      cache?.delete(path); throw new Error('sync_file_changing');
+    }
+    const contentHash = hash(bytes);
+    cache?.set(path, { fingerprint, contentHash });
+    return { contentHash, bytes };
+  }
+  pruneFingerprints(id, paths) {
+    const cache = this.fingerprints.get(id); if (!cache) return;
+    const present = new Set(paths);
+    for (const path of cache.keys()) if (!present.has(path)) cache.delete(path);
   }
   async scan(b) {
     const paths = [], issues = [], seen = new Set(); let count = 0;
@@ -265,16 +300,20 @@ export class SharedFiles {
       for (const item of this.db.prepare('SELECT * FROM shared_incoming WHERE project_id=?').all(id)) await this.applyIncoming(b, item.path, JSON.parse(item.job));
       await this.flush(b);
       const { paths, issues } = await this.scan(b);
+      this.pruneFingerprints(id, paths);
+      const force = Date.now() - (this.deepScanAt.get(id) || 0) >= DEEP_SCAN_MS;
+      let checkedAll = true;
       for (const path of paths) {
-        if (this.isBusy(id)) break;
+        if (this.isBusy(id)) { checkedAll = false; break; }
         try {
-          const bytes = await this.bytes(b, path); if (!bytes) continue;
-          const previous = this.file(id, path), contentHash = hash(bytes);
+          const previous = this.file(id, path), local = await this.localContent(b, path, previous, force);
+          if (!local) continue;
           if (previous) this.db.prepare('UPDATE shared_files SET delete_ready=1 WHERE project_id=? AND path=?').run(id, path);
-          if (previous?.deleted || (contentHash !== previous?.content_hash && (previous?.conflict_deleted || contentHash !== previous?.conflict_hash))) this.enqueue(b, path, bytes, previous?.revision_id || null, previous?.conflict_id ? [previous.conflict_id] : []);
+          if (previous?.deleted || (local.contentHash !== previous?.content_hash && (previous?.conflict_deleted || local.contentHash !== previous?.conflict_hash))) this.enqueue(b, path, local.bytes, previous?.revision_id || null, previous?.conflict_id ? [previous.conflict_id] : []);
         } catch (error) { issues.push({ path, message: explain(error) }); }
       }
       await this.queueDeletions(b, new Set(paths), issues);
+      if (checkedAll) this.deepScanAt.set(id, Date.now());
       await this.flush(b);
       const remote = await this.remote(b), conflicts = remote.filter(f => f.outcome === 'conflict').map(item => ({ ...item,
         headDeleted: Boolean(remote.find(head => head.outcome === 'synced' && head.path === item.path)?.deleted), localDeleted: !paths.includes(item.path) }));
@@ -311,11 +350,13 @@ export class SharedFiles {
       if (!access && !this.isBusy(id) && !this.closed) {
         // Capture offline edits durably without making a network call. A later flush rechecks
         // Product membership and retries exactly the original payload and idempotency key.
-        try { const scanned = await this.scan(b); for (const path of scanned.paths) {
+        try { const scanned = await this.scan(b); this.pruneFingerprints(id, scanned.paths);
+          const force = Date.now() - (this.deepScanAt.get(id) || 0) >= DEEP_SCAN_MS;
+          for (const path of scanned.paths) {
           if (this.db.prepare('SELECT 1 FROM shared_outbox WHERE project_id=? AND path=? UNION ALL SELECT 1 FROM shared_incoming WHERE project_id=? AND path=?').get(id, path, id, path)) continue;
-          const bytes = await this.bytes(b, path), previous = this.file(id, path);
-          if (bytes && (previous?.deleted || (hash(bytes) !== previous?.content_hash && (previous?.conflict_deleted || hash(bytes) !== previous?.conflict_hash)))) this.enqueue(b, path, bytes, previous?.revision_id || null);
-        } await this.queueDeletions(b, new Set(scanned.paths)); } catch { /* A bad/moving file remains on disk; the original actionable error is retained. */ }
+          const previous = this.file(id, path), local = await this.localContent(b, path, previous, force);
+          if (local && (previous?.deleted || (local.contentHash !== previous?.content_hash && (previous?.conflict_deleted || local.contentHash !== previous?.conflict_hash)))) this.enqueue(b, path, local.bytes, previous?.revision_id || null);
+        } await this.queueDeletions(b, new Set(scanned.paths)); this.deepScanAt.set(id, Date.now()); } catch { /* A bad/moving file remains on disk; the original actionable error is retained. */ }
       }
       this.change(id, access ? 'access' : 'offline', explain(e));
     }
@@ -329,6 +370,7 @@ export class SharedFiles {
     if (old.origin !== identity.origin || old.workspaceId !== identity.workspaceId) throw new Error('请连接原来的团队后再恢复此项目。');
     await this.cloud.fileCall(identity, 'turnsu_project', { pathParams: { projectId: b.remote_id } });
     this.db.prepare('UPDATE shared_projects SET paused=0,identity=? WHERE project_id=?').run(JSON.stringify(identity), id);
+    this.deepScanAt.delete(id);
     return this.sync(id);
   }
   async resolve(id, path, choice, expectedHeadRevisionId) {
@@ -387,6 +429,21 @@ export class SharedFiles {
     if (revision.deleted) return { text: '此版本记录了文件删除。此前内容仍保留在团队历史中，可以恢复。', deleted: true, truncated: false };
     const bytes = await this.download(b, revision); return { text: bytes.subarray(0, 100_000).toString('utf8'), truncated: bytes.length > 100_000 };
   }
-  start() { if (this.timer) return; this.timer = setInterval(() => { for (const b of this.db.prepare('SELECT project_id FROM shared_projects WHERE paused=0').all()) this.sync(b.project_id).catch(() => {}); }, 5000); this.timer.unref(); }
-  async close() { clearInterval(this.timer); this.closed = true; await Promise.allSettled(this.running.values()); }
+  pollProjects() {
+    if (this.closed) return Promise.resolve();
+    if (this.polling) return this.polling;
+    this.polling = (async () => {
+      const ids = this.db.prepare('SELECT project_id FROM shared_projects WHERE paused=0').all().map(row => row.project_id);
+      let next = 0;
+      await Promise.all(Array.from({ length: Math.min(2, ids.length) }, async () => {
+        while (!this.closed && next < ids.length) {
+          const id = ids[next++];
+          try { await this.sync(id); } catch { /* The project keeps its own actionable sync state. */ }
+        }
+      }));
+    })().finally(() => { this.polling = null; });
+    return this.polling;
+  }
+  start() { if (this.timer) return; this.timer = setInterval(() => { this.pollProjects().catch(() => {}); }, 30000); this.timer.unref(); }
+  async close() { clearInterval(this.timer); this.closed = true; await this.polling; await Promise.allSettled(this.running.values()); this.fingerprints.clear(); this.deepScanAt.clear(); }
 }

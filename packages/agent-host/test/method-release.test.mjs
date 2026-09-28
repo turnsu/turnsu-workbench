@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -7,7 +9,7 @@ import { Check } from '../../contracts/dist/index.js';
 import { NATIVE_PRODUCT_TOOLS } from '../../agent-runtime/integrations/native/product-tools.mjs';
 
 async function fixture(t) {
-  const directory = await mkdtemp('/private/tmp/turnsu-method-release-');
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-method-release-'));
   let store, release, revision = 1, actor = 'owner', lose = null, replayDenied = false;
   const receipts = new Map(), trials = new Map(), identity = { origin: 'https://team.example.test', workspaceId: 'team', clientSessionId: 'native' };
   const calls = [];

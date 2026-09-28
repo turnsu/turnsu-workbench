@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
@@ -7,7 +8,7 @@ import { lockNativeProfile } from '../../agent-runtime/integrations/native/sessi
 
 const origin = 'https://team.example.test';
 test('cancelling desktop authorization closes the callback and never saves a credential or exposes PKCE', async t => {
-  const directory = await mkdtemp('/private/tmp/turnsu-cloud-cancel-');
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-cloud-cancel-'));
   let callback, calls = 0;
   const cloud = new DesktopCloud({ directory, fetch: async (_url, options) => {
     calls++; callback = JSON.parse(options.body).data.redirectUri;
@@ -26,7 +27,7 @@ test('cancelling desktop authorization closes the callback and never saves a cre
 });
 
 test('desktop authorization rejects an approval URL on another origin', async t => {
-  const directory = await mkdtemp('/private/tmp/turnsu-cloud-origin-');
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-cloud-origin-'));
   const cloud = new DesktopCloud({ directory, fetch: async () => new Response(JSON.stringify({ schemaVersion: 'workbench-api-v1', requestId: 'desktop-auth-start', data: {
     authorizationId: 'auth-origin', expiresAt: new Date(Date.now() + 60000).toISOString(), authorizationUrl: 'https://other.example.test/authorize',
   } }), { status: 201, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }) });
@@ -36,7 +37,7 @@ test('desktop authorization rejects an approval URL on another origin', async t 
 });
 
 test('exclusive desktop ownership can recover a dead credential lock but never takes a live owner', async t => {
-  const directory = await mkdtemp('/private/tmp/turnsu-cloud-lock-'); const path = join(directory, 'profile');
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-cloud-lock-')); const path = join(directory, 'profile');
   t.after(() => rm(directory, { recursive: true, force: true }));
   await writeFile(path + '.lock', '2147483647:dead-test-owner', { mode: 0o600 });
   await assert.rejects(lockNativeProfile(path), /stale_lock/);
@@ -47,7 +48,7 @@ test('exclusive desktop ownership can recover a dead credential lock but never t
 
 test('a project response arriving after disconnect cannot restore the old team connection', async t => {
   const { writeNativeProfile } = await import('../../agent-runtime/integrations/native/session.mjs');
-  const directory = await mkdtemp('/private/tmp/turnsu-cloud-delayed-');
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-cloud-delayed-'));
   let deliver, entered; const started = new Promise(resolve => { entered = resolve; });
   const cloud = new DesktopCloud({ directory }); await cloud.ready;
   await writeNativeProfile(cloud.path, { baseUrl: origin, tokens: { accessToken: 'a'.repeat(43), refreshToken: 'b'.repeat(43),
@@ -67,7 +68,7 @@ test('a project response arriving after disconnect cannot restore the old team c
 
 test('an uncertain token rotation asks for new authorization instead of replaying the old credential', async t => {
   const { writeNativeProfile } = await import('../../agent-runtime/integrations/native/session.mjs');
-  const directory = await mkdtemp('/private/tmp/turnsu-cloud-rotation-');
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-cloud-rotation-'));
   await writeNativeProfile(join(directory, 'cloud-session.json'), { baseUrl: origin, refreshPending: true,
     tokens: { accessToken: 'a'.repeat(43), refreshToken: 'b'.repeat(43), accessTokenExpiresAt: new Date(Date.now() - 1000).toISOString(),
       refreshTokenExpiresAt: new Date(Date.now() + 60000).toISOString(), clientSessionId: 'native-rotation', workspaceId: 'workspace-rotation' } }, { create: true });

@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -6,7 +7,7 @@ import { LocalAgentHost } from '../host.mjs';
 import { Check, ReviseProjectMembersDataSchema } from '../../contracts/dist/index.js';
 const method = action => 'cloud.projectMembers.' + action;
 async function fixture(t) {
-  const directory = await mkdtemp('/private/tmp/turnsu-members-');
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-members-'));
   const identity = { origin: 'https://team.example.test', workspaceId: 'workspace', clientSessionId: 'native' };
   const people = ['owner', 'alice', 'bob'].map(userId => ({ userId, displayName: userId, username: userId }));
   let actor = 'owner', version = 1, lose = false, deny = false, host;

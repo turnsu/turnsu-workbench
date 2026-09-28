@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -17,7 +18,7 @@ const result = t => ({ profile: t.profile, attemptId: t.attemptId, provider: t.s
 const receipt = ({ ticket: t, deliveryId }) => ({ invocationId: t.invocationId, attemptId: t.attemptId, fence: t.fence, deliveryId, executionStatus: 'completed' });
 
 async function fixture(t, createExecution) {
-  const root = await mkdtemp('/private/tmp/turnsu-borrowed-attempt-'); let store, attempts, count = 0;
+  const root = await mkdtemp(join(tmpdir(), 'turnsu-borrowed-attempt-')); let store, attempts, count = 0;
   const open = () => { store = openStore(join(root, 'state')); attempts = new BorrowedAgentAttempts({ db: store.db, createExecution: createExecution || (async ({ ticket: t }) => {
     assert.equal(store.db.prepare('SELECT state FROM borrowed_agent_attempts').get().state, 'running', 'fence is durable before the executor exists');
     return { async run() { count++; return { ...result(t), transcript: 'PRIVATE_CONTEXT_MUST_NOT_ENTER_OUTBOX' }; }, async dispose() {}, cancel() {} };
@@ -61,7 +62,7 @@ test('wrong fence receipt is unconfirmed and cannot replace the saved output', a
 });
 
 test('abrupt process death leaves an interrupted record and reopening never repeats inference', async t => {
-  const root = await mkdtemp('/private/tmp/turnsu-borrowed-crash-'), approved = ticket();
+  const root = await mkdtemp(join(tmpdir(), 'turnsu-borrowed-crash-')), approved = ticket();
   const script = join(root, 'child.mjs'), storeUrl = new URL('../store.mjs', import.meta.url).href, attemptsUrl = new URL('../borrowed-agent-attempts.mjs', import.meta.url).href;
   await writeFile(script, `import {openStore} from ${JSON.stringify(storeUrl)};
 import {BorrowedAgentAttempts} from ${JSON.stringify(attemptsUrl)};

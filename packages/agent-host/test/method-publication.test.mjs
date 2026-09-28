@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
@@ -7,7 +8,7 @@ import { Check } from '../../contracts/dist/index.js';
 import { NATIVE_PRODUCT_TOOLS } from '../../agent-runtime/integrations/native/product-tools.mjs';
 
 async function fixture(t, { inspection = 'passed', nameConflict = false } = {}) {
-  const root = await mkdtemp('/private/tmp/turnsu-capture-cloud-'), path = join(root, 'project'); await mkdir(path);
+  const root = await mkdtemp(join(tmpdir(), 'turnsu-capture-cloud-')), path = join(root, 'project'); await mkdir(path);
   let host, actor = 'owner', denied = false, lose = true;
   const calls = [], receipts = new Map(), identity = { origin: 'https://team.example.test', workspaceId: 'workspace-one', clientSessionId: 'native-one' };
   const open = () => {

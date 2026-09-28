@@ -28,6 +28,11 @@ export function openStore(directory) {
     db = new DatabaseSync(path); chmodSync(path, 0o600);
     db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
       CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, path TEXT UNIQUE NOT NULL, name TEXT NOT NULL, updated_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS agent_preferences(scope TEXT PRIMARY KEY, agent_id TEXT NOT NULL CHECK(agent_id IN ('codex','pi','claude')));
+      CREATE TABLE IF NOT EXISTS wechat_imports(id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), batch_id TEXT NOT NULL, chat_name TEXT, item_count INTEGER NOT NULL, record_count INTEGER NOT NULL, unparsed_count INTEGER NOT NULL, imported_at INTEGER NOT NULL);
+      CREATE INDEX IF NOT EXISTS wechat_imports_project_recent ON wechat_imports(project_id,imported_at DESC,id DESC);
+      CREATE TABLE IF NOT EXISTS wechat_records(import_id TEXT NOT NULL REFERENCES wechat_imports(id), position INTEGER NOT NULL, source_item_id TEXT NOT NULL, sender TEXT NOT NULL, date TEXT NOT NULL, text TEXT NOT NULL, PRIMARY KEY(import_id,position));
+      CREATE TABLE IF NOT EXISTS wechat_items(import_id TEXT NOT NULL REFERENCES wechat_imports(id), id TEXT NOT NULL, display_name TEXT NOT NULL, relative_path TEXT NOT NULL, byte_count INTEGER NOT NULL, sha256 TEXT NOT NULL, parsed INTEGER NOT NULL, PRIMARY KEY(import_id,id));
       CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), native_id TEXT, title TEXT NOT NULL, status TEXT NOT NULL, error TEXT, updated_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), role TEXT NOT NULL, text TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'text', created_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS submissions(id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), prompt TEXT NOT NULL, native_turn_id TEXT, status TEXT NOT NULL);
