@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { openStore } from '../store.mjs';
 import { WorkHandoffs } from '../work-handoffs.mjs';
 import { NATIVE_PRODUCT_TOOLS } from '../../agent-runtime/integrations/native/product-tools.mjs';
@@ -10,7 +10,8 @@ import { Check } from '../../contracts/dist/index.js';
 
 test('reviewed handoff preserves access and other roles, recovers a lost receipt after restart, and rejects stale or unauthorized changes', async t => {
   const root = await mkdtemp(join(tmpdir(), 'turnsu-handoff-test-')); let store = openStore(root), actor = 'owner', etag = '"work-v1"', lose = true, reject = false;
-  store.db.prepare('INSERT INTO projects VALUES(?,?,?,?)').run('local', '/private/tmp/not-read', 'Project', 1);
+  const projectPath = join(root, 'project'); await mkdir(projectPath);
+  store.db.prepare('INSERT INTO projects VALUES(?,?,?,?)').run('local', projectPath, 'Project', 1);
   const members = [
     { userId: 'owner', roles: ['accountable_owner', 'requestor'], accessGrant: { access: 'owner', status: 'active' } },
     { userId: 'member', roles: ['participant'], accessGrant: { access: 'contribute', status: 'active' } },

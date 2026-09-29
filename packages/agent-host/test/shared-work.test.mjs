@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { openStore } from '../store.mjs';
 import { SharedWork } from '../shared-work.mjs';
 import { NATIVE_PRODUCT_TOOLS } from '../../agent-runtime/integrations/native/product-tools.mjs';
@@ -24,7 +24,8 @@ async function offlineFixture(t) {
     return { data: { entryId: args.idempotencyKey } };
   } };
   const make = () => new SharedWork({ db: store.db, cloud, projectBinding: () => ({ identity: JSON.stringify(identity), remote_id: 'remote' }), session: id => store.db.prepare('SELECT * FROM sessions WHERE id=?').get(id) });
-  store.db.prepare('INSERT INTO projects VALUES(?,?,?,?)').run('local', '/private/tmp/not-read', 'local', 1);
+  const projectPath = join(directory, 'project'); await mkdir(projectPath);
+  store.db.prepare('INSERT INTO projects VALUES(?,?,?,?)').run('local', projectPath, 'local', 1);
   store.db.prepare("INSERT INTO sessions(id,project_id,title,status,updated_at) VALUES('session','local','work','idle',1)").run();
   store.db.prepare('INSERT INTO shared_work_sessions(session_id,work_item_id,identity,context,actor_user_id) VALUES(?,?,?,?,?)').run('session', 'work', JSON.stringify(identity), JSON.stringify(context), 'member');
   let work = make();
@@ -101,7 +102,8 @@ test('shared reply receipts survive restart; a different account cannot publish 
     return { data: { entryId: 'entry-reply' } };
   } };
   function service() { return new SharedWork({ db: store.db, cloud, projectBinding: () => {}, session: id => store.db.prepare('SELECT * FROM sessions WHERE id=?').get(id) }); }
-  store.db.prepare('INSERT INTO projects VALUES(?,?,?,?)').run('project-local', '/private/tmp/test-project-not-read', 'local', 1);
+  const projectPath = join(directory, 'project'); await mkdir(projectPath);
+  store.db.prepare('INSERT INTO projects VALUES(?,?,?,?)').run('project-local', projectPath, 'local', 1);
   store.db.prepare("INSERT INTO sessions(id,project_id,title,status,updated_at,agent) VALUES('session-shared','project-local','shared','interrupted',1,'pi')").run();
   store.db.prepare('INSERT INTO shared_work_sessions(session_id,work_item_id,identity,actor_user_id) VALUES(?,?,?,?)').run('session-shared', 'work-one', JSON.stringify(identity), actor);
   store.db.prepare('INSERT INTO messages VALUES(?,?,?,?,?,?)').run('input-one', 'session-shared', 'user', '请求', 'text', 1);
@@ -124,7 +126,8 @@ test('long declared messages retain Unicode and exact contents across bounded Pr
   const directory = await mkdtemp(join(tmpdir(), 'turnsu-work-chunks-')), store = openStore(directory);
   const work = new SharedWork({ db: store.db, cloud: {}, projectBinding: () => {}, session: () => ({ agent: 'codex' }) });
   t.after(async () => { await work.close(); store.close(); await rm(directory, { recursive: true, force: true }); });
-  store.db.prepare('INSERT INTO projects VALUES(?,?,?,?)').run('project', '/private/tmp/not-read', 'project', 1);
+  const projectPath = join(directory, 'project'); await mkdir(projectPath);
+  store.db.prepare('INSERT INTO projects VALUES(?,?,?,?)').run('project', projectPath, 'project', 1);
   store.db.prepare("INSERT INTO sessions(id,project_id,title,status,updated_at) VALUES('session','project','shared','idle',1)").run();
   store.db.prepare('INSERT INTO shared_work_sessions(session_id,work_item_id,identity) VALUES(?,?,?)').run('session', 'work', '{}');
   const content = '团队 🐈\n'.repeat(2400);
@@ -148,7 +151,8 @@ test('a shared file reference retains its exact revision identifiers after an un
     return { data: { entryId: 'shared-entry' } };
   } };
   const make = () => new SharedWork({ db: store.db, cloud, projectBinding: () => {}, session: () => ({ agent: 'codex' }) });
-  store.db.prepare('INSERT INTO projects VALUES(?,?,?,?)').run('project', '/private/tmp/not-read', 'project', 1);
+  const projectPath = join(directory, 'project'); await mkdir(projectPath);
+  store.db.prepare('INSERT INTO projects VALUES(?,?,?,?)').run('project', projectPath, 'project', 1);
   store.db.prepare("INSERT INTO sessions(id,project_id,title,status,updated_at) VALUES('session','project','shared','idle',1)").run();
   store.db.prepare('INSERT INTO shared_work_sessions(session_id,work_item_id,identity) VALUES(?,?,?)').run('session', 'work', JSON.stringify(identity));
   let work = make();

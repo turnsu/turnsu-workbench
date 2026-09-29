@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { openStore } from '../store.mjs';
 import { WorkDecisions } from '../work-decisions.mjs';
 import { NATIVE_PRODUCT_TOOLS } from '../../agent-runtime/integrations/native/product-tools.mjs';
@@ -11,7 +11,8 @@ import { Check } from '../../contracts/dist/index.js';
 test('owner decision drafts and uncertain submissions survive restart without duplicating or changing an accepted decision', async t => {
   const root = await mkdtemp(join(tmpdir(), 'turnsu-decision-test-')); let store = openStore(root), actor = 'owner', lose = true;
   const identity = { origin: 'https://team.example.test', workspaceId: 'workspace', clientSessionId: 'login' }, accepted = new Map();
-  store.db.prepare('INSERT INTO projects VALUES(?,?,?,?)').run('local', '/private/tmp/not-read', 'Project', 1);
+  const projectPath = join(root, 'project'); await mkdir(projectPath);
+  store.db.prepare('INSERT INTO projects VALUES(?,?,?,?)').run('local', projectPath, 'Project', 1);
   const cloud = { identity: async () => identity, async fileCall(binding, name, args) {
     assert.equal(name, 'turnsu_record_decision'); assert.deepEqual(binding, identity);
     assert.ok(Check(NATIVE_PRODUCT_TOOLS.find(tool => tool.name === name).inputSchema, args));

@@ -2,9 +2,11 @@
 
 ## 2026-09-30：跨环境 CI 与真实 Worker 验证
 
+GitHub Actions 在 [main 的完整验证运行](https://github.com/turnsu/turnsu-workbench/actions/runs/36600439533) 中四项作业全部通过：Linux 本地 Host、历史分页与构建；Linux 团队服务、隔离 PostgreSQL、Worker 镜像和真实容器执行；macOS 与 Windows 的 Host 行为、原生 Electron 检查和未签名桌面打包。两个系统的无签名开发包在该运行的 Actions artifact 中保存 7 天。此前的跨平台失败暴露了 macOS `/var` 路径别名、Windows 大文件标识读取精度、Windows 上 POSIX 权限位不适用和测试夹具使用固定 macOS 路径的问题；已按各平台文件系统语义修复并重跑。Windows 的 `.turnsu-local` 暂存目录沿用项目目录的 NTFS ACL，当前没有独立的 ACL 收紧或客户机器上的多账户访问验收。
+
 在 turnsu Linux 开发机的隔离目录中，用 Node 22 和真实 Docker 镜像复测：本地 Host 与桌面逻辑测试通过；Agent runtime、团队服务与 Web 测试通过；隔离 PostgreSQL 全流程（含 Skill 上传与读取）通过，容器及测试卷由运行器清理。10,000 条会话、单会话 2,400 条消息的独立 Host 验证返回启动 0 条、索引 40 条、历史 40 条，五次读取后 RSS 增长 2,932 KiB。该值是 Linux 单次 Host 测量，不代表桌面完整进程组的长期占用。
 
-Worker 镜像构建后，真实非特权容器通过 Pi 会话及动态子任务两条路径：产品侧网关执行合成模型调用，结果进入执行记录，会话记录保存，子任务在父任务完成前进入时间线。测试曾发现容器写入目录受宿主 umask 阻挡、容器 UID 与宿主 UID 不同导致临时目录无法清理；修复后同一真实测试通过。模型响应仍是受控替身，没有客户凭据或生产模型调用。macOS、Windows 的 Actions 结果及桌面可见交互需单独核对，不能由 Linux 结果推断。
+Worker 镜像构建后，真实非特权容器通过 Pi 会话及动态子任务两条路径：产品侧网关执行合成模型调用，结果进入执行记录，会话记录保存，子任务在父任务完成前进入时间线。测试曾发现容器写入目录受宿主 umask 阻挡、容器 UID 与宿主 UID 不同导致临时目录无法清理；修复后同一真实测试通过。模型响应仍是受控替身，没有客户凭据或生产模型调用。macOS、Windows 的桌面可见交互仍需在设备上单独核对，不能由无窗口 CI 推断。
 
 ## 2026-09-29：本地 To B 版本增量
 

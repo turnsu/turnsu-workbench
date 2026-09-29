@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { openStore } from '../store.mjs';
 import { WorkResults } from '../work-results.mjs';
 
@@ -21,7 +21,8 @@ async function fixture(t) {
       return response;
     },
   } };
-  store.db.prepare('INSERT INTO projects VALUES(?,?,?,?)').run('local', '/private/tmp/not-used', 'local', 1);
+  const projectPath = join(directory, 'project'); await mkdir(projectPath);
+  store.db.prepare('INSERT INTO projects VALUES(?,?,?,?)').run('local', projectPath, 'local', 1);
   let service = new WorkResults(work);
   t.after(async () => { await service.close(); store.close(); await rm(directory, { recursive: true, force: true }); });
   return { get service() { return service; }, accepted, calls, identity, setActor(value) { actor = value; }, lose() { lose = true; }, advance() { etag = '"changed"'; }, async reopen() { await service.close(); store.close(); store = openStore(directory); service = new WorkResults(work); } };
