@@ -70,8 +70,15 @@ export class LocalSchedules {
   hasActive() { return !!this.db.prepare("SELECT 1 FROM local_schedules WHERE status='active' LIMIT 1").get(); }
   list({ projectId } = {}) {
     if (projectId) this.host.project(projectId);
-    const rows = projectId ? this.db.prepare('SELECT * FROM local_schedules WHERE project_id=? ORDER BY updated_at DESC LIMIT 100').all(projectId) : this.db.prepare('SELECT * FROM local_schedules ORDER BY updated_at DESC LIMIT 100').all();
-    return { items: rows.map(row => ({ ...row, spec: JSON.parse(row.spec), runs: this.db.prepare('SELECT * FROM local_schedule_runs WHERE schedule_id=? ORDER BY created_at DESC,rowid DESC LIMIT 10').all(row.id) })), backgroundRequired: this.hasActive() };
+    const columns = "id,project_id,name,revision,status,next_at,next_key,updated_at,json_extract(spec,'$.agent') AS agent,json_extract(spec,'$.timing') AS timing";
+    const rows = projectId ? this.db.prepare(`SELECT ${columns} FROM local_schedules WHERE project_id=? ORDER BY updated_at DESC LIMIT 100`).all(projectId) : this.db.prepare(`SELECT ${columns} FROM local_schedules ORDER BY updated_at DESC LIMIT 100`).all();
+    // Pinned prompts and scopes remain in SQLite until an individual edit/approval is opened.
+    return { items: rows.map(row => ({ ...row, timing: JSON.parse(row.timing), runs: this.db.prepare('SELECT id,revision,scheduled_at,session_id,status,substr(error,1,2000) AS error FROM local_schedule_runs WHERE schedule_id=? ORDER BY created_at DESC,rowid DESC LIMIT 10').all(row.id) })), backgroundRequired: this.hasActive() };
+  }
+  read({ id }) {
+    const row = this.db.prepare('SELECT * FROM local_schedules WHERE id=?').get(id);
+    if (!row) fail('计划不可用。');
+    return { ...row, spec: JSON.parse(row.spec) };
   }
   async save(input) {
     this.host.project(input.projectId);

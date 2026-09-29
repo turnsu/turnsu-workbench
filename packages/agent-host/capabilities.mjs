@@ -38,7 +38,7 @@ export class Capabilities {
     const grant = projectId && this.db.prepare("SELECT * FROM capability_grants WHERE project_id=? AND kind='documents'").get(projectId);
     return { manifest, cleanupError: this.cleanupError || null, documents: pkg ? { ...pkg, config: JSON.parse(pkg.config) } : { id: 'documents', version: VERSION, status: 'not_installed' }, docker: Boolean(executable('docker')),
       grant: grant ? { ...grant, config: JSON.parse(grant.config), active: !grant.revoked && grant.expires_at > this.host.clock() } : null,
-      receipts: projectId ? this.db.prepare('SELECT * FROM capability_receipts WHERE project_id=? ORDER BY created_at DESC LIMIT 20').all(projectId).map(row => ({ ...row, result: row.result ? JSON.parse(row.result) : null })) : [] };
+      receipts: projectId ? this.db.prepare("SELECT id,project_id,session_id,tool,status,created_at,json_object('path',json_extract(result,'$.path'),'error',substr(json_extract(result,'$.error'),1,2000)) AS result FROM capability_receipts WHERE project_id=? ORDER BY created_at DESC LIMIT 20").all(projectId).map(row => ({ ...row, result: JSON.parse(row.result) })) : [] };
   }
   install({ office = false, ocr = false, acknowledged }) {
     if (acknowledged !== true || typeof office !== 'boolean' || typeof ocr !== 'boolean') error('请确认安装官方文件包及所选组件。');

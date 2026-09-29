@@ -83,7 +83,7 @@ test('latest missed policy admits one current snapshot and an edit cannot rewrit
   const before = ctx.host.schedules.list().items[0], run = before.runs[0]; assert.equal(before.runs.length, 1);
   await ctx.save({ id: plan.id, revision: before.revision, prompt: 'changed future task' });
   assert.equal(JSON.parse(ctx.host.db.prepare('SELECT spec FROM local_schedule_runs WHERE id=?').get(run.id).spec).prompt, '读取资料并写入新文件');
-  assert.equal(ctx.host.schedules.list().items[0].spec.prompt, 'changed future task');
+  assert.equal((await ctx.host.command('schedules.read',{id:plan.id})).spec.prompt, 'changed future task');
 });
 
 test('a changed pinned Skill stops before any native Agent turn', async t => {
@@ -94,4 +94,18 @@ test('a changed pinned Skill stops before any native Agent turn', async t => {
   await writeFile(join(folder,'SKILL.md'),'---\nname: orders\n---\n修改后的另一套方法。');
   ctx.now+=60_000;await ctx.host.schedules.tick();
   assert.equal(ctx.sent,0);const run=ctx.host.schedules.list().items[0].runs[0];assert.equal(run.status,'failed');assert.match(run.error,/修改/);
+});
+
+test('schedule summaries stay small as long pinned prompts accumulate in execution history', async t=>{
+  const ctx=await setup(t),prompt='customer-private-task-'.repeat(3000);
+  const plan=await ctx.save({prompt});
+  // Missed runs persist the exact task snapshot but should not copy it into the list response.
+  for(let i=0;i<12;i++){ctx.now+=20*60_000;await ctx.host.schedules.tick();}
+  const list=await ctx.host.command('schedules.list',{projectId:ctx.project.id});
+  assert.equal(list.items[0].runs.length,10);assert.equal(ctx.sent,0);
+  const encoded=JSON.stringify(list);assert.ok(Buffer.byteLength(encoded)<10_000);assert.equal(encoded.includes('customer-private-task-'),false);
+  await ctx.reopen();
+  assert.equal((await ctx.host.command('schedules.read',{id:plan.id})).spec.prompt,prompt);
+  const stored=ctx.host.db.prepare('SELECT spec FROM local_schedule_runs WHERE schedule_id=?').all(plan.id);
+  assert.equal(stored.length,12);assert.ok(stored.every(run=>JSON.parse(run.spec).prompt===prompt));
 });

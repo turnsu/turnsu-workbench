@@ -534,6 +534,7 @@ export class LocalAgentHost {
     if (method === 'capabilities.enable') return this.capabilities.enable(args.enabled);
     if (method === 'documents.call') return this.capabilities.call(args.projectId, null, args.request);
     if (method === 'schedules.list') return this.schedules.list(args);
+    if (method === 'schedules.read') return this.schedules.read(args);
     if (method === 'schedules.save') return this.schedules.save(args);
     if (method === 'schedules.pause') return this.schedules.pause(args);
     if (method === 'schedules.run') return this.schedules.runNow(args);
