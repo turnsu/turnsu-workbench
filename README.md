@@ -15,7 +15,7 @@ macOS 上可主动选择微信桥 v1 交接，核对原文和解析覆盖后在�
 
 ## 当前状态
 
-本地项目、会话分页、草稿、资料引用、三个已有 Agent、Skill OS、简明 Loop 和可选团队接线已有实现。本轮加入 OpenCode ACP 适配、本机文件导入及成果系统打开路径。Linux 开发机的 Host 回归、构建，以及真实 OpenCode 项目文件任务与重开续跑已验证；其他 Agent 的本轮实测、macOS/Windows 文件对话框与桌面交互、签名发行和长时完整进程组内存仍需对应环境验收。当前不能把它标为已完成正式跨平台客户交付。证据见[验证记录](wiki/verification.md)，退出条件见[本地交付计划](wiki/roadmap.md)。
+本地项目、会话分页、草稿、资料引用、Codex、Pi、Claude Code、OpenCode、Skill OS、简明 Loop 和可选团队接线已有实现。本轮加入 OpenCode ACP 适配、本机文件导入及成果系统打开路径。Linux 开发机的 Host 回归、构建，以及真实 OpenCode 项目文件任务与重开续跑已验证；GitHub Actions 上 macOS、Windows 的 Host 行为、原生 Electron 检查与无签名打包也已通过。其他 Agent 的本轮真实任务、macOS/Windows 文件对话框与可见交互、签名发行和长时完整进程组内存仍需对应设备验收。当前不能把它标为已完成正式跨平台客户交付。证据见[验证记录](wiki/verification.md)，退出条件见[本地交付计划](wiki/roadmap.md)。
 
 ## 开发
 
