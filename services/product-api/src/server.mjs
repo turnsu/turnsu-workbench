@@ -1,3 +1,5 @@
+import { PostgresAgentConnectorStore } from './connections/postgres-agent-connectors.mjs';
+import { createManagedConnectorHttp } from './connectors/http.mjs';
 import { PostgresMemberAgentService } from "./member-agents/postgres-member-agent-service.mjs";
 import { PostgresNativeSkillPackageReader } from "./skills/postgres-native-skill-package-reader.mjs";
 import { randomUUID } from "node:crypto";
@@ -1698,12 +1700,14 @@ export function createWorkbenchServer({
     internalErrorReporter: createInternalErrorReporter({ env, logger: operationsLogger, metrics: operationsMetrics }),
     requestObserver: createRequestObserver({ logger: operationsLogger, metrics: operationsMetrics }),
   });
+  const connectors = createManagedConnectorHttp({ createPersistence: productStore?.persistenceDriver === 'postgres' ? key => new PostgresAgentConnectorStore(productStore, key) : null, authService: productAuthService, env, origin });
   const staticHandler = createStaticHandler({ distDirectory });
   const server = http.createServer(async (req, res) => {
     const pathname = new URL(req.url, "http://localhost").pathname;
     try {
       if (await operations(req, res)) return;
       await ready;
+      if (await connectors(req, res)) return;
       if (pathname.startsWith("/api/workbench/v1")) return api(req, res);
       if (!await staticHandler(req, res)) {
         res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
@@ -1720,6 +1724,7 @@ export function createWorkbenchServer({
       res.end(body);
     }
   });
+  server.on("close", () => connectors.close());
   const deviceWorkerGateway = composition.deviceWorkerRegistry && composition.deviceLifecycle
     ? new DeviceWorkerGateway({
       authService: productAuthService,

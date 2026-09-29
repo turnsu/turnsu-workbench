@@ -86,7 +86,8 @@ export async function openNativeProductSession(path, { fetch, recoverStaleLock =
     }
     const product = createNativeProductTools({ baseUrl: profile.baseUrl, accessToken: () => profile.tokens.accessToken, fetch, beforeCall: ensureAccess });
     const desktop = desktopControl ? (await import('./desktop-control.mjs')).createDesktopProductControl({ baseUrl: profile.baseUrl, accessToken: () => profile.tokens.accessToken, fetch, beforeCall: ensureAccess }) : undefined;
-    return { product, ...(desktop ? { desktop } : {}), release, async viewer() {
+    const connectors = desktopControl ? (await import("./connector-control.mjs")).createConnectorControl({ baseUrl: profile.baseUrl, accessToken: () => profile.tokens.accessToken, fetch, beforeCall: ensureAccess }) : undefined;
+    return { product, ...(desktop ? { desktop, connectors } : {}), release, async viewer() {
       await ensureAccess();
       const client = createNativeTokenProductClient([WORKBENCH_V1_WORKSPACE_ENDPOINTS.workspace], { baseUrl: profile.baseUrl, accessToken: () => profile.tokens.accessToken, fetch });
       const result = await client.call('workspace', { signal: AbortSignal.timeout(15_000) });

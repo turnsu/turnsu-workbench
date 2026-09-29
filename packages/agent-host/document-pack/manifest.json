@@ -1,0 +1,13 @@
+{
+  "id": "org.turnsu.documents",
+  "version": "1.0.0",
+  "name": "Turnsu 文件处理",
+  "runtime": { "python": "3.13.7", "isolation": "container", "architectures": ["amd64", "arm64"] },
+  "dependencies": { "openpyxl": "3.1.5", "python-docx": "1.2.0", "pypdf": "6.1.1", "reportlab": "4.4.4" },
+  "optionalComponents": { "office": "LibreOffice 转换与重算", "ocr": "Poppler + Tesseract 中英文 OCR" },
+  "permissions": { "network": false, "input": "project-selected-read-only", "output": "project-approved-new-files", "originalOverwrite": false },
+  "limits": { "memoryMiB": 512, "cpus": 1, "inputMiB": 32, "timeoutSeconds": 120 },
+  "tools": ["turnsu_document"],
+  "skills": ["SKILL.md"],
+  "upgradeRequiresProjectReauthorization": true
+}

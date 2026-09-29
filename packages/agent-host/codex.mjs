@@ -6,7 +6,7 @@ import { join, dirname, delimiter, isAbsolute } from "node:path";
 import { nativeCommand, closeNativeProcess } from './native-process.mjs';
 
 export function executable(name, env = process.env) {
-  const dirs = [...(env.PATH || "").split(delimiter), join(homedir(), '.kimi-code/bin'), join(homedir(), '.local/bin'), ...(process.platform === 'win32' ? [env.APPDATA ? join(env.APPDATA, 'npm') : ''] : [join(homedir(), ".nvm/current/bin"), "/opt/homebrew/bin", "/usr/local/bin"])];
+  const dirs = [...(env.PATH || "").split(delimiter), join(homedir(), '.kimi-code/bin'), join(homedir(), '.local/bin'), join(homedir(), '.bun/bin'), ...(process.platform === 'win32' ? [env.APPDATA ? join(env.APPDATA, 'npm') : ''] : [join(homedir(), ".nvm/current/bin"), "/opt/homebrew/bin", "/usr/local/bin"])];
   const names = process.platform === 'win32' ? [name + '.exe', name + '.cmd', name] : [name];
   return dirs.filter((dir) => isAbsolute(dir)).flatMap(dir => names.map(name => join(dir, name))).find((path) => {
     try { accessSync(path, constants.X_OK); return statSync(path).isFile(); } catch { return false; }

@@ -1,3 +1,5 @@
+import { RemoteTasks } from './remote-tasks.mjs';
+import { remoteAgents, normalizeAgentConnection } from './agent-connections.mjs';
 import { sessionIndex } from './session-index.mjs';
 import { AgentPreferences } from './agent-preferences.mjs';
 import { WeChatImports } from './wechat-imports.mjs';
@@ -30,6 +32,9 @@ import { FileReferences, referencePaths } from "./file-references.mjs";
 import { importProjectFiles } from './local-imports.mjs';
 import { MethodPublication } from "./method-publication.mjs";
 import { MemberAgentWork } from './member-agent-work.mjs';
+import { LocalSchedules } from './local-schedules.mjs';
+import { Capabilities } from './capabilities.mjs';
+import { ToolBroker } from './tool-broker.mjs';
 
 const text = (value, max = 100_000) => {
   if (typeof value !== "string" || !value.trim() || value.length > max) throw new Error("内容为空或超过长度限制。");
@@ -65,6 +70,9 @@ export class LocalAgentHost {
     this.nativeTouched = new Map(); this.codexTouched = new Map(); this.releasing = new Map(); this.releasingCodex = new Map();
     this.idleTimer = setInterval(() => { this.reapIdleConnections().catch(() => {}); }, 30_000); this.idleTimer.unref();
     this.connection = null; this.liveSessions = new Set(); this.interactions = new Map(); this.operations = new Set();
+    this.remote = new RemoteTasks(this);
+    this.schedules = new LocalSchedules(this);
+    this.capabilities = new Capabilities(this); this.toolBroker = new ToolBroker(this);
     if (this.db.prepare('SELECT 1 FROM shared_projects LIMIT 1').get()) this.sharing();
     if (this.db.prepare('SELECT 1 FROM shared_work_sessions LIMIT 1').get()) this.teamWork();
   }
@@ -96,6 +104,7 @@ export class LocalAgentHost {
           const map = s.agent === 'pi' ? this.piConnections : s.agent === 'claude' ? this.claudeConnections : this.acpConnections(s.agent);
           const connection = map.get(s.id); map.delete(s.id);
           await connection?.close(); this.claudeStreams.delete(s.id); this.piErrors.delete(s.id); this.acpMessages.delete(s.id);
+          this.toolBroker.release(s.id);
         }
         this.nativeTouched.delete(s.id);
       })();
@@ -143,6 +152,17 @@ export class LocalAgentHost {
       isBusy: id => this.db.prepare('SELECT status FROM sessions WHERE project_id=?').all(id).some(s => busyStates.has(s.status)) });
     this.shared.start(); return this.shared;
   }
+  resourceUsage() {
+    const sessions = this.db.prepare("SELECT id,agent,status FROM sessions WHERE status IN ('starting','running','waiting','stopping') AND id NOT IN (SELECT session_id FROM local_schedule_runs WHERE status='waiting' AND error IS NOT NULL AND session_id IS NOT NULL)").all();
+    for (const id of this.operations) if (!sessions.some(s => s.id === id)) sessions.push(this.session(id));
+    const local = sessions.filter(s => !remoteAgents[s.agent]).length, remote = sessions.length - local;
+    const documents = this.capabilities?.pending.size || 0, computer = this.computer?.active || this.computer?.starting ? 1 : 0;
+    return { local, remote, documents, computer, units: local + documents + computer, limit: 4 };
+  }
+  requireResource(kind) {
+    const used = this.resourceUsage();
+    if ((kind === 'remote' && used.remote >= 4) || (kind === 'agent' && used.local >= 2) || (kind !== 'remote' && used.units >= used.limit)) throw new Error('工作台资源已占用，请等待或停止现有任务后再执行。');
+  }
   changed(sessionId = null) { this.notify({ type: "changed", sessionId }); }
   session(id) {
     const result = this.db.prepare("SELECT sessions.*,projects.path AS cwd FROM sessions JOIN projects ON projects.id=sessions.project_id WHERE sessions.id=?").get(text(id, 128));
@@ -156,7 +176,7 @@ export class LocalAgentHost {
   }
   snapshot(args = {}) {
     if (args.projectId) this.project(args.projectId);
-    const agents = discoverAgents();
+    const agents = [...discoverAgents(), ...this.remote.agents()];
     return { projects: this.db.prepare("SELECT * FROM projects ORDER BY updated_at DESC").all().map(p => ({ ...p, sharing: this.shared?.snapshot(p.id) || null })),
       ...sessionIndex(this.db, args),
       activeSessionCount: this.db.prepare("SELECT count(*) AS count FROM sessions WHERE status IN ('starting','running','waiting','stopping')").get().count,
@@ -167,7 +187,7 @@ export class LocalAgentHost {
     const method = this.db.prepare("SELECT receipt FROM native_method_sessions WHERE session_id=?").get(id);
     const history = messageHistory(this.db, id);
     const pending = this.db.prepare('SELECT r.* FROM input_references r LEFT JOIN submissions s ON s.id=r.input_id WHERE r.session_id=? AND s.id IS NULL ORDER BY r.rowid DESC LIMIT 1').get(id);
-    return { ...session, nativeLoop: this.nativeLoops.state(id), pendingInput: pending ? { inputId: pending.input_id, sessionId: id, text: pending.prompt, references: JSON.parse(pending.paths) } : null, capture: this.capture.state(id), loopCapture: this.loopCapture.state(id), localLoopTrial: this.localLoopTrials.state(id), method: method ? JSON.parse(method.receipt) : null, lastSubmission: this.db.prepare("SELECT id,status FROM submissions WHERE session_id=? ORDER BY rowid DESC LIMIT 1").get(id) || null, sharedWork: this.work?.state(id) || null, messages: history.messages, messagePage: history.page,
+    return { ...session, remote: this.remote.state(id), nativeLoop: this.nativeLoops.state(id), pendingInput: pending ? { inputId: pending.input_id, sessionId: id, text: pending.prompt, references: JSON.parse(pending.paths) } : null, capture: this.capture.state(id), loopCapture: this.loopCapture.state(id), localLoopTrial: this.localLoopTrials.state(id), method: method ? JSON.parse(method.receipt) : null, lastSubmission: this.db.prepare("SELECT id,status FROM submissions WHERE session_id=? ORDER BY rowid DESC LIMIT 1").get(id) || null, sharedWork: this.work?.state(id) || null, messages: history.messages, messagePage: history.page,
       interactions: [...this.interactions.values()].filter((item) => item.sessionId === id).map(({ nativeId, ...item }) => item) };
   }
   updateSession(id, status, error = null) {
@@ -235,12 +255,13 @@ export class LocalAgentHost {
     if (session.agent === "pi") { await this.pi(id); return this.session(id); }
     if (session.agent === "claude") { await this.claude(id); return this.session(id); }
     if (acpAgents.has(session.agent)) { await this.acp(id); return this.session(id); }
+    if (remoteAgents[session.agent]) { this.remote.adapter(session); return session; }
     const connection = await this.codex(session.connection_id);
     if (this.liveSessions.has(id)) return session;
     const params = { ...(session.connection_id ? { modelProvider: `turnsu_${session.connection_id.replaceAll("-", "")}` } : {}), cwd: session.cwd, approvalPolicy: "on-request", approvalsReviewer: "user", sandbox: "workspace-write", ...(session.model ? { model: session.model } : {}) };
     const result = session.native_id
       ? await connection.request("thread/resume", { ...params, threadId: session.native_id })
-      : await connection.request("thread/start", params);
+      : await connection.request("thread/start", { ...params, dynamicTools: [...this.capabilities.tools(session.project_id), ...(this.computer?.tools(session.project_id) || [])].map(tool => ({ type: 'function', name: tool.name, description: tool.description, inputSchema: tool.inputSchema })) });
     if (!result?.thread?.id) throw new Error("Codex 未返回有效会话。");
     this.db.prepare("UPDATE sessions SET native_id=? WHERE id=?").run(result.thread.id, id);
     this.liveSessions.add(id);
@@ -271,6 +292,7 @@ export class LocalAgentHost {
     if (existing && !existing.closed) { await existing.ready; return existing; }
     const factory = { opencode: this.opencodeFactory, kimi: this.kimiFactory, omp: this.ompFactory }[session.agent];
     const connection = factory({ cwd: session.cwd, sessionId: session.native_id || null,
+      mcpServers: await this.toolBroker.mcp(id),
       gateway: this.modelConnections.get(session.connection_id, session.agent), model: session.model,
       onEvent: event => this.onAcpEvent(id, event), onExit: () => {
         if (this.closing) return;
@@ -291,7 +313,7 @@ export class LocalAgentHost {
       if (this.session(id).status === 'stopping') { this.acpConnections(agent).get(id)?.respond(event.id, 'decline'); return; }
       const choices = (event.options || []).filter(option => option.kind === 'allow_once');
       this.interactions.set(event.id, { id: event.id, nativeId: event.id, sessionId: id, method: `${agent}/${choices.length > 1 ? 'choice' : 'approval'}`, title: event.title,
-        command: event.tool, acpChoices: choices.length > 1 ? choices.map(option => ({ id: option.optionId, label: option.name })) : [], questions: [] });
+        command: [event.tool, event.operation ? JSON.stringify(event.operation, null, 2) : null].filter(Boolean).join("\n"), acpChoices: choices.length > 1 ? choices.map(option => ({ id: option.optionId, label: option.name })) : [], questions: [] });
       this.updateSession(id, 'waiting'); return;
     }
     if (event.type === 'permission_closed') {
@@ -373,7 +395,7 @@ export class LocalAgentHost {
         throw new Error("Pi 的原生会话文件不可用，请恢复该文件后继续；已有结果仍保留在桌面。");
       }
     }
-    const connection = this.piFactory({ gateway: this.modelConnections.get(session.connection_id, "pi"), model: session.model, cwd: session.cwd, sessionPath, onEvent: (event) => this.onPiEvent(id, event), onExit: () => {
+    const connection = this.piFactory({ tools: await this.toolBroker.connection(id), gateway: this.modelConnections.get(session.connection_id, "pi"), model: session.model, cwd: session.cwd, sessionPath, onEvent: (event) => this.onPiEvent(id, event), onExit: () => {
       if (this.closing) return;
       for (const [key, item] of this.interactions) if (item.sessionId === id) this.interactions.delete(key);
       if (busyStates.has(this.session(id).status)) this.updateSession(id, "interrupted", "Pi 已断开，恢复会话后检查上次执行结果。");
@@ -449,6 +471,15 @@ export class LocalAgentHost {
   onRequest({ id, method, params }, connection = this.connection) {
     const session = params?.threadId && this.db.prepare("SELECT * FROM sessions WHERE native_id=?").get(params.threadId);
     if (!session) { connection.reject(id); return; }
+    if (method === 'item/tool/call') {
+      const action = params.tool === 'turnsu_document' && busyStates.has(session.status)
+        ? this.capabilities.call(session.project_id, session.id, params.arguments || {}, params.callId)
+        : params.tool === 'turnsu_computer' && busyStates.has(session.status) && this.computer
+          ? this.computer.call(session.project_id, session.id, params.arguments || {})
+        : Promise.reject(new Error('工具未授权或执行已结束。'));
+      action.then(result => connection.respond(id, { contentItems: Array.isArray(result.content) ? result.content.filter(c => c.type === 'text' || c.type === 'image').map(c => c.type === 'image' ? { type: 'inputImage', imageUrl: `data:${c.mimeType};base64,${c.data}` } : { type: 'inputText', text: c.text }) : [{ type: 'inputText', text: JSON.stringify(result) }], success: true }), error => connection.respond(id, { contentItems: [{ type: 'inputText', text: error.message }], success: false })).catch(() => {});
+      return;
+    }
     if (!["item/commandExecution/requestApproval", "item/fileChange/requestApproval", "item/tool/requestUserInput"].includes(method)) {
       connection.reject(id);
       this.message(session.id, `${session.id}:unsupported:${id}`, "notice", "Agent 请求了当前桌面版尚未支持的交互，此请求已拒绝。"); return;
@@ -466,6 +497,51 @@ export class LocalAgentHost {
     return candidate;
   }
   async command(method, args = {}) {
+    if (method === 'capabilities.cleanup') return this.capabilities.cleanup();
+    if (method === 'capabilities.list') return this.capabilities.list(args.projectId);
+    if (method === 'capabilities.install') return this.capabilities.install(args);
+    if (method === 'capabilities.grant') return this.capabilities.grant(args);
+    if (method === 'capabilities.revoke') return this.capabilities.revoke(args.projectId);
+    if (method === 'agents.connections') return [...this.remote.connections.list(), ...this.remote.managed.list()];
+    if (method === 'managed.refresh') return this.remote.managed.refresh();
+    if (method === 'managed.localAction') return this.remote.managed.localAction(args);
+    if (method === 'managed.authorize') { const result = await this.remote.managed.call('authorize', args); this.remote.managed.authorization = result; return { authorizationId: result.authorizationId, scopes: result.scopes }; }
+    if (method === 'managed.authorization') return this.remote.managed.call('authorization', args);
+    if (method === 'managed.cancel') return this.remote.managed.call('cancel', args);
+    if (method === 'managed.museCreate') return this.remote.managed.call('muse-create', args);
+    if (method === 'managed.check') return this.remote.managed.call('check', args, args.connectionId);
+    if (method === 'managed.revoke') { const result = await this.remote.managed.call('revoke', args, args.connectionId); await this.remote.managed.refresh(); return result; }
+    if (method === 'managed.resolve') { const session=this.session(args.sessionId); const result=await this.remote.managed.call('action',{taskId:session.native_id,operation:'resolve',outcome:args.outcome,nativeId:args.nativeId,acknowledged:args.acknowledged===true,requestId:args.requestId},session.agent_connection_id); await this.remote.poll(session.id); return result; }
+    if (method === 'managed.finish') { const session = this.session(args.sessionId); const result=await this.remote.managed.call('action', { taskId: session.native_id, operation: 'finish', acknowledged: args.acknowledged === true, requestId: args.requestId }, session.agent_connection_id); await this.remote.poll(session.id); return result; }
+    if (method === 'agents.check') return this.remote.check(args.id);
+    if (method === 'agents.usage') return { sessions: this.db.prepare('SELECT count(*) AS count FROM sessions WHERE agent_connection_id=?').get(text(args.id, 64)).count };
+    if (method === 'remote.action') return this.remote.action(args);
+    if (method === 'remote.refresh') return this.remote.poll(args.sessionId);
+    if (method === 'remote.review') return this.remote.review(text(args.sessionId, 128));
+    if (method === 'remote.recover') return this.remote.recover(args);
+    if (method === 'remote.download') return this.remote.artifact(args);
+    if (method === 'remote.materials') return (await this.remote.files(args.projectId, args.paths)).map(({ data, ...metadata }) => metadata);
+    if (method.startsWith('computer.')) {
+      if (!this.computer) throw new Error('电脑操作需要桌面工作台。');
+      if (method === 'computer.status') return this.computer.status();
+      if (method === 'computer.start') return this.computer.start(args);
+      if (method === 'computer.stop') return this.computer.stop();
+      if (method === 'computer.history') return this.computer.history(args.projectId);
+      if (method === 'computer.collect') return this.computer.collect(args);
+      throw new Error('不支持这个电脑操作。');
+    }
+    if (method === 'capabilities.skill') return this.capabilities.installSkill(args.projectId);
+    if (method === 'capabilities.enable') return this.capabilities.enable(args.enabled);
+    if (method === 'documents.call') return this.capabilities.call(args.projectId, null, args.request);
+    if (method === 'schedules.list') return this.schedules.list(args);
+    if (method === 'schedules.read') return this.schedules.read(args);
+    if (method === 'schedules.save') return this.schedules.save(args);
+    if (method === 'schedules.pause') return this.schedules.pause(args);
+    if (method === 'schedules.run') return this.schedules.runNow(args);
+    if (method === 'schedules.review') return this.schedules.review(args);
+    if (method === 'schedules.approve') return this.schedules.approve(args);
+    if (method === 'schedules.resolve') return this.schedules.resolve(args);
+    if (method === 'schedules.background') return { required: this.schedules.hasActive() };
     if (method.startsWith('assistance.')) {
       const service = this.assistance();
       if (method === 'assistance.list') return service.list(args);
@@ -598,12 +674,12 @@ export class LocalAgentHost {
       case "workspace.read": return this.snapshot(args);
       case "agent.preference.read": {
         if (args.projectId) this.project(args.projectId);
-        return this.agentPreferences.read(args.projectId, discoverAgents());
+        return this.agentPreferences.read(args.projectId, [...discoverAgents(), ...this.remote.agents()]);
       }
       case "agent.preference.save": {
         this.agentPreferences.save(args);
         this.changed();
-        return this.agentPreferences.read(args.projectId, discoverAgents());
+        return this.agentPreferences.read(args.projectId, [...discoverAgents(), ...this.remote.agents()]);
       }
       case 'wechat.handoffs': return this.wechat.listHandoffs();
       case 'wechat.preview': return this.wechat.preview(args.id, { offset: args.offset });
@@ -617,6 +693,7 @@ export class LocalAgentHost {
 
       case "models.list": {
         const target = args.sessionId ? this.session(args.sessionId) : { agent: args.agent || 'codex', connection_id: args.connectionId || null };
+        if (remoteAgents[target.agent]) return [];
         if (target.connection_id) {
           const models = await this.modelConnections.models(target.connection_id, target.agent);
           this.modelCatalogs.set(this.modelCatalogKey(target), models); return models;
@@ -652,7 +729,8 @@ export class LocalAgentHost {
       }
       case "session.model": {
         const session = this.session(args.sessionId);
-        if (this.operations.has(session.id) || busyStates.has(session.status)) throw new Error("请等待当前任务结束后再切换模型。");
+        if (remoteAgents[session.agent]) throw new Error('远端 Agent 的执行配置由其原生服务管理。');
+        if (this.operations.has(session.id) || (busyStates.has(session.status) && !(remoteAgents[session.agent] && session.status === 'waiting' && ['messageAskUser', 'cascadeAskUser'].includes(this.remote.state(session.id)?.waiting?.waiting_for_event_type)))) throw new Error("请等待当前任务结束后再切换模型。");
         if (session.connection_id && !args.model) throw new Error("请为网关连接选择明确的模型。");
         if (args.model !== null && !this.modelCatalogs.get(this.modelCatalogKey(session))?.some((m) => m.id === args.model)) throw new Error("请刷新并选择此连接返回的模型。");
         if (session.connection_id && session.model !== args.model) {
@@ -664,6 +742,7 @@ export class LocalAgentHost {
       }
       case "session.connection": {
         const session = this.session(args.sessionId);
+        if (remoteAgents[session.agent]) throw new Error('远端 Agent 账号在任务创建时固定，请新建任务选择其他连接。');
         if (session.native_id || this.operations.has(session.id) || busyStates.has(session.status) || this.db.prepare('SELECT 1 FROM submissions WHERE session_id=? LIMIT 1').get(session.id)) throw new Error('这个会话已经连接过 Agent；请新建任务以选择另一模型来源。');
         const connectionId = args.connectionId || null; this.modelConnections.get(connectionId, session.agent);
         this.db.prepare('UPDATE sessions SET connection_id=?,model=NULL WHERE id=?').run(connectionId, session.id);
@@ -696,6 +775,7 @@ export class LocalAgentHost {
         return { saved: true };
       }
       case "session.create": {
+        if (remoteAgents[args.agent]) return this.remote.create(args);
         this.project(args.projectId); if (!["codex", "pi", "claude", "opencode", "kimi", "omp"].includes(args.agent)) throw new Error("这个 Agent 的桌面接入尚未完成。");
         const connectionId = args.connectionId || null; this.modelConnections.get(connectionId, args.agent);
         const id = randomUUID(); this.db.prepare("INSERT INTO sessions(id,project_id,native_id,title,status,error,updated_at,agent,connection_id) VALUES(?,?,NULL,?,'idle',NULL,?,?,?)").run(id, args.projectId, "新任务", Date.now(), args.agent, connectionId); this.changed(id); return this.readSession(id);
@@ -729,7 +809,7 @@ export class LocalAgentHost {
         const id = text(args.sessionId, 128);
         if (this.operations.has(id)) throw new Error("正在处理上一项操作。");
         this.operations.add(id);
-        try { await this.ensureSession(id); if (!busyStates.has(this.session(id).status)) this.updateSession(id, "idle"); return this.readSession(id); }
+        try { if (remoteAgents[this.session(id).agent]) return await this.remote.resume(id); await this.ensureSession(id); if (!busyStates.has(this.session(id).status)) this.updateSession(id, "idle"); return this.readSession(id); }
         finally { this.operations.delete(id); }
       }
       case "session.send": {
@@ -743,11 +823,13 @@ export class LocalAgentHost {
           if (old.status === 'unknown') throw new Error('上次请求是否开始尚未确认，请先恢复会话并核对结果，避免重复执行。');
           return this.readSession(session.id);
         }
-        if (this.operations.has(session.id) || busyStates.has(session.status)) throw new Error("Agent 正在处理，请先等待或停止当前任务。");
+        if (this.operations.has(session.id) || (busyStates.has(session.status) && !(remoteAgents[session.agent] && session.status === 'waiting' && ['messageAskUser', 'cascadeAskUser'].includes(this.remote.state(session.id)?.waiting?.waiting_for_event_type)))) throw new Error("Agent 正在处理，请先等待或停止当前任务。");
         if (session.status === "interrupted") throw new Error("请先恢复会话，核对上次执行结果。");
+        if (!busyStates.has(session.status)) this.requireResource(remoteAgents[session.agent] ? 'remote' : 'agent');
         this.operations.add(session.id);
         let prepared, nativePrompt;
         try {
+          if (remoteAgents[session.agent]) await this.remote.prepare(session, inputId, args.materials, args.allowExternal);
           prepared = this.work ? await this.work.prepare(session.id, prompt, { continueOffline: args.continueOffline === true }) : { prompt, context: null };
           const files = await this.references.prepare(session, inputId, prompt, paths, { continueOffline: prepared.offline === true });
           prepared.prompt = this.references.inject(prepared.prompt, files);
@@ -783,6 +865,7 @@ export class LocalAgentHost {
             this.db.prepare("UPDATE submissions SET status='interrupted' WHERE id=?").run(inputId);
             this.updateSession(session.id, "interrupted"); return this.readSession(session.id);
           }
+          if (remoteAgents[session.agent]) { dispatched = true; await this.remote.send(session, inputId, nativePrompt); return this.readSession(session.id); }
           if (session.agent === "claude") {
             const connection = await this.claude(session.id); dispatched = true;
             await connection.send(inputId, nativePrompt, native.model);
@@ -835,6 +918,8 @@ export class LocalAgentHost {
       }
       case "session.stop": {
         const session = this.session(args.sessionId);
+        if (this.computer?.owner === session.id) await this.computer.stop();
+        if (remoteAgents[session.agent]) return this.remote.action({ sessionId: session.id, requestId: args.requestId || randomUUID(), operation: 'stop' });
         if (acpAgents.has(session.agent)) {
           if (!busyStates.has(session.status)) throw new Error('当前没有可停止的执行。');
           this.updateSession(session.id, 'stopping'); await (await this.acp(session.id)).stop(); return { accepted: true };
@@ -932,5 +1017,5 @@ export class LocalAgentHost {
       default: throw new Error("工作台不支持这个操作。");
     }
   }
-  async close() { this.closing = true; clearInterval(this.idleTimer); await this.reaping; await this.projectMembers?.close(); await this.projectCreation?.close(); await this.memberAgentWork?.close(); await this.capture.close(); await this.loopCapture.close(); await this.localLoopTrials.close(); await this.localLoopPublication.close(); await this.nativeLoops.close(); await this.publication?.close(); await this.loops?.close(); await this.methods?.close(); await this.work?.close(); await this.shared?.close(); await Promise.all([this.cloud?.close(), ...[...this.codexConnections.values()].map(c => c.close()), ...[...this.piConnections.values(), ...this.claudeConnections.values(), ...this.opencodeConnections.values(), ...this.kimiConnections.values(), ...this.ompConnections.values()].map((c) => c.close())]); this.store.close(); }
+  async close() { const cleanupErrors=[]; this.closing = true; clearInterval(this.idleTimer); await this.schedules.close(); await this.remote.close(); await this.toolBroker.close(); try { await this.computer?.close(); } catch(e) { cleanupErrors.push(e); } try { await this.capabilities.close(); } catch(e) { cleanupErrors.push(e); } await this.reaping; await this.projectMembers?.close(); await this.projectCreation?.close(); await this.memberAgentWork?.close(); await this.capture.close(); await this.loopCapture.close(); await this.localLoopTrials.close(); await this.localLoopPublication.close(); await this.nativeLoops.close(); await this.publication?.close(); await this.loops?.close(); await this.methods?.close(); await this.work?.close(); await this.shared?.close(); await Promise.all([this.cloud?.close(), ...[...this.codexConnections.values()].map(c => c.close()), ...[...this.piConnections.values(), ...this.claudeConnections.values(), ...this.opencodeConnections.values(), ...this.kimiConnections.values(), ...this.ompConnections.values()].map((c) => c.close())]); if(cleanupErrors.length)throw new AggregateError(cleanupErrors,cleanupErrors.map(e=>e.message).join(' ')); this.store.close(); }
 }

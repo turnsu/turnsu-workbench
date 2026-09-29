@@ -7,7 +7,7 @@ import { nativeCommand, closeNativeProcess } from './native-process.mjs';
 
 const run = promisify(execFile);
 export class PiConnection {
-  constructor({ cwd, sessionPath, onEvent, onExit, gateway = null, model = null, binary = executable('pi'), spawnProcess = spawn, checkVersion = true }) {
+  constructor({ cwd, sessionPath, onEvent, onExit, tools = null, gateway = null, model = null, binary = executable('pi'), spawnProcess = spawn, checkVersion = true }) {
     this.pending = new Map(); this.dialogs = new Map(); this.closed = false; this.sequence = 0;
     this.startController = new AbortController();
     this.disconnect = () => {
@@ -20,6 +20,7 @@ export class PiConnection {
       if (!binary) throw new Error('请先安装 Pi CLI，再重新打开 Turnsu。');
       const env = { ...process.env, PATH: `${dirname(binary)}${delimiter}${dirname(process.execPath)}${delimiter}${process.env.PATH || ''}` };
       const providerArgs = [];
+      if (tools) { env.TURNSU_TOOL_CONNECTION = JSON.stringify(tools); providerArgs.push('--extension', process.env.TURNSU_TOOLS_EXTENSION || fileURLToPath(new URL('./pi-tools-extension.mjs', import.meta.url))); }
       if (gateway) {
         const provider = `turnsu-${gateway.id}`;
         if (!model?.startsWith(provider + '/')) throw new Error('请先为此 Pi 连接选择模型。');
