@@ -7,7 +7,7 @@
 - 黄金路径：打开本地项目 → 导入或引用资料 → 选择已有 Agent 与模型来源 → 执行和回应权限 → 核对真实结果文件 → 重开继续。工作台和 Skill OS 是主导航；Loop 在 Skill OS 内保持简明。
 - 同一桌面包面向不同客户。客户差异在项目 Skill、可选连接器、Agent/模型配置和授权团队服务中，不写客户专属桌面分支；不加入 Web3、微信全量采集或无关内容模块。
 - 桌面使用 Electron、React 和私有 Node Host。渲染器隔离、沙箱、窄 IPC、系统凭据存储不能削弱。桌面构建不依赖团队 Web、PostgreSQL 或客户服务。
-- `packages/agent-host` 持有 SQLite、原生 Agent 生命周期、文件导入与引用。Codex、Pi、Claude Code、OpenCode 是不同执行器；模型连接是另一维。新 Agent 的协议差异留在适配器内，不能伪造共用历史、工具权限或模型网关支持。
+- `packages/agent-host` 持有 SQLite、原生 Agent 生命周期、文件导入与引用。Kimi Code、Codex、OpenCode、oh-my-pi、Pi、Claude Code 是不同执行器；模型连接是另一维。新 Agent 的协议差异留在适配器内，不能伪造共用历史、工具权限或模型网关支持。WorkBuddy 的授权 Open API 属于另一接入边界，不作为已接通的本机 CLI。
 - 客户已有的 CLI、原生账号、会话及全局配置归客户所有。运行后固定 Agent、工作目录与模型来源；偏好只影响新任务。失败时保留草稿、资料和不确定状态，不能静默换账号、模型或执行器。
 - Skill 是可复用方法，不能授予工具权限。原生 Skill 导出对 runtime、工具、依赖、可执行文件和隐藏配置的安全拒绝必须保留；连接器单独验证。
 - 微信桥的 Swift 生产者和原生分享功能归桥仓库。工作台消费用户主动选择的交接；不得搬入旧应答 UI、绕过协议或把导入解释为已分析、已上云、已发送。

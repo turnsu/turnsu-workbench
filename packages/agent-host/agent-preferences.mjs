@@ -1,4 +1,4 @@
-const supportedAgents = new Set(['codex', 'pi', 'claude', 'opencode']);
+const supportedAgents = new Set(['codex', 'pi', 'claude', 'opencode', 'kimi', 'omp']);
 
 export class AgentPreferences {
   constructor(db) { this.db = db; }

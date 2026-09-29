@@ -26,7 +26,7 @@ import './wechat-import.css';
 const command = (method, args = {}) => invoke("local_command", { method, args });
 const labels = { idle: "可以继续", starting: "正在连接 Agent", running: "正在处理", waiting: "需要你的回应", stopping: "正在停止", interrupted: "可以恢复", failed: "需要处理" };
 const active = (status) => ["starting", "running", "waiting", "stopping"].includes(status);
-const agentName = (agent) => ({ pi: 'Pi', claude: 'Claude Code', codex: 'Codex', opencode: 'OpenCode' }[agent] || agent);
+const agentName = (agent) => ({ pi: 'Pi', claude: 'Claude Code', codex: 'Codex', opencode: 'OpenCode', kimi: 'Kimi Code', omp: 'oh-my-pi' }[agent] || agent);
 const sessionState = (status) => ({ starting: "连接中", running: "进行中", waiting: "待回应", stopping: "停止中", interrupted: "已中断", failed: "需处理" })[status] || "";
 
 function Markdown({ children }) {
@@ -34,9 +34,9 @@ function Markdown({ children }) {
 }
 function Interaction({ item, sessionId, report }) {
   const [answers, setAnswers] = useState(() => Object.fromEntries(item.questions.map((q) => [q.id, q.prefill || ""]))); const [saving, setSaving] = useState(false);
-  async function respond(decision) {
+  async function respond(decision, optionId) {
     setSaving(true);
-    try { await command("interaction.respond", { id: item.id, sessionId, decision, answers }); }
+    try { await command("interaction.respond", { id: item.id, sessionId, decision, optionId, answers }); }
     catch (error) { report(String(error)); }
     finally { setSaving(false); }
   }
@@ -46,7 +46,7 @@ function Interaction({ item, sessionId, report }) {
       {q.options?.length > 0 && <div className="options">{q.options.map((o) => <button key={o.label} title={o.description} onClick={() => setAnswers((a) => ({ ...a, [q.id]: q.multiSelect ? (Array.isArray(a[q.id]) && a[q.id].includes(o.label) ? a[q.id].filter((v) => v !== o.label) : [...(Array.isArray(a[q.id]) ? a[q.id] : []), o.label]) : o.label }))} aria-pressed={Array.isArray(answers[q.id]) ? answers[q.id].includes(o.label) : answers[q.id] === o.label}>{o.label}</button>)}</div>}
       {q.multiline ? <textarea value={Array.isArray(answers[q.id]) ? answers[q.id].join(", ") : answers[q.id] || ""} onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))} aria-label={q.question} /> : <input type={q.isSecret ? "password" : "text"} value={Array.isArray(answers[q.id]) ? answers[q.id].join(", ") : answers[q.id] || ""} onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))} placeholder="填写回答" />}
     </label>) : <pre>{item.command}</pre>}
-    <div className="interactionActions">{item.method.startsWith("claude/") && item.questions.length > 0 && <button disabled={saving} onClick={() => respond("decline")}>取消</button>}{item.method.startsWith("pi/") && item.questions.length > 0 && <button disabled={saving} onClick={() => respond("cancel")}>取消</button>}{item.questions.length ? <button className="primary" disabled={saving || item.questions.some((q) => Array.isArray(answers[q.id]) ? !answers[q.id].length : !answers[q.id]?.trim())} onClick={() => respond()}>提交回答</button> : <><button disabled={saving} onClick={() => respond("decline")}>拒绝</button><button className="primary" disabled={saving} onClick={() => respond("accept")}>{item.method === "pi/confirm" ? "确认" : "允许一次"}</button></>}</div>
+    <div className="interactionActions">{item.acpChoices?.length > 1 ? <><button disabled={saving} onClick={() => respond('decline')}>取消</button>{item.acpChoices.map(option => <button key={option.id} className="primary" disabled={saving} onClick={() => respond('select', option.id)}>{option.label}</button>)}</> : <>{item.method.startsWith("claude/") && item.questions.length > 0 && <button disabled={saving} onClick={() => respond("decline")}>取消</button>}{item.method.startsWith("pi/") && item.questions.length > 0 && <button disabled={saving} onClick={() => respond("cancel")}>取消</button>}{item.questions.length ? <button className="primary" disabled={saving || item.questions.some((q) => Array.isArray(answers[q.id]) ? !answers[q.id].length : !answers[q.id]?.trim())} onClick={() => respond()}>提交回答</button> : <><button disabled={saving} onClick={() => respond("decline")}>拒绝</button><button className="primary" disabled={saving} onClick={() => respond("accept")}>{item.method === "pi/confirm" ? "确认" : "允许一次"}</button></>}</>}</div>
   </section>;
 }
 
@@ -88,6 +88,7 @@ function App() {
   const [draft, setDraft] = useState(""), [draftLoading, setDraftLoading] = useState(false), [navigationStage, setNavigationStage] = useState(null), [draftStatus, setDraftStatus] = useState("");
   const [error, setError] = useState(""), [ready, setReady] = useState(false), [sending, setSending] = useState(false);
   const [filePanel, setFilePanel] = useState(false), [folder, setFolder] = useState(""), [fileList, setFileList] = useState(null), [preview, setPreview] = useState(null);
+  const [previewRefChecking, setPreviewRefChecking] = useState(false);
   const [wechatOpen, setWechatOpen] = useState(false);
   const [agentId, setAgentId] = useState("codex");
   const [agentPreference, setAgentPreference] = useState(null), [preferenceSaving, setPreferenceSaving] = useState(false);
@@ -278,6 +279,22 @@ function App() {
     if (references.length >= 4) { setError("每次最多引用 4 份资料。"); return; }
     changeDraft(draft, [...references, path]); closeReferencePicker();
   }
+  function useProjectFilePath(path) {
+    const fileLine = `项目文件路径：${JSON.stringify(path)}`;
+    changeDraft(draft.trim() ? `${draft.trimEnd()}\n${fileLine}` : `请尝试读取当前${fileLine}。`);
+    closeReferencePicker();
+  }
+  async function addPreviewReference(path) {
+    if (previewRefChecking) return;
+    const currentProject = projectId;
+    setPreviewRefChecking(true);
+    setFileError('');
+    try {
+      await command('references.validate', { projectId: currentProject, path });
+      if (navigation.current.current?.projectId === currentProject) addReference(path);
+    } catch (cause) { if (navigation.current.current?.projectId === currentProject) setFileError(`无法引用此文件：${String(cause)}`); }
+    finally { setPreviewRefChecking(false); }
+  }
   async function send(continueOffline = false) {
     if (!draft.trim() || draftLoading || modelsLoading || sending || active(session?.status)) return;
     if (chosenConnectionId && !model) { setError("请先读取此连接的模型目录并选择模型。"); return; }
@@ -309,7 +326,7 @@ function App() {
     setModelsLoading(true); setError("");
     try {
       let id = sessionId;
-      if (["pi", "claude", "opencode"].includes(agentId) && !id && !chosenConnectionId) {
+      if (["claude", "opencode", "kimi", "omp"].includes(agentId) && !id && !chosenConnectionId) {
         setCreatingSession(true);
         const s = await command("session.create", { projectId, agent: agentId, connectionId: chosenConnectionId || null });
         await command("draft.save", { projectId, sessionId: s.id, text: draft, references });
@@ -317,7 +334,7 @@ function App() {
         id = s.id; navigation.current.adopt(projectId, id, draft, references); selected.current = id; setSessionId(id); setSession(s); setCreatingSession(false); await refresh();
       }
       if (request !== modelRequest.current) return;
-      const available = await command("models.list", { agent: agentId, sessionId: id, connectionId: chosenConnectionId || null });
+      const available = await command("models.list", { agent: agentId, sessionId: id, projectId, connectionId: chosenConnectionId || null });
       if (request === modelRequest.current) setModels(available);
     } catch (e) { if (request === modelRequest.current) setError(String(e)); }
     finally { if (request === modelRequest.current) { setCreatingSession(false); setModelsLoading(false); } }
@@ -407,7 +424,7 @@ function App() {
           <div className="sessionListHeading">{sessionSearch ? "搜索结果" : "最近会话"} <span>{indexLoading ? "读取中…" : sessionPage.total || 0}</span></div>
           {indexError && <p className="railEmpty" role="alert">会话列表读取失败。<button onClick={() => loadSessionIndex(indexQuery.current)}>重试</button></p>}
           <div aria-busy={indexLoading} className={indexLoading ? "sessionIndex loading" : "sessionIndex"}>
-          {filteredSessions.map((s) => editingSessionId === s.id ? <form className="sessionRename" key={s.id} onSubmit={renameSession} onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); finishRename(); } }}><input autoFocus aria-label="会话名称" maxLength={80} required value={editedTitle} disabled={renameSaving} onChange={e => setEditedTitle(e.target.value)}/><button aria-label="保存会话名称" disabled={renameSaving || !editedTitle.trim()} type="submit"><Check size={14}/></button><button aria-label="取消重命名" disabled={renameSaving} type="button" onClick={finishRename}><X size={14}/></button></form> : <div className={`sessionRow ${sessionId === s.id ? "current" : ""}`} key={s.id}><button className="sessionButton" aria-current={sessionId === s.id ? 'page' : undefined} aria-label={`${s.title}，${agentName(s.agent)}${sessionState(s.status) ? `，${sessionState(s.status)}` : ""}`} title={`${s.title} · ${agentName(s.agent)} · ${new Date(s.updated_at).toLocaleString()}`} disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { if (sessionId !== s.id || view !== 'workbench' || draftLoadFailed) selectProject(p.id, s.id); }}><span className={`statusDot ${active(s.status) ? "live" : ""} ${['waiting', 'failed', 'interrupted'].includes(s.status) ? "attention" : ""}`} /><span className="sessionTitle">{s.title}</span><small className={`taskAgent ${['waiting', 'failed', 'interrupted'].includes(s.status) ? "attention" : ""}`}>{sessionState(s.status) || ({ pi: 'Pi', claude: 'CC', opencode: 'OC', codex: 'C' }[s.agent] || '?')}</small></button><button ref={element => { if (element) renameButtons.current.set(s.id, element); else renameButtons.current.delete(s.id); }} className="renameTrigger" aria-label={`重命名会话：${s.title}`} title="重命名" disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { setEditingSessionId(s.id); setEditedTitle(s.title); }}><Pencil size={13}/></button></div>)}
+          {filteredSessions.map((s) => editingSessionId === s.id ? <form className="sessionRename" key={s.id} onSubmit={renameSession} onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); finishRename(); } }}><input autoFocus aria-label="会话名称" maxLength={80} required value={editedTitle} disabled={renameSaving} onChange={e => setEditedTitle(e.target.value)}/><button aria-label="保存会话名称" disabled={renameSaving || !editedTitle.trim()} type="submit"><Check size={14}/></button><button aria-label="取消重命名" disabled={renameSaving} type="button" onClick={finishRename}><X size={14}/></button></form> : <div className={`sessionRow ${sessionId === s.id ? "current" : ""}`} key={s.id}><button className="sessionButton" aria-current={sessionId === s.id ? 'page' : undefined} aria-label={`${s.title}，${agentName(s.agent)}${sessionState(s.status) ? `，${sessionState(s.status)}` : ""}`} title={`${s.title} · ${agentName(s.agent)} · ${new Date(s.updated_at).toLocaleString()}`} disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { if (sessionId !== s.id || view !== 'workbench' || draftLoadFailed) selectProject(p.id, s.id); }}><span className={`statusDot ${active(s.status) ? "live" : ""} ${['waiting', 'failed', 'interrupted'].includes(s.status) ? "attention" : ""}`} /><span className="sessionTitle">{s.title}</span><small className={`taskAgent ${['waiting', 'failed', 'interrupted'].includes(s.status) ? "attention" : ""}`}>{sessionState(s.status) || ({ pi: 'Pi', claude: 'CC', opencode: 'OC', codex: 'C', kimi: 'KM', omp: 'OMP' }[s.agent] || '?')}</small></button><button ref={element => { if (element) renameButtons.current.set(s.id, element); else renameButtons.current.delete(s.id); }} className="renameTrigger" aria-label={`重命名会话：${s.title}`} title="重命名" disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { setEditingSessionId(s.id); setEditedTitle(s.title); }}><Pencil size={13}/></button></div>)}
           {!indexLoading && sessionSearch && filteredSessions.length === 0 && <p className="railEmpty">当前项目没有匹配的会话。</p>}
           </div>
           {(sessionPage.older || sessionPage.newer || indexQuery.current.before || indexQuery.current.after) && <nav className="sessionPagination" aria-label="会话列表分页">
@@ -468,13 +485,13 @@ function App() {
       </section>
       {filePanel && project && <aside className="filePanel"><div className="fileHeader"><strong>{preview ? basename(preview.path) : "项目文件"}</strong><button aria-label="关闭文件面板" onClick={() => setFilePanel(false)}><X size={16} /></button></div><div className="fileTools"><button onClick={() => preview ? setPreview(null) : listFiles(folder.split("/").slice(0, -1).join("/"))} disabled={!preview && !folder}><ChevronLeft size={15} />返回</button><button aria-label="刷新项目文件" onClick={() => listFiles(folder)}><RotateCcw size={15} /></button></div>
         {importNotice && <p className="importNotice" role="status">{importNotice}</p>}
-        {preview && <div className="referencePreviewAction"><button disabled={sending || creatingSession || draftLoading || references.length >= 4 || references.includes(preview.path)} onClick={() => addReference(preview.path)}><FileText size={14}/>{references.includes(preview.path) ? '已引用到任务' : '引用到任务'}</button><button onClick={() => openProjectFile(preview.path)}>系统打开</button></div>}
+        {preview && <div className="referencePreviewAction"><button disabled={sending || creatingSession || draftLoading || previewRefChecking || references.length >= 4 || references.includes(preview.path)} onClick={() => addPreviewReference(preview.path)}><FileText size={14}/>{previewRefChecking ? '检查中…' : references.includes(preview.path) ? '已引用到任务' : '引用到任务'}</button><button onClick={() => openProjectFile(preview.path)}>系统打开</button></div>}
         {fileError && <div className="inlineError" role="alert">{fileError}</div>}
         {fileLoading ? <div className="fileLoading" role="status"><LoaderCircle className="spin" size={16}/>正在读取项目文件…</div> : preview ? <div className="filePreview">{/\.md$/i.test(preview.path) ? <Markdown>{preview.text}</Markdown> : <pre>{preview.text}</pre>}</div> : <div className="fileList"><p className="filePath">{folder || project.sharing?.title || project.name}</p>{fileList?.entries.map((f) => <div className="fileEntry" key={f.path}><button onClick={() => readFile(f)}>{f.directory ? <Folder size={16} /> : <FileText size={16} />}<span>{f.name}</span>{f.directory && <ChevronRight size={13} />}</button>{!f.directory && <button className="nativeFileAction" onClick={() => openProjectFile(f.path)}>{/\.(?:txt|md|markdown|csv|tsv|pdf|docx|xlsx|pptx|png|jpe?g|webp)$/i.test(f.path) ? '系统打开' : '定位'}</button>}</div>)}{fileList?.entries.length === 0 && <p className="muted">这个文件夹还没有文件。</p>}{fileList?.truncated && <p className="muted">当前显示前 500 项，请进入子文件夹查看。</p>}</div>}
       </aside>}
       </div>
     </main>}
-    {referencePicker && project && <FileReferencePicker projectId={projectId} sessionId={sessionId} team={Boolean(session?.sharedWork)} selected={references} onSelect={addReference} onClose={closeReferencePicker} methodContext={{ project, agents: workspace.agents, initialAgent: agentId,
+    {referencePicker && project && <FileReferencePicker projectId={projectId} sessionId={sessionId} team={Boolean(session?.sharedWork)} selected={references} onSelect={addReference} onUsePath={useProjectFilePath} onClose={closeReferencePicker} methodContext={{ project, agents: workspace.agents, initialAgent: agentId,
       workSession: session?.sharedWork?.workItemId ? { id: session.sharedWork.workItemId, title: session.title } : null,
       sourceDraft: { ...(sessionId ? { sessionId } : {}), text: draft, references },
       onBeforeUse: async () => { clearTimeout(draftTimer.current); await command("draft.save", { projectId, sessionId, text: draft, references }); },

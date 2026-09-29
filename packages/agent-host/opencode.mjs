@@ -11,12 +11,12 @@ function modelOptions(options = []) {
   return { configId: model?.id || null, models: values.filter(value => typeof value.value === 'string').map(value => ({ id: value.value, name: value.name || value.value })) };
 }
 
-async function startupRequest(client, method, params) {
+async function startupRequest(client, method, params, agentName) {
   let timer;
   try {
     return await Promise.race([
       client.agent.request(method, params),
-      new Promise((_, reject) => { timer = setTimeout(() => { client.close(); reject(new Error('OpenCode 未在 30 秒内响应；请检查 CLI、账号和本机资源后重试。')); }, 30_000); }),
+      new Promise((_, reject) => { timer = setTimeout(() => { client.close(); reject(new Error(`${agentName} 未在 30 秒内响应；请检查 CLI、账号和本机资源后重试。`)); }, 30_000); }),
     ]);
   } finally { clearTimeout(timer); }
 }
@@ -36,11 +36,12 @@ export function gatewayEnvironment(gateway, model, environment = process.env) {
   return { ...environment, OPENCODE_CONFIG_CONTENT: JSON.stringify(inlineConfig), TURNSU_GATEWAY_KEY: gateway.apiKey };
 }
 
-// One private ACP process owns one native session. Closing it releases its private server,
-// while OpenCode keeps the native session for a later session/load.
-export class OpenCodeConnection {
-  constructor({ cwd, sessionId = null, gateway = null, model = null, onEvent, onExit, binary = executable('opencode'), spawnProcess = spawn }) {
+// One private ACP process owns one native session. Closing it releases its private server;
+// the agent keeps the native session for a later session/load.
+export class AcpConnection {
+  constructor({ cwd, sessionId = null, gateway = null, model = null, onEvent, onExit, binary, agentName, spawnProcess = spawn }) {
     this.closed = false;
+    this.agentName = agentName;
     this.onEvent = onEvent;
     this.permissions = new Map();
     this.modelConfigId = null;
@@ -48,12 +49,12 @@ export class OpenCodeConnection {
     this.replaying = false;
     this.turn = 0;
     this.ready = (async () => {
-      if (!binary) throw new Error('请先安装 OpenCode CLI，再重新打开 Agent 列表。');
+      if (!binary) throw new Error(`请先安装 ${agentName} CLI，再重新打开 Agent 列表。`);
       const launch = nativeCommand(binary, ['acp'], executable('node'));
-      if (this.closed) throw new Error('OpenCode 连接已关闭。');
+      if (this.closed) throw new Error(`${agentName} 连接已关闭。`);
       const env = gatewayEnvironment(gateway, model);
       this.child = spawnProcess(launch.file, launch.args, { cwd, env, shell: false, detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'] });
-      this.child.stderr?.resume();
+      this.child.stderr?.on('data', bytes => { if (/\b(?:EMFILE|ENOSPC)\b/.test(String(bytes))) this.watchFailure = true; });
       this.child.on('error', () => this.disconnected(onExit));
       this.child.on('exit', () => this.disconnected(onExit));
       const stream = acp.ndJsonStream(Writable.toWeb(this.child.stdin), Readable.toWeb(this.child.stdout), { maxMessageBytes: 16_000_000 });
@@ -64,21 +65,24 @@ export class OpenCodeConnection {
         }).connect(stream);
       const initialized = await startupRequest(this.client, acp.methods.agent.initialize, {
         protocolVersion: acp.PROTOCOL_VERSION, clientCapabilities: { session: { configOptions: {} } }, clientInfo: { name: 'turnsu-workbench', version: '0.3.0' },
-      });
-      if (initialized.protocolVersion !== acp.PROTOCOL_VERSION) throw new Error('OpenCode 的 ACP 协议版本与当前工作台不兼容，请更新 OpenCode。');
-      if (sessionId && !initialized.agentCapabilities?.loadSession) throw new Error('此 OpenCode 版本不能恢复原生会话；已有本机结果仍可查看。');
+      }, agentName);
+      if (initialized.protocolVersion !== acp.PROTOCOL_VERSION) throw new Error(`${agentName} 的 ACP 协议版本与当前工作台不兼容，请更新 CLI。`);
+      if (sessionId && !initialized.agentCapabilities?.loadSession) throw new Error(`此 ${agentName} 版本不能恢复原生会话；已有本机结果仍可查看。`);
       this.replaying = Boolean(sessionId);
       try {
         const session = sessionId
-          ? await startupRequest(this.client, acp.methods.agent.session.load, { sessionId, cwd, mcpServers: [] })
-          : await startupRequest(this.client, acp.methods.agent.session.new, { cwd, mcpServers: [] });
+          ? await startupRequest(this.client, acp.methods.agent.session.load, { sessionId, cwd, mcpServers: [] }, agentName)
+          : await startupRequest(this.client, acp.methods.agent.session.new, { cwd, mcpServers: [] }, agentName);
         this.sessionId = sessionId || session.sessionId;
-        if (!this.sessionId) throw new Error('OpenCode 未返回原生会话标识。');
+        if (!this.sessionId) throw new Error(`${agentName} 未返回原生会话标识。`);
         const catalog = modelOptions(session.configOptions);
         this.modelConfigId = catalog.configId; this.models = catalog.models;
       } finally { this.replaying = false; }
       return { sessionId: this.sessionId, models: this.models };
-    })();
+    })().catch(error => {
+      if (this.watchFailure) throw new Error(`${agentName} 无法建立会话：本机文件监视资源不足（EMFILE/ENOSPC）。请检查该 CLI 的文件监视设置或在其他机器重试。`);
+      throw error;
+    });
   }
 
   disconnected(onExit) {
@@ -100,19 +104,19 @@ export class OpenCodeConnection {
         onEvent({ type: 'permission_closed', id });
       };
       const abort = () => done({ outcome: 'cancelled' });
-      this.permissions.set(id, { options: params.options, done });
+      this.permissions.set(id, { options: params.options || [], done });
       signal.addEventListener('abort', abort, { once: true });
-      onEvent({ type: 'permission', id, title: params.toolCall.title || 'OpenCode 请求权限', tool: params.toolCall.name || params.toolCall.kind || 'tool', options: params.options });
+      onEvent({ type: 'permission', id, title: params.toolCall?.title || `${this.agentName} 请求权限`, tool: params.toolCall?.name || params.toolCall?.kind || 'tool', options: params.options || [] });
     });
   }
 
-  respond(id, decision) {
+  respond(id, decision, optionId = null) {
     const request = this.permissions.get(id);
-    if (!request) throw new Error('这个 OpenCode 权限请求已结束。');
+    if (!request) throw new Error(`这个 ${this.agentName} 权限请求已结束。`);
     if (decision === 'decline') return request.done({ outcome: 'cancelled' });
     if (decision !== 'accept') throw new Error('请选择允许一次或拒绝。');
-    const once = request.options.find(option => option.kind === 'allow_once');
-    if (!once) throw new Error('OpenCode 未提供单次允许选项，不能扩大授权范围。');
+    const once = optionId ? request.options.find(option => option.optionId === optionId && option.kind === 'allow_once') : request.options.find(option => option.kind === 'allow_once');
+    if (!once) throw new Error(`${this.agentName} 未提供单次允许选项，不能扩大授权范围。`);
     request.done({ outcome: 'selected', optionId: once.optionId });
   }
 
@@ -120,10 +124,10 @@ export class OpenCodeConnection {
 
   async send(text, model) {
     await this.ready;
-    if (this.closed) throw new Error('OpenCode 已断开，请恢复任务后核对结果。');
+    if (this.closed) throw new Error(`${this.agentName} 已断开，请恢复任务后核对结果。`);
     if (model) {
-      if (!this.modelConfigId || !this.models.some(item => item.id === model)) throw new Error('所选 OpenCode 模型不在当前原生会话的可用列表中。');
-      await startupRequest(this.client, acp.methods.agent.session.setConfigOption, { sessionId: this.sessionId, configId: this.modelConfigId, value: model });
+      if (!this.modelConfigId || !this.models.some(item => item.id === model)) throw new Error(`所选 ${this.agentName} 模型不在当前原生会话的可用列表中。`);
+      await startupRequest(this.client, acp.methods.agent.session.setConfigOption, { sessionId: this.sessionId, configId: this.modelConfigId, value: model }, this.agentName);
     }
     const turn = ++this.turn;
     this.client.agent.request(acp.methods.agent.session.prompt, { sessionId: this.sessionId, prompt: [{ type: 'text', text }] })
@@ -144,4 +148,16 @@ export class OpenCodeConnection {
     this.closePromise = (async () => { await closeNativeProcess(this.child); await this.ready.catch(() => {}); })();
     return this.closePromise;
   }
+}
+
+export class OpenCodeConnection extends AcpConnection {
+  constructor(options) { super({ ...options, binary: options.binary === undefined ? executable('opencode') : options.binary, agentName: 'OpenCode' }); }
+}
+
+export class KimiConnection extends AcpConnection {
+  constructor(options) { super({ ...options, binary: options.binary === undefined ? executable('kimi') : options.binary, agentName: 'Kimi Code' }); }
+}
+
+export class OhMyPiConnection extends AcpConnection {
+  constructor(options) { super({ ...options, binary: options.binary === undefined ? executable('omp') : options.binary, agentName: 'oh-my-pi' }); }
 }

@@ -54,6 +54,16 @@ test('Pi stays running through agent_end and retry, completes only on settled, a
   await f.host.command('session.send', input); assert.equal(f.sends, 1);
 });
 
+test('reading Pi models without a task uses a temporary connection and leaves the session list unchanged', async t => {
+  const f = await fixture(t);
+  const before = await f.host.command('workspace.read', { projectId: f.project.id });
+  const models = await f.host.command('models.list', { agent: 'pi', projectId: f.project.id });
+  const after = await f.host.command('workspace.read', { projectId: f.project.id });
+  assert.equal(models[0].id, 'example/model/variant');
+  assert.deepEqual(after.sessions.map(session => session.id), before.sessions.map(session => session.id));
+  assert.equal(f.hooks.sessionPath, null);
+});
+
 test('Pi extension dialogs preserve native choices and reject stale or cross-task responses', async (t) => {
   const f = await fixture(t); const id = f.session.id;
   await f.host.command('session.send', { sessionId: id, inputId: 'dialog', text: 'Run' }); await f.start;

@@ -13,7 +13,7 @@ import { openStore } from "./store.mjs";
 import { CodexConnection, discoverAgents } from "./codex.mjs";
 import { PiConnection } from "./pi.mjs";
 import { ClaudeConnection } from "./claude.mjs";
-import { OpenCodeConnection } from './opencode.mjs';
+import { OpenCodeConnection, KimiConnection, OhMyPiConnection } from './opencode.mjs';
 import { DesktopCloud } from "./cloud.mjs";
 import { ProjectCreation } from './project-creation.mjs';
 import { SharedFiles } from "./shared-files.mjs";
@@ -36,18 +36,22 @@ const text = (value, max = 100_000) => {
   return value;
 };
 const busyStates = new Set(["starting", "running", "waiting", "stopping"]);
+const acpAgents = new Set(['opencode', 'kimi', 'omp']);
+const acpNames = { opencode: 'OpenCode', kimi: 'Kimi Code', omp: 'oh-my-pi' };
 export function readableError(value) {
   let message = value || "";
   try { const parsed = JSON.parse(message); message = parsed.error?.message || parsed.message || message; } catch {}
   if (/requires a newer version of Codex/i.test(message)) return "当前模型需要更新版本的 Codex。请从下方选择本机可用的模型，再发送任务；也可以先更新 Codex CLI。";
+  if (/403.*subscription.*Kimi Code/i.test(message)) return '当前账号没有 Kimi Code 使用权限（403）。请由账号管理员核对订阅或授权；本次任务未完成，恢复前先核对项目文件。';
   return message;
 }
 
 export class LocalAgentHost {
-  constructor({ directory, notify = () => {}, clock = () => Date.now(), idleTimeoutMs = 300_000, idleConnectionLimit = 2, connectionFactory = (options) => new CodexConnection(options), piFactory = (options) => new PiConnection(options), claudeFactory = (options) => new ClaudeConnection(options), opencodeFactory = (options) => new OpenCodeConnection(options), wechatRoot = undefined, wechatGroupRoot = undefined }) {
+  constructor({ directory, notify = () => {}, clock = () => Date.now(), idleTimeoutMs = 300_000, idleConnectionLimit = 2, connectionFactory = (options) => new CodexConnection(options), piFactory = (options) => new PiConnection(options), claudeFactory = (options) => new ClaudeConnection(options), opencodeFactory = (options) => new OpenCodeConnection(options), kimiFactory = (options) => new KimiConnection(options), ompFactory = (options) => new OhMyPiConnection(options), wechatRoot = undefined, wechatGroupRoot = undefined }) {
     this.modelConnections = new ModelConnections(); this.codexConnections = new Map();
     this.claudeFactory = claudeFactory; this.claudeConnections = new Map(); this.claudeStreams = new Map();
-    this.opencodeFactory = opencodeFactory; this.opencodeConnections = new Map(); this.opencodeMessages = new Map();
+    this.opencodeFactory = opencodeFactory; this.opencodeConnections = new Map(); this.acpMessages = new Map();
+    this.kimiFactory = kimiFactory; this.kimiConnections = new Map(); this.ompFactory = ompFactory; this.ompConnections = new Map();
     this.directory = directory; this.piFactory = piFactory; this.piConnections = new Map(); this.piErrors = new Map(); this.modelCatalogs = new Map();
     this.store = openStore(directory); this.db = this.store.db;
     this.agentPreferences = new AgentPreferences(this.db);
@@ -72,7 +76,7 @@ export class LocalAgentHost {
     return this.reaping;
   }
   async releaseIdleConnections() {
-    const ids = new Set([...this.liveSessions, ...this.piConnections.keys(), ...this.claudeConnections.keys(), ...this.opencodeConnections.keys()]);
+    const ids = new Set([...this.liveSessions, ...this.piConnections.keys(), ...this.claudeConnections.keys(), ...this.opencodeConnections.keys(), ...this.kimiConnections.keys(), ...this.ompConnections.keys()]);
     const idle = [...ids].map(id => this.session(id))
       .filter(s => !busyStates.has(s.status) && !this.operations.has(s.id))
       .sort((a, b) => (this.nativeTouched.get(b.id) || 0) - (this.nativeTouched.get(a.id) || 0));
@@ -89,9 +93,9 @@ export class LocalAgentHost {
           }
           this.liveSessions.delete(s.id);
         } else {
-          const map = s.agent === 'pi' ? this.piConnections : s.agent === 'claude' ? this.claudeConnections : this.opencodeConnections;
+          const map = s.agent === 'pi' ? this.piConnections : s.agent === 'claude' ? this.claudeConnections : this.acpConnections(s.agent);
           const connection = map.get(s.id); map.delete(s.id);
-          await connection?.close(); this.claudeStreams.delete(s.id); this.piErrors.delete(s.id); this.opencodeMessages.delete(s.id);
+          await connection?.close(); this.claudeStreams.delete(s.id); this.piErrors.delete(s.id); this.acpMessages.delete(s.id);
         }
         this.nativeTouched.delete(s.id);
       })();
@@ -195,7 +199,7 @@ export class LocalAgentHost {
       }
       for (const session of sessions) {
         this.liveSessions.delete(session.id);
-        for (const map of [this.piConnections, this.claudeConnections, this.opencodeConnections]) { await map.get(session.id)?.close(); map.delete(session.id); }
+        for (const map of [this.piConnections, this.claudeConnections, this.opencodeConnections, this.kimiConnections, this.ompConnections]) { await map.get(session.id)?.close(); map.delete(session.id); }
       }
       this.modelConnections.profiles = next;
       for (const key of this.modelCatalogs.keys()) if ([...changed].some(id => key.endsWith(':' + id))) this.modelCatalogs.delete(key);
@@ -230,7 +234,7 @@ export class LocalAgentHost {
     if (session.connection_id) { this.modelConnections.get(session.connection_id, session.agent); if (!session.model) throw new Error("请先读取模型目录并选择模型，再发送任务。"); }
     if (session.agent === "pi") { await this.pi(id); return this.session(id); }
     if (session.agent === "claude") { await this.claude(id); return this.session(id); }
-    if (session.agent === 'opencode') { await this.opencode(id); return this.session(id); }
+    if (acpAgents.has(session.agent)) { await this.acp(id); return this.session(id); }
     const connection = await this.codex(session.connection_id);
     if (this.liveSessions.has(id)) return session;
     const params = { ...(session.connection_id ? { modelProvider: `turnsu_${session.connection_id.replaceAll("-", "")}` } : {}), cwd: session.cwd, approvalPolicy: "on-request", approvalsReviewer: "user", sandbox: "workspace-write", ...(session.model ? { model: session.model } : {}) };
@@ -257,31 +261,37 @@ export class LocalAgentHost {
     try { await connection.ready; return connection; }
     catch (e) { await connection.close(); this.claudeConnections.delete(id); throw e; }
   }
-  async opencode(id) {
+  acpConnections(agent) { return { opencode: this.opencodeConnections, kimi: this.kimiConnections, omp: this.ompConnections }[agent]; }
+  async acp(id) {
     await this.releasing.get(id); this.touchNative(id);
-    const existing = this.opencodeConnections.get(id);
-    if (existing && !existing.closed) { await existing.ready; return existing; }
     const session = this.session(id);
-    const connection = this.opencodeFactory({ cwd: session.cwd, sessionId: session.native_id || null,
-      gateway: this.modelConnections.get(session.connection_id, 'opencode'), model: session.model,
-      onEvent: event => this.onOpenCodeEvent(id, event), onExit: () => {
+    const map = this.acpConnections(session.agent);
+    if (!map) throw new Error('这个 Agent 不支持 ACP。');
+    const existing = map.get(id);
+    if (existing && !existing.closed) { await existing.ready; return existing; }
+    const factory = { opencode: this.opencodeFactory, kimi: this.kimiFactory, omp: this.ompFactory }[session.agent];
+    const connection = factory({ cwd: session.cwd, sessionId: session.native_id || null,
+      gateway: this.modelConnections.get(session.connection_id, session.agent), model: session.model,
+      onEvent: event => this.onAcpEvent(id, event), onExit: () => {
         if (this.closing) return;
         for (const [key, item] of this.interactions) if (item.sessionId === id) this.interactions.delete(key);
-        if (busyStates.has(this.session(id).status)) this.updateSession(id, 'interrupted', 'OpenCode 已断开，请恢复会话并核对上次结果。');
+        if (busyStates.has(this.session(id).status)) this.updateSession(id, 'interrupted', `${acpNames[session.agent]} 已断开，请恢复会话并核对上次结果。`);
       } });
-    this.opencodeConnections.set(id, connection);
+    map.set(id, connection);
     try {
       await connection.ready;
       if (connection.sessionId !== session.native_id) this.db.prepare('UPDATE sessions SET native_id=? WHERE id=?').run(connection.sessionId, id);
       return connection;
-    } catch (error) { await connection.close(); this.opencodeConnections.delete(id); throw error; }
+    } catch (error) { await connection.close(); map.delete(id); throw error; }
   }
-  onOpenCodeEvent(id, event) {
+  onAcpEvent(id, event) {
     if (this.closing) return;
+    const agent = this.session(id).agent, name = acpNames[agent];
     if (event.type === 'permission') {
-      if (this.session(id).status === 'stopping') { this.opencodeConnections.get(id)?.respond(event.id, 'decline'); return; }
-      this.interactions.set(event.id, { id: event.id, nativeId: event.id, sessionId: id, method: 'opencode/approval', title: event.title,
-        command: `${event.tool}\n${event.options.map(option => option.name).join(' / ')}`, questions: [] });
+      if (this.session(id).status === 'stopping') { this.acpConnections(agent).get(id)?.respond(event.id, 'decline'); return; }
+      const choices = (event.options || []).filter(option => option.kind === 'allow_once');
+      this.interactions.set(event.id, { id: event.id, nativeId: event.id, sessionId: id, method: `${agent}/${choices.length > 1 ? 'choice' : 'approval'}`, title: event.title,
+        command: event.tool, acpChoices: choices.length > 1 ? choices.map(option => ({ id: option.optionId, label: option.name })) : [], questions: [] });
       this.updateSession(id, 'waiting'); return;
     }
     if (event.type === 'permission_closed') {
@@ -295,19 +305,19 @@ export class LocalAgentHost {
       const update = event.update;
       if (update.sessionUpdate === 'agent_message_chunk' && update.content?.type === 'text') {
         const key = update.messageId || `${event.turn}:answer`;
-        const known = this.opencodeMessages.get(id) || new Map();
+        const known = this.acpMessages.get(id) || new Map();
         let messageId = known.get(key);
-        if (!messageId) { messageId = `${id}:opencode:${key}`; known.set(key, messageId); this.opencodeMessages.set(id, known); }
+        if (!messageId) { messageId = `${id}:${agent}:${key}`; known.set(key, messageId); this.acpMessages.set(id, known); }
         this.message(id, messageId, 'assistant', update.content.text, 'text', true);
       }
-      if (update.sessionUpdate === 'tool_call') this.message(id, `${id}:opencode:tool:${update.toolCallId}`, 'tool', update.title || update.name || 'OpenCode 工具', ['edit', 'delete', 'move'].includes(update.kind) ? 'file' : 'command');
+      if (update.sessionUpdate === 'tool_call') this.message(id, `${id}:${agent}:tool:${update.toolCallId}`, 'tool', update.title || update.name || `${name} 工具`, ['edit', 'delete', 'move'].includes(update.kind) ? 'file' : 'command');
       return;
     }
     if (event.type === 'result' || event.type === 'error') {
       const status = event.type === 'error' || this.session(id).status === 'stopping' ? 'interrupted' : event.stopReason === 'end_turn' ? 'idle' : event.stopReason === 'refusal' ? 'failed' : 'interrupted';
-      const error = event.type === 'error' ? readableError(event.message) : status === 'idle' ? null : `OpenCode 本次执行以 ${event.stopReason} 结束，请核对结果后继续。`;
+      const error = event.type === 'error' ? readableError(event.message) : status === 'idle' ? null : `${name} 本次执行以 ${event.stopReason} 结束，请核对结果后继续。`;
       for (const [key, item] of this.interactions) if (item.sessionId === id) this.interactions.delete(key);
-      this.opencodeMessages.delete(id);
+      this.acpMessages.delete(id);
       this.db.prepare("UPDATE submissions SET status=? WHERE session_id=? AND status IN ('sending','accepted')").run(status === 'idle' ? 'completed' : status === 'failed' ? 'failed' : 'unknown', id);
       this.updateSession(id, status, error); this.work?.publishFinal(id, status);
     }
@@ -618,15 +628,23 @@ export class LocalAgentHost {
           this.modelCatalogs.set("claude", models); return models;
         }
         if (args.agent === "pi") {
-          const session = this.session(args.sessionId); if (session.agent !== "pi") throw new Error("请在 Pi 任务内选择模型。");
-          const result = await (await this.pi(session.id)).request("get_available_models");
+          let result;
+          if (args.sessionId) {
+            const session = this.session(args.sessionId); if (session.agent !== "pi") throw new Error("请在 Pi 任务内选择模型。");
+            result = await (await this.pi(session.id)).request("get_available_models");
+          } else {
+            const project = this.project(args.projectId);
+            const connection = this.piFactory({ cwd: project.path, sessionPath: null, onEvent: () => {}, onExit: () => {} });
+            try { await connection.ready; result = await connection.request("get_available_models"); }
+            finally { await connection.close(); }
+          }
           const models = result.models.map((m) => ({ id: `${m.provider}/${m.id}`, name: `${m.name || m.id} · ${m.provider}`, provider: m.provider, modelId: m.id }));
           this.modelCatalogs.set("pi", models); return models;
         }
-        if (args.agent === 'opencode') {
-          const session = this.session(args.sessionId); if (session.agent !== 'opencode') throw new Error('请在 OpenCode 任务内选择模型。');
-          const models = (await this.opencode(session.id)).models;
-          this.modelCatalogs.set('opencode', models); return models;
+        if (acpAgents.has(args.agent)) {
+          const session = this.session(args.sessionId); if (session.agent !== args.agent) throw new Error(`请在 ${acpNames[args.agent]} 任务内选择模型。`);
+          const models = (await this.acp(session.id)).models;
+          this.modelCatalogs.set(args.agent, models); return models;
         }
         const connection = await this.codex(); let cursor = null, models = [];
         do { const page = await connection.request("model/list", { limit: 100, ...(cursor ? { cursor } : {}) }); models.push(...page.data.filter((m) => !m.hidden).map((m) => ({ id: m.model, name: m.displayName }))); cursor = page.nextCursor; } while (cursor);
@@ -638,9 +656,9 @@ export class LocalAgentHost {
         if (session.connection_id && !args.model) throw new Error("请为网关连接选择明确的模型。");
         if (args.model !== null && !this.modelCatalogs.get(this.modelCatalogKey(session))?.some((m) => m.id === args.model)) throw new Error("请刷新并选择此连接返回的模型。");
         if (session.connection_id && session.model !== args.model) {
-          const connections = session.agent === 'pi' ? this.piConnections : session.agent === 'opencode' ? this.opencodeConnections : null;
+          const connections = session.agent === 'pi' ? this.piConnections : this.acpConnections(session.agent);
           await connections?.get(session.id)?.close(); connections?.delete(session.id);
-          if (session.agent === 'opencode') this.opencodeMessages.delete(session.id);
+          if (acpAgents.has(session.agent)) this.acpMessages.delete(session.id);
         }
         this.db.prepare("UPDATE sessions SET model=? WHERE id=?").run(args.model, session.id); this.changed(session.id); return this.readSession(session.id);
       }
@@ -678,7 +696,7 @@ export class LocalAgentHost {
         return { saved: true };
       }
       case "session.create": {
-        this.project(args.projectId); if (!["codex", "pi", "claude", "opencode"].includes(args.agent)) throw new Error("这个 Agent 的桌面接入尚未完成。");
+        this.project(args.projectId); if (!["codex", "pi", "claude", "opencode", "kimi", "omp"].includes(args.agent)) throw new Error("这个 Agent 的桌面接入尚未完成。");
         const connectionId = args.connectionId || null; this.modelConnections.get(connectionId, args.agent);
         const id = randomUUID(); this.db.prepare("INSERT INTO sessions(id,project_id,native_id,title,status,error,updated_at,agent,connection_id) VALUES(?,?,NULL,?,'idle',NULL,?,?,?)").run(id, args.projectId, "新任务", Date.now(), args.agent, connectionId); this.changed(id); return this.readSession(id);
       }
@@ -696,6 +714,12 @@ export class LocalAgentHost {
         const file = snapshot.files.find(file => args.kind === 'wechat-import' ? file.kind === 'wechat-import' && file.importId === args.importId && file.offset === args.offset : args.objectId ? file.objectId === args.objectId && file.kind === args.kind : file.path === args.path && !file.kind);
         if (!file) throw new Error("找不到这次发送的引用文件。");
         return file;
+      }
+      case "references.validate": {
+        const [path] = referencePaths([args.path]);
+        if (typeof path !== 'string') throw new Error('请选择项目中的文字文件。');
+        await this.references.local(args.projectId, path);
+        return { valid: true };
       }
       case "references.list": return this.references.work.list({ sessionId: text(args.sessionId, 128), cursor: args.cursor, sourceWorkItemId: args.sourceWorkItemId });
       case "references.sources": return this.references.work.sources({ sessionId: text(args.sessionId, 128), cursor: args.cursor });
@@ -791,8 +815,8 @@ export class LocalAgentHost {
             });
             return this.readSession(session.id);
           }
-          if (session.agent === 'opencode') {
-            const connection = await this.opencode(session.id);
+          if (acpAgents.has(session.agent)) {
+            const connection = await this.acp(session.id);
             await connection.send(nativePrompt, native.model);
             dispatched = true;
             if (this.session(session.id).status === 'starting') this.updateSession(session.id, 'running');
@@ -811,9 +835,9 @@ export class LocalAgentHost {
       }
       case "session.stop": {
         const session = this.session(args.sessionId);
-        if (session.agent === 'opencode') {
+        if (acpAgents.has(session.agent)) {
           if (!busyStates.has(session.status)) throw new Error('当前没有可停止的执行。');
-          this.updateSession(session.id, 'stopping'); await (await this.opencode(session.id)).stop(); return { accepted: true };
+          this.updateSession(session.id, 'stopping'); await (await this.acp(session.id)).stop(); return { accepted: true };
         }
         if (session.agent === "claude") {
           if (!busyStates.has(session.status)) throw new Error("当前没有可停止的执行。");
@@ -852,10 +876,12 @@ export class LocalAgentHost {
           connection.respond(item.nativeId, item.questions.length && args.decision !== "decline" ? "accept" : args.decision, answers);
           return { accepted: true };
         }
-        if (item.method === 'opencode/approval') {
-          const connection = this.opencodeConnections.get(item.sessionId);
-          if (!connection || connection.closed) throw new Error('OpenCode 已断开，请恢复任务。');
-          connection.respond(item.nativeId, args.decision);
+        if (acpAgents.has(item.method.split('/')[0]) && (item.method.endsWith('/approval') || item.method.endsWith('/choice'))) {
+          const agent = item.method.split('/')[0], connection = this.acpConnections(agent).get(item.sessionId);
+          if (!connection || connection.closed) throw new Error(`${acpNames[agent]} 已断开，请恢复任务。`);
+          if (item.method.endsWith('/choice') && !['select', 'decline'].includes(args.decision)) throw new Error('请选择当前 Agent 提供的选项。');
+          if (item.method.endsWith('/choice') && args.decision === 'select' && !item.acpChoices.some(option => option.id === args.optionId)) throw new Error('请选择当前 Agent 提供的选项。');
+          connection.respond(item.nativeId, item.method.endsWith('/choice') && args.decision !== 'decline' ? 'accept' : args.decision, args.optionId);
           return { accepted: true };
         }
         if (item.method.startsWith("pi/")) {
@@ -906,5 +932,5 @@ export class LocalAgentHost {
       default: throw new Error("工作台不支持这个操作。");
     }
   }
-  async close() { this.closing = true; clearInterval(this.idleTimer); await this.reaping; await this.projectMembers?.close(); await this.projectCreation?.close(); await this.memberAgentWork?.close(); await this.capture.close(); await this.loopCapture.close(); await this.localLoopTrials.close(); await this.localLoopPublication.close(); await this.nativeLoops.close(); await this.publication?.close(); await this.loops?.close(); await this.methods?.close(); await this.work?.close(); await this.shared?.close(); await Promise.all([this.cloud?.close(), ...[...this.codexConnections.values()].map(c => c.close()), ...[...this.piConnections.values(), ...this.claudeConnections.values(), ...this.opencodeConnections.values()].map((c) => c.close())]); this.store.close(); }
+  async close() { this.closing = true; clearInterval(this.idleTimer); await this.reaping; await this.projectMembers?.close(); await this.projectCreation?.close(); await this.memberAgentWork?.close(); await this.capture.close(); await this.loopCapture.close(); await this.localLoopTrials.close(); await this.localLoopPublication.close(); await this.nativeLoops.close(); await this.publication?.close(); await this.loops?.close(); await this.methods?.close(); await this.work?.close(); await this.shared?.close(); await Promise.all([this.cloud?.close(), ...[...this.codexConnections.values()].map(c => c.close()), ...[...this.piConnections.values(), ...this.claudeConnections.values(), ...this.opencodeConnections.values(), ...this.kimiConnections.values(), ...this.ompConnections.values()].map((c) => c.close())]); this.store.close(); }
 }

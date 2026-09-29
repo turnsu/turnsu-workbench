@@ -58,6 +58,18 @@ test('unreadable, linked, binary, oversized and outside files never dispatch; in
   assert.equal(f.sent.length, 0);
 });
 
+test('reference picker validates text before it creates a task and rejects binary or oversized files', async t => {
+  const f = await fixture(t);
+  await writeFile(join(f.projectPath, 'notes.md'), '真实客户记录');
+  await writeFile(join(f.projectPath, 'orders.xlsx'), Buffer.from([0x50, 0x4b, 0, 0]));
+  await writeFile(join(f.projectPath, 'large.txt'), 'x'.repeat(65537));
+  assert.deepEqual(await f.host.command('references.validate', { projectId: f.project.id, path: 'notes.md' }), { valid: true });
+  for (const path of ['orders.xlsx', 'large.txt', '../outside.md']) {
+    await assert.rejects(f.host.command('references.validate', { projectId: f.project.id, path }));
+  }
+  assert.equal(f.sent.length, 0);
+});
+
 test('a prepared reference survives lost admission and restart without recapturing later edits', async t => {
   const f = await fixture(t), input = { sessionId: f.session.id, inputId: 'uncertain-admission', text: '用这些资料整理', references: ['source.md'] };
   await writeFile(join(f.projectPath, 'source.md'), 'EXACT_SELECTED_CONTENT');

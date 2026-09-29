@@ -7,7 +7,7 @@ Electron 桌面 / React
   → 隔离 preload IPC
   → 私有 Node Host
       → SQLite：项目、会话索引、草稿、Agent 偏好、可见消息与导入索引
-      → 原生 Codex / Pi / Claude Code / OpenCode 进程
+      → 原生 Kimi Code / Codex / OpenCode / oh-my-pi / Pi / Claude Code 进程
       → 本机项目文件、用户选定的导入副本与 Skill OS
       → 可选微信桥 v1 交接消费者
       → 可选 Product API：显式共享的事项与资料
@@ -25,8 +25,12 @@ Host 以 SQLite 保存可见工作状态和原生会话 ID，不复制用户全�
 | Pi | RPC；本机 session 文件与扩展请求 | 当前会话恢复可能读取该会话完整原生消息 |
 | Claude Code | CLI SDK；原生 session ID、流和工具批准 | 原生账号及工具权限由用户控制 |
 | OpenCode | ACP 私有 stdio；session/new、load、prompt、permission、cancel | 单次允许/拒绝；原生提供商或已选的 OpenAI Chat 兼容网关，权限与停止仍需桌面实测 |
+| Kimi Code | `kimi acp` 私有 stdio；沿用 ACP 会话、模型、权限与停止 | 沿用其原生账号和模型配置；桌面已建会话并列出模型，实际任务被当前账号订阅权限 403 拒绝 |
+| oh-my-pi | `omp acp` 私有 stdio；沿用 ACP 会话、模型、权限与停止 | 沿用其原生账号和模型配置；目前只有适配器行为测试，真实 CLI/模型任务待验收 |
 
 Agent 和模型来源分开。现有模型连接可供明确支持该协议的执行器使用，密钥保存在系统保护的凭据存储中；更换模型端点不等于更换 Agent。OpenCode 可沿用原生提供商，也可选工作台中的 OpenAI Chat 兼容网关：Host 只为该进程注入临时提供商配置和密钥环境变量，不改写用户的全局 OpenCode 配置；Responses / Anthropic Messages 连接不会被伪装为 Chat。会话一旦开始，执行器、工作目录和模型来源不静默替换。无 Agent 或未登录时保留草稿并说明恢复动作。
+
+Kimi Code 与 oh-my-pi 当前通过各自原生配置选择模型；工作台可读取 ACP 暴露的模型目录，但尚未给它们注入 Turnsu 模型网关。WorkBuddy 的[开放平台](https://open.workbuddy.cn/docs/third-party-app)提供经审核的第三方应用、OAuth 2.1 和本地助理/云端任务 API；其[Open API](https://open.workbuddy.cn/docs/openapi)不是本机 CLI stdio 协议。没有应用凭据及用户授权前，工作台不得在 Agent 选择器中声称能直接驱动 WorkBuddy，也不得借用其本地会话或权限。将来接入时应单列授权、结果和成本边界。
 
 工作台不是第四套推理循环：各适配器拥有其原生协议差异，Host 统一管理项目、会话状态、可见事件、权限请求和资源回收。一个 Agent 不支持的工具或恢复能力必须明确显示，不伪造跨 Agent 无损迁移。跨 Agent 接续只传用户确认的目标、材料、结果和未决事项。
 
@@ -43,7 +47,7 @@ Agent 和模型来源分开。现有模型连接可供明确支持该协议的�
 | 路径 | 职责 |
 | --- | --- |
 | `apps/desktop` | Electron、React、系统文件操作与安全 IPC |
-| `packages/agent-host` | 本机状态、四种 Agent、资料引用、会话与资源回收 |
+| `packages/agent-host` | 本机状态、各 Agent 适配、资料引用、会话与资源回收 |
 | `packages/agent-runtime` | 原生工具协议和受限执行能力 |
 | `packages/contracts` / `packages/product-client` | 可选团队服务协议和客户端 |
 | `services/product-api` / `apps/team-web` | 共享事项、权限、团队管理 |

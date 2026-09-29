@@ -1,5 +1,23 @@
 # 验证记录
 
+## 2026-09-30：macOS 可见桌面与多格式资料 QA
+
+在 macOS arm64 上用隔离状态的临时 Electron 包和合成客户资料，完成真实界面操作：打开本地项目；通过系统文件选择器导入一份 `.xlsx`、一份 `.docx` 和一份含可提取中文文字的 `.pdf`；逐份比较源文件与 `Imported/` 副本的 SHA-256，全部相同。重启后项目、两条 Codex 会话和未发送草稿仍可读取。该包只放在临时目录，没有安装到系统应用目录或改动用户现有工作台数据。
+
+真实 Codex 本地任务直接读取三种项目文件，写出并在工作台文件面板预览 `docs-result.md`。结果中的待处理订单金额合计为 **174.50 元**，退款复核为 **2 个工作日**，工作日首次响应为 **4 小时**；三份独立核验码都与原始文件一致。测试没有把核验码写入任务描述。Agent 在该机器上未找到常见的 Office/PDF 命令行依赖，改用已有的 OOXML/XML 和 macOS PDFKit 完成读取；因此这证明了当前 Codex 与这三份**文本型**样本的真实路径，不证明所有 Agent 或复杂文档都有内置解析能力。
+
+QA 同时发现：`@` 资料选择器曾允许把 Excel 选为“文字内容快照”，发送时才报 UTF-8 错误并留下未执行会话。修复后，Excel、Word、PDF 选择项明确执行“插入路径”，说明由 Agent 执行时尝试读取、不产生内容快照；文字文件在选择时先按 Host 的 UTF-8、64 KB 和项目路径规则校验。项目文件预览的“引用到任务”也接入了同一校验。更新后的临时包已实测 `@` 入口：选择 Excel 只修改草稿，伪装成 `.txt` 的二进制文件在选择时即报错，最近会话数量不变；文件预览入口只完成代码和构建检查，尚未单独目测。
+
+Pi 对照任务在模型目录阶段被本机安装版本挡住：该机 Pi 为 **0.74.0**，桌面接入要求 **0.87.0** 或更新版本，故没有进入文件读取，不能据此判断 Pi 的 Office/PDF 能力。测试还发现“查看模型先创建空会话”；现在 Pi 模型目录改用临时无会话连接。在真实旧版 CLI 和隔离状态下复查，仍返回版本错误，**会话数为 0**。Claude Code 任务曾进入运行态，随后真实模型端返回 **401 Invalid API Key**；本机 `auth status` 的 `loggedIn` 只能说明密钥助手存在，不能证明密钥可用于推理。按当前优先级暂停它的真实任务测试。未验证 Windows 可见界面、扫描版 PDF/OCR、公式与多工作表 Excel、复杂 Word 版式、客户真实文档、正式签名升级及长时完整进程组内存。
+
+## 2026-09-30：新增 ACP 执行器调查与受限验证
+
+[Kimi Code CLI 的 `kimi acp`](https://www.kimi.com/code/docs/en/kimi-code-cli/reference/kimi-acp) 和[oh-my-pi 的 `omp acp`](https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/modes/acp/acp-agent.ts)都提供标准 ACP 会话、模型、批准和停止表面，因此沿用工作台既有的私有 stdio ACP 适配。新增 Host 行为测试覆盖两者的原生会话 ID、模型选择、明确选项的回答、批准、停止和重开；这只证明工作台状态边界，不证明真实模型任务。受限命令环境中 Kimi Code CLI **0.41.0** 的 `initialize` 成功，但 `session/new` 因 `EMFILE: too many open files, watch` 失败；正常权限启动的隔离桌面包随后成功建会话，列出 4 个原生模型。用户在界面选择 `K2.7 Code Highspeed` 后，实际三格式文件任务被当前账号的 **403 订阅权限**拒绝，任务显示中断，项目里未生成 `kimi-docs-result.md`。因此不能把受限环境的 `EMFILE` 当成桌面 CLI 必然失败，也不能把模型目录当成文件任务通过。当前没有 `omp` 可执行文件，oh-my-pi 仍缺真实运行验收。
+
+本次修改后，在允许本地临时回环端口的环境下执行 `npm test`，Host 与桌面逻辑回归通过；`npm run build` 通过，macOS 无窗口 `test:electron` 通过原生 Host、系统加密凭据与重开检查。受限沙箱中的回环监听会报 `EPERM`、Electron 会以 `SIGABRT` 退出，已在正常 macOS 权限下重跑；这些检查仍不代表 Kimi/oh-my-pi 的真实模型任务或 Windows 可见界面。
+
+WorkBuddy 官方[第三方应用文档](https://open.workbuddy.cn/docs/third-party-app)与[Open API](https://open.workbuddy.cn/docs/openapi)要求应用审核、OAuth 2.1 用户授权，再调用本地助理或云端任务接口。当前没有应用凭据及授权，工作台没有把 WorkBuddy 列为可直接执行的本机 Agent。它与 CodeBuddy Code 的 CLI ACP 是不同接入面，不能混称。
+
 ## 2026-09-30：跨环境 CI 与真实 Worker 验证
 
 GitHub Actions 在 [main 的完整验证运行](https://github.com/turnsu/turnsu-workbench/actions/runs/36600439533) 中四项作业全部通过：Linux 本地 Host、历史分页与构建；Linux 团队服务、隔离 PostgreSQL、Worker 镜像和真实容器执行；macOS 与 Windows 的 Host 行为、原生 Electron 检查和未签名桌面打包。两个系统的无签名开发包在该运行的 Actions artifact 中保存 7 天。此前的跨平台失败暴露了 macOS `/var` 路径别名、Windows 大文件标识读取精度、Windows 上 POSIX 权限位不适用和测试夹具使用固定 macOS 路径的问题；已按各平台文件系统语义修复并重跑。Windows 的 `.turnsu-local` 暂存目录沿用项目目录的 NTFS ACL，当前没有独立的 ACL 收紧或客户机器上的多账户访问验收。
@@ -68,11 +86,11 @@ PostgreSQL 分组测试在一次完整顺序运行后，对发现问题的分组
 
 ## 尚未验证
 
-- 本轮新桌面包的实际点击、视觉和键盘验收未完成。使用隔离状态启动本机 Electron 时进程以 134 退出；全局桌面状态读取被自动审批拒绝，未继续读取其他用户窗口。新增文件导入/系统打开，以及会话列表分页、搜索加载与项目切换仍须在可用设备上操作验收。
+- 早前本机 Electron 启动曾以 134 退出；上面的隔离临时包已在 macOS 完成项目、文件导入、会话重开和 Codex 可见任务验证。系统默认应用的 PDF 打开结果、会话列表大规模加载和 Windows 可见交互仍须单独验收。
 - Windows 真机，以及两种系统下包含 Renderer / Electron / 原生 Agent 的长时内存曲线。
 - 公司模型网关的真实推理、文件产出和网络中断恢复；协议模拟与模型目录读取不替代这些结果。
 - macOS 微信桥真实分享至工作台、Windows 系统文件选择器的实际导入和成果打开，以及真实客服消息到本地回复草稿。
-- OpenCode 真实权限弹窗与停止的桌面可见路径（Host 受控事件测试已通过）；Codex、Pi、Claude Code 在本轮客户环境中的真实文件任务。企业 Agent 允许名单、受管安装及跨 Agent 交接属于可选企业扩展，尚未验收。
+- OpenCode 真实权限弹窗与停止的桌面可见路径（Host 受控事件测试已通过）；Kimi Code、oh-my-pi、Pi 在客户环境中的真实文件任务，以及暂缓的 Claude Code 真实任务。Codex 已有上述单机合成资料路径；企业 Agent 允许名单、受管安装及跨 Agent 交接属于可选企业扩展，尚未验收。
 - 正式发行签名、公证及自动更新。
 
 后续沿 [本地交付计划](roadmap.md) 验收实际任务路径，不以更多静态检查代替尚缺的运行证据。

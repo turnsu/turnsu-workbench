@@ -4,14 +4,16 @@ import { ChevronLeft, ChevronRight, FileText, Folder, X } from 'lucide-react';
 import { WorkReferenceChoices } from './WorkReferenceChoices.jsx';
 import { TeamSkillsDialog } from './TeamSkillsDialog.jsx';
 const command = (method, args) => invoke('local_command', { method, args });
+const agentFile = name => /\.(?:pdf|docx?|xlsx?|pptx?|odt|ods|png|jpe?g|webp|gif|heic|zip)$/i.test(name);
 
 export const referenceLabel = selection => typeof selection === 'string' ? selection : selection.kind === 'wechat-import' ? (selection.path || `微信记录 · 第 ${selection.offset + 1}–${selection.offset + selection.count} 条`) : selection.label || selection.path;
 export const referenceKey = selection => typeof selection === 'string' ? selection : selection.kind === 'wechat-import' ? `wechat-import:${selection.importId}:${selection.offset}` : selection.kind ? `${selection.kind}:${selection.workItemId}:${selection.objectId}` : selection.revisionId ? `${selection.projectId}:${selection.revisionId}` : selection.path;
 
-export function FileReferencePicker({ projectId, sessionId, team, selected, onSelect, onClose, methodContext }) {
+export function FileReferencePicker({ projectId, sessionId, team, selected, onSelect, onUsePath, onClose, methodContext }) {
   const dialog = useRef(null);
   const [tab, setTab] = useState('files'), [methodsBusy, setMethodsBusy] = useState(false);
   const [folder, setFolder] = useState(''), [query, setQuery] = useState(''), [files, setFiles] = useState(null), [error, setError] = useState('');
+  const [checking, setChecking] = useState('');
   useEffect(() => { dialog.current.showModal(); }, []);
   useEffect(() => {
     let current = true; setFiles(null); setError(''); setQuery('');
@@ -19,15 +21,23 @@ export function FileReferencePicker({ projectId, sessionId, team, selected, onSe
     return () => { current = false; };
   }, [projectId, folder]);
   const entries = files?.entries.filter(file => file.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())) || [];
+  async function choose(file) {
+    if (file.directory) { setFolder(file.path); return; }
+    if (agentFile(file.name)) { onUsePath(file.path); return; }
+    setChecking(file.path); setError('');
+    try { await command('references.validate', { projectId, path: file.path }); onSelect(file.path); }
+    catch (cause) { setError(`无法引用「${file.name}」：${String(cause)}`); }
+    finally { setChecking(''); }
+  }
   return <dialog ref={dialog} className="cloudDialog fileReferencePicker" aria-labelledby="reference-heading" onCancel={e => { e.preventDefault(); if (!methodsBusy) onClose(); }}>
     <div className="cloudHeading"><h2 id="reference-heading">引用资料</h2><button aria-label="关闭资料选择" disabled={methodsBusy} onClick={onClose}><X size={18}/></button></div>
     <div className="referenceTabs" aria-label="资料类别">{[['files','项目文件'], ...(team && sessionId ? [['work-entry','共享进展'],['work-decision','已确认决定']] : []), ...(methodContext ? [['methods','团队方法']] : [])].map(([id, label]) => <button key={id} disabled={methodsBusy} aria-pressed={tab === id} onClick={() => setTab(id)}>{label}</button>)}</div>
     {tab === 'methods' ? <TeamSkillsDialog {...methodContext} inline onBusyChange={setMethodsBusy} onClose={onClose}/> : tab !== 'files' ? <WorkReferenceChoices key={sessionId} sessionId={sessionId} kind={tab} selected={selected} onSelect={onSelect}/> : <>
-    <p className="cloudNote">选择文字资料，发送时读取内容。每次最多引用 4 份资料，每份 64 KB，合计 128 KB。</p>
+    <p className="cloudNote">文字资料在发送时保存内容快照，每次最多 4 份、单份 64 KB、合计 128 KB。Excel、Word、PDF 等文件只插入项目路径，供 Agent 执行时尝试读取；不保存内容快照，也不代表已解析。</p>
     <div className="referenceFolder"><button disabled={!folder} aria-label="返回上一级文件夹" onClick={() => setFolder(folder.split('/').slice(0, -1).join('/'))}><ChevronLeft size={16}/></button><span>{folder || '项目文件'}</span></div>
     <input autoFocus type="search" aria-label="筛选当前文件夹" placeholder="筛选当前文件夹…" value={query} onChange={e => setQuery(e.target.value)}/>
     {error && <p role="alert" className="inlineError">{error}</p>}
-    <div className="referenceFileList" aria-label="可选文件">{!files && !error && <p>正在读取文件…</p>}{entries.map(file => <button key={file.path} disabled={!file.directory && (selected.includes(file.path) || selected.length >= 4)} onClick={() => file.directory ? setFolder(file.path) : onSelect(file.path)}>{file.directory ? <Folder size={16}/> : <FileText size={16}/>}<span>{file.name}</span>{file.directory ? <ChevronRight size={14}/> : selected.includes(file.path) ? <small>已引用</small> : null}</button>)}{files && !entries.length && <p className="muted">{query ? '当前文件夹没有匹配的文件。' : '这个文件夹还没有文件。'}</p>}</div>
+    <div className="referenceFileList" aria-label="可选文件">{!files && !error && <p>正在读取文件…</p>}{entries.map(file => <button key={file.path} disabled={Boolean(checking) || (!file.directory && !agentFile(file.name) && (selected.includes(file.path) || selected.length >= 4))} onClick={() => choose(file)}>{file.directory ? <Folder size={16}/> : <FileText size={16}/>}<span>{file.name}</span>{file.directory ? <ChevronRight size={14}/> : agentFile(file.name) ? <small>插入路径</small> : selected.includes(file.path) ? <small>已引用</small> : checking === file.path ? <small>检查中</small> : null}</button>)}{files && !entries.length && <p className="muted">{query ? '当前文件夹没有匹配的文件。' : '这个文件夹还没有文件。'}</p>}</div>
     {files?.truncated && <p className="cloudNote">这里只显示前 500 项，可以进入子文件夹查找。</p>}</>}
   </dialog>;
 }
