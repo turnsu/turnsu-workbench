@@ -64,6 +64,7 @@ export class Computer {
       const result = await this.transport(request.tool === 'describe' ? 'describe' : 'call', { ...request, grantId: grant.id, manifestHash: digest(grant.manifest) });
       if (this.active !== grant) fail('电脑操作已被暂停或撤销，请核对应用当前状态。');
       return result;
+    } catch(error) { await this.status().catch(()=>{}); throw error;
     } finally { this.busy = false; }
   }
   async stop() {

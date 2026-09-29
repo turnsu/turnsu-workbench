@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { computerPolicy } from '../computer-policy.mjs';
+import { ComputerRuntime } from '../computer-runtime.mjs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const scope = { platform: 'linux', inputDirectory: '/input', outputDirectory: '/output' };
 const browser = { acknowledged: true, mode: 'isolated', target: 'browser', minutes: 30, origins: ['https://example.com'] };
@@ -20,4 +24,16 @@ test('native application grants require explicit platform resource identity and 
   assert.equal(policy.resources.apps[0].terminate, 'driver_launched');
   assert.throws(() => computerPolicy(input, scope));
   assert.throws(() => computerPolicy({ ...input, minutes: 10000 }, scope));
+});
+
+test('a lost computer action response ends the grant before another write can be attempted',async t=>{
+  const root=await mkdtemp(join(tmpdir(),'turnsu-computer-timeout-')),runtime=new ComputerRuntime(root);
+  t.after(async()=>{await runtime.close();await rm(root,{recursive:true,force:true});});await runtime.ready;
+  let effects=0,closed=false;
+  runtime.active={id:'reviewed-grant',mode:'local',manifestHash:'reviewed',expiresAt:Date.now()+60_000,manifest:{allow:{tools:['browser_click']}}};
+  runtime.toolCatalog=[{name:'browser_click',inputSchema:{}}];
+  runtime.rpc={request:async()=>{effects++;throw Error('response lost after click');},close:async()=>{closed=true;}};
+  const call=()=>runtime.dispatch('call',{grantId:'reviewed-grant',manifestHash:'reviewed',tool:'browser_click',arguments:{ref:'button'}});
+  await assert.rejects(call(),/response lost/);assert.equal(effects,1);assert.equal(closed,true);assert.equal((await runtime.status()).active,null);
+  await assert.rejects(call(),/授权已失效/);assert.equal(effects,1);
 });

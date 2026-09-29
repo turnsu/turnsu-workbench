@@ -58,8 +58,9 @@ try {
   }
   assert.ok(new URL(followed.structuredContent.url).hostname.endsWith('iana.org'), 'Click must actually navigate to the linked document');
   console.log('Confirmed browser result:', followed.structuredContent.url);
-  await assert.rejects(call('browser_navigate', {...context,url:'https://example.org'}), /origin|manifest|capability|outside/i);
   const container = runtime.active.container;
+  await assert.rejects(call('browser_navigate', {...context,url:'https://example.org'}), /origin|manifest|capability|outside/i);
+  assert.equal((await runtime.status()).active,null,'A refused or uncertain driver action ends the grant');
   await host.command('computer.stop');
   await assert.rejects(call('start_session'), /授权/);
   assert.notEqual((await runCapability('docker', ['inspect', container])).code, 0, 'Stopped container must be removed');

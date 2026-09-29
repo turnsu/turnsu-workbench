@@ -43,7 +43,7 @@ WorkBuddy 和 Muse 复用 Product API。普通本机 Agent、文件工具和本�
 | `local.request` | `taskId, requestId, tool, reason, arguments`；tool 只允许 documents/computer；进入工作台审批 |
 | `local.result` | `taskId, requestId`；查询完成、拒绝、不确定或失败回执 |
 
-本机批准必须同时满足当前项目的工具权限。结果丢失先复用本机回执，不再执行。超大截图和文件留在本机，不自动上云。当前只支持公开 HTTPS 成果下载地址；下载拒绝私有网络、重定向和越界文件。连接器需另外实现 Muse 官方要求的登记适配，真实双向联调前保持“等待接手”。[Muse 平台](https://muse.ai/platform)
+本机批准必须同时满足当前项目的工具权限。结果丢失先复用本机回执，不再执行。超大截图和文件留在本机，不自动上云。当前只支持公开 HTTPS 成果下载地址；下载逐跳校验地址，拒绝私有网络、跳向受限网络的重定向和越界文件。连接器需另外实现 Muse 官方要求的登记适配，真实双向联调前保持“等待接手”。[Muse 平台](https://muse.ai/platform)
 
 ## Manus 客户配置
 

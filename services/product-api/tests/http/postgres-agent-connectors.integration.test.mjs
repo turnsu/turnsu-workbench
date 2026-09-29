@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import { Pool } from 'pg';
 import { ProductPostgresStore } from '../../src/store/postgres/index.mjs';
+import { PostgresAgentConnectorStore } from '../../src/connections/postgres-agent-connectors.mjs';
 import { createManagedConnectorHttp } from '../../src/connectors/http.mjs';
 
 const enabled=process.env.WORKBENCH_POSTGRES_INTEGRATION==='1';
@@ -19,7 +20,7 @@ test('managed connectors isolate customers, encrypt credentials, fence replay an
     if(options.method==='POST'){sends++;return Response.json({code:0,data:{message_id:'message-one'}});}
     return Response.json({code:0,data:{messages:[]}});
   };
-  const handler=createManagedConnectorHttp({store,authService:{authenticateNativeAccessToken:async({accessToken})=>identities[accessToken]},origin:'https://turnsu.example.test',env:{TURNSU_CONNECTOR_SECRET_KEY:randomBytes(32).toString('base64'),TURNSU_WORKBUDDY_CLIENT_ID:'reviewed-app',TURNSU_WORKBUDDY_CLIENT_SECRET:'server-only-secret'},fetch:provider});
+  const handler=createManagedConnectorHttp({createPersistence:key=>new PostgresAgentConnectorStore(store,key),authService:{authenticateNativeAccessToken:async({accessToken})=>identities[accessToken]},origin:'https://turnsu.example.test',env:{TURNSU_CONNECTOR_SECRET_KEY:randomBytes(32).toString('base64'),TURNSU_WORKBUDDY_CLIENT_ID:'reviewed-app',TURNSU_WORKBUDDY_CLIENT_SECRET:'server-only-secret'},fetch:provider});
   const server=createServer((req,res)=>handler(req,res));await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}/api/workbench/v1/agent-connectors/`;
   t.after(async()=>{await handler.close();await new Promise(r=>server.close(r));await store.close();await pool.end();});
   async function call(operation,input={},token='alice',status=200){const response=await fetch(base+operation,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(input)});const result=await response.json();assert.equal(response.status,status,result.error);return result.data;}
@@ -65,7 +66,7 @@ test('WorkBuddy cloud persists its native task before readiness, sends once, dow
     if(message.method==='session/prompt'){prompts++;promptId=message.id;}
     return new Response(null,{status:202});
   };
-  const handler=createManagedConnectorHttp({store,authService:{authenticateNativeAccessToken:async()=>identity},origin:'https://turnsu.example.test',env:{TURNSU_CONNECTOR_SECRET_KEY:randomBytes(32).toString('base64'),TURNSU_WORKBUDDY_CLIENT_ID:'test-app',TURNSU_WORKBUDDY_CLIENT_SECRET:'private'},fetch:provider});
+  const handler=createManagedConnectorHttp({createPersistence:key=>new PostgresAgentConnectorStore(store,key),authService:{authenticateNativeAccessToken:async()=>identity},origin:'https://turnsu.example.test',env:{TURNSU_CONNECTOR_SECRET_KEY:randomBytes(32).toString('base64'),TURNSU_WORKBUDDY_CLIENT_ID:'test-app',TURNSU_WORKBUDDY_CLIENT_SECRET:'private'},fetch:provider});
   const server=createServer((req,res)=>handler(req,res));await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}/api/workbench/v1/agent-connectors/`;
   t.after(async()=>{await handler.close();await new Promise(r=>server.close(r));await store.close();await pool.end();});
   async function call(operation,input={},expected=200){const response=await fetch(base+operation,{method:'POST',headers:{Authorization:'Bearer customer','Content-Type':'application/json'},body:JSON.stringify(input)});const result=await response.json();assert.equal(response.status,expected,result.error);return result.data;}

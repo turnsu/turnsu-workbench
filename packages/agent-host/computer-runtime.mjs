@@ -137,9 +137,16 @@ export class ComputerRuntime {
     if (method !== 'call' || !this.active.manifest.allow.tools.includes(args.tool)) fail('未授权的电脑工具。');
     const parameters = {...(args.arguments || {})};
     if(this.toolCatalog.find(tool=>tool.name===args.tool)?.inputSchema?.properties?.session) parameters.session = `turnsu-${this.active.id}`;
-    const result = await this.rpc.request('tools/call', { name: args.tool, arguments: parameters });
-    if (result.isError || result.structuredContent?.status === 'refused' || result.structuredContent?.effect === 'refused' || result.structuredContent?.refusal) fail(result.structuredContent?.refusal?.message || JSON.stringify(result).slice(0, 2000));
-    return result;
+    try {
+      const result = await this.rpc.request('tools/call', { name: args.tool, arguments: parameters });
+      if (result.isError || result.structuredContent?.status === 'refused' || result.structuredContent?.effect === 'refused' || result.structuredContent?.refusal) fail(result.structuredContent?.refusal?.message || JSON.stringify(result).slice(0, 2000));
+      return result;
+    } catch (error) {
+      // A timed-out click may already have changed the application. End this grant rather than
+      // admitting another action on an uncertain desktop; the user must inspect and reauthorize.
+      await this.stop().catch(()=>{});
+      throw error;
+    }
   }
   async stop() {
     await this.ready;

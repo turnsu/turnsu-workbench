@@ -1,3 +1,4 @@
+import { PostgresAgentConnectorStore } from './connections/postgres-agent-connectors.mjs';
 import { createManagedConnectorHttp } from './connectors/http.mjs';
 import { PostgresMemberAgentService } from "./member-agents/postgres-member-agent-service.mjs";
 import { PostgresNativeSkillPackageReader } from "./skills/postgres-native-skill-package-reader.mjs";
@@ -1699,7 +1700,7 @@ export function createWorkbenchServer({
     internalErrorReporter: createInternalErrorReporter({ env, logger: operationsLogger, metrics: operationsMetrics }),
     requestObserver: createRequestObserver({ logger: operationsLogger, metrics: operationsMetrics }),
   });
-  const connectors = createManagedConnectorHttp({ store: productStore, authService: productAuthService, env, origin });
+  const connectors = createManagedConnectorHttp({ createPersistence: productStore?.persistenceDriver === 'postgres' ? key => new PostgresAgentConnectorStore(productStore, key) : null, authService: productAuthService, env, origin });
   const staticHandler = createStaticHandler({ distDirectory });
   const server = http.createServer(async (req, res) => {
     const pathname = new URL(req.url, "http://localhost").pathname;

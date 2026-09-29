@@ -12,15 +12,15 @@ async function body(req) {
   let value;try{value=JSON.parse(Buffer.concat(parts).toString());}catch{throw new ConnectorError('JSON 请求无效。');}
   requireValue(value && typeof value==='object' && !Array.isArray(value),'请求无效。');return value;
 }
-export function createManagedConnectorHttp({ store,authService,env,origin,fetch }) {
+export function createManagedConnectorHttp({ createPersistence,authService,env,origin,fetch }) {
   const ready = (async () => {
-    if (store?.persistenceDriver!=='postgres' || (!env.TURNSU_CONNECTOR_SECRET_KEY && !env.TURNSU_CONNECTOR_SECRET_KEY_FILE)) return null;
+    if (!createPersistence || (!env.TURNSU_CONNECTOR_SECRET_KEY && !env.TURNSU_CONNECTOR_SECRET_KEY_FILE)) return null;
     const configuration={...env};
     for(const name of ['TURNSU_CONNECTOR_SECRET_KEY','TURNSU_WORKBUDDY_CLIENT_SECRET']) {
       if(env[name+'_FILE']) { const secret=(await readSecretFile(env[name+'_FILE'])).trim(); requireValue(secret.length>0 && secret.length<=16_384,'连接器密钥文件无效。',503); configuration[name]=secret; }
       else if(env.WORKBENCH_LOCAL_PRODUCTION==='1' && env[name]) throw new ConnectorError('生产连接器密钥必须从 Secret Store 挂载文件读取。',503);
     }
-    return new ManagedAgentConnectors({store,env:configuration,origin,fetch});
+    return new ManagedAgentConnectors({persistence:createPersistence(configuration.TURNSU_CONNECTOR_SECRET_KEY),env:configuration,origin,fetch});
   })();
   ready.catch(()=>{});
   let receiving=0;
@@ -47,8 +47,8 @@ export function createManagedConnectorHttp({ store,authService,env,origin,fetch 
       else switch(operation) {
         case 'connections':result=await service.connections(identity);break;
         case 'authorize':result=await service.authorize(identity,input);break;
-        case 'authorization':result=(await service.db.tx(q=>q('SELECT status,connection_id FROM agent_connector_authorizations WHERE workspace_id=$1 AND user_id=$2 AND state_hash=$3',[...service.db.scope(identity),input.authorizationId]))).rows[0]||{status:'unavailable'};break;
-        case 'cancel':await service.db.tx(q=>q("UPDATE agent_connector_authorizations SET consumed_at=now(),status='cancelled' WHERE workspace_id=$1 AND user_id=$2 AND state_hash=$3 AND consumed_at IS NULL",[...service.db.scope(identity),input.authorizationId]));result={cancelled:true};break;
+        case 'authorization':result=await service.db.authorization(identity,input.authorizationId);break;
+        case 'cancel':await service.db.cancelAuthorization(identity,input.authorizationId);result={cancelled:true};break;
         case 'check':result=await service.check(identity,input);break;
         case 'revoke':result=await service.revoke(identity,input);break;
         case 'send':result=await service.send(identity,input);break;
