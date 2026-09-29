@@ -26,7 +26,7 @@ import './wechat-import.css';
 const command = (method, args = {}) => invoke("local_command", { method, args });
 const labels = { idle: "可以继续", starting: "正在连接 Agent", running: "正在处理", waiting: "需要你的回应", stopping: "正在停止", interrupted: "可以恢复", failed: "需要处理" };
 const active = (status) => ["starting", "running", "waiting", "stopping"].includes(status);
-const agentName = (agent) => agent === "pi" ? "Pi" : agent === "claude" ? "Claude Code" : "Codex";
+const agentName = (agent) => ({ pi: 'Pi', claude: 'Claude Code', codex: 'Codex', opencode: 'OpenCode' }[agent] || agent);
 const sessionState = (status) => ({ starting: "连接中", running: "进行中", waiting: "待回应", stopping: "停止中", interrupted: "已中断", failed: "需处理" })[status] || "";
 
 function Markdown({ children }) {
@@ -96,6 +96,7 @@ function App() {
   const modelRequest = useRef(0);
   const [models, setModels] = useState(null), [model, setModel] = useState(""), [modelsLoading, setModelsLoading] = useState(false);
   const [fileError, setFileError] = useState(""), [fileLoading, setFileLoading] = useState(false);
+  const [importingFiles, setImportingFiles] = useState(false), [importNotice, setImportNotice] = useState('');
   const selected = useRef(null), draftTimer = useRef(null), draftVersion = useRef(0), fileVersion = useRef(0), refreshTimer = useRef(null), composing = useRef(false);
   const refreshQueue = useRef(null);
   const transcript = useRef(null), atBottom = useRef(true), pendingSend = useRef(null);
@@ -230,7 +231,7 @@ function App() {
             setSessionSearch(""); setWorkspace(w => ({ ...w, sessions: [], sessionPage: {} }));
             loadSessionIndex({ projectId: id });
           }
-          ++draftVersion.current; ++fileVersion.current; ++modelRequest.current; setModelsLoading(false); setFileList(null); setPreview(null); setModel(""); setModels(null); setAgentId(indexQuery.current.projectId === id ? workspace.agentPreference?.agentId || 'codex' : workspace.agents.find(agent => agent.installed)?.id || 'codex'); setAgentPreference(null); setConnectionId("");
+          ++draftVersion.current; ++fileVersion.current; ++modelRequest.current; setModelsLoading(false); setFileList(null); setPreview(null); setImportNotice(''); setFileError(''); setModel(""); setModels(null); setAgentId(indexQuery.current.projectId === id ? workspace.agentPreference?.agentId || 'codex' : workspace.agents.find(agent => agent.installed)?.id || 'codex'); setAgentPreference(null); setConnectionId("");
           setView('workbench'); setWorkOpen(false); setSyncOpen(false); setWechatOpen(false); setProjectId(id); selected.current = nextSession; setSessionId(nextSession); setSession(null); setError(""); setDraft(""); setReferences([]); setReferencePicker(false); setDraftStatus(""); setFilePanel(false); pendingSend.current = null; atBottom.current = true; lastMessageSignature.current = null; setAwayFromBottom(false); setHasNewContent(false);
         },
         loaded({ draft: saved, session: value }) {
@@ -308,7 +309,7 @@ function App() {
     setModelsLoading(true); setError("");
     try {
       let id = sessionId;
-      if (["pi", "claude"].includes(agentId) && !id && !chosenConnectionId) {
+      if (["pi", "claude", "opencode"].includes(agentId) && !id && !chosenConnectionId) {
         setCreatingSession(true);
         const s = await command("session.create", { projectId, agent: agentId, connectionId: chosenConnectionId || null });
         await command("draft.save", { projectId, sessionId: s.id, text: draft, references });
@@ -367,10 +368,29 @@ function App() {
   }
   async function readFile(file) {
     if (file.directory) return listFiles(file.path);
+    if (/\.(?:pdf|docx|xlsx|pptx|png|jpe?g|webp)$/i.test(file.path)) return openProjectFile(file.path);
     const version = ++fileVersion.current; setFileLoading(true); setPreview(null); setFileError("");
     try { const result = await command("files.read", { projectId, path: file.path }); if (version === fileVersion.current) setPreview(result); }
     catch (e) { if (version === fileVersion.current) setFileError(String(e)); }
     finally { if (version === fileVersion.current) setFileLoading(false); }
+  }
+  async function importFiles() {
+    if (!projectId || importingFiles) return;
+    setImportingFiles(true); setImportNotice(''); setFileError('');
+    try {
+      const result = await invoke('import_files', { projectId });
+      if (!result) return;
+      setFilePanel(true);
+      await listFiles('Imported');
+      setImportNotice(result.imported.length ? `已导入 ${result.imported.length} 个文件到 Imported，原文件未更改。` : '没有文件导入。');
+      if (result.failed.length) setFileError(result.failed.map(file => `${file.name}：${file.reason}`).join('；'));
+    } catch (error) { setFileError(String(error)); setFilePanel(true); }
+    finally { setImportingFiles(false); }
+  }
+  async function openProjectFile(path) {
+    setFileError('');
+    try { await invoke(/\.(?:txt|md|markdown|csv|tsv|pdf|docx|xlsx|pptx|png|jpe?g|webp)$/i.test(path) ? 'open_project_file' : 'reveal_project_file', { projectId, path }); }
+    catch (error) { setFileError(String(error)); }
   }
 
   return <div className="app">
@@ -387,7 +407,7 @@ function App() {
           <div className="sessionListHeading">{sessionSearch ? "搜索结果" : "最近会话"} <span>{indexLoading ? "读取中…" : sessionPage.total || 0}</span></div>
           {indexError && <p className="railEmpty" role="alert">会话列表读取失败。<button onClick={() => loadSessionIndex(indexQuery.current)}>重试</button></p>}
           <div aria-busy={indexLoading} className={indexLoading ? "sessionIndex loading" : "sessionIndex"}>
-          {filteredSessions.map((s) => editingSessionId === s.id ? <form className="sessionRename" key={s.id} onSubmit={renameSession} onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); finishRename(); } }}><input autoFocus aria-label="会话名称" maxLength={80} required value={editedTitle} disabled={renameSaving} onChange={e => setEditedTitle(e.target.value)}/><button aria-label="保存会话名称" disabled={renameSaving || !editedTitle.trim()} type="submit"><Check size={14}/></button><button aria-label="取消重命名" disabled={renameSaving} type="button" onClick={finishRename}><X size={14}/></button></form> : <div className={`sessionRow ${sessionId === s.id ? "current" : ""}`} key={s.id}><button className="sessionButton" aria-current={sessionId === s.id ? 'page' : undefined} aria-label={`${s.title}，${agentName(s.agent)}${sessionState(s.status) ? `，${sessionState(s.status)}` : ""}`} title={`${s.title} · ${agentName(s.agent)} · ${new Date(s.updated_at).toLocaleString()}`} disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { if (sessionId !== s.id || view !== 'workbench' || draftLoadFailed) selectProject(p.id, s.id); }}><span className={`statusDot ${active(s.status) ? "live" : ""} ${['waiting', 'failed', 'interrupted'].includes(s.status) ? "attention" : ""}`} /><span className="sessionTitle">{s.title}</span><small className={`taskAgent ${['waiting', 'failed', 'interrupted'].includes(s.status) ? "attention" : ""}`}>{sessionState(s.status) || (s.agent === "pi" ? "Pi" : s.agent === "claude" ? "CC" : "C")}</small></button><button ref={element => { if (element) renameButtons.current.set(s.id, element); else renameButtons.current.delete(s.id); }} className="renameTrigger" aria-label={`重命名会话：${s.title}`} title="重命名" disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { setEditingSessionId(s.id); setEditedTitle(s.title); }}><Pencil size={13}/></button></div>)}
+          {filteredSessions.map((s) => editingSessionId === s.id ? <form className="sessionRename" key={s.id} onSubmit={renameSession} onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); finishRename(); } }}><input autoFocus aria-label="会话名称" maxLength={80} required value={editedTitle} disabled={renameSaving} onChange={e => setEditedTitle(e.target.value)}/><button aria-label="保存会话名称" disabled={renameSaving || !editedTitle.trim()} type="submit"><Check size={14}/></button><button aria-label="取消重命名" disabled={renameSaving} type="button" onClick={finishRename}><X size={14}/></button></form> : <div className={`sessionRow ${sessionId === s.id ? "current" : ""}`} key={s.id}><button className="sessionButton" aria-current={sessionId === s.id ? 'page' : undefined} aria-label={`${s.title}，${agentName(s.agent)}${sessionState(s.status) ? `，${sessionState(s.status)}` : ""}`} title={`${s.title} · ${agentName(s.agent)} · ${new Date(s.updated_at).toLocaleString()}`} disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { if (sessionId !== s.id || view !== 'workbench' || draftLoadFailed) selectProject(p.id, s.id); }}><span className={`statusDot ${active(s.status) ? "live" : ""} ${['waiting', 'failed', 'interrupted'].includes(s.status) ? "attention" : ""}`} /><span className="sessionTitle">{s.title}</span><small className={`taskAgent ${['waiting', 'failed', 'interrupted'].includes(s.status) ? "attention" : ""}`}>{sessionState(s.status) || ({ pi: 'Pi', claude: 'CC', opencode: 'OC', codex: 'C' }[s.agent] || '?')}</small></button><button ref={element => { if (element) renameButtons.current.set(s.id, element); else renameButtons.current.delete(s.id); }} className="renameTrigger" aria-label={`重命名会话：${s.title}`} title="重命名" disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { setEditingSessionId(s.id); setEditedTitle(s.title); }}><Pencil size={13}/></button></div>)}
           {!indexLoading && sessionSearch && filteredSessions.length === 0 && <p className="railEmpty">当前项目没有匹配的会话。</p>}
           </div>
           {(sessionPage.older || sessionPage.newer || indexQuery.current.before || indexQuery.current.after) && <nav className="sessionPagination" aria-label="会话列表分页">
@@ -413,6 +433,7 @@ function App() {
         {project?.sharing && <button ref={workButton} onClick={() => setWorkOpen(true)}>团队工作</button>}
         {project?.sharing && <button ref={syncButton} className={`syncBadge ${project.sharing.status}`} onClick={() => setSyncOpen(true)}>{syncLabels[project.sharing.status]}</button>}
         {project && <button onClick={() => setWechatOpen(true)}><FileText size={16}/>微信资料</button>}
+        {project && <button disabled={importingFiles || Boolean(project.sharing)} title={project.sharing ? '团队项目的文件可能同步给成员；请在团队文件中核对共享范围。私有导入请打开本地项目。' : '复制文件到当前本地项目，保留原文件'} onClick={importFiles}><Plus size={16} />{importingFiles ? '正在导入…' : '导入文件'}</button>}
         {project && <button aria-pressed={filePanel} onClick={() => { setFilePanel(!filePanel); if (!filePanel) listFiles(); }}><Files size={16} />项目文件</button>}
       </header>
       <div className="workArea"><section className="conversation">
@@ -446,9 +467,10 @@ function App() {
         </>}
       </section>
       {filePanel && project && <aside className="filePanel"><div className="fileHeader"><strong>{preview ? basename(preview.path) : "项目文件"}</strong><button aria-label="关闭文件面板" onClick={() => setFilePanel(false)}><X size={16} /></button></div><div className="fileTools"><button onClick={() => preview ? setPreview(null) : listFiles(folder.split("/").slice(0, -1).join("/"))} disabled={!preview && !folder}><ChevronLeft size={15} />返回</button><button aria-label="刷新项目文件" onClick={() => listFiles(folder)}><RotateCcw size={15} /></button></div>
-        {preview && <div className="referencePreviewAction"><button disabled={sending || creatingSession || draftLoading || references.length >= 4 || references.includes(preview.path)} onClick={() => addReference(preview.path)}><FileText size={14}/>{references.includes(preview.path) ? '已引用到任务' : '引用到任务'}</button></div>}
+        {importNotice && <p className="importNotice" role="status">{importNotice}</p>}
+        {preview && <div className="referencePreviewAction"><button disabled={sending || creatingSession || draftLoading || references.length >= 4 || references.includes(preview.path)} onClick={() => addReference(preview.path)}><FileText size={14}/>{references.includes(preview.path) ? '已引用到任务' : '引用到任务'}</button><button onClick={() => openProjectFile(preview.path)}>系统打开</button></div>}
         {fileError && <div className="inlineError" role="alert">{fileError}</div>}
-        {fileLoading ? <div className="fileLoading" role="status"><LoaderCircle className="spin" size={16}/>正在读取项目文件…</div> : preview ? <div className="filePreview">{/\.md$/i.test(preview.path) ? <Markdown>{preview.text}</Markdown> : <pre>{preview.text}</pre>}</div> : <div className="fileList"><p className="filePath">{folder || project.sharing?.title || project.name}</p>{fileList?.entries.map((f) => <button key={f.path} onClick={() => readFile(f)}>{f.directory ? <Folder size={16} /> : <FileText size={16} />}<span>{f.name}</span>{f.directory && <ChevronRight size={13} />}</button>)}{fileList?.entries.length === 0 && <p className="muted">这个文件夹还没有文件。</p>}{fileList?.truncated && <p className="muted">当前显示前 500 项，请进入子文件夹查看。</p>}</div>}
+        {fileLoading ? <div className="fileLoading" role="status"><LoaderCircle className="spin" size={16}/>正在读取项目文件…</div> : preview ? <div className="filePreview">{/\.md$/i.test(preview.path) ? <Markdown>{preview.text}</Markdown> : <pre>{preview.text}</pre>}</div> : <div className="fileList"><p className="filePath">{folder || project.sharing?.title || project.name}</p>{fileList?.entries.map((f) => <div className="fileEntry" key={f.path}><button onClick={() => readFile(f)}>{f.directory ? <Folder size={16} /> : <FileText size={16} />}<span>{f.name}</span>{f.directory && <ChevronRight size={13} />}</button>{!f.directory && <button className="nativeFileAction" onClick={() => openProjectFile(f.path)}>{/\.(?:txt|md|markdown|csv|tsv|pdf|docx|xlsx|pptx|png|jpe?g|webp)$/i.test(f.path) ? '系统打开' : '定位'}</button>}</div>)}{fileList?.entries.length === 0 && <p className="muted">这个文件夹还没有文件。</p>}{fileList?.truncated && <p className="muted">当前显示前 500 项，请进入子文件夹查看。</p>}</div>}
       </aside>}
       </div>
     </main>}

@@ -13,3 +13,10 @@ test('Windows npm CLI entry preserves spaced paths and metacharacter arguments w
   assert.throws(() => nativeCommand(join(root, 'unknown.cmd'), [], 'node.exe'), /无法启动/);
   assert.throws(() => nativeCommand(join(root, 'codex.cmd'), [], null), /无法启动/);
 });
+
+test('OpenCode npm shim resolves its native executable without invoking cmd.exe', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'turnsu opencode shim ')); t.after(() => rm(root, { recursive: true, force: true }));
+  const entry = join(root, 'node_modules/opencode-ai/bin/opencode.exe');
+  await mkdir(join(root, 'node_modules/opencode-ai/bin'), { recursive: true }); await writeFile(entry, 'fixture');
+  assert.deepEqual(nativeCommand(join(root, 'opencode.cmd'), ['acp'], null), { file: entry, args: ['acp'], entry });
+});

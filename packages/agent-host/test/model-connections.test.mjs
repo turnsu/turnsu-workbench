@@ -93,3 +93,35 @@ test('Pi source keeps slash-containing model IDs and rejects native or other-con
   await assert.rejects(host.command('session.model', { sessionId: session.id, model: 'openai/another/model' }), /此连接/);
   await assert.rejects(host.command('session.model', { sessionId: session.id, model: null }), /明确的模型/);
 });
+
+test('OpenCode keeps a selected chat gateway and exact model separate from its native account', async t => {
+  const f = await gateway(t), root = await mkdtemp(join(tmpdir(), 'turnsu-opencode-gateway-'));
+  const path = join(root, 'project'); await mkdir(path);
+  const connections = [];
+  const host = new LocalAgentHost({ directory: join(root, 'state'), opencodeFactory: options => {
+    const connection = { options, sessionId: 'native-gateway-session', ready: Promise.resolve(), closed: false,
+      async send(prompt, model) { this.sent = { prompt, model }; },
+      async close() { this.closed = true; },
+    };
+    connections.push(connection); return connection;
+  } });
+  t.after(async () => { await host.close(); await rm(root, { recursive: true, force: true }); });
+  await host.configureConnections([{ ...f.profile, protocol: 'chat' }]);
+  const project = await host.command('project.open', { path });
+  const session = await host.command('session.create', { projectId: project.id, agent: 'opencode', connectionId: f.profile.id });
+  const models = await host.command('models.list', { sessionId: session.id, agent: 'opencode' });
+  assert.equal(models[0].id, 'turnsu-company/another/model');
+  await host.command('session.model', { sessionId: session.id, model: models[0].id });
+  await host.command('session.send', { sessionId: session.id, inputId: 'gateway-prompt', text: 'Report' });
+  assert.equal(connections[0].options.gateway.apiKey, f.profile.apiKey);
+  assert.equal(connections[0].options.model, models[0].id);
+  assert.equal(connections[0].sent.model, models[0].id);
+  connections[0].options.onEvent({ type: 'result', stopReason: 'end_turn' });
+  await host.command('session.model', { sessionId: session.id, model: models[1].id });
+  assert.equal(connections[0].closed, true, 'a gateway model change must release the old native process');
+  await host.command('session.send', { sessionId: session.id, inputId: 'gateway-prompt-2', text: 'Continue' });
+  assert.equal(connections[1].options.sessionId, 'native-gateway-session');
+  assert.equal(connections[1].options.model, models[1].id);
+  assert.equal(connections[1].sent.model, models[1].id);
+  assert.ok(!(await readFile(join(root, 'state/local.sqlite'))).includes(Buffer.from(f.profile.apiKey)));
+});

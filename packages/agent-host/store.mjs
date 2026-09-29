@@ -28,7 +28,7 @@ export function openStore(directory) {
     db = new DatabaseSync(path); chmodSync(path, 0o600);
     db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
       CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, path TEXT UNIQUE NOT NULL, name TEXT NOT NULL, updated_at INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS agent_preferences(scope TEXT PRIMARY KEY, agent_id TEXT NOT NULL CHECK(agent_id IN ('codex','pi','claude')));
+      CREATE TABLE IF NOT EXISTS agent_preferences(scope TEXT PRIMARY KEY, agent_id TEXT NOT NULL CHECK(agent_id IN ('codex','pi','claude','opencode')));
       CREATE TABLE IF NOT EXISTS wechat_imports(id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), batch_id TEXT NOT NULL, chat_name TEXT, item_count INTEGER NOT NULL, record_count INTEGER NOT NULL, unparsed_count INTEGER NOT NULL, imported_at INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS wechat_imports_project_recent ON wechat_imports(project_id,imported_at DESC,id DESC);
       CREATE TABLE IF NOT EXISTS wechat_records(import_id TEXT NOT NULL REFERENCES wechat_imports(id), position INTEGER NOT NULL, source_item_id TEXT NOT NULL, sender TEXT NOT NULL, date TEXT NOT NULL, text TEXT NOT NULL, PRIMARY KEY(import_id,position));
@@ -75,6 +75,9 @@ export function openStore(directory) {
       UPDATE sessions SET status='interrupted' WHERE status IN ('starting','running','waiting','stopping');
       UPDATE submissions SET status='unknown' WHERE status='sending';`);
     db.exec("UPDATE borrowed_agent_attempts SET state='interrupted',error_code='borrowed_execution_interrupted' WHERE state='running'");
+    if (!db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='agent_preferences'").get().sql.includes("'opencode'")) {
+      db.exec("BEGIN IMMEDIATE; CREATE TABLE agent_preferences_next(scope TEXT PRIMARY KEY,agent_id TEXT NOT NULL CHECK(agent_id IN ('codex','pi','claude','opencode'))); INSERT INTO agent_preferences_next SELECT scope,agent_id FROM agent_preferences; DROP TABLE agent_preferences; ALTER TABLE agent_preferences_next RENAME TO agent_preferences; COMMIT");
+    }
     for (const field of ['deleted', 'conflict_deleted', 'delete_ready']) if (!db.prepare('PRAGMA table_info(shared_files)').all().some(c => c.name === field)) db.exec(`ALTER TABLE shared_files ADD COLUMN ${field} INTEGER NOT NULL DEFAULT 0`);
     if (!db.prepare('PRAGMA table_info(shared_outbox)').all().some(c => c.name === 'delete_ready')) db.exec('ALTER TABLE shared_outbox ADD COLUMN delete_ready INTEGER NOT NULL DEFAULT 0');
     if (!db.prepare('PRAGMA table_info(shared_projects)').all().some(c => c.name === 'scope')) db.exec('ALTER TABLE shared_projects ADD COLUMN scope TEXT');

@@ -14,10 +14,10 @@ export function executable(name, env = process.env) {
 }
 
 export function discoverAgents() {
-  return ["codex", "pi", "claude"].map((id) => {
+  return ["codex", "pi", "claude", "opencode"].map((id) => {
     const path = executable(id);
     // Existence is deliberately not reported as login or execution readiness.
-    return { id, name: { codex: "Codex", pi: "Pi", claude: "Claude Code" }[id], installed: Boolean(path), supported: true };
+    return { id, name: { codex: "Codex", pi: "Pi", claude: "Claude Code", opencode: "OpenCode" }[id], installed: Boolean(path), supported: true };
   });
 }
 

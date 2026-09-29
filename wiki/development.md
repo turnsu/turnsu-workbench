@@ -1,6 +1,6 @@
 # 开发指南
 
-下面命令对应当前实现。To B、客服与微信桥接入遵循[完整迭代计划](roadmap.md)和[开发约束](../AGENTS.md)。计划中的受管安装、企业配置与业务闭环只有经过真实路径验收后才能列为可用能力。
+下面命令对应当前实现。本地 To B 交付遵循[本地交付计划](roadmap.md)和[开发约束](../AGENTS.md)。可选团队与客户业务连接只有经过真实路径验收后才能列为可用能力。
 
 ## 桌面
 
@@ -14,11 +14,11 @@
 
 桌面数据默认放在系统应用数据目录下的 `ai.turnsu.desktop`，保留既有安装的数据位置。`TURNSU_DESKTOP_STATE` 只用于隔离开发 / 验收目录。不要让两个进程打开同一数据库；Host 有独占锁。密钥存入操作系统保护的凭据文件，不写入 SQLite 或日志。
 
-模型连接在桌面设置中配置。Codex 使用 Responses，Claude Code 使用 Anthropic Messages，Pi 支持界面列出的兼容协议。模型目录检查仅证明目录可读取，不能代替真实推理验收。
+模型连接在桌面设置中配置。Codex 使用 Responses，Claude Code 使用 Anthropic Messages，Pi 支持界面列出的兼容协议；OpenCode 通过 ACP 使用原生提供商或工作台已选的 OpenAI Chat 兼容网关。网关目录和 OpenCode 会话模型识别已在受控环境检查，真实公司网关推理仍未验收。模型目录检查本身不能代替推理验收。
 
 ## Linux 开发机验证
 
-Linux 开发机可在隔离目录使用 Node.js ≥22.19 或一次性 Node 容器安装锁定依赖，执行 `npm run setup`、`npm test`、`npm run build`。这验证 Host、桌面逻辑和构建，不安装 macOS 客户端，也不启动现有企业服务。测试中的 SQLite、微信桥样本和项目目录必须来自临时目录；不要把客户聊天或密钥复制到测试镜像。真实 macOS 微信分享、Windows 桌面交互与发行签名分别在对应系统验收。
+Linux 开发机可在隔离目录使用 Node.js ≥22.19 或一次性 Node 容器安装锁定依赖，执行 `npm run setup`、`npm test`、`npm run build`。这验证 Host、桌面逻辑和构建，不安装 macOS 客户端，也不启动现有企业服务。安装 OpenCode CLI 后可运行 `TURNSU_OPENCODE_BIN=/path/to/opencode node packages/agent-host/test/opencode-native-smoke.mjs`，验证 ACP 建会话和恢复；加 `TURNSU_OPENCODE_TEST_TURN=1` 会发送一条合成模型任务；加 `TURNSU_OPENCODE_TEST_GATEWAY=1 TURNSU_OPENCODE_GATEWAY_TURN=1` 会用本机合成 Chat 网关验证实际请求。`PATH` 中可找到 CLI 且模型可用时，`node packages/agent-host/test/opencode-host-smoke.mjs` 会在临时项目完成读写文件、Host 重开和续跑。测试中的 SQLite、微信桥样本和项目目录必须来自临时目录；不要把客户聊天或密钥复制到测试镜像。真实 macOS 微信分享、Windows 桌面交互与发行签名分别在对应系统验收。
 
 ## 可选团队服务
 
