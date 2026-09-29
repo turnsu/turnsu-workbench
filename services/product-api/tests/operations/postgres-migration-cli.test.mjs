@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { promisify } from "node:util";
@@ -10,7 +11,7 @@ const node = process.execPath;
 
 test("PostgreSQL migration CLI reports the append-only manifest without a database connection", async () => {
   const { stdout, stderr } = await execute(node, [script, "--print-manifest"], {
-    cwd: fileURLToPath(new URL("../../../../domains", import.meta.url)),
+    cwd: tmpdir(),
     env: { ...process.env, NODE_NO_WARNINGS: "1" },
   });
   assert.equal(stderr, "");
@@ -23,7 +24,7 @@ test("PostgreSQL migration CLI reports the append-only manifest without a databa
 test("PostgreSQL migration CLI dry run never connects and never reveals URL credentials", async () => {
   const url = "postgresql://migration-user:secret@127.0.0.1:1/looloomi_cli_test";
   const { stdout, stderr } = await execute(node, [script, "--dry-run", "--url", url], {
-    cwd: fileURLToPath(new URL("../../../../domains", import.meta.url)),
+    cwd: tmpdir(),
     env: { ...process.env, NODE_NO_WARNINGS: "1" },
   });
   assert.equal(stderr, "");

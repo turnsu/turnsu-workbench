@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import net from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -414,7 +416,7 @@ test("stdio Gateway session is process-bound and releases invocation usage on cl
 test("Unix socket endpoint binds one invocation and rejects the wrong nonce", {
   skip: process.env.WORKBENCH_UNIX_SOCKET_INTEGRATION !== "1",
 }, async (t) => {
-  const root = await mkdtemp("/private/tmp/lagw-");
+  const root = await mkdtemp(join(tmpdir(), "lagw-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const { gateway, binding, message } = await fixture();
   const server = new UnixToolGatewayServer({ gateway, tempRoot: root });

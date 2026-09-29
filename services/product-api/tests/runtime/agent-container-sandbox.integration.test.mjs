@@ -25,6 +25,7 @@ test("real Agent image runs Pi through the product stdio Gateway with no contain
   t.after(() => rm(root, { recursive: true, force: true }));
   const persistence = new InMemoryExecutionPersistence();
   const modelCalls = [];
+  const transcripts = [];
   const gateway = new ProductToolGateway({
     persistence,
     modelExecutor: async (call) => {
@@ -40,6 +41,13 @@ test("real Agent image runs Pi through the product stdio Gateway with no contain
     image,
     gatewayServer: new StdioToolGatewayServer({ gateway }),
     tempRoot: root,
+    requireTranscriptArtifact: true,
+    transcriptArtifactService: {
+      async commit(transcript) {
+        transcripts.push(transcript);
+        return { transcriptArtifactId: "transcript-real-agent-image" };
+      },
+    },
   });
   const broker = new ExecutionBroker({
     persistence,
@@ -57,11 +65,16 @@ test("real Agent image runs Pi through the product stdio Gateway with no contain
     invocationId: "invocation-real-agent-image",
     attemptId: "attempt-real-agent-image",
     workspaceId: "workspace-agent-image",
+    actor: { userId: "user-agent-image" },
     controller: { kind: "agent_turn", controllerId: "turn-real-agent-image", fence: 1 },
     mode: "bounded_agent",
     isolation: "container",
     goal: "Return a response from the real isolated Pi Worker.",
-    input: { value: 1 },
+    input: { value: 1, kernelSessionReplay: {
+      schemaVersion: "agent-kernel-session-replay-v1",
+      session: { sessionId: "invocation-real-agent-image", branchId: null },
+      events: [], checkpoint: { cursor: 0 },
+    } },
     limits: {
       timeoutMs: 30_000, maxSteps: 4, maxModelRequests: 2, maxChildren: 0,
       maxInputBytes: 100_000, maxOutputBytes: 100_000, maxImageCount: 0,
@@ -84,12 +97,16 @@ test("real Agent image runs Pi through the product stdio Gateway with no contain
   };
 
   const result = await broker.execute(request);
-  assert.equal(result.status, "completed", JSON.stringify(result));
+  assert.equal(result.status, "completed", JSON.stringify({ result, events: persistence.events.get(request.invocationId) ?? [] }));
   assert.equal(result.isolation, "container");
   assert.equal(result.requestedModelRevisionId, "model-revision-agent-image-1");
   assert.equal(result.actualModelRevisionId, "model-revision-agent-image-1");
   assert.deepEqual(result.output, { response: "Real isolated Pi Worker completed." });
   assert.equal(modelCalls.length, 1);
+  assert.equal(transcripts.length, 1);
+  assert.equal(transcripts[0].ownerUserId, "user-agent-image");
+  assert.ok(transcripts[0].content.byteLength > 0);
+  assert(result.evidence.some((item) => item.ref === "worker-transcript:transcript-real-agent-image"));
   assert.equal(JSON.stringify(modelCalls).includes("must-not-cross"), false);
   assert.equal(JSON.stringify(modelCalls).includes("apiKey"), false);
   assert.equal((await sandbox.scavenge()).containersRemoved, 0);
@@ -102,6 +119,7 @@ test("real pi-workflow streams dynamic children into the product timeline before
   const persistence = new InMemoryExecutionPersistence();
   const modelCalls = [];
   const dockerDiagnostics = [];
+  const childUpdates = [];
   const gateway = new ProductToolGateway({
     persistence,
     modelExecutor: async (call) => {
@@ -125,6 +143,12 @@ test("real pi-workflow streams dynamic children into the product timeline before
     image,
     gatewayServer: new StdioToolGatewayServer({ gateway }),
     tempRoot: root,
+    requireTranscriptArtifact: true,
+    transcriptArtifactService: {
+      async commit() {
+        return { transcriptArtifactId: "transcript-real-agwab-image" };
+      },
+    },
     spawnProcess: (...args) => {
       const child = spawn(...args);
       child.stderr?.on("data", (chunk) => dockerDiagnostics.push(Buffer.from(chunk)));
@@ -137,10 +161,20 @@ test("real pi-workflow streams dynamic children into the product timeline before
     idFactory: (() => { let sequence = 1000; return (kind) => `${kind}-${++sequence}`; })(),
     capacityAuthorizer: { async authorize() { return true; } },
   });
+  const backend = createAgentContainerBackend({ sandbox });
   broker.registerBackend({
     mode: "agent_orchestrator",
     isolation: "container",
-    backend: createAgentContainerBackend({ sandbox }),
+    backend: {
+      probe: () => backend.probe(),
+      execute: (args) => backend.execute({
+        ...args,
+        reportChild: (update) => {
+          childUpdates.push(update);
+          return args.reportChild(update);
+        },
+      }),
+    },
   });
   const request = {
     schemaVersion: "workbench-execution-fabric-v1",
@@ -164,6 +198,7 @@ test("real pi-workflow streams dynamic children into the product timeline before
     evidenceRequirements: [],
     metadata: {
       outerNodeId: "pinned-node-agwab",
+      allowedChildren: ["dynamic.controller", "dynamic.decide-r0", "dynamic.synthesize-0", "synthesize"],
       modelProfileRevisionId: "model-revision-agwab-image-1",
       fallbackModelProfileRevisionIds: [],
       modelCapability: "structured_output",
@@ -199,6 +234,7 @@ test("real pi-workflow streams dynamic children into the product timeline before
       output: child.result?.output ?? null,
     })),
     parentEvents: parentEvents.map((event) => ({ type: event.type, payload: event.payload })),
+    childUpdates,
     dockerDiagnostics: Buffer.concat(dockerDiagnostics).toString("utf8").slice(-8_000),
   }));
   assert.equal(result.requestedModelRevisionId, "model-revision-agwab-image-1");

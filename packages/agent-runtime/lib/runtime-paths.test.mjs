@@ -42,6 +42,12 @@ try {
     }),
     /runtime_override_must_be_temporary/,
   );
+  assert.throws(
+    () => resolveRuntimePaths({
+      env: { TURNSU_AGENT_TEST_MODE: "1", [RUNTIME_ROOT_ENV]: join(dirname(tmpdir()), "outside-system-temp") },
+    }),
+    /runtime_override_must_be_temporary/,
+  );
 
   const isolated = resolveRuntimePaths({
     env: { TURNSU_AGENT_TEST_MODE: "1", [RUNTIME_ROOT_ENV]: tempRuntimeRoot },

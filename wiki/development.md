@@ -24,6 +24,10 @@ Linux 开发机可在隔离目录使用 Node.js ≥22.19 或一次性 Node 容�
 
 执行 `npm run setup -- --team`。按 `.env.example` 配置独立 PostgreSQL、对象存储和服务密钥，运行 `scripts/start-workbench-server.sh`。生产部署必须保留 TLS、服务端授权、幂等、事务及持久化边界。新工作区从空内容开始；测试样例不得自动出现在用户项目。
 
+## CI 与交付构建验证
+
+GitHub Actions 的 `Verify workbench` 在指向 `main` 的 PR、推送 `main` 和手动触发时运行。Linux 分别验证本地 Host／桌面逻辑、1 万条会话下的启动、分页和 Host 内存预算、构建后 Agent runtime 的实际运行，以及可选团队服务、Web、隔离 PostgreSQL 行为；Worker 镜像构建后还运行真实非特权容器中的 Pi 会话和动态子任务，验证产品网关、结果、会话记录保存与清理。macOS 与 Windows runner 安装锁定依赖、运行本地测试与真实 Electron Host／系统凭据检查，并生成桌面开发包。`main` 的无签名开发包保存在限时 7 天的 Actions artifact 中供检查。流程不使用客户凭据，不部署服务，也不发布正式安装包。Host 的合成内存预算不代表包含 Electron Renderer 和原生 Agent 的长时资源验收；跨平台打包和 Electron 无窗口检查也不能替代客户机器上的完整界面、真实 Agent 登录与权限、签名、公证、升级验收。
+
 `npm run test:team` 检查服务端与团队 Web；真实 PostgreSQL 验证使用 `npm run test:postgres:isolated --prefix services/product-api`。原生连接器仅用于用户主动授权的团队连接。
 
 Agent Worker 镜像从仓库根目录构建：`docker build -f deploy/agent-image/Dockerfile .`。配置不可变镜像摘要后才可在团队执行服务中启用。普通桌面任务不要求 Docker。

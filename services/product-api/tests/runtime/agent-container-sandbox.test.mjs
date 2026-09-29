@@ -100,6 +100,23 @@ test("Agent container arguments share the strict isolation policy and mount no s
   assert.match(mounts[0], /dst=\/work\/output$/);
   assert.equal(args.some((item) => item.includes("domains/") || item.includes("providerSecret")), false);
   assert.deepEqual(args.slice(-3), [IMAGE, "node", "/opt/turnsu/packages/agent-runtime/worker/worker.mjs"]);
+  const hostOwned = buildAgentContainerArguments({
+    image: IMAGE,
+    containerName: "looloomi-agent-host-owned",
+    invocationId: "invocation-agent-a",
+    outputRoot: "/tmp/output",
+    containerUser: "1001:1001",
+    limits: { maxOutputBytes: 4096 },
+  });
+  assert.equal(option(hostOwned, "--user"), "1001:1001");
+  assert.throws(() => buildAgentContainerArguments({
+    image: IMAGE,
+    containerName: "looloomi-agent-root-forbidden",
+    invocationId: "invocation-agent-a",
+    outputRoot: "/tmp/output",
+    containerUser: "0:0",
+    limits: { maxOutputBytes: 4096 },
+  }), { message: "agent_container_arguments_invalid" });
 });
 
 test("Agent sandbox passes only governed input and strips image, host, and socket details", async (t) => {

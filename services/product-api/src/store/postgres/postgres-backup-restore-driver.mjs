@@ -55,8 +55,10 @@ export class PostgresBackupRestoreDriver {
     try {
       const source = await this.#snapshot(this.store);
       const dump = await this.transport.dump();
-      const encryption = await encryptBackupStream({ source: dump.source, destination: archive, key });
-      await dump.completed;
+      const encryption = await settleStreamAndTransport(
+        encryptBackupStream({ source: dump.source, destination: archive, key }),
+        dump.completed,
+      );
       this.backups.set(handle, { root, archive, key, source });
       return Object.freeze({
         handle,
@@ -82,8 +84,10 @@ export class PostgresBackupRestoreDriver {
     let restoredStore = null;
     try {
       const restore = await this.transport.restore(target);
-      const verification = await decryptBackupStream({ source: backup.archive, destination: restore.destination, key: backup.key });
-      await restore.completed;
+      const verification = await settleStreamAndTransport(
+        decryptBackupStream({ source: backup.archive, destination: restore.destination, key: backup.key }),
+        restore.completed,
+      );
       restoredStore = await this.createIsolatedStore(target);
       const restored = await this.#snapshot(restoredStore);
       if (!sameSnapshot(backup.source, restored)) throw coded("postgres_backup_semantic_mismatch");
@@ -117,6 +121,7 @@ export class PostgresBackupRestoreDriver {
     const target = await this.transport.createIsolatedTarget();
     try {
       const restore = await this.transport.restore(target);
+      const completed = restore.completed.catch(() => {});
       const tampered = Buffer.from(backup.key);
       tampered[0] ^= 0xff;
       try {
@@ -127,7 +132,7 @@ export class PostgresBackupRestoreDriver {
       } finally {
         tampered.fill(0);
         restore.abort?.();
-        await restore.completed.catch(() => {});
+        await completed;
       }
       throw coded("postgres_backup_authentication_not_enforced");
     } finally {
@@ -166,6 +171,13 @@ export class PostgresBackupRestoreDriver {
       return Object.freeze({ migrationRows, tableCounts, checksum: `sha256:${digest}` });
     });
   }
+}
+
+async function settleStreamAndTransport(stream, completed) {
+  const [streamResult, transportResult] = await Promise.allSettled([stream, completed]);
+  if (transportResult.status === "rejected") throw transportResult.reason;
+  if (streamResult.status === "rejected") throw streamResult.reason;
+  return streamResult.value;
 }
 
 function sameSnapshot(left, right) {

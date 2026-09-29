@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
@@ -16,7 +17,7 @@ test("recommended startup migrates isolated PostgreSQL and serves health over th
 
   const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
   const startupScript = join(repositoryRoot, "scripts/start-workbench-server.sh");
-  const temporaryRoot = await mkdtemp("/private/tmp/looloomi-production-entrypoint-");
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "looloomi-production-entrypoint-"));
   const cloudSecrets = join(temporaryRoot, "cloud-secrets");
   await mkdir(cloudSecrets, { mode: 0o700 });
 
@@ -25,6 +26,7 @@ test("recommended startup migrates isolated PostgreSQL and serves health over th
     env: {
       ...process.env,
       WORKBENCH_POSTGRES_URL: connectionString,
+      WORKBENCH_NODE_BIN: process.execPath,
       WORKBENCH_MANAGED_POSTGRES: "1",
       WORKBENCH_SKIP_WEB_BUILD: "1",
       WORKBENCH_ENV_FILE: join(temporaryRoot, "absent.env"),

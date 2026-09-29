@@ -550,7 +550,7 @@ function dockerBackupTransport({ container, user, password, sourceDatabase, sour
     const child = spawn("docker", ["exec", "-i", "-e", `PGPASSWORD=${password}`, container, ...args], {
       stdio: [stdin, stdout, "pipe"],
     });
-    const completed = childExit(child, "postgres_backup_transport_failed");
+    const completed = childExit(child, "postgres_backup_transport_failed", password);
     return { child, completed };
   };
   return Object.freeze({
@@ -585,7 +585,7 @@ function dockerBackupTransport({ container, user, password, sourceDatabase, sour
   });
 }
 
-function childExit(child, failureCode) {
+function childExit(child, failureCode, secret) {
   const chunks = [];
   let bytes = 0;
   child.stderr.on("data", (chunk) => {
@@ -594,10 +594,20 @@ function childExit(child, failureCode) {
     else child.kill("SIGKILL");
   });
   return new Promise((resolve, reject) => {
-    child.once("error", () => reject(coded(failureCode)));
+    child.once("error", (cause) => {
+      const error = coded(failureCode);
+      error.message = `${failureCode}: ${cause.code || "spawn_failed"}`;
+      reject(error);
+    });
     child.once("exit", (code) => {
       if (code === 0) resolve();
-      else reject(coded(failureCode));
+      else {
+        const stderr = Buffer.concat(chunks).toString("utf8");
+        const diagnostic = (secret ? stderr.replaceAll(secret, "[redacted]") : stderr).trim().slice(0, 2000);
+        const error = coded(failureCode);
+        error.message = `${failureCode}: exit=${code}${diagnostic ? ` ${diagnostic}` : ""}`;
+        reject(error);
+      }
     });
   });
 }

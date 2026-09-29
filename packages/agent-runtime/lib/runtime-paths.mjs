@@ -13,10 +13,6 @@ export function isPathInside(parent, candidate) {
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
-function temporaryRoots() {
-  return [...new Set([tmpdir(), "/tmp", "/private/tmp"].map((path) => resolve(path)))];
-}
-
 function validateRuntimeOverride(rawOverride, { isTestMode }) {
   if (!rawOverride) {
     if (isTestMode) throw new Error("test_runtime_override_required");
@@ -26,9 +22,8 @@ function validateRuntimeOverride(rawOverride, { isTestMode }) {
   if (!isAbsolute(rawOverride)) throw new Error("runtime_override_must_be_absolute");
 
   const candidate = resolve(rawOverride);
-  const isDedicatedTemporaryPath = temporaryRoots().some((root) => (
-    candidate !== root && isPathInside(root, candidate)
-  ));
+  const tempRoot = resolve(tmpdir());
+  const isDedicatedTemporaryPath = candidate !== tempRoot && isPathInside(tempRoot, candidate);
   if (!isDedicatedTemporaryPath || isPathInside(derivedRepoRoot, candidate)) {
     throw new Error("runtime_override_must_be_temporary");
   }

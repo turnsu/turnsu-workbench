@@ -7,8 +7,9 @@ import { verifyCrossWorkReferences } from './verify-cross-work-references.mjs';
 import test from 'node:test';
 import { createServer } from 'node:http';
 import { mkdtemp, rm, readFile, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { FilesystemObjectStore } from '../../src/storage/filesystem-object-store.mjs';
-import { join } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { verifyTeamWork } from '../../../../packages/agent-host/test/verify-team-work.mjs';
 import { verifyFileDeletions } from '../../../../packages/agent-host/test/verify-file-deletions.mjs';
@@ -34,7 +35,7 @@ test('two native members synchronize files, continue declared team work, and res
   assert.match(new URL(connectionString).pathname, /_test$/);
   const pool = new Pool({ connectionString, max: 5 });
   const store = new ProductPostgresStore({ pool }); await store.runMigrations();
-  const directory = await mkdtemp('/private/tmp/turnsu-desktop-cloud-');
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-desktop-cloud-'));
   const server = createServer(); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
   const sessionStore = new PostgresWorkbenchSessionStore({ store });
@@ -173,7 +174,8 @@ test('two native members synchronize files, continue declared team work, and res
   const uiState = process.env.TURNSU_FILE_DESKTOP_UI_STATE;
   if (uiState) process.stderr.write('Native window fixture preparing\n');
   if (uiState) {
-    assert.match(uiState, /^\/private\/tmp\/turnsu-file-ui-[a-z0-9-]+$/);
+    assert.ok(isAbsolute(uiState) && dirname(resolve(uiState)) === resolve(tmpdir()), 'UI state must be a direct child of the system temporary directory');
+    assert.match(basename(uiState), /^turnsu-file-ui-[a-z0-9-]+$/);
     await mkdir(uiState, { mode: 0o700 });
     const uiCloud = new DesktopCloud({ directory: uiState });
     await authorize(uiCloud, browserHeaders); await uiCloud.close();

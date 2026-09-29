@@ -2,8 +2,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-NODE_BIN="${WORKBENCH_NODE_BIN:-$(command -v node)}"
-NPM_BIN="${WORKBENCH_NPM_BIN:-$(command -v npm)}"
+NODE_BIN="${WORKBENCH_NODE_BIN:-}"
+NPM_BIN="${WORKBENCH_NPM_BIN:-}"
+if [[ -z "$NODE_BIN" ]]; then NODE_BIN="$(command -v node || true)"; fi
+if [[ -z "$NPM_BIN" ]]; then NPM_BIN="$(command -v npm || true)"; fi
 ENV_FILE="${WORKBENCH_ENV_FILE:-$ROOT_DIR/.env}"
 
 if [[ ! -x "$NODE_BIN" ]]; then
@@ -28,7 +30,7 @@ env_value() {
 
 POSTGRES_URL="${WORKBENCH_POSTGRES_URL:-$(env_value WORKBENCH_POSTGRES_URL)}"
 OBJECT_STORE_ROOT="${WORKBENCH_OBJECT_STORE_ROOT:-$(env_value WORKBENCH_OBJECT_STORE_ROOT)}"
-OBJECT_STORE_ROOT="${OBJECT_STORE_ROOT:-${HOME}/Library/Application Support/Looloomi/workbench-objects}"
+OBJECT_STORE_ROOT="${OBJECT_STORE_ROOT:-${XDG_DATA_HOME:-${HOME}/.local/share}/turnsu-workbench/objects}"
 
 if [[ -z "$POSTGRES_URL" ]]; then
   echo "workbench_postgres_url_missing:set_WORKBENCH_POSTGRES_URL" >&2

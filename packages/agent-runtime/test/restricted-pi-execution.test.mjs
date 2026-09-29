@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { InMemoryCredentialStore } from '@earendil-works/pi-ai';
 import { createFauxCore, fauxAssistantMessage } from '@earendil-works/pi-ai/providers/faux';
@@ -12,7 +13,7 @@ import { BorrowedAgentAttempts } from '../../agent-host/borrowed-agent-attempts.
 const call = (name, args) => fauxAssistantMessage([{ type: 'toolCall', id: name + Math.random(), name, arguments: args }], { stopReason: 'toolUse' });
 const done = () => fauxAssistantMessage([{ type: 'text', text: 'Ready for owner review.' }], { stopReason: 'stop' });
 async function fixture(t) {
-  const root = await mkdtemp('/private/tmp/turnsu-restricted-pi-'), cwd = join(root, 'work'), agentDir = join(root, 'agent');
+  const root = await mkdtemp(join(tmpdir(), 'turnsu-restricted-pi-')), cwd = join(root, 'work'), agentDir = join(root, 'agent');
   await mkdir(cwd); await mkdir(join(agentDir, 'extensions'), { recursive: true });
   await writeFile(join(cwd, 'AGENTS.md'), 'PRIVATE_PROJECT_CONTEXT_DO_NOT_SHARE');
   await writeFile(join(agentDir, 'AGENTS.md'), 'PRIVATE_GLOBAL_CONTEXT_DO_NOT_SHARE');

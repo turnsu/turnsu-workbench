@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createServer } from 'node:http';
 import { mkdtemp, rm, readFile, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Pool } from 'pg';
 import { DesktopCloud } from '../../../../packages/agent-host/cloud.mjs';
 import { ProductPostgresStore } from '../../src/store/postgres/index.mjs';
@@ -18,7 +20,7 @@ test('desktop browser authorization opens actual team projects, survives restart
   assert.match(new URL(connectionString).pathname, /_test$/);
   const pool = new Pool({ connectionString, max: 5 });
   const store = new ProductPostgresStore({ pool }); await store.runMigrations();
-  const directory = await mkdtemp('/private/tmp/turnsu-desktop-cloud-');
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-desktop-cloud-'));
   const server = createServer(); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
   const sessionStore = new PostgresWorkbenchSessionStore({ store });

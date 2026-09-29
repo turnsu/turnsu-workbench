@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   createDefaultAuthPersistence,
@@ -84,7 +86,7 @@ test("PostgreSQL composition consumes the PG model, memory, and Artifact owners 
     store,
     runner: Object.freeze({ kind: "injected-postgres-runner" }),
     automationScheduler: Object.freeze({ async pollDue() { return { inspected: 0 }; } }),
-    objectStoreRoot: "/private/tmp/looloomi-postgres-artifact-composition-test",
+    objectStoreRoot: join(tmpdir(), "looloomi-postgres-artifact-composition-test"),
   });
   assert.ok(composition.modelCatalog instanceof PostgresModelCatalog);
   assert.equal(composition.memoryService?.persistence?.constructor?.name, "PostgresMemoryPersistence");

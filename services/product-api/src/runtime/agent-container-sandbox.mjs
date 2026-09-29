@@ -132,7 +132,14 @@ export class AgentContainerSandbox {
       await mkdir(this.#tempRoot, { recursive: true, mode: 0o700 });
       root = await mkdtemp(join(this.#tempRoot, "execution-"));
       const outputRoot = join(root, "output");
-      await mkdir(outputRoot, { mode: 0o777 });
+      const hostUid = process.getuid?.();
+      const hostGid = process.getgid?.();
+      const hostOwnedOutput = Number.isSafeInteger(hostUid) && hostUid > 0
+        && Number.isSafeInteger(hostGid) && hostGid >= 0;
+      // A host-owned, private bind mount lets the unprivileged Worker write
+      // artifacts and lets the host remove nested files after it exits.
+      await mkdir(outputRoot, { mode: hostOwnedOutput ? 0o700 : 0o777 });
+      if (!hostOwnedOutput) await chmod(outputRoot, 0o777);
       endpoint = await this.#gatewayServer.open({
         invocationId: request.invocationId,
         attemptId: request.attemptId,
@@ -160,6 +167,7 @@ export class AgentContainerSandbox {
         containerName,
         invocationId: request.invocationId,
         outputRoot,
+        containerUser: hostOwnedOutput ? `${hostUid}:${hostGid}` : "65534:65534",
         limits: { ...this.#limits, timeoutMs: request.limits.timeoutMs, maxOutputBytes: request.limits.maxOutputBytes },
       });
       const result = await executeAgentContainer({
@@ -301,10 +309,12 @@ export function buildAgentContainerArguments({
   containerName,
   invocationId,
   outputRoot,
+  containerUser = "65534:65534",
   limits,
 } = {}) {
   if (!DIGEST_PINNED_CONTAINER_IMAGE.test(image || "")
-    || ![outputRoot, invocationId].every((value) => typeof value === "string" && value.length > 0)) {
+    || ![outputRoot, invocationId].every((value) => typeof value === "string" && value.length > 0)
+    || !/^[1-9][0-9]*:[0-9]+$/.test(containerUser)) {
     throw new TypeError("agent_container_arguments_invalid");
   }
   const checked = validateLimits({ ...DEFAULT_LIMITS, ...limits });
@@ -319,6 +329,7 @@ export function buildAgentContainerArguments({
       tmpfsBytes: checked.tmpfsBytes,
       fileSizeBytes: checked.maxOutputBytes,
       interactive: true,
+      user: containerUser,
     }),
     "--env", "HOME=/tmp",
     "--env", "HTTP_PROXY=",

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 
 // Exercise the generated chunk, including its SDK resource lookup, without an account or inference.
 // Pass the local-agent-host directory from the built app. Run after build-host.mjs.
@@ -14,7 +15,7 @@ const bundle = resolve(process.argv[2]);
 const names = (await readdir(join(bundle, 'chunks'))).filter(name => /^borrowed-pi-runtime-.*\.mjs$/.test(name));
 assert.equal(names.length, 1, 'build output must contain exactly one current borrowed runtime');
 const { BorrowedPiRuntime } = await import(pathToFileURL(join(bundle, 'chunks', names[0])));
-const directory = await mkdtemp('/private/tmp/turnsu-bundled-pi-');
+const directory = await mkdtemp(join(tmpdir(), 'turnsu-bundled-pi-'));
 let runtime, execution;
 try {
   const provider = 'turnsu-bundle-test', modelId = 'controlled';

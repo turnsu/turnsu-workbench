@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { chmod, mkdtemp, mkdir, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -25,7 +26,7 @@ function outputDirectory(args) {
 }
 
 test("attachment extraction sandbox removes every prior owned work directory on startup", async (t) => {
-  const root = await mkdtemp("/private/tmp/looloomi-attachment-recovery-");
+  const root = await mkdtemp(join(tmpdir(), "looloomi-attachment-recovery-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const managedRoot = join(root, MANAGED_DIRECTORY);
   const stale = join(managedRoot, "workbench-attachment-ABC123");
@@ -62,8 +63,8 @@ test("attachment extraction sandbox removes every prior owned work directory on 
 });
 
 test("attachment extraction startup refuses a symlinked managed root without deleting its target", async (t) => {
-  const root = await mkdtemp("/private/tmp/looloomi-attachment-symlink-");
-  const outside = await mkdtemp("/private/tmp/looloomi-attachment-outside-");
+  const root = await mkdtemp(join(tmpdir(), "looloomi-attachment-symlink-"));
+  const outside = await mkdtemp(join(tmpdir(), "looloomi-attachment-outside-"));
   t.after(() => Promise.all([
     rm(root, { recursive: true, force: true }),
     rm(outside, { recursive: true, force: true }),
@@ -80,7 +81,7 @@ test("attachment extraction startup refuses a symlinked managed root without del
 });
 
 test("Docker diagnostics with host paths never cross the attachment sandbox boundary", async (t) => {
-  const root = await mkdtemp("/private/tmp/looloomi-attachment-diagnostic-");
+  const root = await mkdtemp(join(tmpdir(), "looloomi-attachment-diagnostic-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const spawnProcess = () => {
     const child = new FakeChild();
@@ -106,7 +107,7 @@ test("Docker diagnostics with host paths never cross the attachment sandbox boun
 });
 
 test("structured worker validation survives a nonzero Docker exit without leaking diagnostics", async (t) => {
-  const root = await mkdtemp("/private/tmp/looloomi-attachment-validation-");
+  const root = await mkdtemp(join(tmpdir(), "looloomi-attachment-validation-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const spawnProcess = (_binary, args) => {
     const child = new FakeChild();
@@ -136,7 +137,7 @@ test("structured worker validation survives a nonzero Docker exit without leakin
 });
 
 test("Docker unavailability fails closed and never falls back to host extraction", async (t) => {
-  const root = await mkdtemp("/private/tmp/looloomi-attachment-no-fallback-");
+  const root = await mkdtemp(join(tmpdir(), "looloomi-attachment-no-fallback-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const spawnProcess = () => {
     const child = new FakeChild();

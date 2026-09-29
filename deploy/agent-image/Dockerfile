@@ -1,7 +1,10 @@
 FROM node:22.22.3-bookworm-slim@sha256:e21fc383b50d5347dc7a9f1cae45b8f4e2f0d39f7ade28e4eef7d2934522b752
 
 LABEL org.opencontainers.image.title="Turnsu Agent Worker" \
-      org.opencontainers.image.description="Isolated Pi worker behind the Product gateway"
+      org.opencontainers.image.description="Isolated Pi worker behind the Product gateway" \
+      com.looloomi.pi.version="0.85.1" \
+      com.looloomi.pi-subagent.version="0.4.8" \
+      com.looloomi.pi-workflow.version="0.10.1"
 ENV NODE_ENV=production
 WORKDIR /opt/turnsu
 COPY packages/contracts ./packages/contracts

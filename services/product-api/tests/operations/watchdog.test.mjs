@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import { runLocalWatchdog } from "../../operations/watchdog.mjs";
 
 test("watchdog persists bounded state, alerts on third consecutive failure, and clears on recovery", async (t) => {
-  const root = await mkdtemp("/private/tmp/looloomi-watchdog-");
+  const root = await mkdtemp(join(tmpdir(), "looloomi-watchdog-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const statePath = `${root}/state/watchdog.json`;
   const alerts = [];

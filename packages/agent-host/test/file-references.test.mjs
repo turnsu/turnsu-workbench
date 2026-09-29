@@ -48,7 +48,7 @@ test('unreadable, linked, binary, oversized and outside files never dispatch; in
   await writeFile(join(f.projectPath, 'binary'), Buffer.from([0, 1]));
   await writeFile(join(f.projectPath, 'encoding'), Buffer.from([0xff]));
   await writeFile(join(f.projectPath, 'large.txt'), 'a'.repeat(65537));
-  for (const path of ['../private.txt', '/private/tmp/private.txt', '.env', 'escape.txt', 'hard.txt', 'missing.txt', 'binary', 'encoding', 'large.txt']) {
+  for (const path of ['../private.txt', join(f.root, 'private.txt'), '.env', 'escape.txt', 'hard.txt', 'missing.txt', 'binary', 'encoding', 'large.txt']) {
     await assert.rejects(f.host.command('session.send', { sessionId: f.session.id, inputId: path, text: 'Use file', references: [path] }));
   }
   const draft = { projectId: f.project.id, sessionId: f.session.id, text: '保留', references: ['missing.txt'] };

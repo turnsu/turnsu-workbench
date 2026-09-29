@@ -22,7 +22,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, readFile, writeFile, rm, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 import { Pool } from "pg";
@@ -546,7 +546,8 @@ test("Product HTTP resumes a private Skill package across service restart and sa
     // No UI-specific responses or model calls: the packaged desktop uses its normal host.
     const uiState = process.env.TURNSU_LOOP_DESKTOP_UI_STATE;
     if (uiState) {
-      assert.match(uiState, /^\/private\/tmp\/turnsu-loop-ui-[a-z0-9-]+$/);
+      assert.ok(isAbsolute(uiState) && dirname(resolve(uiState)) === resolve(tmpdir()), "UI state must be a direct child of the system temporary directory");
+      assert.match(basename(uiState), /^turnsu-loop-ui-[a-z0-9-]+$/);
       await mkdir(uiState, { mode: 0o700 });
       await writeFile(join(uiState, 'ready.json'), JSON.stringify({ desktopState, origin: authService.publicOrigin, projectPath: join(root, 'loop-capture-project') }), { mode: 0o600 });
       const deadline = Date.now() + 20 * 60_000;

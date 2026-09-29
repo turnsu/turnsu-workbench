@@ -201,6 +201,7 @@ async function runIntegrationTest(connectionString) {
     "tests/http/postgres-native-client-auth-http.integration.test.mjs",
     "tests/http/postgres-desktop-cloud.integration.test.mjs",
     "tests/http/postgres-project-files.integration.test.mjs",
+    "tests/http/postgres-skill-upload.integration.test.mjs",
   ];
   const selected = process.env.WORKBENCH_POSTGRES_TEST_FILE
     ? [process.env.WORKBENCH_POSTGRES_TEST_FILE]

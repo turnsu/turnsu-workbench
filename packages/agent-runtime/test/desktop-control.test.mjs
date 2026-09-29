@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openNativeProductSession, writeNativeProfile } from '../integrations/native/session.mjs';
 import { NATIVE_PRODUCT_TOOLS } from '../integrations/native/product-tools.mjs';
 
 const envelope = data => new Response(JSON.stringify({ schemaVersion: 'workbench-api-v1', requestId: 'test-request', data }), { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 test('desktop consent uses the same rotating native credential but never becomes an Agent tool', async t => {
-  const root = await mkdtemp('/private/tmp/turnsu-desktop-control-'), path = join(root, 'session.json');
+  const root = await mkdtemp(join(tmpdir(), 'turnsu-desktop-control-')), path = join(root, 'session.json');
   t.after(() => rm(root, { recursive: true, force: true }));
   const tokens = { accessToken: 'a'.repeat(43), refreshToken: 'b'.repeat(43), accessTokenExpiresAt: new Date(Date.now() - 1000).toISOString(), refreshTokenExpiresAt: new Date(Date.now() + 60000).toISOString(), clientSessionId: 'native-test', workspaceId: 'workspace-test' };
   await writeNativeProfile(path, { baseUrl: 'http://127.0.0.1:8798', tokens }, { create: true });

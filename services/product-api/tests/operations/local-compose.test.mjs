@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -48,17 +50,18 @@ test("startup requires a PostgreSQL DSN and migrates before accepting traffic", 
 
 test("PostgreSQL restore accepts only explicit database and object _restore_test targets", () => {
   const target = "postgresql://operator:secret@127.0.0.1:5432/looloomi_restore_test?sslmode=disable";
+  const validObjectRoot = join(tmpdir(), "objects_restore_test");
   assert.equal(parsePostgresConnection(target).database, "looloomi_restore_test");
-  assert.equal(assertRestoreTarget(target, "/private/tmp/objects_restore_test").database, "looloomi_restore_test");
+  assert.equal(assertRestoreTarget(target, validObjectRoot).database, "looloomi_restore_test");
   assert.throws(
     () => assertRestoreTarget(
       "postgresql://operator:secret@127.0.0.1:5432/looloomi",
-      "/private/tmp/objects_restore_test",
+      validObjectRoot,
     ),
     /postgres_restore_target_must_end_restore_test/,
   );
   assert.throws(
-    () => assertRestoreTarget(target, "/private/tmp/objects"),
+    () => assertRestoreTarget(target, join(tmpdir(), "objects")),
     /object_restore_target_must_end_restore_test/,
   );
 });

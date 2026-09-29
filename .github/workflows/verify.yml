@@ -1,0 +1,107 @@
+name: Verify workbench
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  local-workbench:
+    name: Local workbench · Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Install locked dependencies
+        run: npm run setup
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - name: Test local Host and desktop logic
+        run: npm test
+      - name: Check 10,000-session startup, paging, and Host memory budget
+        run: node packages/agent-host/test/verify-history-budget.mjs
+      - name: Build desktop UI and private Host
+        run: npm run build
+      - name: Exercise bundled Agent runtime
+        run: node apps/desktop/scripts/verify-host-bundle.mjs apps/desktop/host-dist
+
+  team-and-delivery:
+    name: Optional team service and delivery build · Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Install locked dependencies
+        run: npm run setup -- --team
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - name: Test runtime, Product API, and team web
+        run: |
+          npm test --prefix packages/agent-runtime
+          npm run test:team
+      - name: Build team web
+        run: npm run build --prefix apps/team-web
+      - name: Test isolated PostgreSQL behavior
+        run: |
+          docker pull postgres@sha256:80dee66a0ba95a54d143008143e5d7ef628c0e8d5e0666b39d13c8bac3377953
+          npm run test:postgres:isolated --prefix services/product-api
+      - name: Build worker image without publishing
+        run: docker build --tag turnsu-worker:ci -f deploy/agent-image/Dockerfile .
+      - name: Run real isolated Pi and dynamic child workflows
+        run: |
+          WORKBENCH_AGENT_DOCKER_INTEGRATION=1 \
+          WORKBENCH_AGENT_IMAGE="$(docker image inspect --format '{{.Id}}' turnsu-worker:ci)" \
+          node --test services/product-api/tests/runtime/agent-container-sandbox.integration.test.mjs
+
+  desktop-packages:
+    name: Desktop package · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2022]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Install locked dependencies and Electron
+        run: npm run setup
+      - name: Test local Host and desktop logic
+        run: npm test
+      - name: Test native Electron Host and protected credentials
+        run: npm run test:electron --prefix apps/desktop
+      - name: Build unsigned desktop package
+        run: npm run package
+      - name: Preserve macOS app permissions
+        if: runner.os == 'macOS'
+        run: tar -czf turnsu-workbench-macos.tar.gz -C .build/turnsu-electron .
+      - name: Archive Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path '.build/turnsu-electron/*' -DestinationPath 'turnsu-workbench-windows.zip'
+      - name: Keep unsigned package for review
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: turnsu-workbench-${{ matrix.os }}-unsigned
+          path: turnsu-workbench-*
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
