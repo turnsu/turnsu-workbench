@@ -189,7 +189,10 @@ export class SharedFiles {
   }
   async privateArea(b) {
     const area = join(await this.root(b), '.turnsu-local'); await mkdir(area, { mode: 0o700 }).catch(e => { if (e.code !== 'EEXIST') throw e; });
-    const info = await lstat(area); if (!info.isDirectory() || info.isSymbolicLink() || info.mode & 0o077) throw new Error('sync_unsafe_path');
+    const info = await lstat(area);
+    // Windows reports synthetic POSIX mode bits; access is governed by the
+    // project's NTFS ACL, so those bits cannot establish directory privacy.
+    if (!info.isDirectory() || info.isSymbolicLink() || (process.platform !== 'win32' && info.mode & 0o077)) throw new Error('sync_unsafe_path');
     return area;
   }
   async install(b, revision, bytes) {
