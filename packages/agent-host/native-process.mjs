@@ -10,8 +10,10 @@ export function nativeCommand(binary, args, nodeBinary) {
     'codex.cmd': ['@openai/codex/bin/codex.js'],
     'pi.cmd': ['@mariozechner/pi-coding-agent/dist/cli.js', '@earendil-works/pi-coding-agent/dist/cli.js'],
     'claude.cmd': ['@anthropic-ai/claude-code/cli.js'],
+    'opencode.cmd': ['opencode-ai/bin/opencode.exe'],
   }[basename(binary).toLowerCase()];
   const entry = entries?.map(p => join(dirname(binary), 'node_modules', p)).find(p => existsSync(p));
+  if (entry?.toLowerCase().endsWith('.exe')) return { file: entry, args, entry };
   if (!entry || !nodeBinary) throw new Error('无法启动这个 Windows CLI，请检查 Node.js 与原生 Agent 的安装。');
   return { file: nodeBinary, args: [entry, ...args], entry };
 }

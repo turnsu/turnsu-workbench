@@ -130,3 +130,8 @@
 .agentPreferenceActions { display: flex; align-items: center; gap: 2px; }
 .agentPreferenceActions button { font-size: 10px; color: #697064; padding: 2px 5px; white-space: nowrap; }
 .agentPreferenceActions button:disabled { opacity: .72; }
+.fileEntry { display: flex; align-items: center; gap: 2px; }
+.fileEntry > button:first-child { flex: 1; min-width: 0; }
+.fileEntry > .nativeFileAction { width: auto; flex: none; color: #647454; font-size: 11px; white-space: nowrap; }
+.referencePreviewAction { display: flex; align-items: center; gap: 6px; padding: 8px 0; }
+.importNotice { font-size: 12px; color: #4d6745; background: #edf4e9; border-radius: 7px; padding: 9px 11px; line-height: 1.5; }

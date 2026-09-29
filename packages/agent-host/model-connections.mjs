@@ -1,5 +1,5 @@
 export const gatewayDefault = 'https://gateway.turnsu.org/v1';
-export const protocolAgents = Object.freeze({ responses: ['codex', 'pi'], messages: ['claude', 'pi'], chat: ['pi'] });
+export const protocolAgents = Object.freeze({ responses: ['codex', 'pi'], messages: ['claude', 'pi'], chat: ['pi', 'opencode'] });
 
 export function normalizeConnection(input) {
   if (!input || typeof input !== 'object') throw new Error('请填写模型连接。');
@@ -53,6 +53,6 @@ export class ModelConnections {
   list() { return [...this.profiles.values()].map(publicConnection); }
   async models(id, agent) {
     const profile = this.get(id, agent), models = await discoverModels(profile);
-    return agent === 'pi' ? models.map(m => ({ ...m, id: `turnsu-${id}/${m.id}`, provider: `turnsu-${id}`, modelId: m.id })) : models;
+    return ['pi', 'opencode'].includes(agent) ? models.map(m => ({ ...m, id: `turnsu-${id}/${m.id}`, provider: `turnsu-${id}`, modelId: m.id })) : models;
   }
 }

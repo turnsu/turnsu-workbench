@@ -34,12 +34,31 @@ async function invoke(operation, args = {}) {
   if (configuring) throw new Error('模型连接正在更新，请稍后重试。');
   switch (operation) {
     case 'local_command':
-      if (!args || typeof args.method !== 'string' || args.method.length > 100 || args.method === 'project.open' || args.method === 'cloud.authorization' || args.method.startsWith('desktop.') || JSON.stringify(args).length > 150_000) throw new Error('不支持这个桌面操作。');
+      if (!args || typeof args.method !== 'string' || args.method.length > 100 || ['project.open', 'files.import', 'files.resolve', 'cloud.authorization'].includes(args.method) || args.method.startsWith('desktop.') || JSON.stringify(args).length > 150_000) throw new Error('不支持这个桌面操作。');
       return host.request(args.method, args.args);
     case 'open_project': {
       const selected = await dialog.showOpenDialog(window, { title: '打开本地项目', properties: ['openDirectory'] });
       if (selected.canceled || !selected.filePaths[0]) return null;
       return host.request('project.open', { path: selected.filePaths[0] });
+    }
+    case 'import_files': {
+      if (typeof args.projectId !== 'string') throw new Error('请先打开本地项目。');
+      const selected = await dialog.showOpenDialog(window, { title: '导入项目资料', properties: ['openFile', 'multiSelections'] });
+      if (selected.canceled || !selected.filePaths.length) return null;
+      return host.request('files.import', { projectId: args.projectId, paths: selected.filePaths });
+    }
+    case 'open_project_file': {
+      if (typeof args.projectId !== 'string' || typeof args.path !== 'string') throw new Error('请选择项目文件。');
+      const file = await host.request('files.resolve', { projectId: args.projectId, path: args.path });
+      if (!/\.(?:txt|md|markdown|csv|tsv|pdf|docx|xlsx|pptx|png|jpe?g|webp)$/i.test(file.path)) throw new Error('这种文件请从项目文件夹手动打开。');
+      const failure = await shell.openPath(file.path);
+      if (failure) throw new Error(`系统无法打开此文件：${failure}`);
+      return { opened: true };
+    }
+    case 'reveal_project_file': {
+      if (typeof args.projectId !== 'string' || typeof args.path !== 'string') throw new Error('请选择项目文件。');
+      const file = await host.request('files.resolve', { projectId: args.projectId, path: args.path });
+      shell.showItemInFolder(file.path); return { opened: true };
     }
     case 'open_cloud_authorization': {
       const { url } = await host.request('cloud.authorization');

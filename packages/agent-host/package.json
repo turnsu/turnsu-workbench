@@ -10,6 +10,8 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.2.132"
+    "@agentclientprotocol/sdk": "1.5.1",
+    "@anthropic-ai/claude-agent-sdk": "0.2.132",
+    "zod": "4.2.0"
   }
 }
