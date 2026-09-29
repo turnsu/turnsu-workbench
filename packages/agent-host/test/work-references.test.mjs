@@ -39,18 +39,23 @@ async function fixture(t) {
     assert.equal(method, 'turn/start'); sent.push(params.input[0].text); return { turn: { id: 'turn' } };
   } });
   let host, project, session;
-  function open() {
-    host = new LocalAgentHost({ directory: join(root, 'state'), connectionFactory }); host.cloud = cloud;
+  async function open() {
+    host = new LocalAgentHost({ directory: join(root, 'state'), connectionFactory });
+    // Reopening a saved team session starts the Host-owned Work timer. Close it
+    // before replacing Work with this test's controlled cloud dependency.
+    await host.work?.close();
+    await host.cloud?.close();
+    host.cloud = cloud;
     host.work = new SharedWork({ db: host.db, cloud, projectBinding: () => ({ remote_id: 'remote', identity: JSON.stringify(identity) }), session: id => host.session(id) });
   }
-  open(); project = await host.command('project.open', { path: join(root, 'project') });
+  await open(); project = await host.command('project.open', { path: join(root, 'project') });
   session = await host.command('session.create', { projectId: project.id, agent: 'codex' });
   host.db.prepare('INSERT INTO shared_work_sessions(session_id,work_item_id,identity,actor_user_id) VALUES(?,?,?,?)').run(session.id, 'work', JSON.stringify(identity), 'member');
   t.after(async () => { await host.close(); await rm(root, { recursive: true, force: true }); });
   return { get host() { return host; }, project, session, entry, decision, sent, receipts, submissions, sourceEntry,
     denySource() { sourceDenied = true; }, online() { offline = false; },
     async finish(id = 'answer') { host.message(session.id, id, 'assistant', '根据来源整理的结果'); host.updateSession(session.id, 'idle'); host.work.publishFinal(session.id, 'idle'); await host.work.flush(session.id); },
-    lose() { lost = true; }, deny() { deny = true; }, offline() { offline = true; }, async reopen() { await host.close(); open(); } };
+    lose() { lost = true; }, deny() { deny = true; }, offline() { offline = true; }, async reopen() { await host.close(); await open(); } };
 }
 const select = ({ text, byteLength, ...value }) => value;
 

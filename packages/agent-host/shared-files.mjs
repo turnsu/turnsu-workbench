@@ -6,6 +6,7 @@ import { join, dirname } from 'node:path';
 const MAX_BYTES = 8 * 1024 * 1024;
 const DEEP_SCAN_MS = 10 * 60 * 1000;
 const MAX_CACHED_PROJECTS = 8;
+const SHARED_PROJECT_COLUMNS = 'project_id,remote_id,identity,title,CAST(device AS TEXT) AS device,CAST(inode AS TEXT) AS inode,paused,status,error,conflicts,issues,synced_at,scope';
 const hash = bytes => 'sha256:' + createHash('sha256').update(bytes).digest('hex');
 function validPath(path) {
   return typeof path === 'string' && path.length > 0 && path.length <= 512 && path === path.normalize('NFC') && path.split('/').every(p => p && p.length <= 128 && !p.startsWith('.') && !/[\\\x00-\x1f\x7f:<>"|?*]/u.test(p) && !/[. ]$/u.test(p) && !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu.test(p));
@@ -32,14 +33,14 @@ export class SharedFiles {
     // Metadata only. File bodies and Agent history must not accumulate in the Host.
     this.fingerprints = new Map(); this.deepScanAt = new Map(); this.polling = null;
   }
-  binding(id) { const b = this.db.prepare('SELECT * FROM shared_projects WHERE project_id=?').get(id); if (!b) throw new Error('这个项目尚未加入团队共享。'); return b; }
+  binding(id) { const b = this.db.prepare(`SELECT ${SHARED_PROJECT_COLUMNS} FROM shared_projects WHERE project_id=?`).get(id); if (!b) throw new Error('这个项目尚未加入团队共享。'); return b; }
   includes(b, path, ancestors = false) {
     const scope = b.scope ? JSON.parse(b.scope) : null;
     return !scope || scope.some(item => path === item.path || (item.kind === 'directory' && path.startsWith(item.path + '/')) || (ancestors && item.path.startsWith(path + '/')));
   }
   assertIncluded(b, path) { if (!this.includes(b, path)) throw new Error('这个文件不在已确认的共享范围内。'); }
   snapshot(id) {
-    const b = this.db.prepare('SELECT * FROM shared_projects WHERE project_id=?').get(id); if (!b) return null;
+    const b = this.db.prepare(`SELECT ${SHARED_PROJECT_COLUMNS} FROM shared_projects WHERE project_id=?`).get(id); if (!b) return null;
     return { projectId: id, title: b.title, scope: b.scope ? JSON.parse(b.scope) : null, paused: Boolean(b.paused), status: b.status, error: b.error, conflicts: JSON.parse(b.conflicts), issues: JSON.parse(b.issues), syncedAt: b.synced_at,
       pending: this.db.prepare('SELECT count(*) AS n FROM shared_outbox WHERE project_id=?').get(id).n };
   }
@@ -52,9 +53,9 @@ export class SharedFiles {
     const remote = await this.cloud.fileCall(identity, 'turnsu_project', { pathParams: { projectId: remoteId } });
     if (remote.data.status === 'archived') throw new Error('项目已归档，不能开始同步。');
     if (scope === undefined && (await readdir(project.path)).length) throw new Error('请选择一个空文件夹，或明确选择已有项目中的共享范围。');
-    const root = await lstat(project.path);
+    const root = await lstat(project.path, { bigint: true });
     if (!root.isDirectory() || root.isSymbolicLink()) throw new Error('请选择一个实际文件夹。');
-    const binding = { project_id: id, device: root.dev, inode: root.ino };
+    const binding = { project_id: id, device: String(root.dev), inode: String(root.ino) };
     await this.root(binding);
     for (const item of scope || []) {
       const info = await lstat(await this.target(binding, item.path));
@@ -65,12 +66,12 @@ export class SharedFiles {
     this.change(id, 'pending'); return this.snapshot(id);
   }
   async root(b) {
-    const path = this.project(b.project_id).path, info = await lstat(path);
-    if (!info.isDirectory() || info.isSymbolicLink() || info.dev !== b.device || info.ino !== b.inode) throw new Error('sync_root_changed');
+    const path = this.project(b.project_id).path, info = await lstat(path, { bigint: true });
+    if (!info.isDirectory() || info.isSymbolicLink() || String(info.dev) !== String(b.device) || String(info.ino) !== String(b.inode)) throw new Error('sync_root_changed');
     // macOS may expose the same directory via /var and /private/var. Keep the
     // device/inode fence, but work from its canonical path for child checks.
-    const canonical = await realpath(path), target = await lstat(canonical);
-    if (!target.isDirectory() || target.dev !== b.device || target.ino !== b.inode) throw new Error('sync_root_changed');
+    const canonical = await realpath(path), target = await lstat(canonical, { bigint: true });
+    if (!target.isDirectory() || String(target.dev) !== String(b.device) || String(target.ino) !== String(b.inode)) throw new Error('sync_root_changed');
     return canonical;
   }
   async target(b, path, create = false) {

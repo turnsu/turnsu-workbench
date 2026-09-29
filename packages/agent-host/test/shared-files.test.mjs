@@ -57,11 +57,18 @@ test('a parent path alias resolves to the same bound directory without accepting
   await symlink(physical, alias, 'dir');
   let path = join(alias, 'project');
   const sync = new SharedFiles({ project: () => ({ path }) });
-  const info = await stat(path);
+  const info = await stat(path, { bigint: true });
   const binding = { project_id: 'project', device: info.dev, inode: info.ino };
   assert.equal(await sync.root(binding), await realpath(path));
   path = alias;
   await assert.rejects(sync.root(binding), /sync_root_changed/);
+});
+test('wide filesystem identifiers survive the SQLite binding read exactly', async t => {
+  const { a } = await fixture(t);
+  const wide = 10977524093039201n;
+  a.db.prepare('UPDATE shared_projects SET inode=? WHERE project_id=?').run(wide, a.id);
+  assert.equal(a.sync.binding(a.id).inode, wide.toString());
+  assert.equal(a.sync.snapshot(a.id).projectId, a.id);
 });
 test('unchanged shared files are not reread every cycle, while edits and a forced sweep still reach the team', async t => {
   const { a, remote } = await fixture(t);
