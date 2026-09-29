@@ -1,0 +1,692 @@
+.shell.feature-loops .m5LoopBoard {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  min-height: 100%;
+  padding: 28px 30px 36px;
+  background: var(--surface, #f7f6f3);
+}
+
+.shell.feature-loops .m5LoopPageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 22px;
+}
+
+.shell.feature-loops .m5LoopPageHeader p {
+  margin: 0 0 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shell.feature-loops .m5LoopPageHeader h1 {
+  margin: 0;
+  color: var(--text, #1b1917);
+  font-size: clamp(26px, 3vw, 38px);
+  letter-spacing: -0.035em;
+}
+
+.shell.feature-loops .m5LoopHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shell.feature-loops .m5LoopCommand {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, var(--accent, #4f46e5) 32%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent, #4f46e5) 5%, var(--surface-raised, #fff));
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--accent, #4f46e5) 8%, transparent);
+  color: var(--accent, #4f46e5);
+}
+
+.shell.feature-loops .m5LoopCommand label,
+.shell.feature-loops .m5LoopCommand input {
+  min-width: 0;
+  width: 100%;
+}
+
+.shell.feature-loops .m5LoopCommand input {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.shell.feature-loops .m5LoopCommand > span {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.shell.feature-loops .m5LoopCommandSafety {
+  margin: 7px 4px 19px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.shell.feature-loops .m5LoopNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised, #fff);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.shell.feature-loops .m5LoopLanes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(230px, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.shell.feature-loops .m5LoopLane {
+  position: relative;
+  min-width: 0;
+  min-height: 430px;
+  padding: 0 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-subtle, #eeece8) 62%, var(--surface, #f7f6f3));
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+.shell.feature-loops .m5LoopLane.isDropTarget {
+  border-color: var(--accent, #4f46e5);
+  background: color-mix(in srgb, var(--accent, #4f46e5) 7%, var(--surface, #f7f6f3));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent, #4f46e5) 24%, transparent);
+}
+
+.shell.feature-loops .m5LoopLaneHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 5px;
+}
+
+.shell.feature-loops .m5LoopLaneHeader h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+
+.shell.feature-loops .m5LoopLaneHeader > span {
+  display: grid;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--surface-raised, #fff);
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.shell.feature-loops .m5LoopLaneDot,
+.shell.feature-loops .m5LoopStateDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #a8a29e;
+}
+
+.shell.feature-loops .m5LoopLaneDot.ready,
+.shell.feature-loops .m5LoopStateDot.ready { background: #16a34a; }
+.shell.feature-loops .m5LoopLaneDot.shared,
+.shell.feature-loops .m5LoopStateDot.shared { background: var(--accent, #4f46e5); }
+
+.shell.feature-loops .m5LoopDropHint {
+  display: grid;
+  min-height: 38px;
+  margin: 0 0 8px;
+  place-items: center;
+  border: 1px dashed var(--accent, #4f46e5);
+  border-radius: 8px;
+  color: var(--accent, #4f46e5);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.shell.feature-loops .m5LoopLaneList {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+}
+
+.shell.feature-loops .m5LoopCard {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-raised, #fff);
+  box-shadow: 0 1px 2px rgb(28 25 23 / 4%);
+}
+
+.shell.feature-loops .m5LoopCard:focus-within,
+.shell.feature-loops .m5LoopCard:hover {
+  border-color: color-mix(in srgb, var(--accent, #4f46e5) 30%, var(--line));
+}
+
+.shell.feature-loops .m5LoopCardTopline {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.shell.feature-loops .m5LoopGrip { color: var(--muted); cursor: grab; }
+
+.shell.feature-loops .m5LoopCardTitle {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.shell.feature-loops .m5LoopVersion {
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.shell.feature-loops .m5LoopGoal {
+  display: -webkit-box;
+  min-height: 36px;
+  margin: 9px 0 12px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.shell.feature-loops .m5LoopMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.shell.feature-loops .m5LoopAvatar {
+  display: grid;
+  width: 21px;
+  height: 21px;
+  place-items: center;
+  border-radius: 6px;
+  background: #e7e5e4;
+  color: #44403c;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.shell.feature-loops .m5LoopAvatar.shared {
+  background: color-mix(in srgb, var(--accent, #4f46e5) 14%, white);
+  color: var(--accent, #4f46e5);
+}
+
+.shell.feature-loops .m5LoopCardActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  margin-top: 11px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.shell.feature-loops .m5LoopMore {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.shell.feature-loops .m5LoopMore:hover,
+.shell.feature-loops .m5LoopMore:focus-visible {
+  background: var(--surface-subtle);
+  color: var(--text);
+}
+
+.shell.feature-loops .m5LoopEmpty {
+  display: grid;
+  min-height: 132px;
+  place-items: center;
+  align-content: center;
+  gap: 5px;
+  padding: 18px;
+  border: 1px dashed color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 9px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.shell.feature-loops .m5LoopEmpty strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.shell.feature-loops .m5LoopEmpty p {
+  max-width: 220px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.shell.feature-loops .m5CreateLoopEntry {
+  display: grid;
+  align-content: start;
+  gap: 22px;
+  max-width: 980px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 28px 30px 42px;
+}
+
+.shell.feature-loops .m5CreateLoopHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.shell.feature-loops .m5CreateLoopHeader > div:first-child {
+  display: grid;
+  gap: 7px;
+}
+
+.shell.feature-loops .m5CreateStartingOptions {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-raised, #fff);
+}
+
+.shell.feature-loops .m5CreateStartingOptions h2 {
+  margin: 0;
+  padding: 13px 16px 9px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shell.feature-loops .m5CreateStartingOptions > button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 16px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.shell.feature-loops .m5CreateStartingOptions > button:hover,
+.shell.feature-loops .m5CreateStartingOptions > button:focus-visible {
+  background: var(--surface-subtle);
+}
+
+.shell.feature-loops .m5CreateStartingOptions > button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.shell.feature-loops .m5CreateStartingOptions strong,
+.shell.feature-loops .m5CreateStartingOptions small {
+  display: block;
+}
+
+.shell.feature-loops .m5CreateStartingOptions small {
+  margin-top: 3px;
+  color: var(--muted);
+}
+
+.shell.feature-loops .m5ProposalStagedBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 30px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, #ca8a04 35%, var(--line));
+  border-radius: 9px;
+  background: color-mix(in srgb, #facc15 8%, var(--surface-raised, #fff));
+  color: #854d0e;
+}
+
+.shell.feature-loops .m5ProposalStagedBanner strong,
+.shell.feature-loops .m5ProposalStagedBanner span {
+  display: block;
+}
+
+.shell.feature-loops .m5ProposalStagedBanner strong { font-size: 13px; }
+.shell.feature-loops .m5ProposalStagedBanner span { margin-top: 2px; font-size: 12px; line-height: 1.45; }
+
+.shell.feature-loops .m5ProposalDecision {
+  display: grid;
+  gap: 8px;
+}
+
+.shell.feature-loops .m5ProposalDecision > button { width: 100%; }
+.shell.feature-loops .m5ProposalDecision small { color: var(--muted); line-height: 1.45; }
+
+.shell.feature-loops .m5StartingPointPage,
+.shell.feature-loops .m5DuplicateDialog {
+  display: grid;
+  gap: 18px;
+  width: 100%;
+}
+
+.shell.feature-loops .m5ChoiceHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.shell.feature-loops .m5ChoiceHeading h2 { margin: 0; }
+.shell.feature-loops .m5ChoiceHeading p { margin: 5px 0 0; color: var(--muted); line-height: 1.5; }
+
+.shell.feature-loops .m5ChoiceHeading > span {
+  display: grid;
+  min-width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.shell.feature-loops .m5DomainChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.shell.feature-loops .m5DomainChips button {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-raised, #fff);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.shell.feature-loops .m5DomainChips button.active {
+  border-color: color-mix(in srgb, var(--accent, #4f46e5) 38%, var(--line));
+  background: color-mix(in srgb, var(--accent, #4f46e5) 8%, white);
+  color: var(--accent, #4f46e5);
+}
+
+.shell.feature-loops .m5StartingPointGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.shell.feature-loops .m5StartingPointGrid article {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-raised, #fff);
+}
+
+.shell.feature-loops .m5StartingPointGrid h3,
+.shell.feature-loops .m5StartingPointGrid p { margin: 0; }
+.shell.feature-loops .m5StartingPointGrid h3 { font-size: 14px; }
+.shell.feature-loops .m5StartingPointGrid p {
+  display: -webkit-box;
+  min-height: 40px;
+  overflow: hidden;
+  color: var(--muted);
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.shell.feature-loops .m5StartingPointKind,
+.shell.feature-loops .m5StartingPointMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.shell.feature-loops .m5StartingPointKind > span {
+  color: var(--accent, #4f46e5);
+  font-weight: 650;
+}
+
+.shell.feature-loops .m5StartingPointGrid article > button {
+  justify-self: start;
+  margin-top: 4px;
+}
+
+.shell.feature-loops .m5DuplicateDialog {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-raised, #fff);
+  box-shadow: 0 18px 56px rgb(28 25 23 / 8%);
+}
+
+.shell.feature-loops .m5DuplicateSearch {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+.shell.feature-loops .m5DuplicateSearch input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.shell.feature-loops .m5DuplicateList {
+  display: grid;
+  max-height: 310px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.shell.feature-loops .m5DuplicateList > button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.shell.feature-loops .m5DuplicateList > button:last-of-type { border-bottom: 0; }
+.shell.feature-loops .m5DuplicateList > button:hover { background: var(--surface-subtle); }
+.shell.feature-loops .m5DuplicateList > button.selected {
+  background: color-mix(in srgb, var(--accent, #4f46e5) 7%, white);
+}
+
+.shell.feature-loops .m5DuplicateList strong,
+.shell.feature-loops .m5DuplicateList small { display: block; }
+.shell.feature-loops .m5DuplicateList small {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell.feature-loops .m5DuplicateList > button > span:last-child { color: var(--muted); font-size: 11px; }
+
+.shell.feature-loops .m5ChoiceRadio {
+  width: 15px;
+  height: 15px;
+  border: 1px solid #a8a29e;
+  border-radius: 999px;
+}
+
+.shell.feature-loops .m5DuplicateList > button.selected .m5ChoiceRadio {
+  border: 4px solid var(--accent, #4f46e5);
+}
+
+.shell.feature-loops .m5DuplicateDialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding-top: 3px;
+}
+
+.shell.feature-loops .m5DuplicateDialog footer p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 940px) {
+  .shell.feature-loops .m5LoopBoard { padding: 22px 18px 30px; }
+  .shell.feature-loops .m5LoopLanes {
+    grid-template-columns: repeat(3, minmax(260px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+}
+
+@media (max-width: 620px) {
+  .shell.feature-loops .m5LoopPageHeader { display: grid; gap: 16px; }
+  .shell.feature-loops .m5LoopHeaderActions { justify-content: stretch; }
+  .shell.feature-loops .m5LoopHeaderActions > * { flex: 1; }
+  .shell.feature-loops .m5LoopCommand { grid-template-columns: auto minmax(0, 1fr); }
+  .shell.feature-loops .m5LoopCommand > span { display: none; }
+  .shell.feature-loops .m5CreateLoopEntry { padding: 22px 18px 34px; }
+  .shell.feature-loops .m5CreateLoopHeader { display: grid; }
+  .shell.feature-loops .m5StartingPointGrid { grid-template-columns: minmax(0, 1fr); }
+  .shell.feature-loops .m5DuplicateDialog { padding: 16px; }
+  .shell.feature-loops .m5DuplicateDialog footer { align-items: stretch; flex-direction: column; }
+  .shell.feature-loops .m5DuplicateDialog footer > button { width: 100%; }
+  .shell.feature-loops .m5ProposalStagedBanner { margin: 0 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell.feature-loops .m5LoopLane { transition: none; }
+}
+
+/* The creation path uses the same quiet, centered workspace as a new task. */
+.turnsuLoopCreate { width: min(100%, 780px); margin: 0 auto; padding: 34px 32px 64px; color: var(--text); }
+.turnsuLoopCreate .loopCreateBack { display: inline-flex; align-items: center; gap: 7px; padding: 6px 0; margin-bottom: 44px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+.turnsuLoopCreate header { margin-bottom: 28px; }
+.turnsuLoopCreate .loopCreateEyebrow { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+.shell .turnsuLoopCreate h1 { margin: 0; font-size: clamp(25px, 3vw, 34px); letter-spacing: -.04em; font-weight: 600; line-height: 1.35; }
+.turnsuLoopCreate header > p:last-child { margin: 12px 0 0; color: var(--muted); font-size: 14px; line-height: 1.8; }
+.turnsuLoopCreate .loopCreateModes { display: flex; gap: 20px; margin-bottom: 24px; border-bottom: 1px solid var(--line); }
+.loopCreateModes button { border: 0; border-bottom: 2px solid transparent; padding: 10px 1px; background: none; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+.loopCreateModes button[aria-pressed="true"] { border-bottom-color: var(--text); color: var(--text); }
+.turnsuLoopCreate .loopCreateFields { margin: 0; padding: 0; border: 0; min-width: 0; display: grid; gap: 20px; }
+.turnsuLoopCreate .createField { display: grid; gap: 8px; margin: 0; min-width: 0; font-size: 13px; }
+.turnsuLoopCreate input, .turnsuLoopCreate textarea { width: 100%; min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-raised); color: var(--text); font: inherit; font-size: 14px; line-height: 1.8; box-sizing: border-box; }
+.turnsuLoopCreate textarea { resize: vertical; }
+.turnsuLoopCreate input:focus-visible, .turnsuLoopCreate textarea:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.turnsuLoopCreate input::placeholder, .turnsuLoopCreate textarea::placeholder { color: var(--muted); opacity: .8; }
+.turnsuLoopCreate .loopCreateGoal textarea { min-height: 188px; padding: 16px 18px; }
+.turnsuLoopCreate small { color: var(--muted); line-height: 1.6; }
+.loopCreateDetails { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.loopCreateDetails > summary { padding: 16px 0; display: flex; justify-content: space-between; align-items: center; font-size: 13px; list-style: none; cursor: pointer; color: var(--muted); }
+.loopCreateDetails > summary::-webkit-details-marker { display: none; }
+.loopCreateDetails[open] > summary svg { transform: rotate(180deg); }
+.loopCreateDetails > div { display: grid; gap: 18px; padding: 2px 0 22px; }
+.loopCreateDetails > p { margin: 0 0 20px; font-size: 13px; line-height: 1.8; color: var(--muted); }
+.loopCreateActions, .loopReviewActions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 24px; }
+.loopCreateActions > .modelSwitch { min-width: 0; max-width: 55%; }
+.loopCreateActions button { gap: 7px; }
+.turnsuLoopCreate .loopCreateFootnote { font-size: 12px; color: var(--muted); margin: 15px 0 0; line-height: 1.7; }
+.loopCreateStatus, .loopProposalDiagnostics { margin: 20px 0 0; padding: 15px 18px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-subtle); font-size: 13px; line-height: 1.8; }
+.loopCreateStatus p, .loopProposalDiagnostics p { margin: 5px 0 10px; }
+.loopProposalDiagnostics > div + div { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.loopDraftNotice { display: flex; align-items: flex-start; gap: 8px; color: var(--muted); font-size: 12px; line-height: 1.8; }
+.loopDraftNotice svg { flex-shrink: 0; margin-top: 2px; }
+.loopReviewDefinition { display: grid; gap: 20px; margin-top: 28px; }
+.loopReviewSteps { margin-top: 28px; }
+.loopReviewSteps h2 { font-size: 14px; font-weight: 600; }
+.loopReviewSteps ul { margin: 0; padding: 0; list-style: none; }
+.loopReviewSteps li { display: flex; align-items: flex-start; gap: 14px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.loopReviewSteps li > div { flex: 1; min-width: 0; }
+.loopReviewSteps .loopStepIcon { border: 1px solid var(--line); border-radius: 7px; width: 30px; height: 30px; display: grid; place-items: center; flex-shrink: 0; margin-top: 5px; color: var(--muted); }
+.loopReviewSteps .loopStepSource { display: block; margin: 8px 5px 0; }
+.loopReviewSteps input { padding: 3px 5px; border-color: transparent; font-weight: 600; background: transparent; }
+.loopReviewSteps input:hover { border-color: var(--line); }
+.loopReviewSteps p { margin: 4px 5px 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.loopReviewSteps li > small { padding-top: 8px; white-space: nowrap; font-size: 11px; }
+@media (max-width: 600px) {
+  .turnsuLoopCreate { padding: 20px 20px 40px; }
+  .turnsuLoopCreate .loopCreateBack { margin-bottom: 28px; }
+  .shell .turnsuLoopCreate h1 { font-size: 26px; }
+  .turnsuLoopCreate .loopCreateGoal textarea { min-height: 210px; }
+  .loopCreateActions { align-items: stretch; }
+  .loopReviewSteps li { gap: 9px; }
+  .loopReviewSteps li > small { display: none; }
+  .loopReviewActions { flex-wrap: wrap; }
+}

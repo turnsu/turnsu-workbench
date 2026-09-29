@@ -1,17 +1,34 @@
 services:
-  mongodb:
-    image: mongo:7
-    container_name: looloomi-mongodb
+  postgres:
+    image: postgres@sha256:80dee66a0ba95a54d143008143e5d7ef628c0e8d5e0666b39d13c8bac3377953
+    container_name: "${WORKBENCH_POSTGRES_CONTAINER_NAME:-looloomi-postgres}"
     restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${WORKBENCH_POSTGRES_USER:-looloomi}"
+      POSTGRES_DB: "${WORKBENCH_POSTGRES_DATABASE:-looloomi_workbench}"
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
     ports:
-      - "127.0.0.1:27017:27017"
+      - "${WORKBENCH_POSTGRES_BIND_IP:-127.0.0.1}:${WORKBENCH_POSTGRES_PORT:-5432}:5432"
     volumes:
-      - looloomi-mongodb-data:/data/db
+      - "${WORKBENCH_POSTGRES_DATA_DIR:?WORKBENCH_POSTGRES_DATA_DIR is required}:/var/lib/postgresql/data"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    pids_limit: 512
+    mem_limit: 2g
+    cpus: 2
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      test:
+        - CMD-SHELL
+        - >-
+          pg_isready --username="$${POSTGRES_USER}"
+          --dbname="$${POSTGRES_DB}"
       interval: 5s
-      timeout: 3s
-      retries: 20
+      timeout: 5s
+      retries: 60
+      start_period: 10s
 
-volumes:
-  looloomi-mongodb-data:
+secrets:
+  postgres_password:
+    file: "${WORKBENCH_SECRETS_DIR:?WORKBENCH_SECRETS_DIR is required}/postgres-password"

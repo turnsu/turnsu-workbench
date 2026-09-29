@@ -1,0 +1,517 @@
+.workPage {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 20px 6px 42px;
+}
+
+.workHeader {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 2px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.workHeader > div:first-child {
+  display: grid;
+  gap: 5px;
+  max-width: 820px;
+}
+
+.workHeader p,
+.workHeader h1,
+.workHeader span,
+.workSectionHeading p,
+.workSectionHeading h2,
+.workListHeader p,
+.workListHeader h2,
+.workScopeSummary p,
+.workScopeSummary h2 { margin: 0; }
+
+.workHeader > div:first-child > p,
+.workSectionHeading > div > p,
+.workListHeader > div > p,
+.workScopeSummary p {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.workHeader h1 {
+  font-size: clamp(26px, 3vw, 36px);
+  letter-spacing: -.04em;
+}
+
+.workHeader > div:first-child > span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.workHeaderActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 7px;
+}
+
+.workSyncState {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.workStaleBanner,
+.workBoundaryBar {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.workStaleBanner {
+  border-color: color-mix(in srgb, var(--warning) 42%, var(--line));
+  background: var(--warning-bg);
+}
+
+.workStaleBanner > div,
+.workBoundaryBar > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.workStaleBanner strong,
+.workBoundaryBar strong { color: var(--text); font-size: 12px; }
+.workStaleBanner span,
+.workBoundaryBar p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.workStaleBanner .loopButton,
+.workBoundaryBar .loopButton { flex: 0 0 auto; margin-left: auto; }
+
+.workBoundaryBar { background: transparent; border: 0; padding: 4px 0; }
+.workBoundaryIcon {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 31px;
+  height: 31px;
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.workBoard {
+  display: grid;
+  grid-template-columns: 238px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.workProjects,
+.workList,
+.workDetail {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+}
+
+.workProjects {
+  position: sticky;
+  top: 8px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 12px;
+}
+
+.workSectionHeading,
+.workListHeader,
+.workScopeSummary {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workSectionHeading > div,
+.workListHeader > div,
+.workScopeSummary > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.workSectionHeading h2,
+.workListHeader h2,
+.workScopeSummary h2 { font-size: 16px; }
+
+.workProjectAll {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.workProjectAll:hover,
+.workProjectAll:focus-visible,
+.workProjectAll.active {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+  background: var(--accent-soft);
+}
+
+.workProjectAll svg { color: var(--accent); }
+.workProjectAll small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.projectCardList { display: grid; gap: 3px; }
+
+.projectCard {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.projectCard:hover,
+.projectCard:focus-visible { background: var(--surface-subtle); }
+.projectCard.selected {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 62%, var(--surface));
+}
+
+.projectCardIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  color: var(--accent);
+}
+
+.projectCardCopy { display: grid; gap: 2px; min-width: 0; }
+.projectCardCopy strong,
+.projectCardCopy small,
+.projectCardCopy span { overflow: hidden; text-overflow: ellipsis; }
+.projectCardCopy strong { white-space: nowrap; font-size: 12px; }
+.projectCardCopy small {
+  display: -webkit-box;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.projectCardCopy span { color: var(--faint); font-size: 9px; }
+.projectCard > svg { color: var(--faint); }
+
+.workList { display: grid; align-content: start; gap: 12px; padding: 14px; container-type: inline-size; }
+.workScopeSummary {
+  align-items: center;
+  padding: 11px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-subtle);
+}
+.workScopeSummary > div:first-child > span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workScopeSummary > div:last-child { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; }
+.workListHeader { align-items: end; }
+.workListHeader > div > span { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.workResultCount { flex: 0 0 auto; color: var(--muted); font-size: 10px; }
+.workResultCount strong { color: var(--text); font-size: 14px; font-variant-numeric: tabular-nums; }
+
+.workFilters {
+  display: flex;
+  max-width: 100%;
+  overflow-x: auto;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+  scrollbar-width: thin;
+}
+
+.workFilters button {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 7px;
+  min-height: 29px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.workFilters button strong {
+  min-width: 17px;
+  padding: 1px 5px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--line) 65%, transparent);
+  color: var(--text);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.workFilters button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-tight); }
+.workFilters button.active strong { background: var(--accent-soft); color: var(--accent); }
+.workItemGrid { display: grid; border-top: 1px solid var(--line); }
+
+.workItemCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.workItemCard:hover { background: var(--surface-subtle); }
+.workItemCard.selected { background: color-mix(in srgb, var(--accent-soft) 56%, var(--surface)); }
+.workItemCardMain {
+  display: grid;
+  grid-template-columns: 3px minmax(220px, 1.45fr) minmax(90px, .55fr) minmax(140px, .9fr) minmax(90px, .48fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 11px 8px 11px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.workItemStatusRail { align-self: stretch; width: 3px; min-height: 52px; border-radius: 0 2px 2px 0; background: var(--line-strong); }
+.workItemStatusRail.status-active,
+.workItemStatusRail.status-ready { background: var(--accent); }
+.workItemStatusRail.status-blocked { background: var(--danger); }
+.workItemStatusRail.status-waiting_review { background: var(--warning); }
+.workItemStatusRail.status-completed { background: var(--success); }
+.workItemIdentity { display: grid; gap: 3px; min-width: 0; }
+.workItemEyebrow { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.workItemEyebrow > span:last-child {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workItemIdentity > strong,
+.workItemIdentity > small,
+.workItemCell > strong { overflow: hidden; text-overflow: ellipsis; }
+.workItemIdentity > strong { white-space: nowrap; font-size: 13px; }
+.workItemIdentity > small {
+  display: -webkit-box;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+.workItemCell { display: grid; gap: 3px; min-width: 0; }
+.workItemCell small { color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
+.workItemCell strong { color: var(--text); font-size: 10px; font-weight: 650; white-space: nowrap; }
+.workItemNext strong { white-space: normal; line-height: 1.35; }
+.workItemOpen { color: var(--faint); }
+.workItemCardActions { display: flex; align-items: center; padding: 8px 4px 8px 0; }
+
+.workEmptyNote { display: grid; justify-items: start; gap: 9px; margin: 0; padding: 18px 12px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.workEmptyNote p { margin: 0; }
+.workCardError,
+.workFormError {
+  margin: 0;
+  padding: 8px 9px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--danger-bg) 70%, var(--surface));
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.workDetail {
+  position: sticky;
+  top: 8px;
+  display: grid;
+  align-content: start;
+  gap: 13px;
+  padding: 15px;
+  max-height: calc(100dvh - 92px);
+  overflow: auto;
+}
+.workDetail > header { display: flex; align-items: start; justify-content: space-between; gap: 10px; }
+.workDetail > header > div { display: grid; gap: 3px; min-width: 0; }
+.workDetail > header p,
+.workDetail > header h2 { margin: 0; }
+.workDetail > header p { color: var(--accent); font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.workDetail > header h2 { font-size: 18px; }
+.workDetailClose { width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 22px; line-height: 1; }
+.workDetailClose:hover,
+.workDetailClose:focus-visible { background: var(--surface-subtle); color: var(--text); }
+.workDetailObjective { margin: 0; color: var(--text); font-size: 12px; line-height: 1.5; }
+.workDetailMeta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--muted); font-size: 10px; }
+.workDetailFocus { display: grid; gap: 7px; }
+.workDetailFocus > span { display: grid; gap: 3px; padding: 9px 10px; border-left: 3px solid var(--accent); background: var(--surface-subtle); }
+.workDetailFocus > span.blocked { border-left-color: var(--danger); background: var(--danger-bg); }
+.workDetailFocus small { color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.workDetailFocus strong { color: var(--text); font-size: 11px; line-height: 1.45; }
+.workBoundaryNote,
+.workDetailReadOnly,
+.workDialogHint { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.workBoundaryNote { display: flex; align-items: start; gap: 7px; padding-top: 11px; border-top: 1px solid var(--line); }
+.workBoundaryNote svg { flex: 0 0 auto; margin-top: 1px; color: var(--accent); }
+.workUpdateForm,
+.workForm { display: grid; gap: 11px; }
+.workUpdateForm > label,
+.workFormGrid > label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 650; }
+.workUpdateForm select,
+.workUpdateForm input,
+.workFormGrid select,
+.workFormGrid input { min-height: 36px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--text); }
+.workFormGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.workMemberSelection { display: grid; gap: 9px; margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 7px; }
+.workMemberSelection legend { padding: 0 4px; color: var(--text); font-size: 12px; font-weight: 700; }
+.workMemberSelection p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.workMemberSelection > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.workMemberSelection label { display: flex; min-width: 0; align-items: center; gap: 6px; padding: 7px; border-radius: 6px; background: var(--surface-subtle); color: var(--text); font-size: 12px; }
+.workMemberSelection label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workMemberList { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.workMemberList li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border-radius: 6px; background: var(--surface-subtle); font-size: 12px; }
+
+@media (max-width: 1040px) {
+  .workItemCardMain { grid-template-columns: 3px minmax(200px, 1.4fr) minmax(85px, .6fr) minmax(120px, .8fr) auto; }
+  .workItemDue { display: grid; }
+}
+
+@media (max-width: 840px) {
+  .workPage { padding: 16px 0 32px; }
+  .workHeader { align-items: start; flex-direction: column; }
+  .workHeaderActions { justify-content: start; }
+  .workBoard { grid-template-columns: 1fr; }
+  .workProjects { position: static; }
+  .projectCardList { display: flex; overflow-x: auto; padding-bottom: 3px; }
+  .projectCard { flex: 0 0 230px; }
+  .workDetail { grid-column: 1; position: static; max-height: none; }
+}
+
+@media (max-width: 680px) {
+  .workHeaderActions,
+  .workHeaderActions .loopButton { width: 100%; }
+  .workSyncState { width: 100%; }
+  .workStaleBanner,
+  .workBoundaryBar { align-items: start; flex-wrap: wrap; }
+  .workStaleBanner .loopButton,
+  .workBoundaryBar .loopButton { margin-left: 42px; }
+  .workScopeSummary,
+  .workListHeader { align-items: start; flex-direction: column; }
+  .workScopeSummary > div:last-child { width: 100%; justify-content: space-between; }
+  .workResultCount { align-self: stretch; }
+  .workItemCard { grid-template-columns: minmax(0, 1fr); }
+  .workItemCardMain { grid-template-columns: 3px minmax(0, 1fr) auto; gap: 10px; padding-right: 10px; }
+  .workItemIdentity { grid-column: 2; }
+  .workItemOwner,
+  .workItemNext,
+  .workItemDue { grid-column: 2; }
+  .workItemDue { display: grid; }
+  .workItemOpen { grid-column: 3; grid-row: 1; }
+  .workItemCardActions { justify-content: flex-end; padding: 0 9px 9px; }
+  .workFormGrid,
+  .workMemberSelection > div { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 680px) {
+  .workHeaderActions { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 6px; }
+  .workHeaderActions .loopButton { min-height: 42px; padding-inline: 9px; }
+  .workHeaderActions .workSyncState { grid-column: 1 / -1; }
+  .workBoundaryBar { gap: 8px; padding-block: 6px; }
+  .workBoundaryBar > div { flex: 1; }
+  .workBoundaryBar .loopButton { margin-left: 0; }
+  .workEmptyNote { padding: 12px 0; min-height: 0; }
+  .workProjects { gap: 4px; }
+  .workFilters { flex-wrap: nowrap; overflow-x: auto; }
+  .workFilters > button { flex: 0 0 auto; }
+}
+
+/* A detail pane reduces the list width independently of the viewport. */
+@container (max-width: 820px) {
+  .workItemCard { grid-template-columns: minmax(0, 1fr); }
+  .workItemCardMain { grid-template-columns: 3px repeat(3, minmax(0, 1fr)) 18px; gap: 10px; padding-right: 10px; }
+  .workItemStatusRail { grid-column: 1; grid-row: 1 / 3; }
+  .workItemIdentity { grid-column: 2 / 5; grid-row: 1; }
+  .workItemOwner { grid-column: 2; grid-row: 2; }
+  .workItemNext { grid-column: 3; grid-row: 2; }
+  .workItemDue { display: grid; grid-column: 4; grid-row: 2; }
+  .workItemOpen { grid-column: 5; grid-row: 1; }
+  .workItemCardActions { padding: 0 10px 10px 13px; justify-content: end; }
+}
+
+@container (max-width: 440px) {
+  .workItemCardMain { grid-template-columns: 3px minmax(0, 1fr) 18px; gap: 9px; }
+  .workItemStatusRail { grid-row: 1 / 5; }
+  .workItemIdentity { grid-column: 2; }
+  .workItemOpen { grid-column: 3; }
+  .workItemOwner { grid-column: 2; grid-row: 2; }
+  .workItemNext { grid-column: 2; grid-row: 3; }
+  .workItemDue { grid-column: 2; grid-row: 4; }
+  .workItemCell { grid-template-columns: 65px minmax(0, 1fr); align-items: baseline; gap: 8px; }
+  .workItemCell strong { white-space: normal; }
+  .workItemIdentity > small { -webkit-line-clamp: 2; }
+}
+
+/* A selected work item replaces the queue; it is not a third inspector column. */
+.workPage.detailOpen .workBoard { grid-template-columns: 210px minmax(0, 1fr); }
+.workPage.detailOpen .workDetail { grid-column: 2; grid-row: auto; position: static; max-height: none; overflow: visible; padding: 24px 32px 40px; gap: 18px; }
+.workDetailNavigation, .workDetailActions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.workDetailActions { justify-content: flex-start; }
+.workDetail > header h2 { margin: 0; font-size: 25px; line-height: 1.35; }
+.workDetailObjective { font-size: 14px; line-height: 1.65; max-width: 70ch; }
+.workDetailMeta { font-size: 12px; gap: 14px; }
+.workDetailFocus strong { font-size: 13px; font-weight: 500; }
+.workPage .workItemCardMain { grid-template-columns: 3px minmax(0, 1fr) auto; }
+.workPage .workItemIdentity { grid-column: 2; }
+.workPage .workItemOwner, .workPage .workItemNext, .workPage .workItemDue { grid-column: 2; }
+.workPage .workItemCell { display: flex; gap: 8px; padding: 0; }
+.workPage .workItemCell small { font-size: 11px; }
+.workPage .workItemOpen { grid-column: 3; grid-row: 1; }
+@media (max-width: 1000px) {
+  .workPage.detailOpen .workBoard { grid-template-columns: minmax(0, 1fr); }
+  .workPage.detailOpen .workProjects { display: none; }
+  .workPage.detailOpen .workDetail { grid-column: 1; padding: 20px; }
+}
+@media (max-width: 600px) {
+  .workPage.detailOpen .workDetail { padding: 16px; }
+  .workDetail > header h2 { font-size: 21px; }
+  .workDetailNavigation { flex-wrap: wrap; }
+}

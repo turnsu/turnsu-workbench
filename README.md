@@ -1,138 +1,41 @@
-# WeChat Intelligence Radar MVP
+# Turnsu 工作台
 
-Swift / SwiftUI macOS MVP for a local-first "WeChat x On-chain Intelligence Terminal" aimed at personal or 5-8 person team usage.
+Turnsu 工作台是面向企业员工的本地 Agent 工作入口。打开项目，导入或引用资料，选择已有的 Codex、Pi、Claude Code 或 OpenCode，完成任务并核对项目文件；会话、草稿和可见结果留在本机，重开后可以继续。团队共享和云端复杂任务按客户授权启用，不是本地任务的前置条件。
 
-## Scope
+## 用户路径
 
-- Builds only inside this new project directory.
-- Uses mock fixture data for MVP development.
-- Keeps `assignment-agent-raw` and `wechat-cli_raw` as read-only references.
-- Does not connect to the current computer's WeChat client.
-- Does not call `wechat-cli init/history/search` or any live local WeChat read command without explicit authorization.
-- Treats CoinMarketCap MCP / Crypto Skill Hub as a permissioned/live capability. If no callable CMC tool, network permission, or API key is available, the app must show `blocked` or `degraded` and may only use clearly labeled mock market fixtures.
+1. 打开一个本地项目文件夹，用系统选择器导入资料，或在项目文件面板选择已有文件。导入保留原文件，项目副本放在 `Imported/`；同名文件不覆盖。
+2. 选择本机已有且已登录的 Agent，按需选择模型来源。新任务可记住个人或本项目默认值；已开始的会话固定执行器和原生会话 ID。
+3. 描述目标并引用选定文本。工作台显示回答、工具活动和原生权限请求；停止或断开后可核对结果再恢复。
+4. 在项目文件中预览文本、系统打开常用文档或定位其他文件。有效做法可整理成 Skill；Loop 只用于需要顺序复用的步骤。
 
-## Architecture
+macOS 上可主动选择微信桥 v1 交接，核对原文和解析覆盖后在本机任务中引用。导入本身不调用模型、不上云、不发微信。Windows 可通过系统选择器导入授权导出的普通文件；当前不宣称自动解析 ZIP、图片、音频或扫描 PDF。
 
-```text
-SwiftUI Views
-  -> DashboardViewModel
-  -> RuntimeBackend
-  -> RuntimeRepository
-  -> RuntimeCommand / RuntimeQuery / RuntimeMutation
-  -> AgentOrchestrator module pipeline
-  -> AgentRunStore / AgentSyncState
-  -> PolicyGate / CapabilityRegistry / AgentRunLog
-  -> WeChatDataAdapter
-  -> WeChatFixtureFileAdapter / MockWeChatDataAdapter
-  -> MarketSnapshotStore / CMCRefreshBridge
-  -> CMCMarketDataProvider
-  -> CMCSkillHubCapability
-  -> TokenResolutionService
-  -> NormalizedWeChatStore / TokenEntityStore
-  -> OnchainSnapshotStore / AlertStore
-  -> EvidenceStore / TaskStore / WatchlistStore / AlertRuleStore
-  -> ArtifactManifestStore / RuntimeHealthStore
-  -> SubagentManager agent module timeline
-  -> MockWeb3MarketDataAdapter
-  -> Web3SignalService
-  -> BriefingAgent
-  -> IntelligenceSnapshot
+**本地工作台不等于离线模型。** Agent 若连接远程模型，会按其账号和配置发送输入。工作台也不能替客户已有 Agent 的全部原生工具设置强制统一沙箱。
+
+## 当前状态
+
+本地项目、会话分页、草稿、资料引用、三个已有 Agent、Skill OS、简明 Loop 和可选团队接线已有实现。本轮加入 OpenCode ACP 适配、本机文件导入及成果系统打开路径。Linux 开发机的 Host 回归、构建，以及真实 OpenCode 项目文件任务与重开续跑已验证；其他 Agent 的本轮实测、macOS/Windows 文件对话框与桌面交互、签名发行和长时完整进程组内存仍需对应环境验收。当前不能把它标为已完成正式跨平台客户交付。证据见[验证记录](wiki/verification.md)，退出条件见[本地交付计划](wiki/roadmap.md)。
+
+## 开发
+
+需要 Node.js ≥22.19；每个包保留自己的锁文件。原生 Agent CLI 与登录由用户配置，工作台不改写全局配置。
+
+```sh
+npm run setup
+npm test
+npm run build
+npm start
 ```
 
-Future live integration should implement `WeChatDataAdapter` using `wechat-cli` JSON outputs, after explicit user authorization.
+`npm run package` 生成桌面包。桌面由 Electron、React 和私有 Node Host 组成；日常构建及自动测试可以在 Turnsu Linux 开发机的隔离环境进行，不需在个人 Mac 上反复安装。macOS 与 Windows 的系统交互和发行包需要各自实机验收。
 
-## Current Data Chain
+| 路径 | 内容 |
+| --- | --- |
+| `apps/desktop` | 桌面界面、主进程和安全 IPC |
+| `packages/agent-host` | 本机状态、四种 Agent、资料与恢复 |
+| `apps/team-web`、`services/product-api` | 可选团队管理与共享事项 |
+| `packages` | 共享契约、客户端和运行模块 |
+| `deploy`、`wiki` | 可选部署与现行文档 |
 
-- WeChat intelligence: `WeChatFixtureFileAdapter` loads `Fixtures/wechat/messages.sample.json`; if the file cannot be loaded it degrades to `MockWeChatDataAdapter`.
-- Desktop shell: the app now has Home/Daily Brief, WeChat Intelligence Inbox, Token Terminal, Watchlist/Alerts, Agent Console, and Data/Ops workspaces.
-- Agent run: `AgentOrchestrator` builds a planner envelope, evaluates policy, loads the fixture batch, applies the selected `TimeWindow`, detects Web3 entities, loads the freshest market snapshot, resolves token entities, generates on-chain fixture snapshots and alerts, writes run artifacts, synthesizes briefing/actions/sources, and returns `IntelligenceSnapshot`.
-- Token loop: `TokenResolutionService` normalizes messages, extracts BTC/ETH/SOL symbols and CA-like strings, resolves `TokenEntity` records, and links related WeChat messages to Token Terminal.
-- Web3 enrichment: `Web3SignalService` detects BTC/ETH/SOL/Web3 mentions in group intelligence and attaches normalized market context.
-- Runtime storage: local-first JSON stores are written under `runtime/wechat`, `runtime/entities`, `runtime/market`, `runtime/onchain`, `runtime/alerts`, and `runtime/runs/{runID}/`.
-- Ops surface: `AgentSyncState`, source health, policy decisions, artifact paths, freshness, and degraded reasons are visible in Agent Console / Data-Ops.
-- UI controls: group selection, time window changes, rescan, and copy summary all call ViewModel methods and append run logs/sync status.
-
-## Runtime Overhaul Status
-
-`wiki/plan/2026-05-24-runtime-data-agent-ops-overhaul.md` is now implemented at MVP runtime depth:
-
-- local `RuntimeBackend` / `RuntimeRepository` / command-query-mutation boundary;
-- evidence, task, watchlist, alert-rule, artifact-manifest, and runtime-health JSON stores;
-- explicit agent module pipeline: Ingestion, Entity Resolver, Market Data, On-chain, Evidence, Alert, Task, Briefing, QA/Policy;
-- Top Command Bar, Left Nav, Main Workspace, Right Inspector, and Bottom Operations Deck;
-- Ops health, artifact completeness, policy state, import/export boundary, secrets boundary, and degraded reasons as runtime data.
-
-## CMC MCP Boundary
-
-The intended live provider is CoinMarketCap MCP / Skills Marketplace:
-
-https://coinmarketcap.com/api/skills-marketplace/
-
-In the current Codex session `mcp__crypto_skill_hub__` is active. The loaded skill is:
-
-```text
-unique_name: altcoin_token_profile
-parameters: {"symbol":"BTC|ETH|SOL","convert":"USD"}
-```
-
-The app therefore reports:
-
-- `CoinMarketCap MCP`: `enabled`
-- `Web3 Enrichment`: `enabled`
-- `Mock Market Fixture`: `standby`
-
-The current normalized snapshot was loaded from CMC Skill Hub executions for BTC, ETH, and SOL. The Swift app does not call the network directly; live refresh belongs to the external agent/MCP execution boundary. Mock market values remain fallback only and must not be described as live CoinMarketCap data.
-
-## Runtime Artifacts
-
-Manual app-free smoke check:
-
-```bash
-swift run WeChatIntelligenceRadar --smoke-check
-```
-
-This runs one agent refresh without launching the desktop window and writes:
-
-```text
-runtime/market/latest-market-snapshot.json
-runtime/wechat/messages.normalized.json
-runtime/entities/token-entities.json
-runtime/onchain/{chain}/{ca-or-tokenID}.json
-runtime/alerts/alerts.json
-runtime/alerts/alert-rules.json
-runtime/evidence/evidence.json
-runtime/tasks/tasks.json
-runtime/watchlist/watchlist.json
-runtime/artifacts/manifest.json
-runtime/health/latest-health.json
-runtime/runs/{runID}/run.json
-runtime/runs/{runID}/planner-envelope.json
-runtime/runs/{runID}/policy-decisions.json
-runtime/runs/{runID}/market-snapshot.json
-runtime/runs/{runID}/intelligence-snapshot.json
-runtime/runs/{runID}/terminal-data.json
-runtime/runs/{runID}/module-runs.json
-runtime/runs/{runID}/subagent-runs.json
-runtime/runs/{runID}/artifact-manifest.json
-runtime/runs/{runID}/logs.json
-```
-
-## Build
-
-```bash
-swift build
-```
-
-## Test
-
-```bash
-swift test
-```
-
-The current CommandLineTools install does not expose `XCTest` as an importable module, so the test target uses framework-free precondition checks for Web3 detection, policy blocking, CMC freshness, fixture JSON loading, CA extraction, time-window filtering, and artifact writing. `swift test` validates the target build; `--smoke-check` is the runtime verification path.
-
-## Run
-
-```bash
-swift run WeChatIntelligenceRadar
-```
+[产品定义](PRODUCT.md) · [交互设计](DESIGN.md) · [开发指南](wiki/development.md) · [开发约束](AGENTS.md)

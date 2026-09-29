@@ -1,0 +1,14 @@
+.nativeSkillDialog { display: grid; gap: 20px; color: var(--text); }
+.nativeSkillIdentity { display: flex; align-items: baseline; gap: 12px; margin: 0; }
+.nativeSkillIdentity span { color: var(--muted); font-size: 12px; }
+.nativeSkillDialog fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.nativeSkillDialog legend { margin-bottom: 10px; font-size: 13px; font-weight: 600; }
+.nativeSkillAgentChoices { display: flex; flex-wrap: wrap; gap: 8px; }
+.nativeSkillAgentChoices label { display: flex; gap: 7px; align-items: center; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.nativeSkillAgentChoices label:has(input:checked) { border-color: var(--text); background: var(--surface-subtle); }
+.nativeSkillAgentChoices input { accent-color: var(--text); }
+.nativeSkillDialog ol { margin: 0; padding-left: 22px; display: grid; gap: 14px; line-height: 1.7; font-size: 14px; }
+.nativeSkillDialog code { display: block; font-size: 12px; overflow-wrap: anywhere; padding: 8px 10px; margin-top: 7px; background: var(--surface-subtle); border-radius: 6px; }
+.nativeSkillNote, .nativeSkillDialog details, .nativeSkillDownloadStatus { font-size: 12px; color: var(--muted); line-height: 1.7; margin: 0; }
+.nativeSkillDialog summary { cursor: pointer; }
+.nativeSkillDownloadStatus { color: var(--text); }

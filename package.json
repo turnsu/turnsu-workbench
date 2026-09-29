@@ -1,0 +1,17 @@
+{
+  "name": "turnsu-workbench",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "start": "npm start --prefix apps/desktop",
+    "build": "npm run build --prefix apps/desktop",
+    "package": "npm run package --prefix apps/desktop",
+    "test": "npm test --prefix packages/agent-host && npm test --prefix apps/desktop",
+    "test:team": "npm test --prefix services/product-api && npm run smoke --prefix apps/team-web"
+  }
+}

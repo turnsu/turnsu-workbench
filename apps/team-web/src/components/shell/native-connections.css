@@ -1,0 +1,24 @@
+.nativeConnections > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.nativeConnections > header h3 { margin: 0; }
+.nativeConnections > header button { display: inline-flex; align-items: center; justify-content: center; background: transparent; color: var(--muted); border: 0; border-radius: 6px; width: 32px; height: 32px; cursor: pointer; }
+.nativeConnections > header button:disabled { opacity: .5; cursor: default; }
+.nativeConnectionList { list-style: none; padding: 0; margin: 0; }
+.nativeConnectionList > li { border-bottom: 1px solid var(--line); padding-block: 16px; }
+.nativeConnectionRow { display: flex; align-items: center; gap: 10px; }
+.nativeConnectionRow > div { display: grid; gap: 5px; flex: 1; min-width: 0; }
+.nativeConnectionRow strong { font-size: 13px; }
+.nativeConnectionRow small { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.nativeConnectionConfirm { margin-top: 16px; padding: 14px; background: var(--surface-subtle); border-radius: 8px; }
+.nativeConnectionConfirm > div { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.nativeConnections > header button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+
+.nativeAgentSetup { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 8px; }
+.nativeAgentSetup ol { padding-left: 20px; margin: 20px 0; }
+.nativeAgentSetup li { padding-left: 4px; margin-block: 18px; }
+.nativeAgentSetup strong { font-size: 13px; }
+.nativeAgentSetup pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--surface-subtle); border-radius: 8px; font-size: 11px; line-height: 1.6; }
+.nativeAgentChoices { display: flex; flex-wrap: wrap; gap: 6px; }
+.nativeAgentChoices button { border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.nativeAgentChoices button[aria-pressed="true"] { background: var(--surface-subtle); border-color: currentColor; }
+.nativeConnectorDownload { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: inherit; text-underline-offset: 3px; }
+.nativeAgentSetup :is(button, a, pre):focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }

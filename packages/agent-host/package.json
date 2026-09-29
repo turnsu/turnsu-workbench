@@ -1,0 +1,17 @@
+{
+  "name": "@turnsu/local-agent-host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "1.5.1",
+    "@anthropic-ai/claude-agent-sdk": "0.2.132",
+    "zod": "4.2.0"
+  }
+}

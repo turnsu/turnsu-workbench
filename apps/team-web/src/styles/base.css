@@ -1,0 +1,306 @@
+:root {
+  color-scheme: light;
+  --bg: #f7f6f3;
+  --page: #f7f6f3;
+  --sidebar: #efede8;
+  --surface: #fffefb;
+  --surface-raised: #ffffff;
+  --surface-subtle: #f2f0eb;
+  --surface-hover: #eeecff;
+  --surface-selected: #e9e7ff;
+  --canvas: #faf9f6;
+  --canvas-dot: #d8d4cc;
+  --node: #fffefb;
+  --line: #dedad2;
+  --line-strong: #b7b0a5;
+  --text: #1b1917;
+  --muted: #6b665f;
+  --faint: #8b857c;
+  --accent: #4f46e5;
+  --accent-strong: #4338ca;
+  --accent-soft: #ecebff;
+  --success: #17633a;
+  --success-bg: #edf8f1;
+  --warning: #8a5a00;
+  --warning-bg: #fff5d7;
+  --danger: #b42318;
+  --danger-bg: #fff0ef;
+  --info: #1e5aa8;
+  --info-bg: #edf4ff;
+  --control: #ffffff;
+  --control-hover: #f5f7fb;
+  --control-active: #e8f1ff;
+  --radius: 8px;
+  --shadow-tight: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --focus-ring: 0 0 0 3px rgba(79, 70, 229, 0.2);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  background: var(--bg);
+  color: var(--text);
+}
+
+:root[data-theme="dark"],
+.shell[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #15191f;
+  --sidebar: #1a1f27;
+  --surface: #202631;
+  --surface-raised: #252c37;
+  --surface-subtle: #2a313d;
+  --surface-hover: #303946;
+  --surface-selected: #18345f;
+  --canvas: #1b212b;
+  --canvas-dot: #354153;
+  --node: #252c37;
+  --line: #343e4d;
+  --line-strong: #566275;
+  --text: #f4f7fb;
+  --muted: #b1bccb;
+  --faint: #94a1b3;
+  --accent: #69a7ff;
+  --accent-strong: #9cc5ff;
+  --accent-soft: #15345f;
+  --success: #72d99a;
+  --success-bg: #132a1f;
+  --warning: #f2c76b;
+  --warning-bg: #342914;
+  --danger: #ff9189;
+  --danger-bg: #371c1b;
+  --info: #9ac5ff;
+  --info-bg: #182e4d;
+  --control: #252c37;
+  --control-hover: #303946;
+  --control-active: #17365f;
+  --shadow-tight: 0 1px 2px rgba(0, 0, 0, 0.28);
+}
+
+* { box-sizing: border-box; }
+
+html,
+body,
+#root {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  min-width: 0;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea { font: inherit; }
+
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+
+.loopButton.loopButton-primary:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.loopButton.loopButton-primary:not(:disabled):hover {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3,
+p { margin-top: 0; }
+
+h1 {
+  margin-bottom: 4px;
+  font-size: 23px;
+  font-weight: 680;
+  line-height: 1.18;
+}
+
+h2 {
+  margin-bottom: 4px;
+  font-size: 15px;
+  font-weight: 680;
+  line-height: 1.25;
+}
+
+h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 680;
+}
+
+p { color: var(--muted); }
+.muted { color: var(--muted); }
+
+.workspaceBody {
+  min-width: 0;
+  min-height: 0;
+  padding: 18px 24px;
+  overflow: auto;
+}
+
+.surface {
+  min-width: 0;
+  min-height: calc(100vh - 116px);
+}
+
+.objectKicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.workspaceConnectionBanner,
+.workspacePermissionBanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.workspaceConnectionBanner {
+  min-height: 38px;
+  margin: 0 20px 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--warning);
+  border-radius: 7px;
+  background: var(--warning-bg);
+}
+
+.workspacePermissionBanner {
+  justify-content: space-between;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-subtle);
+  color: var(--muted);
+}
+
+.workspaceConnectionBanner > div,
+.workspacePermissionBanner > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.workspaceConnectionBanner span { color: var(--muted); }
+.workspacePermissionBanner strong { color: var(--text); }
+
+.workspaceConnectionBanner button,
+.workspacePermissionBanner button {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.workspaceConnectionBanner button {
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.workspaceConnectionBanner button:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring);
+}
+
+.toastStack {
+  position: fixed;
+  z-index: 240;
+  right: 24px;
+  bottom: 24px;
+  display: grid;
+  width: min(360px, calc(100vw - 32px));
+  gap: 10px;
+}
+
+.toast {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-tight);
+}
+
+.toast p { margin: 0 0 8px; color: var(--text); }
+.toastActions { display: flex; justify-content: flex-end; gap: 8px; }
+
+.emptyState {
+  max-width: 520px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+@media (max-width: 720px) {
+  .workspaceBody { padding: 12px; }
+
+  .toastStack {
+    right: 12px;
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    width: calc(100vw - 24px);
+  }
+
+  .toastStack .toast:nth-child(n + 2) { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+/* `npm run review` can be backed by a controlled visual fixture. Keep its
+   evidence boundary visible without changing the production build. */
+.visualReviewOnlyNotice {
+  position: fixed;
+  z-index: 10000;
+  inset-block-start: 10px;
+  inset-inline-end: 12px;
+  max-width: min(420px, calc(100vw - 24px));
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, #d97706 45%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, #fff7ed 96%, transparent);
+  color: #7c2d12;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 14%);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.visualReviewOnlyNotice strong {
+  font-size: 13px;
+}

@@ -1,71 +1,25 @@
-# 产品
+# Turnsu 工作台
 
-## 默认类别
+Turnsu 工作台是交付给企业员工的**本地 Agent 工作入口**。用户在自己的电脑上打开项目、导入或引用资料，沿用已安装的 Agent 完成任务，核对真实文件和回答，并在重开后继续工作。工作台的核心路径不要求登录 Turnsu 云端；客户需要团队共享、云端复杂任务或业务系统连接时，再明确启用对应能力。
 
-product
+## 用户与价值时刻
 
-## 用户
+客服、运营、销售、行政和交付人员常有散落在本机文件及授权聊天记录里的工作。价值时刻不是 Agent 回答了一段话，而是员工能在选定项目中找到可核对的成果，理解材料来自哪里、哪些没有处理、下一步由谁完成。主管和管理员可在接入团队服务后管理共享事项，但不接管每个人的原生 Agent 会话。
 
-核心用户是一位高频使用本地 macOS App 的个人操作者。他在日常工作中用统一 Agent 完成三类高频任务：crypto 数据获取与分析、equity / cross-asset markets research、会议提要和文档撰写。
+一条主路径：打开项目 → 选择或导入资料 → 选择 Codex、Pi、Claude Code 或 OpenCode 与模型来源 → 描述任务 → 回应真实权限请求 → 查看回答和项目成果 → 修订或确认 → 重开继续。有效做法可整理为 Skill；Loop 只承载必要的顺序步骤，不成为任务的前置设置。
 
-用户打开这个 App 不是为了浏览装饰性的仪表盘，而是要快速回答：
+## 产品组成
 
-- 我能不能马上布置一个 crypto、markets 或 office 任务？
-- 当前结果能不能继续追问或改写？
-- 哪个最终结果是权威结果？
-- 这份结果能不能复制、保存或交付？
-- 哪些安全边界需要我确认，同时不暴露内部工具和运行时管线？
+- **本地工作台**：项目、会话、草稿、项目文件、来源引用、执行活动、权限请求、停止与恢复。历史按页读取，闲置执行连接按需回收。
+- **多个执行 Agent**：尊重客户已安装、已登录的原生 CLI 及账号。新任务可选执行器，个人和项目默认值只影响新会话；既有会话固定原生 ID。换 Agent 是新执行，不假装移植隐藏上下文。
+- **资料与成果**：用户选择的项目文件、系统文件选择器导入、可选微信桥交接。原件、项目副本、发送时文本快照与 Agent 结果各有清楚边界。常用成果由系统打开，其他文件可定位；工作台不把模型回答当作业务系统回执。
+- **Skill OS**：从真实任务发现、使用、整理和试跑方法。Loop 保留简明复用能力。Skill 不能授予自己文件、网络或业务写入权限。
+- **可选团队扩展**：现有 Product API、共享事项、云端 Agent 和客户业务连接器按授权启用。本地任务不依赖它们。
 
-## 产品目的
+使用远程模型的本地 Agent 仍可能把输入发送到模型服务；“本地工作台”表示项目与会话的默认所有权在用户设备上，不保证离线推理或零数据外发。原生 Agent 的工具和批准策略由其自身配置决定，工作台展示并转交请求，不能仅凭统一界面宣称所有执行器都受同一沙箱约束。
 
-looloomi 是一个本地优先的统一 Agent 工作台。它把任务布置、连续追问、CMC 结果阅读、Markets Research 草稿、会议提要、文档草稿、复核和交付动作收束到一个安静的桌面工作界面中。
+## 版本完成标准
 
-成功状态是：这个 App 像一个完整的 macOS 工作应用，而不是终端、聊天记录或运维控制台。
+当前目标是**通用本地 To B 客户版**：真实 Agent 能完成本机文件任务，失败可恢复，用户能核对结果，已有数据升级后仍在，macOS 与 Windows 的发行和长时资源表现经过实机验收。客户专属 CRM、订单、企业租户和云端客服并非本地版前置条件；这些扩展不能在缺少系统和授权样本时宣称已交付。
 
-当前实现状态：Blocks Workbench 是 SwiftUI 默认工作台。主导航保持 Workbench / History / Settings；Workbench 由 Domain Blocks、Loop Templates、Active Loops、block-aware result canvas 和 Loop Composer 组成。Crypto、Markets、Office 是用户可见的垂直 block；CMC、Markets Research、Office/Meeting、Cloud ASR、Feishu、WeChatCLI、memory 和 subagent coordination 继续作为后台能力或任务状态出现。Command Desk v2 是上一版可用基线，不再是最终 active design。
-
-- 首屏是可工作的界面，而不是系统说明页、日志页或运行监控页。
-- 用户不需要理解实现细节，也能开始新任务或恢复旧任务。
-- 当前任务、最终答案、草稿正文和下一步动作可以一眼扫到。
-- 常用 crypto market loop、markets research loop、office drafting loop 可以从 Domain Block 内快速启动，并能在结果上 review、continue、refine 或 prepare delivery。
-- 内部 runtime 概念只出现在 artifact、诊断或设置中。
-
-## 品牌个性
-
-安静、精确、私密。
-
-产品气质应更接近 Apple 原生生产力应用，而不是加密交易终端或 AI demo。它通过克制的层级、稳定的控件和可预测的交互建立信任，而不是通过装饰效果建立气氛。
-
-## 反参考
-
-- 默认首屏像 Bloomberg 式高密度交易终端。
-- 只靠聊天历史承载任务状态的 chat-only shell。
-- 常驻日志、资料源列表、provider 状态、policy matrix 或 artifact 列表的运维看板。
-- 黑色驾驶舱、发光边框、大面积渐变和密集状态 chip。
-- App 内出现营销页式 hero、超大卡片和解释功能的长文案。
-- 暴露 raw provider、internal tool、normalizer、worker、raw artifact field、secret 或 runtime implementation name。
-
-## 设计原则
-
-1. 从命令和结果出发，不从资料源出发。
-   默认界面要先展示可布置的任务、当前结果、追问入口和下一步动作。资料源和 runtime 细节是辅助层。
-
-2. 一个权威答案。
-   UI 不允许让用户在 stream blob、session message 和 artifact 文件之间做判断。最终输出只来自 final read model。
-
-3. 渐进式细节。
-   Evidence、context、review、policy 和 artifacts 都可以查看，但不能和当前结果画布抢主层级。
-
-4. 展示能力包，不展示基础设施。
-   Crypto、Markets Research、Office/Meeting、飞书交付和本地输入以用户可理解的任务意图出现。内部 provider 和 tool name 继续隐藏。
-
-5. 安静的可信感。
-   使用 Apple 风格的间距、层级、原生控件和克制色彩。界面应当退到任务背后。
-
-## 无障碍与包容性
-
-- 默认支持 system-adaptive light/dark appearance，以 light-first 构图为基线，并保持完整 dark mode parity。
-- 尊重 reduced motion 和 reduced transparency。
-- 正文和控件对比度必须达到 WCAG AA。
-- 长中文任务标题、混合英文 ID、市场 symbol 必须能稳定截断或换行，不得重叠。
-- 颜色不能作为唯一状态表达；必须同时依赖标签、图标和位置。
+实现事实与尚缺的验收分别见[架构](wiki/architecture.md)、[本地交付计划](wiki/roadmap.md)和[验证记录](wiki/verification.md)。

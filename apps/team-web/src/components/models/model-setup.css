@@ -1,0 +1,17 @@
+.modelSetupForm { display: grid; gap: 20px; max-width: 100%; }
+.modelSetupIntro, .modelSetupHint { margin: 0; color: var(--muted, #62656b); font-size: 14px; line-height: 1.7; }
+.modelSetupForm fieldset { display: grid; gap: 16px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.modelSetupForm label { display: grid; gap: 8px; font-size: 14px; font-weight: 500; }
+.modelSetupForm input:not([type=checkbox]), .modelSetupForm select { box-sizing: border-box; width: 100%; min-width: 0; height: 44px; border: 1px solid var(--line, #d6d7da); border-radius: 8px; padding: 0 12px; color: inherit; background: var(--surface, #fff); font: inherit; }
+.modelSetupForm input:focus-visible, .modelSetupForm select:focus-visible { outline: 2px solid #db6837; outline-offset: 2px; }
+.modelSetupRow { display: grid; grid-template-columns: 1fr 1.5fr; gap: 16px; }
+.modelSetupForm .modelSetupCheckbox { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.modelSetupCheckbox input { width: 18px; height: 18px; accent-color: #db6837; }
+.modelSetupHint { font-size: 12px; margin-top: -6px; }
+.modelSetupError { margin: 0; color: var(--danger, #b42318); font-size: 14px; line-height: 1.7; }
+@media (max-width: 540px) { .modelSetupRow { grid-template-columns: 1fr; } .modelSetupForm input:not([type=checkbox]), .modelSetupForm select { font-size: 16px; } }
+
+.modelSetupAdvanced { border-top: 1px solid var(--line); padding-top: 14px; }
+.modelSetupAdvanced summary { cursor: pointer; font-size: 13px; font-weight: 500; }
+.modelSetupAdvanced summary span { float: right; color: var(--muted); font-size: 12px; font-weight: 400; }
+.modelSetupAdvanced .modelSetupRow { margin-top: 16px; }

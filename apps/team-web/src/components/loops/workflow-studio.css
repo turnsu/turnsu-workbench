@@ -1,0 +1,158 @@
+.shell.turnsuWorkbench.page-builder .workspaceBody:has(.workflowStudio) { padding: 0; overflow: hidden; }
+.workflowStudio { height: 100dvh; max-height: 100%; min-height: 480px; min-width: 0; display: flex; flex-direction: column; background: var(--surface); color: var(--text); font-size: 13px; }
+.workflowStudio * { box-sizing: border-box; }
+.workflowStudio button, .workflowStudio input, .workflowStudio textarea, .workflowStudio select { font: inherit; }
+.workflowStudio button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid transparent; background: transparent; color: var(--text); border-radius: 7px; cursor: pointer; min-height: 32px; padding: 6px 10px; }
+.workflowStudio button:disabled { cursor: default; opacity: .38; }
+.workflowStudio button:not(:disabled):hover { background: var(--surface-subtle, #f1f1f1); }
+.workflowStudio :is(button,input,textarea,select,summary,[tabindex]):focus-visible { outline: 2px solid #e46c39; outline-offset: 3px; }
+.studioHeader { display: flex; align-items: center; gap: 10px; min-height: 72px; padding: 12px 22px 12px 16px; border-bottom: 1px solid var(--line); }
+.studioIdentity { min-width: 0; flex: 1; }
+.shell .workflowStudio .studioIdentity h1 { font-size: 17px; line-height: 1.45; font-weight: 620; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -.025em; }
+.studioIdentity > span { display: flex; gap: 4px; align-items: center; margin-top: 3px; color: var(--muted); font-size: 11px; }
+.studioHeaderActions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.workflowStudio .studioPrimary { background: #202020; color: #fff; padding: 8px 14px; border: 1px solid #202020; }
+.workflowStudio .studioPrimary:not(:disabled):hover { background: #3b3b3b; }
+.workflowStudio .studioSave { margin: 0 8px; border-color: var(--line); }
+.studioToolbar { display: flex; align-items: center; gap: 4px; padding: 8px 22px; min-height: 52px; border-bottom: 1px solid var(--line); }
+.studioToolbar button { color: var(--muted); font-size: 12px; }
+.studioToolbar button:first-child { color: var(--text); }
+.studioToolbar button.active { background: var(--surface-subtle); color: var(--text); }
+.studioGraphCount { margin-left: auto; color: var(--faint); font-size: 11px; white-space: nowrap; }
+.studioBody { flex: 1; display: flex; min-height: 0; min-width: 0; overflow: hidden; }
+.studioCanvasSlot { flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column; }
+.studioGraph { flex: 1; min-height: 0; position: relative; overflow: hidden; background-color: var(--canvas, #f7f7f7); background-image: radial-gradient(color-mix(in srgb, var(--muted) 24%, transparent) .8px, transparent .8px); background-size: 20px 20px; touch-action: none; cursor: grab; }
+.studioGraph:active { cursor: grabbing; }
+.studioGraphWorld { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; }
+.studioWires { position: absolute; overflow: visible; width: 1px; height: 1px; pointer-events: none; }
+.studioWire { fill: none; stroke: #a8a8ab; stroke-width: 1.8; }
+.studioWireHit { fill: none; stroke: transparent; stroke-width: 16; pointer-events: stroke; cursor: pointer; }
+.studioWires g.selected .studioWire, .studioWires g:focus-within .studioWire { stroke: #db6738; stroke-width: 2.4; }
+.studioNode { position: absolute; pointer-events: auto; border: 1px solid var(--line-strong, #d8d8db); background: var(--surface); border-radius: 10px; box-shadow: 0 2px 5px rgb(0 0 0 / 4%); color: var(--text); cursor: default; }
+.studioNode.selected { border-color: #dd794e; box-shadow: 0 0 0 2px #e8814e20, 0 4px 12px #00000009; }
+.workflowStudio .studioNodeHeader { display: flex; justify-content: flex-start; gap: 10px; width: 100%; height: 60px; padding: 12px 14px; border-radius: 10px 10px 0 0; text-align: left; cursor: grab; touch-action: none; }
+.studioNodeHeader > span:nth-child(2) { min-width: 0; flex: 1; display: grid; gap: 4px; }
+.studioNodeHeader small { color: var(--muted); font-size: 10px; }
+.studioNodeHeader strong { font-size: 13px; line-height: 1.4; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.studioNodeIcon, .studioLibraryIcon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0; color: #7558a4; background: #f1edf9; }
+.kind-Input .studioNodeIcon, .studioLibraryIcon.kind-Input { color: #3b74a1; background: #eaf2fa; }
+.kind-Output .studioNodeIcon, .studioLibraryIcon.kind-Output { color: #488463; background: #eaf4ee; }
+.kind-ReviewGate .studioNodeIcon, .studioLibraryIcon.kind-ReviewGate { color: #aa7636; background: #fbf2e5; }
+.kind-Material .studioNodeIcon { color: #63788b; background: #edf2f7; }
+.studioNodeDone { color: #518d69; flex-shrink: 0; }
+.studioNodeFailed { color: #b45538; flex-shrink: 0; }
+.studioNodePorts { display: grid; grid-template-columns: 1fr 1fr; padding-top: 8px; }
+.studioNodePorts > div { min-width: 0; }
+.workflowStudio .studioPort { position: relative; display: flex; width: 100%; min-height: 24px; height: 24px; padding: 0 13px; border: 0; border-radius: 0; font-size: 11px; color: var(--muted); }
+.studioPort.input { text-align: left; justify-content: flex-start; }
+.studioPort.output { text-align: right; justify-content: flex-end; }
+.studioPort span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.studioPort i { position: absolute; width: 9px; height: 9px; border: 1.5px solid #a7a7ad; border-radius: 50%; background: var(--surface); top: 8px; }
+.studioPort.input i { left: -5px; }
+.studioPort.output i { right: -5px; }
+.studioPort.active i, .studioPort.target:hover i { border-color: #dd794e; background: #dd794e; }
+.studioPort.target i { box-shadow: 0 0 0 4px #e8814e17; }
+.studioNodeFoot { height: 28px; padding: 2px 12px 2px 14px; display: flex; align-items: center; justify-content: space-between; color: var(--faint); font-size: 10px; }
+.studioNodeFoot .studioMissing { color: #a66c2d; }
+.workflowStudio .studioNodeFoot button { min-height: 22px; height: 22px; padding: 0 3px; font-weight: 700; color: var(--muted); }
+.studioCanvasTools { position: absolute; bottom: 22px; left: 22px; display: flex; align-items: center; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 2px 8px #00000005; }
+.studioCanvasTools button { min-width: 30px; padding: 5px 7px; font-size: 11px; }
+.studioZoom { font-size: 11px; width: 36px; text-align: center; color: var(--muted); }
+.studioToolDivider { height: 17px; width: 1px; background: var(--line); margin: 0 4px; }
+.studioCanvasHint { position: absolute; right: 22px; bottom: 28px; display: flex; align-items: center; gap: 6px; margin: 0; color: var(--faint); font-size: 10px; pointer-events: none; }
+.panelOpen .studioCanvasHint { display: none; }
+.studioCanvasMessage { position: absolute; top: 16px; left: 16px; right: 16px; display: flex; align-items: center; gap: 8px; padding: 7px 9px 7px 13px; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; box-shadow: 0 3px 12px #00000009; font-size: 12px; }
+.studioCanvasMessage > span { flex: 1; min-width: 0; }
+.studioCanvasMessage button { flex-shrink: 0; font-size: 11px; }
+.studioEmpty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--muted); }
+.studioEmpty h2 { margin-top: 16px; font-size: 18px; color: var(--text); }
+.studioEmpty p { max-width: 280px; text-align: center; line-height: 1.7; }
+.studioEmpty button { border-color: var(--line); background: var(--surface); margin-top: 10px; }
+.studioPanel { width: 346px; min-width: 0; flex-shrink: 0; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: var(--surface); }
+.studioPanel.panel-run { width: 380px; }
+.studioPanelHeader { display: flex; align-items: center; gap: 12px; padding: 20px; border-bottom: 1px solid var(--line); }
+.studioPanelHeader > div { flex: 1; min-width: 0; }
+.studioPanelHeader small { font-size: 10px; color: var(--muted); }
+.studioPanelHeader h2 { margin: 5px 0 0; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; }
+.studioPanelHeader button { padding: 4px; }
+.studioPanelContent { padding: 20px; overflow: auto; min-height: 0; flex: 1; }
+.studioPanelContent p { font-size: 12px; line-height: 1.7; margin: 0 0 18px; }
+.studioPanelContent h3 { margin: 22px 0 12px; font-size: 11px; font-weight: 500; color: var(--muted); }
+.studioPanelContent fieldset { border: 0; min-width: 0; padding: 0; margin: 0; display: grid; gap: 18px; }
+.studioPanelContent fieldset h3 { margin: 6px 0 -6px; }
+.studioField { min-width: 0; display: grid; gap: 8px; }
+.studioField > span { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.studioField small { font-size: 10px; color: var(--faint); }
+.studioField :is(input,textarea,select) { width: 100%; min-width: 0; border: 1px solid var(--line-strong, #ddd); border-radius: 7px; padding: 9px 10px; color: var(--text); background: var(--surface); font-size: 12px; line-height: 1.65; }
+.studioField textarea { resize: vertical; }
+.studioOutputPorts { display: grid; gap: 8px; }
+.studioOutputPorts > span { display: flex; justify-content: space-between; padding: 9px 10px; font-size: 12px; background: var(--surface-subtle, #f6f6f6); border-radius: 6px; }
+.studioOutputPorts small { color: var(--faint); font-size: 10px; }
+.studioAdvanced { border-top: 1px solid var(--line); padding-top: 8px; }
+.studioAdvanced summary { display: flex; justify-content: space-between; padding: 10px 0; font-size: 12px; color: var(--muted); cursor: pointer; list-style: none; }
+.studioAdvanced summary::-webkit-details-marker { display: none; }
+.studioAdvanced > div { display: grid; gap: 16px; padding: 10px 0; }
+.studioCheck { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.workflowStudio .studioRemove { justify-content: flex-start; color: #a64a3d; font-size: 12px; justify-self: start; padding-left: 0; }
+.studioSearch { display: flex; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); }
+.studioSearch input { border: 0; outline: none; background: none; width: 100%; min-width: 0; color: var(--text); font-size: 12px; }
+.workflowStudio .studioLibraryItem { text-align: left; display: flex; width: 100%; padding: 12px 7px; gap: 11px; border-bottom: 1px solid var(--line); border-radius: 0; }
+.studioLibraryItem > span:nth-child(2) { display: grid; gap: 6px; min-width: 0; flex: 1; }
+.studioLibraryItem strong { font-size: 12px; font-weight: 550; }
+.studioLibraryItem small { color: var(--muted); font-size: 11px; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.studioLibraryItem > svg { flex-shrink: 0; }
+.studioPublish { margin-top: 25px; border-top: 1px solid var(--line); padding-top: 12px; }
+.studioPublish button { border-color: var(--line); }
+.shell.turnsuWorkbench .workflowStudio .modelSettingsGrid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.shell.turnsuWorkbench .workflowStudio .modelSettingsField { display: grid; gap: 8px; min-width: 0; font-size: 12px; }
+.shell.turnsuWorkbench .workflowStudio .modelSwitchTrigger { width: 100%; }
+.shell.turnsuWorkbench .workflowStudio .modelSwitchPopover { width: 100%; min-width: 0; }
+.studioRunTabs { display: flex; border-bottom: 1px solid var(--line); margin: -4px 0 20px; gap: 14px; }
+.studioRunTabs button { border-radius: 0; padding: 8px 0 12px; color: var(--muted); font-size: 12px; }
+.studioRunTabs button[aria-selected="true"] { border-bottom: 2px solid var(--text); color: var(--text); }
+.workflowStudio .studioStartRun { width: 100%; margin-top: 20px; min-height: 38px; }
+.studioRunStatus { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 18px 0; }
+.studioRunStatus > span { display: flex; align-items: center; gap: 6px; }
+.studioRunStatus.status-completed > span { color: #47815e; }
+.studioRunStatus small { color: var(--muted); font-size: 10px; }
+.studioRunSteps { padding: 0; list-style: none; margin: 18px 0 24px; display: grid; gap: 14px; }
+.studioRunSteps li { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.studioRunSteps li > span:nth-child(2) { flex: 1; min-width: 0; }
+.studioRunSteps small { color: var(--muted); font-size: 10px; }
+.studioStepDot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.studioStepDot.status-completed { background: #57916c; }
+.studioStepDot.status-failed { background: #be6953; }
+.studioResult { border-top: 1px solid var(--line); padding-top: 4px; margin-bottom: 20px; overflow-wrap: anywhere; }
+.studioResult .agentMarkdown { font-size: 12px; line-height: 1.75; }
+.studioResult .agentMarkdown h3 { color: var(--text); font-size: 14px; font-weight: 600; }
+.studioResult .agentMarkdown h4 { font-size: 12px; }
+.studioResult .agentMarkdownTable { overflow: auto; }
+.studioResult table { border-collapse: collapse; }
+.studioResult td, .studioResult th { padding: 7px; border: 1px solid var(--line); }
+.studioNoResult { padding: 32px 0; text-align: center; color: var(--muted); }
+.studioNoResult p { margin: 14px 0; }
+.studioPanelContent .studioRunError { color: #b45538; font-size: 12px; line-height: 1.7; margin-top: 15px; }
+.studioConflict { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 20px; background: var(--warning-bg); color: var(--warning); font-size: 12px; }
+.studioConflict > span { flex: 1; }
+.studioSpinner { animation: studioSpin 1s linear infinite; }
+.studioMobileSteps { display: none; }
+@keyframes studioSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .studioSpinner { animation: none; } }
+@media (max-width: 1050px) { .studioHeader { padding: 10px 12px; } .studioHeaderActions { gap: 0; } .studioPanel, .studioPanel.panel-run { width: 326px; } .studioCanvasHint { display: none; } .studioGraphCount { display: none; } }
+@media (max-width: 820px) {
+  .workflowStudio { height: calc(100dvh - 52px); min-height: 0; }
+  .studioHeader { min-height: 68px; padding: 8px; flex-wrap: wrap; gap: 4px; }
+  .shell .workflowStudio .studioIdentity h1 { font-size: 14px; }
+  .studioIdentity { width: calc(100% - 45px); flex: auto; }
+  .studioHeaderActions { width: 100%; padding-left: 36px; justify-content: flex-end; }
+  .studioHeaderActions .studioSave { margin-left: auto; }
+  .studioToolbar { padding: 6px 10px; justify-content: space-between; }
+  .studioToolbar button { font-size: 11px; padding: 7px; }
+  .studioBody.panelOpen .studioCanvasSlot { display: none; }
+  .studioPanel, .studioPanel.panel-run { width: 100%; border-left: 0; }
+  .studioCanvasTools { left: 12px; bottom: 16px; }
+  .studioMobileSteps { display: flex; gap: 6px; overflow: auto; padding: 8px 12px; background: var(--surface); border-top: 1px solid var(--line); }
+  .studioMobileSteps button { flex-shrink: 0; font-size: 11px; border-color: var(--line); }
+  .studioPanelHeader { padding: 14px 18px; }
+  .workflowStudio .studioIconButton, .studioPanelHeader button { min-width: 40px; min-height: 40px; }
+}
