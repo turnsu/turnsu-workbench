@@ -8,7 +8,7 @@ const fail = message => { throw new Error(message); };
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export class Computer {
   constructor(host, transport) {
-    this.host = host; this.transport = transport; this.active = null; this.busy = false;
+    this.host = host; this.transport = transport; this.active = null; this.busy = false; this.generation = 0;
     this.db = host.db;
     this.db.exec(`CREATE TABLE IF NOT EXISTS computer_grants(id TEXT PRIMARY KEY,project_id TEXT NOT NULL REFERENCES projects(id),config TEXT NOT NULL,status TEXT NOT NULL,expires_at INTEGER NOT NULL);
       UPDATE computer_grants SET status='expired' WHERE status='active';`);
@@ -18,7 +18,7 @@ export class Computer {
   async start(input) {
     if (this.active || this.starting) fail('同一台电脑只允许一个电脑操作任务。请先停止当前授权。');
     this.host.requireResource?.('computer');
-    this.starting = true; let scratch;
+    this.starting = true; const generation = this.generation; let scratch;
     try {
       const project = this.host.project(input.projectId);
       if (this.db.prepare('SELECT 1 FROM shared_projects WHERE project_id=?').get(project.id)) fail('请在私有项目中单独授权电脑操作。');
@@ -39,7 +39,9 @@ export class Computer {
       }
       const manifest = computerPolicy(input, { inputDirectory: input.mode === 'isolated' ? '/input' : inputDirectory, outputDirectory: input.mode === 'isolated' ? '/output' : outputDirectory });
       const config = { id, projectId: project.id, root, mode: input.mode, manifest, scratch, inputs, network: input.network === true, expiresAt: this.host.clock() + input.minutes * 60_000 };
+      if (generation !== this.generation) fail('电脑操作准备已取消，请重新授权。');
       await this.transport('start', config);
+      if (generation !== this.generation) fail('电脑操作准备已取消，请重新授权。');
       this.db.prepare('INSERT INTO computer_grants VALUES(?,?,?,\'active\',?)').run(id, project.id, JSON.stringify(config), config.expiresAt);
       this.active = config; this.owner = null; this.touched = this.host.clock(); this.host.notify({ type: 'computer-changed' }); this.host.changed(); return this.status();
     } catch (e) {
@@ -58,9 +60,11 @@ export class Computer {
     if (this.busy) fail('上一次电脑操作尚未完成。');
     if (request.tool !== 'describe' && !grant.manifest.allow.tools.includes(request.tool)) fail('电脑工具不在授权清单中。');
     if (JSON.stringify(request).length > 100_000) fail('电脑操作参数超过上限。');
-    if (await realpath(this.host.project(projectId).path) !== grant.root) fail('项目目录已变化，请撤销并重新授权。');
+    // Reserve before any async filesystem work, including against another session in this Host.
     this.owner = sessionId; this.busy = true; this.touched = this.host.clock();
     try {
+      if (await realpath(this.host.project(projectId).path) !== grant.root) fail('项目目录已变化，请撤销并重新授权。');
+      if (this.active !== grant || grant.expiresAt <= this.host.clock()) fail('电脑操作已被暂停或撤销，请核对应用当前状态。');
       const result = await this.transport(request.tool === 'describe' ? 'describe' : 'call', { ...request, grantId: grant.id, manifestHash: digest(grant.manifest) });
       if (this.active !== grant) fail('电脑操作已被暂停或撤销，请核对应用当前状态。');
       return result;
@@ -68,6 +72,7 @@ export class Computer {
     } finally { this.busy = false; }
   }
   async stop() {
+    this.generation++;
     const grant = this.active; this.active = null; this.owner = null;
     if (grant) this.db.prepare("UPDATE computer_grants SET status='revoked' WHERE id=?").run(grant.id);
     await this.transport('stop'); this.host.notify({ type: 'computer-changed' }); this.host.changed();

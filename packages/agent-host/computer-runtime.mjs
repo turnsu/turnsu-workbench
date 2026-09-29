@@ -27,7 +27,7 @@ const pack = process.env.TURNSU_COMPUTER_PACK || fileURLToPath(new URL('./comput
 // driver, its TCC attribution, the stop action, and all child processes. Never a global daemon.
 export class ComputerRuntime {
   constructor(directory, notify = () => {}) {
-    this.directory = join(directory, 'computer-runtime'); this.notify = notify; this.children = new Set(); this.active = null; this.ready = this.restore();
+    this.directory = join(directory, 'computer-runtime'); this.notify = notify; this.children = new Set(); this.active = null; this.generation = 0; this.ready = this.restore();
   }
   async restore() {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
@@ -80,15 +80,20 @@ export class ComputerRuntime {
     await rename(temp, join(this.directory, 'installed.json')); this.config = config;
   }
   async start(config) {
+    const generation = this.generation;
+    const checkStarting = () => { if (generation !== this.generation) fail('电脑操作准备已取消，请重新授权。'); };
     await this.ready;
+    checkStarting();
     if (this.active || this.cleanupPending || this.starting || this.installing) fail('已有电脑运行时或待回收环境，请先停止后重试。');
     if (!config.manifest || config.manifest.version !== 3 || !config.manifest.allow?.tools?.length) fail('电脑操作策略缺失或无效。');
     this.starting = true;
     try {
       if (this.config?.version !== DRIVER_VERSION) fail('请先准备固定版本的电脑操作环境。');
       const manifestPath = join(config.scratch, 'capabilities.json'); await writeFile(manifestPath, JSON.stringify(config.manifest), { mode: 0o644, flag: 'wx' });
+      checkStarting();
       this.active = { ...config, manifestHash: hash(JSON.stringify(config.manifest)) };
       await writeFile(join(this.directory, 'active.json'), JSON.stringify({id:config.id,mode:config.mode}), {mode:0o600,flag:'wx'});
+      checkStarting();
       if (config.mode === 'isolated') {
         const docker = executable('docker'); if (!docker || !this.config.image) fail('隔离环境未就绪。请重新检查，不会自动切换本机。');
         this.active.container = `turnsu-cua-${config.id}`;
@@ -96,25 +101,29 @@ export class ComputerRuntime {
       } else {
         const binary = this.config.binary;
         if (!binary || hash(await readFile(binary)) !== this.config.binaryHash) fail('本机 Driver 未安装或文件已变化，请重新准备。');
+        checkStarting();
         const endpoint = process.platform === 'win32' ? `\\\\.\\pipe\\turnsu-cua-${config.id}` : join(config.scratch, 'driver.sock'); this.active.endpoint = endpoint;
         this.launchDriver(binary, ['serve', '--embedded', '--parent-liveness-stdio', '--permission-mode', 'bounded', '--capability-manifest', manifestPath, '--approve-capability-manifest', '--socket', endpoint]);
       }
       let last;
       for (let attempt = 0; attempt < 5; attempt++) {
+        checkStarting();
         try {
           this.rpc = config.mode === 'isolated'
             ? new CapabilityMcp(executable('docker'), ['exec', '-i', this.active.container, '/opt/cua/cua-driver', 'mcp', '--embedded', '--socket', '/tmp/driver.sock'], { children: this.children })
             : new CapabilityMcp(this.config.binary, ['mcp', '--embedded', '--socket', this.active.endpoint], { children: this.children });
           const catalog = await this.rpc.initialize();
+          checkStarting();
           if (!Array.isArray(catalog.tools) || config.manifest.allow.tools.some(name => !catalog.tools.some(tool => tool.name === name))) fail('Driver 没有提供授权清单中的工具。');
           this.toolCatalog = catalog.tools.filter(tool => config.manifest.allow.tools.includes(tool.name));
           if (config.mode === 'isolated') {
             const prepared = await this.rpc.request('tools/call', { name: 'browser_prepare', arguments: { session: `turnsu-${config.id}`, allow_launch: true, profile: { mode: 'isolated_new' } } });
+            checkStarting();
             if (prepared.isError || prepared.structuredContent?.status !== 'ok' || !prepared.structuredContent?.prepared_pid) fail('隔离浏览器未通过实际启动检查。');
             this.active.browser = prepared.structuredContent;
           }
           return { started: true, browser: this.active.browser };
-        } catch (e) { last = e.message; await this.rpc?.close(); this.rpc = null; }
+        } catch (e) { last = e.message; await this.rpc?.close(); this.rpc = null; checkStarting(); }
         await new Promise(resolve => setTimeout(resolve, 500));
       }
       fail('电脑操作尚未就绪。请检查图形环境、系统权限与运行包；不会启动其他模式。' + (last ? ' 运行时未通过检查。' : ''));
@@ -149,6 +158,7 @@ export class ComputerRuntime {
     }
   }
   async stop() {
+    this.generation++;
     await this.ready;
     if (this.stopping) return this.stopping;
     this.stopping = this.performStop().finally(() => { this.stopping = null; });
