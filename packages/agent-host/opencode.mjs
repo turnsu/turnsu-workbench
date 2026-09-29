@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { dirname, delimiter } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
 import * as acp from '@agentclientprotocol/sdk';
@@ -39,7 +40,7 @@ export function gatewayEnvironment(gateway, model, environment = process.env) {
 // One private ACP process owns one native session. Closing it releases its private server;
 // the agent keeps the native session for a later session/load.
 export class AcpConnection {
-  constructor({ cwd, sessionId = null, gateway = null, model = null, onEvent, onExit, binary, agentName, spawnProcess = spawn }) {
+  constructor({ cwd, sessionId = null, gateway = null, model = null, mcpServers = [], onEvent, onExit, binary, agentName, spawnProcess = spawn }) {
     this.closed = false;
     this.agentName = agentName;
     this.onEvent = onEvent;
@@ -50,9 +51,9 @@ export class AcpConnection {
     this.turn = 0;
     this.ready = (async () => {
       if (!binary) throw new Error(`请先安装 ${agentName} CLI，再重新打开 Agent 列表。`);
-      const launch = nativeCommand(binary, ['acp'], executable('node'));
+      const launch = nativeCommand(binary, ['acp'], executable('node'), executable('bun'));
       if (this.closed) throw new Error(`${agentName} 连接已关闭。`);
-      const env = gatewayEnvironment(gateway, model);
+      const env = gatewayEnvironment(gateway, model, { ...process.env, PATH: [dirname(binary), dirname(process.execPath), ...(executable('bun') ? [dirname(executable('bun'))] : []), process.env.PATH || ''].join(delimiter) });
       this.child = spawnProcess(launch.file, launch.args, { cwd, env, shell: false, detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'] });
       this.child.stderr?.on('data', bytes => { if (/\b(?:EMFILE|ENOSPC)\b/.test(String(bytes))) this.watchFailure = true; });
       this.child.on('error', () => this.disconnected(onExit));
@@ -71,8 +72,8 @@ export class AcpConnection {
       this.replaying = Boolean(sessionId);
       try {
         const session = sessionId
-          ? await startupRequest(this.client, acp.methods.agent.session.load, { sessionId, cwd, mcpServers: [] }, agentName)
-          : await startupRequest(this.client, acp.methods.agent.session.new, { cwd, mcpServers: [] }, agentName);
+          ? await startupRequest(this.client, acp.methods.agent.session.load, { sessionId, cwd, mcpServers }, agentName)
+          : await startupRequest(this.client, acp.methods.agent.session.new, { cwd, mcpServers }, agentName);
         this.sessionId = sessionId || session.sessionId;
         if (!this.sessionId) throw new Error(`${agentName} 未返回原生会话标识。`);
         const catalog = modelOptions(session.configOptions);
@@ -106,7 +107,7 @@ export class AcpConnection {
       const abort = () => done({ outcome: 'cancelled' });
       this.permissions.set(id, { options: params.options || [], done });
       signal.addEventListener('abort', abort, { once: true });
-      onEvent({ type: 'permission', id, title: params.toolCall?.title || `${this.agentName} 请求权限`, tool: params.toolCall?.name || params.toolCall?.kind || 'tool', options: params.options || [] });
+      onEvent({ type: 'permission', id, title: params.toolCall?.title || `${this.agentName} 请求权限`, tool: params.toolCall?.name || params.toolCall?.kind || 'tool', options: params.options || [], operation: params.toolCall || null });
     });
   }
 

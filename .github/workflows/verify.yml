@@ -105,3 +105,40 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
+
+  isolated-capabilities:
+    name: File tools, native Agents and bounded browser · Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Install repository dependencies
+        run: npm run setup
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - name: Build document tools with Office and OCR
+        run: docker build --build-arg OFFICE=1 --build-arg OCR=1 -t turnsu-documents:ci packages/agent-host/document-pack
+      - name: Verify actual Office/PDF content, conversion, OCR and original preservation
+        run: node --test packages/agent-host/test/documents-docker.test.mjs
+        env:
+          TURNSU_DOCUMENT_TEST_IMAGE: turnsu-documents:ci
+          TURNSU_DOCUMENT_FULL_TEST_IMAGE: turnsu-documents:ci
+      - name: Install fixed native CLI versions in a runner-only directory
+        run: npm install --prefix "$RUNNER_TEMP/turnsu-native" --no-audit --no-fund @openai/codex@0.150.1 @earendil-works/pi-coding-agent@0.87.0 opencode-ai@1.18.33 @oh-my-pi/pi-coding-agent@18.4.4 bun@1.4.2
+      - name: Verify native tool discovery, actual file work and original session recovery
+        run: |
+          export PATH="$RUNNER_TEMP/turnsu-native/node_modules/.bin:$PATH"
+          for agent in codex pi opencode omp; do
+            node packages/agent-host/test/verify-native-tools.mjs "$agent" "$RUNNER_TEMP/turnsu-native/node_modules/.bin/$agent"
+          done
+        env:
+          TURNSU_DOCUMENT_TEST_IMAGE: turnsu-documents:ci
+      - name: Build fixed Cua Driver and Chromium environment
+        run: docker build -t turnsu-computer:ci packages/agent-host/computer-pack
+      - name: Verify isolated browser operation, origin denial and process cleanup
+        run: node packages/agent-host/test/verify-computer-docker.mjs
+        env:
+          TURNSU_COMPUTER_TEST_IMAGE: turnsu-computer:ci

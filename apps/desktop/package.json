@@ -10,7 +10,8 @@
     "start": "npm run build && electron .",
     "package": "npm run build && node scripts/package.mjs",
     "test": "node --test src/*.test.mjs test/*.test.mjs",
-    "test:electron": "npm run build && electron test/electron-host-smoke.mjs"
+    "test:electron": "npm run build && electron test/electron-host-smoke.mjs",
+    "pretest": "node scripts/build-host.mjs host-dist"
   },
   "dependencies": {
     "react": "19.2.0",

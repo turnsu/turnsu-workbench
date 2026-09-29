@@ -1,5 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const operations = new Set(['local_command', 'open_project', 'import_files', 'open_project_file', 'reveal_project_file', 'open_cloud_authorization', 'connection_list', 'connection_save', 'connection_remove', 'connection_check', 'open_gateway']);
+const operations = new Set(['local_command', 'open_project', 'import_files', 'open_project_file', 'reveal_project_file', 'open_cloud_authorization', 'connection_list', 'connection_save', 'connection_remove', 'connection_check', 'open_gateway', 'computer_install', 'computer_app_picker', 'background_settings', 'manus_authorize', 'manus_authorize_cancel', 'agent_connection_list', 'agent_connection_save', 'agent_connection_remove', 'agent_connection_check', 'open_agent_task', 'open_agent_guide', 'open_managed_authorization']);
 contextBridge.exposeInMainWorld('turnsuDesktop', {
   platform: process.platform,
   invoke: (operation, args) => {

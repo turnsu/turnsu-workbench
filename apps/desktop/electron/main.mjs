@@ -1,40 +1,70 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, safeStorage, session, shell, utilityProcess } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, net, nativeImage, Notification, powerMonitor, protocol, safeStorage, session, shell, Tray, utilityProcess } from 'electron';
 import { mkdir } from 'node:fs/promises';
 import { dirname, resolve, join, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { ComputerRuntime } from '../host-dist/computer-runtime.mjs';
 import { HostClient } from './host-client.mjs';
+import { ManusAuth } from './manus-auth.mjs';
 import { ConnectionVault } from './connection-vault.mjs';
+import { normalizeAgentConnection, publicAgentConnection, serializeAgentSecret, deserializeAgentSecret, agentProfilesForHost } from '../host-dist/agent-connections.mjs';
 import { randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const stateDirectory = process.env.TURNSU_DESKTOP_STATE || join(app.getPath('appData'), 'ai.turnsu.desktop');
 app.setName('Turnsu 工作台');
 app.setPath('userData', join(stateDirectory, 'electron'));
 protocol.registerSchemesAsPrivileged([{ scheme: 'turnsu', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
-let window, host, vault, hostReady, quitting = false, closing = false, configuring = false;
+let window, host, vault, agentVault, manusAuth, hostReady, tray, computer, quitting = false, closing = false, configuring = false;
 const closeReplies = new Map();
 const localOrigin = 'turnsu://app/index.html';
 const safeSender = event => window && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame && event.senderFrame.url === localOrigin;
 const csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'";
 
-async function applyConnections(profiles) {
-  if (configuring) throw new Error('模型连接正在更新，请稍后重试。');
+async function applyConnections(profiles, target = vault) {
+  if (configuring) throw new Error('连接正在更新，请稍后重试。');
   configuring = true;
-  const previous = vault.profiles;
+  const previous = target.profiles, method = target === vault ? 'desktop.connections.configure' : 'desktop.agents.configure';
   try {
-    await host.request('desktop.connections.configure', { connections: profiles });
-    try { await vault.write(profiles); }
-    catch (error) { await host.request('desktop.connections.configure', { connections: previous }); throw error; }
-    return vault.list();
+    await host.request(method, { connections: target === agentVault ? agentProfilesForHost(profiles) : profiles });
+    try { await target.write(profiles); }
+    catch (error) { await host.request(method, { connections: target === agentVault ? agentProfilesForHost(previous) : previous }); throw error; }
+    return target.list();
   } finally { configuring = false; }
 }
 
 async function invoke(operation, args = {}) {
   await hostReady;
-  if (configuring) throw new Error('模型连接正在更新，请稍后重试。');
+  if (configuring) throw new Error('连接正在更新，请稍后重试。');
   switch (operation) {
+    case 'computer_install': {
+      if ((await host.request('capabilities.list')).documents.status === 'installing') throw new Error('正在准备文件环境，请完成后再准备电脑环境。');
+      return computer.install(args);
+    }
+    case 'computer_app_picker': {
+      const selected = await dialog.showOpenDialog(window, { title: '选择允许操作的本机应用', properties: ['openFile'], ...(process.platform === 'darwin' ? { filters: [{ name: '应用', extensions: ['app'] }] } : process.platform === 'win32' ? { filters: [{ name: '应用', extensions: ['exe'] }] } : {}) });
+      if (selected.canceled || !selected.filePaths[0]) return null;
+      const path = selected.filePaths[0];
+      if (process.platform === 'darwin') {
+        if (!path.endsWith('.app')) throw new Error('请选择应用程序。');
+        const result = await promisify(execFile)('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleIdentifier', join(path, 'Contents', 'Info.plist')], { timeout: 5000, maxBuffer: 8192 });
+        const identity = result.stdout.trim(); if (!/^[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/.test(identity)) throw new Error('应用没有可验证的标识。');
+        return { identity };
+      }
+      return { identity: path };
+    }
+    case 'background_settings': {
+      const supported = ['darwin', 'win32'].includes(process.platform);
+      if (Object.hasOwn(args, 'openAtLogin')) {
+        if (!supported || typeof args.openAtLogin !== 'boolean') throw new Error('此系统不支持设置登录自启。');
+        app.setLoginItemSettings({ openAtLogin: args.openAtLogin });
+      }
+      return { supported, openAtLogin: supported ? app.getLoginItemSettings().openAtLogin : false };
+    }
     case 'local_command':
       if (!args || typeof args.method !== 'string' || args.method.length > 100 || ['project.open', 'files.import', 'files.resolve', 'cloud.authorization'].includes(args.method) || args.method.startsWith('desktop.') || JSON.stringify(args).length > 150_000) throw new Error('不支持这个桌面操作。');
+      if (args.method === 'capabilities.install' && (await computer.status()).installing) throw new Error('正在准备电脑环境，请完成后再准备文件环境。');
       return host.request(args.method, args.args);
     case 'open_project': {
       const selected = await dialog.showOpenDialog(window, { title: '打开本地项目', properties: ['openDirectory'] });
@@ -76,6 +106,43 @@ async function invoke(operation, args = {}) {
       return applyConnections(vault.profiles.filter(p => p.id !== args.id));
     }
     case 'connection_check': return host.request('connections.check', { id: args.id });
+    case 'agent_connection_list': return { ...agentVault.list(), oauth: manusAuth.status() };
+    case 'manus_authorize': return manusAuth.begin(args);
+    case 'manus_authorize_cancel': return manusAuth.cancel();
+    case 'agent_connection_save': {
+      if (args.mode !== 'api_key') throw new Error('Team 账号请使用浏览器授权。');
+      const profiles = await agentVault.prepare({ ...args, revoked: false, accountId: null });
+      const candidate = profiles.at(-1);
+      const verified = await host.request('desktop.agents.verify', { connection: candidate });
+      const previous = agentVault.profiles.find(p => p.id === verified.id);
+      if (previous?.accountId && previous.accountId !== verified.accountId) throw new Error('密钥属于另一个账号，请添加新连接。');
+      return applyConnections([...profiles.slice(0, -1), verified], agentVault);
+    }
+    case 'agent_connection_remove': {
+      if (agentVault.error) throw new Error(agentVault.error);
+      const previous = agentVault.profiles.find(p => p.id === args.id);
+      const result = await applyConnections(agentVault.profiles.map(p => p.id === args.id ? { ...p, apiKey: '', oauth: null, revoked: true } : p), agentVault);
+      try { if (previous && !previous.revoked) await manusAuth.revoke(previous); } catch { result.revokeNotice = '本机凭据已停用，但服务端撤销尚未确认，请在 Manus 的 Authorized Apps 中撤销授权。'; }
+      return result;
+    }
+    case 'agent_connection_check': return host.request('agents.check', { id: args.id });
+    case 'open_managed_authorization': {
+      const { url } = await host.request('desktop.managed.authorization');
+      if (!url || new URL(url).origin !== 'https://www.workbuddy.cn') throw new Error('WorkBuddy 授权已结束，请重新连接。');
+      await shell.openExternal(url); return { opened: true };
+    }
+    case 'open_agent_task': {
+      const value = await host.request('session.read', { sessionId: args.sessionId });
+      const url = new URL(value.remote?.url || '');
+      const hosts = value.agent === 'manus' ? ['manus.im','manus.ai'] : value.agent?.startsWith('workbuddy-') ? ['workbuddy.cn','www.workbuddy.cn'] : ['muse.ai'];
+      if (url.protocol !== 'https:' || url.username || url.password || !hosts.includes(url.hostname)) throw new Error('此任务尚未返回可信的原生地址。');
+      await shell.openExternal(url.href); return { opened: true };
+    }
+    case 'open_agent_guide': {
+      const urls = { manus: 'https://manus.im/settings/api', workbuddy: 'https://open.workbuddy.cn/docs/third-party-app', muse: 'https://muse.ai/platform', kimi: 'https://moonshotai.github.io/kimi-cli/', codex: 'https://developers.openai.com/codex/cli', opencode: 'https://opencode.ai/docs/', omp: 'https://github.com/can1357/oh-my-pi', pi: 'https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent' };
+      if (!urls[args.agent]) throw new Error('没有该 Agent 的配置指引。');
+      await shell.openExternal(urls[args.agent]); return { opened: true };
+    }
     case 'open_gateway': await shell.openExternal('https://gateway.turnsu.org/keys'); return { opened: true };
     default: throw new Error('不支持这个桌面操作。');
   }
@@ -103,8 +170,8 @@ async function requestClose() {
         if (result.response !== 1) return;
       }
     }
-    await host?.close(); quitting = true; app.quit();
-  } finally { closing = false; }
+    await manusAuth?.close(); await host?.close(); await computer?.close(); quitting = true; app.quit();
+  } catch(error) { await dialog.showMessageBox(window, { type: 'error', message: '退出尚未完成', detail: error.message || '请检查运行环境后重试。' }); } finally { closing = false; }
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -124,18 +191,43 @@ else {
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   session.defaultSession.setPermissionCheckHandler(() => false);
   vault = new ConnectionVault(stateDirectory, safeStorage);
+  agentVault = new ConnectionVault(stateDirectory, safeStorage, { filename: 'agent-connections.json', normalize: normalizeAgentConnection, present: publicAgentConnection, serializeSecret: serializeAgentSecret, deserializeSecret: deserializeAgentSecret });
+  manusAuth = new ManusAuth({ vault: agentVault, openExternal: url => shell.openExternal(url), save: profile => applyConnections([...agentVault.profiles.filter(p => p.id !== profile.id), profile], agentVault), withLock: async work => { if (configuring) throw new Error('连接正在更新，请稍后重试。'); configuring = true; try { return await work(); } finally { configuring = false; } } });
   const hostRoot = resolve(root.replace(/\.asar$/, '.asar.unpacked'), 'host-dist');
-  const child = utilityProcess.fork(resolve(hostRoot, 'desktop-entry.mjs'), [stateDirectory], { serviceName: 'Turnsu Local Host', stdio: 'pipe', env: { ...process.env, TURNSU_GATEWAY_EXTENSION: resolve(hostRoot, 'pi-gateway-extension.mjs') } });
+  process.env.TURNSU_COMPUTER_PACK = resolve(hostRoot, 'computer-pack');
+  computer = new ComputerRuntime(stateDirectory, payload => { if (window && !window.isDestroyed()) window.webContents.send('desktop:host-event', payload); });
+  const child = utilityProcess.fork(resolve(hostRoot, 'desktop-entry.mjs'), [stateDirectory], { serviceName: 'Turnsu Local Host', stdio: 'pipe', env: { ...process.env, TURNSU_GATEWAY_EXTENSION: resolve(hostRoot, 'pi-gateway-extension.mjs'), TURNSU_DOCUMENT_PACK: resolve(hostRoot, 'document-pack'), TURNSU_TOOL_MCP: resolve(hostRoot, 'tool-mcp.mjs'), TURNSU_TOOLS_EXTENSION: resolve(hostRoot, 'pi-tools-extension.mjs') } });
   // Host/SDK diagnostics can contain private paths. UI errors travel through the structured channel.
   child.stdout?.resume(); child.stderr?.resume();
-  host = new HostClient(child, payload => { if (window && !window.isDestroyed()) window.webContents.send('desktop:host-event', payload); });
-  hostReady = vault.read().then(() => host.request('desktop.connections.configure', { connections: vault.profiles }));
+  host = new HostClient(child, payload => {
+    if (window && !window.isDestroyed()) window.webContents.send('desktop:host-event', payload);
+    if (payload.type === 'schedule-changed' && ['completed', 'failed', 'waiting', 'uncertain'].includes(payload.status) && Notification.isSupported()) {
+      const notice = new Notification({ title: 'Turnsu 定时任务', body: payload.status === 'completed' ? '任务已完成，可在工作台核对成果。' : '任务需要处理，请回工作台查看。' });
+      notice.on('click', () => { window?.show(); window?.focus(); }); notice.show();
+    }
+  }, (method, args) => computer.dispatch(method, args), args => manusAuth.authorize(args));
+  hostReady = Promise.all([vault.read(), agentVault.read()]).then(async () => {
+    await host.request('desktop.connections.configure', { connections: vault.profiles });
+    await host.request('desktop.agents.configure', { connections: agentProfilesForHost(agentVault.profiles) });
+    await host.request('desktop.scheduler.start');
+  });
   hostReady.catch(() => {});
   window = new BrowserWindow({ title: 'Turnsu 工作台', width: 1180, height: 800, minWidth: 800, minHeight: 600, show: false, backgroundColor: '#f8f8f7', webPreferences: { preload: resolve(root, 'electron/preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true, spellcheck: false } });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.webContents.on('will-attach-webview', event => event.preventDefault());
-  window.on('close', event => { if (!quitting) { event.preventDefault(); requestClose(); } });
+  tray = new Tray(nativeImage.createFromPath(resolve(root, 'dist/brand/turnsu-icon-32.png')).resize({ width: 18, height: 18 }));
+  tray.setToolTip('Turnsu 工作台');
+  tray.setContextMenu(Menu.buildFromTemplate([{ label: '停止电脑操作', click: () => host.request('computer.stop').catch(() => computer.stop()) }, { label: '打开工作台', click: () => { window.show(); window.focus(); } }, { type: 'separator' }, { label: '退出工作台（停止本地调度）', click: requestClose }]));
+  tray.on('click', () => { window.show(); window.focus(); });
+  window.on('close', event => {
+    if (!quitting) { event.preventDefault(); hostReady.then(() => host.request('schedules.background')).then(state => state.required ? window.hide() : requestClose()).catch(() => requestClose()); }
+  });
+  app.on('activate', () => { window?.show(); window?.focus(); });
+  globalShortcut.register('CommandOrControl+Shift+Escape', () => host.request('computer.stop').catch(() => computer.stop()));
+  powerMonitor.on('lock-screen', () => hostReady.then(() => host.request('computer.stop')).catch(() => {}));
+  powerMonitor.on('suspend', () => hostReady.then(() => host.request('computer.stop')).catch(() => {}));
+  powerMonitor.on('resume', () => hostReady.then(() => host.request('desktop.scheduler.start')).catch(() => {}));
   window.once('ready-to-show', () => window.show());
   ipcMain.handle('desktop:invoke', async (event, operation, args) => {
     if (!safeSender(event)) return { ok: false, error: '操作来源不可用。' };

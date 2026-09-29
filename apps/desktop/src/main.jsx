@@ -1,4 +1,9 @@
+import { ProjectMaterialPicker } from './ProjectMaterialPicker.jsx';
+import { AgentConnectionsDialog } from './AgentConnectionsDialog.jsx';
+import { RemoteTaskPanel } from './RemoteTaskPanel.jsx';
 import { ModelConnectionsDialog } from "./ModelConnectionsDialog.jsx";
+import { SchedulesDialog } from './SchedulesDialog.jsx';
+import { CapabilitiesDialog } from './CapabilitiesDialog.jsx';
 import "./model-connections.css";
 import { invoke, listen, beforeClose } from "./desktop-bridge.mjs";
 import { LocalDraftNavigation } from "./local-draft-navigation.mjs";
@@ -26,7 +31,7 @@ import './wechat-import.css';
 const command = (method, args = {}) => invoke("local_command", { method, args });
 const labels = { idle: "可以继续", starting: "正在连接 Agent", running: "正在处理", waiting: "需要你的回应", stopping: "正在停止", interrupted: "可以恢复", failed: "需要处理" };
 const active = (status) => ["starting", "running", "waiting", "stopping"].includes(status);
-const agentName = (agent) => ({ pi: 'Pi', claude: 'Claude Code', codex: 'Codex', opencode: 'OpenCode', kimi: 'Kimi Code', omp: 'oh-my-pi' }[agent] || agent);
+const agentName = (agent) => ({ pi: 'Pi', claude: 'Claude Code', codex: 'Codex', opencode: 'OpenCode', kimi: 'Kimi Code', omp: 'oh-my-pi', manus: 'Manus', 'workbuddy-local': 'WorkBuddy 本地', 'workbuddy-cloud': 'WorkBuddy 云端', muse: 'Muse' }[agent] || agent);
 const sessionState = (status) => ({ starting: "连接中", running: "进行中", waiting: "待回应", stopping: "停止中", interrupted: "已中断", failed: "需处理" })[status] || "";
 
 function Markdown({ children }) {
@@ -52,6 +57,13 @@ function Interaction({ item, sessionId, report }) {
 
 function App() {
   const [view, setView] = useState('workbench');
+  const [computerState, setComputerState] = useState(null);
+  useEffect(() => { let live = true; const read = () => command('computer.status').then(value => { if (live) setComputerState(value); }).catch(() => {}); read(); const sub = listen(({ payload }) => { if (payload.type === 'computer-changed') read(); }); return () => { live = false; sub.then(off => off()); }; }, []);
+  const [agentConnectionsOpen, setAgentConnectionsOpen] = useState(false), [agentConnections, setAgentConnections] = useState([]), [agentConnectionId, setAgentConnectionId] = useState('');
+  const [remoteMaterials, setRemoteMaterials] = useState(''), [allowExternal, setAllowExternal] = useState(false);
+  const agentButton = useRef(null);
+  async function readAgentConnections() { const value = await invoke('agent_connection_list'); setAgentConnections(value.connections); }
+  useEffect(() => { readAgentConnections().catch(() => {}); }, []);
   const [connectionsOpen, setConnectionsOpen] = useState(false), [connections, setConnections] = useState([]), [connectionId, setConnectionId] = useState('');
   const connectionButton = useRef(null), connectionTrigger = useRef(null);
   function openConnections(event) { connectionTrigger.current = event.currentTarget; setConnectionsOpen(true); }
@@ -87,10 +99,13 @@ function App() {
   const [draftLoadFailed, setDraftLoadFailed] = useState(false);
   const [draft, setDraft] = useState(""), [draftLoading, setDraftLoading] = useState(false), [navigationStage, setNavigationStage] = useState(null), [draftStatus, setDraftStatus] = useState("");
   const [error, setError] = useState(""), [ready, setReady] = useState(false), [sending, setSending] = useState(false);
+  const currentFiles = useRef({});
   const [filePanel, setFilePanel] = useState(false), [folder, setFolder] = useState(""), [fileList, setFileList] = useState(null), [preview, setPreview] = useState(null);
   const [previewRefChecking, setPreviewRefChecking] = useState(false);
   const [wechatOpen, setWechatOpen] = useState(false);
   const [agentId, setAgentId] = useState("codex");
+  const [schedulesOpen, setSchedulesOpen] = useState(false);
+  const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
   const [agentPreference, setAgentPreference] = useState(null), [preferenceSaving, setPreferenceSaving] = useState(false);
   const manualAgentVersion = useRef(0);
   const [creatingSession, setCreatingSession] = useState(false);
@@ -103,6 +118,7 @@ function App() {
   const transcript = useRef(null), atBottom = useRef(true), pendingSend = useRef(null);
   const lastMessageSignature = useRef(null);
   const [awayFromBottom, setAwayFromBottom] = useState(false), [hasNewContent, setHasNewContent] = useState(false);
+  currentFiles.current = { projectId, filePanel, folder };
   const project = workspace.projects.find((p) => p.id === projectId);
   const projectSessions = workspace.sessions.filter((s) => s.project_id === projectId);
   const filteredSessions = projectSessions;
@@ -112,6 +128,26 @@ function App() {
   const chosenConnectionId = session?.connection_id || (!sessionId ? connectionId : "");
   const chosenConnection = connections.find(c => c.id === chosenConnectionId);
   const chosenAgent = workspace.agents.find((a) => a.id === agentId);
+  const remoteAgent = ['remote', 'managed', 'handoff'].includes(chosenAgent?.kind);
+  const chosenAgentConnectionId = session?.agent_connection_id || agentConnectionId;
+  const answering = remoteAgent && session?.status === 'waiting' && ['messageAskUser','cascadeAskUser'].includes(session?.remote?.waiting?.waiting_for_event_type);
+  useEffect(() => {
+    setAllowExternal(false);
+    let saved; try { saved = JSON.parse(localStorage.getItem(`turnsu.remoteDraft:${projectId}:${sessionId || ''}`)); } catch {}
+    setRemoteMaterials(typeof saved?.materials === 'string' ? saved.materials : '');
+    setAgentConnectionId(session?.agent_connection_id || saved?.connectionId || '');
+  }, [projectId, sessionId]);
+  function updateRemoteDraft(materials, connection) {
+    setRemoteMaterials(materials); setAgentConnectionId(connection); setAllowExternal(false);
+    try { localStorage.setItem(`turnsu.remoteDraft:${projectId}:${sessionId || ''}`, JSON.stringify({ materials, connectionId: connection })); } catch { setError('无法保存材料选择，请保留所选路径后重试。'); }
+  }
+  async function tryAgent(agent, connection = '') {
+    setAgentConnectionsOpen(false);
+    if (!projectId) { setError('请先打开本地项目，再进行 Agent 试运行。'); return; }
+    await selectProject(projectId); ++manualAgentVersion.current; setAgentId(agent); setAgentConnectionId(connection); setModel(''); setConnectionId('');
+    changeDraft('检查当前项目材料，说明你能使用的工具、读取范围和限制。先不要修改文件。');
+    composerInput.current?.focus();
+  }
 
   useLayoutEffect(() => { if (historyPage && transcript.current) transcript.current.scrollTop = 0; }, [historyPage]);
   async function readHistory(direction, cursor) {
@@ -187,6 +223,10 @@ function App() {
     let dispose, mounted = true;
     listen(({ payload }) => {
       if (payload.type === "open-project-requested") { openProject(); return; }
+      if (payload.type === 'capability-changed' && currentFiles.current.filePanel && payload.projectId === currentFiles.current.projectId) {
+        const target = currentFiles.current, version = ++fileVersion.current;
+        command('files.list', { projectId: target.projectId, path: target.folder }).then(value => { if (version === fileVersion.current && currentFiles.current.projectId === target.projectId) setFileList(value); }).catch(e => setFileError(String(e)));
+      }
       if (payload.type === "disconnected") { setError("本地服务已停止。请重新打开 Turnsu，已保存的内容仍在本机。"); return; }
       eventNeedsSession.current ||= !payload.sessionId || payload.sessionId === selected.current;
       if (!refreshTimer.current) refreshTimer.current = setTimeout(() => {
@@ -296,19 +336,21 @@ function App() {
     finally { setPreviewRefChecking(false); }
   }
   async function send(continueOffline = false) {
-    if (!draft.trim() || draftLoading || modelsLoading || sending || active(session?.status)) return;
-    if (chosenConnectionId && !model) { setError("请先读取此连接的模型目录并选择模型。"); return; }
+    if (!draft.trim() || draftLoading || modelsLoading || sending || (active(session?.status) && !answering)) return;
+    if (remoteAgent && (!allowExternal || !chosenAgentConnectionId)) { setError("请选择 Agent 账号，并确认本次提示词与材料外发。"); return; }
+    if (!remoteAgent && chosenConnectionId && !model) { setError("请先读取此连接的模型目录并选择模型。"); return; }
     ++historyVersion.current; setHistoryPage(null); setHistoryLoading(false); atBottom.current = true;
     setSending(true); setError(""); clearTimeout(draftTimer.current);
-    const submitted = draft;
+    const submitted = draft, materials = remoteMaterials.split('\n').map(p => p.trim()).filter(Boolean);
     try {
       await command("draft.save", { projectId, sessionId, text: submitted, references });
       let id = selected.current;
-      if (!id) { const s = await command("session.create", { projectId, agent: agentId, connectionId: chosenConnectionId || null }); id = s.id; await command("draft.save", { projectId, sessionId: id, text: submitted, references }); await command("draft.save", { projectId, text: "", references: [] }); navigation.current.adopt(projectId, id, submitted, references); selected.current = id; setSessionId(id); setSession(s); }
-      if (model && !sessionId) await command("session.model", { sessionId: id, model });
-      if (!pendingSend.current || pendingSend.current.text !== submitted || pendingSend.current.sessionId !== id || JSON.stringify(pendingSend.current.references || []) !== JSON.stringify(references)) pendingSend.current = { inputId: crypto.randomUUID(), sessionId: id, text: submitted, references };
+      if (remoteAgent) await command("remote.materials", { projectId, paths: materials });
+      if (!id) { const s = await command("session.create", { projectId, agent: agentId, connectionId: remoteAgent ? null : chosenConnectionId || null, agentConnectionId: chosenAgentConnectionId }); id = s.id; await command("draft.save", { projectId, sessionId: id, text: submitted, references }); await command("draft.save", { projectId, text: "", references: [] }); navigation.current.adopt(projectId, id, submitted, references); selected.current = id; setSessionId(id); setSession(s); }
+      if (!remoteAgent && model && !sessionId) await command("session.model", { sessionId: id, model });
+      if (!pendingSend.current || pendingSend.current.text !== submitted || pendingSend.current.sessionId !== id || JSON.stringify(pendingSend.current.references || []) !== JSON.stringify(references) || JSON.stringify(pendingSend.current.materials || []) !== JSON.stringify(remoteAgent ? materials : [])) pendingSend.current = { inputId: crypto.randomUUID(), sessionId: id, text: submitted, references, materials: remoteAgent ? materials : [], allowExternal: remoteAgent ? allowExternal : false };
       const result = await command("session.send", { ...pendingSend.current, ...(continueOffline === true ? { continueOffline: true } : {}) });
-      if (selected.current === id) { navigation.current.adopt(projectId, id, "", []); setSession(result); setDraft(""); setReferences([]); setDraftStatus(""); }
+      if (selected.current === id) { navigation.current.adopt(projectId, id, "", []); setSession(result); setDraft(""); setReferences([]); setDraftStatus(""); setAllowExternal(false); setRemoteMaterials(""); localStorage.removeItem(`turnsu.remoteDraft:${projectId}:${id}`); localStorage.removeItem(`turnsu.remoteDraft:${projectId}:`); }
       await command("draft.save", { projectId, sessionId: id, text: "", references: [] }); pendingSend.current = null; await refresh();
     } catch (e) {
       setError(String(e));
@@ -411,6 +453,7 @@ function App() {
   }
 
   return <div className="app">
+    {computerState?.grant && <div className="computerIndicator" role="status"><strong>{computerState.grant.mode === "local" ? "本机电脑操作已授权" : "隔离电脑已启用"}</strong><span>到期 {new Date(computerState.grant.expiresAt).toLocaleTimeString()}</span><button onClick={() => command("computer.stop").then(() => setComputerState(null)).catch(e => setError(e.message))}>暂停并撤销</button></div>}
     <aside className="sidebar">
       <img className="brand" src="./brand/turnsu-lockup.svg" alt="Turnsu" />
       <nav className="productNav" aria-label="主要区域"><Button variant={view === 'workbench' ? 'secondary' : 'ghost'} aria-current={view === 'workbench' ? 'page' : undefined} onClick={() => setView('workbench')}><MessageSquare size={17}/>工作台</Button><Button variant={view === 'skills' ? 'secondary' : 'ghost'} aria-current={view === 'skills' ? 'page' : undefined} onClick={() => setView('skills')}><BookOpen size={17}/>Skill OS</Button></nav>
@@ -436,10 +479,16 @@ function App() {
       </div>)}</nav>
       {!workspace.projects.length && ready && <p className="railEmpty">打开一个文件夹，<br />从已有资料开始工作。</p>}
       <button ref={teamButton} className="teamConnection" onClick={() => setCloudOpen(true)}><Plus size={15}/>连接团队</button>
+      <button ref={agentButton} className="teamConnection" onClick={() => setAgentConnectionsOpen(true)}><Settings2 size={15}/>连接 Agent</button>
       <button ref={connectionButton} className="teamConnection" onClick={openConnections}><Settings2 size={15}/>模型连接</button>
+      <button className="teamConnection" onClick={() => setSchedulesOpen(true)}><Settings2 size={15}/>定时任务</button>
+      <button className="teamConnection" onClick={() => setCapabilitiesOpen(true)}><Settings2 size={15}/>能力与权限</button>
       <div className="localFoot"><Laptop size={15} /><span>本地工作台<small>项目与会话保存在这台电脑</small></span></div>
     </aside>
+    {agentConnectionsOpen && <AgentConnectionsDialog agents={workspace.agents} onClose={() => { setAgentConnectionsOpen(false); agentButton.current?.focus(); }} onChanged={async () => { await readAgentConnections(); await refresh(); }} onTrial={project ? tryAgent : null} onHosted={() => { setAgentConnectionsOpen(false); setCloudOpen(true); }}/> }
     {connectionsOpen && <ModelConnectionsDialog onClose={closeConnections} onChanged={readConnections}/>}
+    {capabilitiesOpen && <CapabilitiesDialog project={project} onClose={() => setCapabilitiesOpen(false)}/>}
+    {schedulesOpen && <SchedulesDialog project={project} agents={workspace.agents} initial={{ prompt: draft, agent: agentId, model: session?.model || model, connectionId: chosenConnectionId, agentConnectionId: chosenAgentConnectionId, materials: remoteMaterials.split("\n").map(p => p.trim()).filter(Boolean), references }} onClose={() => setSchedulesOpen(false)} onOpen={async s => { setSchedulesOpen(false); await refresh(); await selectProject(s.project_id, s.id); }}/>}
     {captureOpen && (captureOpen.kind === 'local-trial' ? <LocalLoopTrialDialog session={captureOpen.session} onClose={closeCapture}/> : captureOpen.kind === 'loop' ? <LoopCaptureDialog session={captureOpen.session} message={captureOpen.message} onClose={closeCapture} onOpen={async s => { await refresh(); await selectProject(s.project_id, s.id); }}/> : <MethodCaptureDialog session={captureOpen.session} message={captureOpen.message} onClose={closeCapture} onOpen={async s => { await refresh(); await selectProject(s.project_id, s.id); }}/> )}
     {workOpen && project?.sharing && <TeamWorkDialog project={project} agents={workspace.agents} onClose={() => setWorkOpen(false)} onOpen={async s => { await refresh(); await selectProject(s.project_id, s.id); }}/> }
     {syncOpen && project?.sharing && <SyncDialog project={project} onClose={() => setSyncOpen(false)}/> }
@@ -468,6 +517,7 @@ function App() {
           </div>
           {!navigationStage && !historyPage && !draftLoadFailed && awayFromBottom && <button className="latestJump" onClick={goToLatest}><ArrowDown size={14}/>{hasNewContent ? "有新内容 · 回到底部" : "回到底部"}</button>}
           <div className="composerArea">
+            {session?.remote && <RemoteTaskPanel key={session.id} session={session} onChanged={refresh}/>}
             {session?.localLoopTrial && <div className="methodNotice"><span>本机试做 · {session.localLoopTrial.name}</span><button disabled={active(session.status)} onClick={e => { captureTrigger.current = e.currentTarget; setCaptureOpen({ session, kind: 'local-trial' }); }}>核对试做结果</button></div>}
             {session?.loopCapture && <div className="methodNotice"><span>正在整理可复用 Loop</span><button disabled={active(session.status)} onClick={e => { captureTrigger.current = e.currentTarget; setCaptureOpen({ session, kind: 'loop' }); }}>查看流程草稿</button></div>}
             {session?.capture && <div className="methodNotice"><span>{session.capture.installed ? '这份草稿已采用到本机' : '正在整理可复用技能 · 草稿仅在本机'}</span><button disabled={active(session.status)} onClick={e => { captureTrigger.current = e.currentTarget; setCaptureOpen({ session }); }}>查看技能草稿</button></div>}
@@ -475,11 +525,13 @@ function App() {
             {session?.method && <div className="methodNotice"><span>已选择技能：<strong>{session.method.skillName}</strong> · v{session.method.version}</span><small>描述任务后发送，由你的 Agent 使用</small></div>}
             {session?.sharedWork && <div className="sharedWorkNotice"><span>{session.sharedWork.canContinueOffline ? `团队暂时无法连接。上次资料：${new Date(session.sharedWork.contextFetchedAt).toLocaleString()}。新内容先保存在本机，恢复后核验权限并同步。` : session.sharedWork.error || (session.sharedWork.pending ? '请求与答复正在同步到团队…' : '本次请求与最终答复对工作成员可见')}</span>{(session.sharedWork.error || session.sharedWork.pending > 0 || session.sharedWork.canContinueOffline) && <button onClick={() => control(session.sharedWork.workItemId ? 'work.retry' : 'work.finish')}>重试共享</button>}{session.sharedWork.canContinueOffline && !active(session.status) && <button disabled={!draft.trim() || sending || modelsLoading || draftLoading || !chosenAgent?.installed || session.status === 'interrupted'} onClick={() => send(true)}>用上次资料在本机继续</button>}</div>}
             {session?.status === "interrupted" && <div className="resume"><span>上次执行已中断。恢复后检查结果，再继续。</span><button onClick={() => control("session.resume")}><RotateCcw size={14} />恢复会话</button></div>}
-            <div className="composer"><div className="connectionSource"><label htmlFor="connection-source">模型来源</label><select id="connection-source" value={chosenConnectionId} disabled={Boolean(sessionId && (!session || session.native_id || session.lastSubmission)) || draftLoading || sending || modelsLoading || creatingSession} onChange={e => chooseConnection(e.target.value)}><option value="">跟随原生 Agent</option>{connections.filter(c => c.agents.includes(agentId)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}{chosenConnectionId && !chosenConnection && <option value={chosenConnectionId}>连接不可用</option>}</select>{chosenConnection && <code title={chosenConnection.baseUrl}>{chosenConnection.baseUrl}</code>}<button onClick={openConnections}>管理连接</button></div>{references.length > 0 && <div className="referenceChips" aria-label="已引用资料">{references.map(selection => <span key={referenceKey(selection)}><FileText size={14}/><span title={referenceLabel(selection)}>{referenceLabel(selection)}{typeof selection !== "string" && <small> · {selection.kind === "work-decision" ? "决定" : selection.kind === "work-entry" ? "共享进展" : selection.kind === "wechat-import" ? "微信导入" : "历史版本"}</small>}</span><button disabled={sending || creatingSession || draftLoading} aria-label={`移除引用 ${referenceLabel(selection)}`} onClick={() => changeDraft(draft, references.filter(item => referenceKey(item) !== referenceKey(selection)))}><X size={13}/></button></span>)}</div>}<Textarea ref={composerInput} aria-label="任务描述" placeholder={sessionId ? "继续这项工作…" : "描述你想完成的工作…"} value={draft} disabled={draftLoading || sending || creatingSession} onChange={(e) => changeDraft(e.target.value)} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={(e) => { if (e.key === "@" && !composing.current && !e.nativeEvent.isComposing && (!e.currentTarget.selectionStart || /\s/.test(draft[e.currentTarget.selectionStart - 1]))) { e.preventDefault(); setReferencePicker(true); return; } if (e.key === "Enter" && !e.shiftKey && !composing.current && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
+            <div className="composer">{!remoteAgent && <div className="connectionSource"><label htmlFor="connection-source">模型来源</label><select id="connection-source" value={chosenConnectionId} disabled={Boolean(sessionId && (!session || session.native_id || session.lastSubmission)) || draftLoading || sending || modelsLoading || creatingSession} onChange={e => chooseConnection(e.target.value)}><option value="">跟随原生 Agent</option>{connections.filter(c => c.agents.includes(agentId)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}{chosenConnectionId && !chosenConnection && <option value={chosenConnectionId}>连接不可用</option>}</select>{chosenConnection && <code title={chosenConnection.baseUrl}>{chosenConnection.baseUrl}</code>}<button onClick={openConnections}>管理连接</button></div>}
+              {remoteAgent && <div className="remoteComposer"><label>Agent 账号<select aria-label="Agent 账号" value={chosenAgentConnectionId} disabled={Boolean(sessionId) || sending} onChange={e => updateRemoteDraft(remoteMaterials, e.target.value)}><option value="">选择已连接账号</option>{agentConnections.filter(c => !c.revoked && (c.provider === agentId || c.agents?.includes(agentId))).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}{chosenAgentConnectionId && !agentConnections.some(c => c.id === chosenAgentConnectionId) && <option value={chosenAgentConnectionId}>此任务绑定的账号</option>}</select></label><button onClick={() => setAgentConnectionsOpen(true)}>管理 Agent</button>{chosenAgent?.files && <ProjectMaterialPicker key={projectId} projectId={projectId} paths={remoteMaterials.split('\n').map(p=>p.trim()).filter(Boolean)} disabled={sending} onChange={paths=>updateRemoteDraft(paths.join('\n'),chosenAgentConnectionId)}/>}<label className="externalConsent"><input type="checkbox" checked={allowExternal} disabled={sending} onChange={e => setAllowExternal(e.target.checked)}/>将本次提示词、引用内容与选定材料交给 {chosenAgent?.name}；其原生工具权限由该服务管理。</label></div>}
+              {references.length > 0 && <div className="referenceChips" aria-label="已引用资料">{references.map(selection => <span key={referenceKey(selection)}><FileText size={14}/><span title={referenceLabel(selection)}>{referenceLabel(selection)}{typeof selection !== "string" && <small> · {selection.kind === "work-decision" ? "决定" : selection.kind === "work-entry" ? "共享进展" : selection.kind === "wechat-import" ? "微信导入" : "历史版本"}</small>}</span><button disabled={sending || creatingSession || draftLoading} aria-label={`移除引用 ${referenceLabel(selection)}`} onClick={() => changeDraft(draft, references.filter(item => referenceKey(item) !== referenceKey(selection)))}><X size={13}/></button></span>)}</div>}<Textarea ref={composerInput} aria-label="任务描述" placeholder={sessionId ? "继续这项工作…" : "描述你想完成的工作…"} value={draft} disabled={draftLoading || sending || creatingSession} onChange={(e) => changeDraft(e.target.value)} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={(e) => { if (e.key === "@" && !composing.current && !e.nativeEvent.isComposing && (!e.currentTarget.selectionStart || /\s/.test(draft[e.currentTarget.selectionStart - 1]))) { e.preventDefault(); setReferencePicker(true); return; } if (e.key === "Enter" && !e.shiftKey && !composing.current && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
               <div className="composerToolbar"><button className="referenceTrigger" aria-label="引用资料" title="引用资料（@）" disabled={sending || creatingSession || draftLoading} onClick={() => setReferencePicker(true)}>＠</button><span className="agentChoice"><select aria-label="执行 Agent" value={agentId} disabled={Boolean(sessionId) || sending || draftLoading || modelsLoading} onChange={(e) => { ++manualAgentVersion.current; setAgentId(e.target.value); setConnectionId(""); setModels(null); setModel(""); }}>
-                {workspace.agents.map(agent => <option key={agent.id} value={agent.id}>{agent.name}{agent.installed ? '' : ' · 未安装'}</option>)}
-              </select> {models ? <select aria-label="执行模型" value={model} disabled={draftLoading || sending || active(session?.status)} onChange={(e) => chooseModel(e.target.value)}><option value="" disabled={Boolean(chosenConnectionId)}>{chosenConnectionId ? "请选择网关模型" : "沿用会话配置"}</option>{models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select> : <button className="modelChoice" disabled={draftLoading || sending || modelsLoading || active(session?.status)} onClick={loadModels}>{modelsLoading ? "读取模型…" : (model || "选择模型")}</button>}</span><span className="composerHint">{chosenAgent?.installed ? (agentId === "pi" ? "使用 Pi 本机权限" : "在此项目工作") : `请先安装 ${chosenAgent?.name || agentId} CLI`}</span>{active(session?.status) ? <button className="send" aria-label="停止执行" onClick={() => control("session.stop")}><Square size={15} /></button> : <button className="send" aria-label="发送任务" disabled={!draft.trim() || sending || modelsLoading || draftLoading || !chosenAgent?.installed || session?.status === "interrupted"} onClick={send}>{sending ? <LoaderCircle className="spin" size={17} /> : <ArrowUp size={18} />}</button>}</div>
-            </div><div className="composerMeta"><span>{draftStatus || (session?.sharedWork ? "团队工作 · 工具日志和原生历史保留在本机" : project.sharing ? "文件与团队共享 · 对话仅在本机" : agentId === "pi" ? "Pi 按本机配置运行 · 扩展请求会在这里显示" : "仅在本机 · 需要权限时会询问你")}</span>{!sessionId && agentPreference ? <span className="agentPreferenceActions"><button disabled={preferenceSaving || agentPreference.project === agentId} onClick={() => saveAgentPreference('project')}>{agentPreference.project === agentId ? '本项目默认' : '设为本项目默认'}</button><button disabled={preferenceSaving || agentPreference.personal === agentId} onClick={() => saveAgentPreference('personal')}>{agentPreference.personal === agentId ? '个人默认' : '设为个人默认'}</button></span> : <span>@ 资料和方法 · Enter 发送</span>}</div>
+                {workspace.agents.map(agent => <option key={agent.id} value={agent.id}>{agent.name}{agent.installed ? '' : agent.kind ? ' · 未连接' : ' · 未安装'}</option>)}
+              </select> {!remoteAgent && (models ? <select aria-label="执行模型" value={model} disabled={draftLoading || sending || active(session?.status)} onChange={(e) => chooseModel(e.target.value)}><option value="" disabled={Boolean(chosenConnectionId)}>{chosenConnectionId ? "请选择网关模型" : "沿用会话配置"}</option>{models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select> : <button className="modelChoice" disabled={draftLoading || sending || modelsLoading || active(session?.status)} onClick={loadModels}>{modelsLoading ? "读取模型…" : (model || "选择模型")}</button>)}</span><span className="composerHint">{remoteAgent ? (chosenAgent?.installed ? "按选定材料交接" : "请先连接 Agent") : chosenAgent?.installed ? (agentId === "pi" ? "使用 Pi 本机权限" : "在此项目工作") : `请先安装 ${chosenAgent?.name || agentId} CLI`}</span>{active(session?.status) && !answering ? <button disabled={remoteAgent && chosenAgent?.stop === false} title={remoteAgent && chosenAgent?.stop === false ? "请在原生应用中停止" : undefined} className="send" aria-label="停止执行" onClick={() => control("session.stop")}><Square size={15} /></button> : <button className="send" aria-label="发送任务" disabled={!draft.trim() || sending || modelsLoading || draftLoading || !chosenAgent?.installed || session?.status === "interrupted" || (remoteAgent && (!allowExternal || !chosenAgentConnectionId))} onClick={send}>{sending ? <LoaderCircle className="spin" size={17} /> : <ArrowUp size={18} />}</button>}</div>
+            </div><div className="composerMeta"><span>{draftStatus || (remoteAgent ? "选定内容会外发 · 账号不等于工具授权" : session?.sharedWork ? "团队工作 · 工具日志和原生历史保留在本机" : project.sharing ? "文件与团队共享 · 对话仅在本机" : agentId === "pi" ? "Pi 按本机配置运行 · 扩展请求会在这里显示" : "仅在本机 · 需要权限时会询问你")}</span>{!sessionId && agentPreference ? <span className="agentPreferenceActions"><button disabled={preferenceSaving || agentPreference.project === agentId} onClick={() => saveAgentPreference('project')}>{agentPreference.project === agentId ? '本项目默认' : '设为本项目默认'}</button><button disabled={preferenceSaving || agentPreference.personal === agentId} onClick={() => saveAgentPreference('personal')}>{agentPreference.personal === agentId ? '个人默认' : '设为个人默认'}</button></span> : <span>@ 资料和方法 · Enter 发送</span>}</div>
           </div>
         </>}
       </section>

@@ -200,6 +200,7 @@ async function runIntegrationTest(connectionString) {
     "tests/http/postgres-model-configuration.integration.test.mjs",
     "tests/http/postgres-native-client-auth-http.integration.test.mjs",
     "tests/http/postgres-desktop-cloud.integration.test.mjs",
+    "tests/http/postgres-agent-connectors.integration.test.mjs",
     "tests/http/postgres-project-files.integration.test.mjs",
     "tests/http/postgres-skill-upload.integration.test.mjs",
   ];

@@ -7,7 +7,7 @@ const host = resolve(root, '../../packages/agent-host');
 const out = resolve(process.argv[2]);
 const require = createRequire(resolve(root, 'package.json'));
 await mkdir(out, { recursive: true });
-const result = await require('esbuild').build({ entryPoints: { entry: resolve(host, 'entry.mjs'), 'desktop-entry': resolve(host, 'desktop-entry.mjs'), 'model-connections': resolve(host, 'model-connections.mjs') }, outdir: out, outExtension: { '.js': '.mjs' }, chunkNames: 'chunks/[name]-[hash]', splitting: true, bundle: true, platform: 'node', target: 'node22', format: 'esm', minify: true, write: false, metafile: true,
+const result = await require('esbuild').build({ entryPoints: { entry: resolve(host, 'entry.mjs'), 'desktop-entry': resolve(host, 'desktop-entry.mjs'), 'model-connections': resolve(host, 'model-connections.mjs'), 'computer-runtime': resolve(host, 'computer-runtime.mjs'), 'agent-connections': resolve(host, 'agent-connections.mjs'), 'manus': resolve(host, 'manus.mjs') }, outdir: out, outExtension: { '.js': '.mjs' }, chunkNames: 'chunks/[name]-[hash]', splitting: true, bundle: true, platform: 'node', target: 'node22', format: 'esm', minify: true, write: false, metafile: true,
   banner: { js: 'import { createRequire as turnsuRequire } from "node:module"; const require = turnsuRequire(import.meta.url);' } });
 // The desktop may consume public contracts; Product services and PostgreSQL stay in the cloud build.
 const forbidden = Object.keys(result.metafile.inputs).filter(path => /(?:^|\/)services\/|(?:^|\/)node_modules\/(?:pg|pg-pool|postgres)\//.test(path.replaceAll('\\', '/')));
@@ -38,3 +38,7 @@ console.log('Turnsu local host bundled; the isolated Pi SDK loads on demand. Use
 
 await cp(resolve(host, 'pi-gateway-extension.mjs'), resolve(out, 'pi-gateway-extension.mjs'));
 await cp(resolve(host, 'pi-gateway-extension.mjs'), resolve(out, 'chunks/pi-gateway-extension.mjs'));
+for (const name of ['tool-mcp.mjs', 'tool-client.mjs', 'pi-tools-extension.mjs']) await cp(resolve(host, name), resolve(out, name));
+await cp(resolve(host, 'document-pack'), resolve(out, 'document-pack'), { recursive: true, filter: path => !path.includes('__pycache__') });
+
+await cp(resolve(host, 'computer-pack'), resolve(out, 'computer-pack'), { recursive: true });

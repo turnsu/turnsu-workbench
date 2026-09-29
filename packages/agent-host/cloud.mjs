@@ -119,6 +119,13 @@ export class DesktopCloud {
     if (this.session !== session) throw new Error('sync_connection_changed');
     return result;
   }
+  async connectorCall(identity, operation, input) {
+    const current = await this.identity(), session = this.session;
+    if (JSON.stringify(current) !== JSON.stringify(identity) || !session.connectors) throw new Error("托管接入身份已变化，请重新连接。");
+    const result = await session.connectors.call(operation, input);
+    if (session !== this.session) throw new Error("托管接入身份已变化，请核对结果。");
+    return result;
+  }
   async disconnect() {
     await this.ready;
     if (this.login) return this.cancel();

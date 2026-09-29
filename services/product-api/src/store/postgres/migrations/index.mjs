@@ -247,4 +247,5 @@ export const POSTGRES_MIGRATIONS = Object.freeze([
   Object.freeze({version:"043_member_agent_request_lists",description:"Index actor-scoped member request discovery without a second inbox store.",loadSql:()=>readFile(new URL("./043_member_agent_request_lists.sql",import.meta.url),"utf8")}),
   Object.freeze({version:"044_work_item_result_reviews",description:"Bind immutable team result review events to exact shared entries.",loadSql:()=>readFile(new URL("./044_work_item_result_reviews.sql",import.meta.url),"utf8")}),
   Object.freeze({version:"045_project_file_tombstones",description:"Preserve recoverable file deletions as versioned tombstones in the existing project revision chain.",loadSql:()=>readFile(new URL("./045_project_file_tombstones.sql",import.meta.url),"utf8")}),
+  Object.freeze({version:"046_agent_connectors",description:"Customer-scoped managed Agent credentials and explicit handoff receipts.",loadSql:()=>readFile(new URL("./046_agent_connectors.sql",import.meta.url),"utf8")}),
 ]);
