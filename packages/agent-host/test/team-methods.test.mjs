@@ -52,7 +52,7 @@ test('choosing a published skill installs exact project files, opens one durable
   await assert.rejects(f.host.command('methods.use', { ...f.args, agent: 'claude' }), /同一请求/);
   await f.host.command('session.send', { sessionId: task.id, inputId: 'user-input', text: '整理这周反馈' });
   const prompt = f.requests.find(r => r.method === 'turn/start').params.input[0].text;
-  assert.match(prompt, /整理这周反馈/); assert.ok(prompt.includes(join(task.method.directory, 'SKILL.md'))); assert.match(prompt, /1\.0\.0/);
+  assert.match(prompt, /整理这周反馈/); assert.ok(prompt.includes(JSON.stringify(join(task.method.directory, 'SKILL.md')))); assert.match(prompt, /1\.0\.0/);
   assert.equal((await f.host.command('session.read', { sessionId: task.id })).messages[0].text, '整理这周反馈');
 });
 

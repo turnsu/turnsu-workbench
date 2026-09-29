@@ -183,8 +183,11 @@ export class WeChatImports {
         await durableWrite(join(staging, 'binding.json'), JSON.stringify({ projectId, id }));
         await durableWrite(join(staging, 'manifest.json'), data.raw);
         await rename(staging, final);
-        const directory = await open(this.snapshotRoot, 'r');
-        try { await directory.sync(); } finally { await directory.close(); }
+        // Windows does not support fsync on a directory handle; copied files are flushed above.
+        if (process.platform !== 'win32') {
+          const directory = await open(this.snapshotRoot, 'r');
+          try { await directory.sync(); } finally { await directory.close(); }
+        }
       }
       const manifest = data.manifest, importedAt = Date.now();
       this.db.exec('BEGIN');

@@ -11,6 +11,12 @@ function validPath(path) {
   return typeof path === 'string' && path.length > 0 && path.length <= 512 && path === path.normalize('NFC') && path.split('/').every(p => p && p.length <= 128 && !p.startsWith('.') && !/[\\\x00-\x1f\x7f:<>"|?*]/u.test(p) && !/[. ]$/u.test(p) && !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu.test(p));
 }
 async function exists(path) { try { return await lstat(path); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } }
+async function syncDirectory(path) {
+  // Node cannot flush directory handles on Windows; the staged file itself is flushed.
+  if (process.platform === 'win32') return;
+  const dir = await open(path, 'r');
+  try { await dir.sync(); } finally { await dir.close(); }
+}
 function explain(error) {
   if (error.status === 401 || /sync_login_required|native_session_/.test(error.message)) return '请重新连接团队。待同步内容仍保留在本机。';
   if (error.message === 'sync_connection_changed') return '团队登录已更换。请在项目中确认后恢复同步。';
@@ -60,8 +66,12 @@ export class SharedFiles {
   }
   async root(b) {
     const path = this.project(b.project_id).path, info = await lstat(path);
-    if (!info.isDirectory() || info.isSymbolicLink() || info.dev !== b.device || info.ino !== b.inode || await realpath(path) !== path) throw new Error('sync_root_changed');
-    return path;
+    if (!info.isDirectory() || info.isSymbolicLink() || info.dev !== b.device || info.ino !== b.inode) throw new Error('sync_root_changed');
+    // macOS may expose the same directory via /var and /private/var. Keep the
+    // device/inode fence, but work from its canonical path for child checks.
+    const canonical = await realpath(path), target = await lstat(canonical);
+    if (!target.isDirectory() || target.dev !== b.device || target.ino !== b.inode) throw new Error('sync_root_changed');
+    return canonical;
   }
   async target(b, path, create = false) {
     if (!validPath(path)) throw new Error('sync_unsafe_path');
@@ -217,7 +227,7 @@ export class SharedFiles {
     await link(staged, destination).catch(e => { if (e.code !== 'EEXIST') throw e; });
     // Break our own hard link so future normal reads cannot be mistaken for external hard links.
     await unlink(staged);
-    for (const folder of new Set([area, dirname(destination)])) { const dir = await open(folder, 'r'); try { await dir.sync(); } finally { await dir.close(); } }
+    for (const folder of new Set([area, dirname(destination)])) await syncDirectory(folder);
     this.db.exec('BEGIN');
     try {
       this.baseline(b.project_id, path, job.revision.revisionId, job.revision.contentHash);
@@ -265,7 +275,7 @@ export class SharedFiles {
         throw new Error('sync_file_changing');
       }
     }
-    for (const folder of new Set([area, ...(destination ? [dirname(destination)] : [])])) { const dir = await open(folder, 'r'); try { await dir.sync(); } finally { await dir.close(); } }
+    for (const folder of new Set([area, ...(destination ? [dirname(destination)] : [])])) await syncDirectory(folder);
     this.db.exec('BEGIN');
     try {
       this.baseline(b.project_id, path, job.revision.revisionId, job.revision.contentHash, null, null, true);

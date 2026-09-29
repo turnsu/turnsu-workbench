@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, symlink, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, symlink, rm, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LocalAgentHost } from '../host.mjs';
@@ -17,7 +17,7 @@ test('project Skill OS reads real local files and prepares one pinned native tas
     request: async (method, params) => {
       if (method === 'thread/start') return { thread: { id: 'native-skill-thread', turns: [] } };
       if (method === 'turn/start') {
-        turns++; sentPrompt = JSON.stringify(params);
+        turns++; sentPrompt = params.input?.[0]?.text ?? '';
         onEvent({ method: 'turn/started', params: { threadId: 'native-skill-thread', turn: { id: 'turn-1' } } });
         return { turn: { id: 'turn-1' } };
       }
@@ -45,7 +45,7 @@ test('project Skill OS reads real local files and prepares one pinned native tas
   host = new LocalAgentHost({ directory: join(root, 'state'), connectionFactory });
   await host.command('session.send', { sessionId: session.id, inputId: 'skill-input-1', text: '整理这周的成果' });
   assert.equal(turns, 1);
-  assert.match(sentPrompt, /weekly-report\/SKILL\.md/);
+  assert.ok(sentPrompt.includes(JSON.stringify(await realpath(skillPath))));
   assert.match(sentPrompt, /整理这周的成果/);
 });
 

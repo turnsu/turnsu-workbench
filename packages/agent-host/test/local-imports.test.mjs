@@ -23,7 +23,7 @@ test('selected local files enter a project without overwriting the source or an 
   assert.equal(await readFile(join(projectPath, first.imported[0].path), 'utf8'), 'first version');
   assert.equal(await readFile(join(projectPath, second.imported[0].path), 'utf8'), 'second version');
   assert.equal(await readFile(source, 'utf8'), 'second version');
-  assert.equal((await host.command('files.resolve', { projectId: project.id, path: second.imported[0].path })).path, join(projectPath, second.imported[0].path));
+  assert.equal((await host.command('files.resolve', { projectId: project.id, path: second.imported[0].path })).path, join(project.path, second.imported[0].path));
   await assert.rejects(host.command('files.resolve', { projectId: project.id, path: '../source/report.txt' }), /当前项目/);
 });
 

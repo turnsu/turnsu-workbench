@@ -1,7 +1,7 @@
 import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, writeFile, rm, symlink, readdir, rename } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm, symlink, readdir, rename, realpath, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { openStore } from '../store.mjs';
@@ -48,6 +48,21 @@ async function fixture(t) {
   t.after(async () => { for (const c of clients) await c.close(); await rm(directory, { recursive: true, force: true }); });
   return { directory, remote, client, a: await client('a'), b: await client('b') };
 }
+test('a parent path alias resolves to the same bound directory without accepting a replaced root', { skip: process.platform === 'win32' }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'turnsu-sync-path-alias-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const physical = join(directory, 'physical'), alias = join(directory, 'alias');
+  await mkdir(physical);
+  await mkdir(join(physical, 'project'));
+  await symlink(physical, alias, 'dir');
+  let path = join(alias, 'project');
+  const sync = new SharedFiles({ project: () => ({ path }) });
+  const info = await stat(path);
+  const binding = { project_id: 'project', device: info.dev, inode: info.ino };
+  assert.equal(await sync.root(binding), await realpath(path));
+  path = alias;
+  await assert.rejects(sync.root(binding), /sync_root_changed/);
+});
 test('unchanged shared files are not reread every cycle, while edits and a forced sweep still reach the team', async t => {
   const { a, remote } = await fixture(t);
   const original = a.sync.bytes.bind(a.sync); let reads = 0;

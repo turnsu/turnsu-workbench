@@ -12,7 +12,8 @@ export async function readNativeProfile(path) {
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const stat = await file.stat();
-    if (!stat.isFile() || stat.size > 8192 || (stat.mode & 0o077) !== 0 || (process.getuid && stat.uid !== process.getuid())) throw new Error("native_session_private_file_required");
+    // Windows reports emulated POSIX mode bits; user-data access is governed by NTFS ACLs.
+    if (!stat.isFile() || stat.size > 8192 || (process.platform !== "win32" && (stat.mode & 0o077) !== 0) || (process.getuid && stat.uid !== process.getuid())) throw new Error("native_session_private_file_required");
     const value = JSON.parse(await file.readFile("utf8"));
     assertProductOrigin(value.baseUrl);
     if (!Check(NativeTokenSetSchema, value.tokens)) throw new Error("native_session_invalid");
@@ -45,7 +46,7 @@ export async function lockNativeProfile(path, { recoverStaleLock = false } = {})
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
       const before = await lstat(lockPath);
-      if (!before.isFile() || before.isSymbolicLink() || (before.mode & 0o077) || (process.getuid && before.uid !== process.getuid())) throw new Error("native_session_lock_invalid");
+      if (!before.isFile() || before.isSymbolicLink() || (process.platform !== "win32" && (before.mode & 0o077)) || (process.getuid && before.uid !== process.getuid())) throw new Error("native_session_lock_invalid");
       const owner = await readFile(lockPath, "utf8").catch(() => "");
       const pid = Number(owner.split(":")[0]);
       if (!Number.isSafeInteger(pid) || pid < 1) throw new Error("native_session_lock_invalid");

@@ -98,7 +98,8 @@ export class MethodCapture {
     try {
       const staged = join(stage, 'SKILL.md');
       await writeFile(staged, draft.content, { flag: 'wx', mode: 0o600 });
-      const handle = await open(staged, 'r');
+      // FlushFileBuffers requires a writable handle on Windows.
+      const handle = await open(staged, 'r+');
       try { await handle.sync(); } finally { await handle.close(); }
       try { await link(staged, file); } catch (e) { if (e.code !== 'EEXIST') throw e; }
     } finally { await rm(stage, { recursive: true, force: true }); }
