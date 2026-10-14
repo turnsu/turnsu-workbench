@@ -11,7 +11,7 @@ import { Browser } from "../../../packages/agent-host/browser.mjs";
 import { LocalAgentHost } from "../../../packages/agent-host/host.mjs";
 import { EmbeddedRuntime } from "../electron/embedded-runtime.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const directory = await mkdtemp(join(tmpdir(), "turnsu-conversation-"));
+const directory = process.env.TURNSU_UI_TEST_ROOT || await mkdtemp(join(tmpdir(), "turnsu-conversation-"));
 app.setPath("userData", join(directory, "electron"));
 protocol.registerSchemesAsPrivileged(
   ["turnsu", "turnsu-ui"].map((scheme) => ({
@@ -373,12 +373,19 @@ app.whenReady().then(async () => {
       );
     process.exitCode = 1;
   } finally {
-    clearTimeout(deadline);
-    await embedded?.close();
-    await host?.close();
-    window?.destroy();
-    if(server) await new Promise(resolve => server.close(resolve));
-    await rm(directory, { recursive: true, force: true });
-    app.exit(process.exitCode || 0);
+    try {
+      await embedded?.close();
+      await host?.close();
+      window?.destroy();
+      if(server) await new Promise(resolve => server.close(resolve));
+      if (!process.env.TURNSU_UI_TEST_ROOT)
+        await rm(directory, { recursive: true, force: true });
+    } catch (error) {
+      console.error("UI test cleanup failed:", error.message);
+      process.exitCode = 1;
+    } finally {
+      clearTimeout(deadline);
+      app.exit(process.exitCode || 0);
+    }
   }
 });

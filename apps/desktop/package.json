@@ -12,8 +12,8 @@
     "test": "node --test src/*.test.mjs test/*.test.mjs",
     "test:electron": "npm run build && node scripts/launch.mjs test/electron-host-smoke.mjs",
     "pretest": "node scripts/build-host.mjs host-dist",
-    "test:browser": "node scripts/launch.mjs test/embedded-browser-smoke.mjs",
-    "test:conversation": "npm run build:ui && node scripts/launch.mjs test/conversation-ui-smoke.mjs"
+    "test:browser": "node scripts/test-ui.mjs browser",
+    "test:conversation": "npm run build:ui && node scripts/test-ui.mjs conversation"
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "2.0.3",

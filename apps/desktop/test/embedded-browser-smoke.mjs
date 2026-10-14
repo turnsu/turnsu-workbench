@@ -13,7 +13,7 @@ const deadline = setTimeout(() => {
   console.error("Electron browser test exceeded 60 seconds");
   app.exit(1);
 }, 60000);
-const root = await mkdtemp(join(tmpdir(), "turnsu-embedded-real-"));
+const root = process.env.TURNSU_UI_TEST_ROOT || await mkdtemp(join(tmpdir(), "turnsu-embedded-real-"));
 app.setPath("userData", join(root, "electron"));
 let host, runtime, window, server;
 let uploaded = null;
@@ -212,12 +212,19 @@ app.whenReady().then(async () => {
     console.error(e.stack);
     process.exitCode = 1;
   } finally {
-    clearTimeout(deadline);
-    await runtime?.shutdown();
-    await host?.close();
-    window?.destroy();
-    if (server) await new Promise((r) => server.close(r));
-    await rm(root, { recursive: true, force: true });
-    app.exit(process.exitCode || 0);
+    try {
+      await runtime?.shutdown();
+      await host?.close();
+      window?.destroy();
+      if (server) await new Promise((r) => server.close(r));
+      if (!process.env.TURNSU_UI_TEST_ROOT)
+        await rm(root, { recursive: true, force: true });
+    } catch (error) {
+      console.error("UI test cleanup failed:", error.message);
+      process.exitCode = 1;
+    } finally {
+      clearTimeout(deadline);
+      app.exit(process.exitCode || 0);
+    }
   }
 });
