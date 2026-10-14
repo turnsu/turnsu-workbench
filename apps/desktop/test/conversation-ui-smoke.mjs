@@ -678,6 +678,9 @@ app.whenReady().then(async () => {
     await until(() => js('document.querySelector(".sessionRow")?.textContent.includes("每周归档")'), 'all-project lookup cannot locate a moved conversation');
     await js('document.querySelector(".sessionRow .sessionButton").click()');
     await until(() => js('document.querySelector(".composer textarea")?.value === "迁移后继续核对，保留原文件夹和这段草稿。"'), 'global lookup lost the conversation');
+    // Match a short usable area on every OS; native title bars differ.
+    window.setContentSize(880, 640);
+    await until(() => js('innerWidth === 880 && innerHeight === 640'), 'short content viewport did not resize');
     const currentRow = await js('(() => { const row=document.querySelector(".sessionRow.current").getBoundingClientRect(), nav=document.querySelector("nav[aria-label=项目与任务]").getBoundingClientRect(); return {row: [row.top, row.bottom], nav: [nav.top, nav.bottom]}; })()');
     assert.ok(currentRow.row[0] >= currentRow.nav[0] && currentRow.row[1] <= currentRow.nav[1], 'a short window must show the current conversation: ' + JSON.stringify(currentRow));
     if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `session-management-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
