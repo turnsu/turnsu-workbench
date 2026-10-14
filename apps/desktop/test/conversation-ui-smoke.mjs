@@ -10,13 +10,14 @@ import { createServer } from "node:http";
 import { Browser } from "../../../packages/agent-host/browser.mjs";
 import { LocalAgentHost } from "../../../packages/agent-host/host.mjs";
 import { EmbeddedRuntime } from "../electron/embedded-runtime.mjs";
+import { bundledFontResponse } from "../electron/bundled-fonts.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const directory = process.env.TURNSU_UI_TEST_ROOT || await mkdtemp(join(tmpdir(), "turnsu-conversation-"));
 app.setPath("userData", join(directory, "electron"));
 protocol.registerSchemesAsPrivileged(
   ["turnsu", "turnsu-ui"].map((scheme) => ({
     scheme,
-    privileges: { standard: true, secure: true, supportFetchAPI: true },
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: scheme === 'turnsu-ui' },
   })),
 );
 let stage = "startup";
@@ -112,9 +113,11 @@ app.whenReady().then(async () => {
                 ? host.browser.read(a.sessionId)
                 : host.command(m, a),
     };
+    const fontRequests = { workbench: new Set(), app: new Set() };
     protocol.handle("turnsu", async (request) => {
       const url = new URL(request.url),
         file = resolve(root, "dist", "." + decodeURIComponent(url.pathname));
+      if (url.pathname.endsWith(".woff2")) fontRequests.workbench.add(request.url);
       if (url.hostname !== "app" || !file.startsWith(join(root, "dist") + sep))
         return new Response("", { status: 404 });
       const r = await net.fetch(pathToFileURL(file).href);
@@ -127,12 +130,16 @@ app.whenReady().then(async () => {
       });
     });
     protocol.handle("turnsu-ui", async (request) => {
+      if (new URL(request.url).pathname.startsWith("/fonts/")) {
+        fontRequests.app.add(request.url);
+        return bundledFontResponse(request, root);
+      }
       assert.equal(request.url, "turnsu-ui://app/intelligence.html");
       return new Response((await host.ui.resource()).contents[0].text, {
         headers: {
           "Content-Type": "text/html",
           "Content-Security-Policy":
-            "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'",
+            "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src 'self'; img-src data:; connect-src 'none'",
         },
       });
     });
@@ -146,6 +153,13 @@ app.whenReady().then(async () => {
         contextIsolation: true,
         nodeIntegration: false,
       },
+    });
+    const fontDiagnostics = new Set();
+    window.webContents.on('console-message', event => {
+      if (/font|Content Security Policy|CORS/i.test(event.message) && fontDiagnostics.size < 3) {
+        fontDiagnostics.add(event.message);
+        console.error('Renderer resource diagnostic:', event.message);
+      }
     });
     embedded = new EmbeddedRuntime({
       window,
@@ -199,6 +213,31 @@ app.whenReady().then(async () => {
         )),
       "inline App not rendered",
     );
+    stage = "load local Chinese reading fonts inside the sandbox";
+    const readingFontEvidence = '(' + (async () => {
+      await document.fonts.ready;
+      const loaded = [...document.fonts].filter(font => font.status === 'loaded' && font.family.includes('Noto Sans SC')).length;
+      return { loaded, family: getComputedStyle(document.body).fontFamily, chinese: document.fonts.check('400 16px "Noto Sans SC"', '金额确认') };
+    }).toString() + ')()';
+    const appFonts = await frame().executeJavaScript(readingFontEvidence);
+    const workbenchFonts = await js(readingFontEvidence);
+    for (const fonts of [appFonts, workbenchFonts]) {
+      assert.ok(fonts.loaded > 0 && fonts.chinese, "actual Chinese font data must load, not just a CSS fallback name: " + JSON.stringify(fonts));
+      assert.match(fonts.family, /Noto Sans SC/);
+    }
+    for (const requests of Object.values(fontRequests)) {
+      assert.ok(requests.size > 0 && requests.size < 202, "load only used font subsets, never preload the whole collection");
+      assert.ok([...requests].every(url => /^turnsu(?:-ui)?:\/\/app\/fonts\//.test(url)), "font requests must remain inside the desktop package");
+    }
+    const fontUrl = [...fontRequests.app][0];
+    const fontResponse = await bundledFontResponse(new Request(fontUrl), root);
+    assert.equal(fontResponse.status, 200);
+    assert.equal(fontResponse.headers.get("Content-Type"), "font/woff2");
+    assert.equal(Buffer.from(await fontResponse.arrayBuffer()).subarray(0, 4).toString(), "wOF2");
+    for (const url of ["turnsu-ui://other/fonts/noto-sans-sc-000-AAAAAAAA.woff2", "turnsu-ui://app/fonts/../../electron/main.mjs", "turnsu-ui://app/fonts/noto-sans-sc-000-AAAAAAAA.woff2?path=credentials"]) {
+      assert.equal((await bundledFontResponse(new Request(url), root)).status, 404, "font access must not expose another host, arbitrary files or query-controlled paths");
+    }
+    assert.equal((await bundledFontResponse(new Request(fontUrl, { method: "POST" }), root)).status, 404, "font route is read-only");
     stage = "compose without crowding the conversation";
     const emptyComposerHeight = await js('document.querySelector(".composer").getBoundingClientRect().height');
     assert.ok(emptyComposerHeight < 135, "an empty composer must leave room to read the conversation");
@@ -563,8 +602,10 @@ app.whenReady().then(async () => {
         platform: process.platform,
         electron: process.versions.electron,
         nativeAgent: false,
+        fonts: { workbenchSubsets: fontRequests.workbench.size, appSubsets: fontRequests.app.size },
         evidence: [
           "production conversation and sandboxed MCP App",
+          "offline Chinese fonts loaded in both actual documents through a read-only packaged route",
           "edited data returned to waiting tool",
           "same iframe across expand/collapse",
           "paper/night theme follows MCP host context without losing edits",

@@ -1,4 +1,5 @@
 import { EmbeddedRuntime } from './embedded-runtime.mjs';
+import { bundledFontResponse } from './bundled-fonts.mjs';
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, net, nativeImage, Notification, powerMonitor, protocol, safeStorage, session, shell, Tray, utilityProcess } from 'electron';
 import { mkdir } from 'node:fs/promises';
 import { dirname, resolve, join, sep } from 'node:path';
@@ -16,7 +17,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const stateDirectory = process.env.TURNSU_DESKTOP_STATE || join(app.getPath('appData'), 'ai.turnsu.desktop');
 app.setName('Turnsu 工作台');
 app.setPath('userData', join(stateDirectory, 'electron'));
-protocol.registerSchemesAsPrivileged(['turnsu','turnsu-ui'].map(scheme=>({scheme,privileges:{standard:true,secure:true,supportFetchAPI:true}})));
+protocol.registerSchemesAsPrivileged(['turnsu','turnsu-ui'].map(scheme=>({scheme,privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:scheme==='turnsu-ui'}})));
 let embedded, window, host, vault, agentVault, manusAuth, hostReady, tray, computer, quitting = false, closing = false, configuring = false;
 const closeReplies = new Map();
 const localOrigin = 'turnsu://app/index.html';
@@ -192,9 +193,10 @@ else {
     return new Response(response.body, { status: response.status, headers: { ...Object.fromEntries(response.headers), 'Content-Security-Policy': csp } });
   });
   protocol.handle('turnsu-ui',async request=>{
+    if(new URL(request.url).pathname.startsWith('/fonts/'))return bundledFontResponse(request,root);
     if(request.url!=='turnsu-ui://app/intelligence.html'||request.method!=='GET'||!embedded?.inline)return new Response('Not found',{status:404});
     const resource=await host.request('ui.resource',{sessionId:embedded.inline.id});
-    return new Response(resource.contents[0].text,{headers:{'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"}});
+    return new Response(resource.contents[0].text,{headers:{'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src 'self'; img-src data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"}});
   });
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   session.defaultSession.setPermissionCheckHandler(() => false);
