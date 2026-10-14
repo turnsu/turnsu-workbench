@@ -112,9 +112,8 @@ jobs:
         timeout-minutes: 5
         env:
           TURNSU_QA_ARTIFACTS: ${{ runner.temp }}/turnsu-ui-evidence
-        run: |
-          npm run test:conversation --prefix apps/desktop
-          npm run test:browser --prefix apps/desktop
+        # PowerShell must not hide a failed first command behind the next one.
+        run: npm run test:conversation --prefix apps/desktop && npm run test:browser --prefix apps/desktop
       - name: Keep actual UI evidence
         if: always()
         uses: actions/upload-artifact@v7
