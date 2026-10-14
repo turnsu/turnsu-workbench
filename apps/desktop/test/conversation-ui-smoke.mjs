@@ -599,7 +599,21 @@ app.whenReady().then(async () => {
     stage = "manage projects and organize the existing conversation";
     const targetPath = join(directory, '每周工作'); await mkdir(targetPath);
     const target = await host.command('project.open', { path: targetPath });
-    const clickText = (selector, text) => js(`Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(el => el.textContent.trim() === ${JSON.stringify(text)}).click()`);
+    const clickText = (selector, text) => until(() => js(`(() => {
+      const element=Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(el => el.textContent.trim() === ${JSON.stringify(text)});
+      if (!element || element.disabled || !element.checkVisibility()) return false;
+      element.click(); return true;
+    })()`), `action did not become available: ${text}`);
+    const openSessionMenu = async () => {
+      // A persisted pin is not the end of the operation: the index must refresh
+      // before React enables the trigger again. Never click a disabled control.
+      await until(() => js(`(() => {
+        const button=document.querySelector('[aria-label="会话选项：订单整理"]');
+        if (!button || button.disabled) return false;
+        button.click(); return true;
+      })()`), 'session menu trigger did not become available');
+      await until(() => js('Boolean(document.querySelector("[role=menu]"))'), 'session menu did not open');
+    };
     await until(() => js('document.querySelectorAll(".projectButton").length === 2'), 'new project did not reach navigation');
     await js('document.querySelector(".projectSwitcher summary").click()');
     await clickText('.projectChoices button', '管理项目');
@@ -619,10 +633,10 @@ app.whenReady().then(async () => {
     await js('document.querySelector("[aria-label=保存会话名称]").click()');
     await until(() => js('document.querySelector(".taskTitle")?.textContent === "订单整理"'), 'session title was not saved');
     await setDraft('迁移后继续核对，保留原文件夹和这段草稿。');
-    await js('document.querySelector("[aria-label=会话选项：订单整理]").click()');
+    await openSessionMenu();
     await clickText('[role=menuitem]', '置顶会话');
     await until(() => host.session(s.id).pinned_at > 0, 'session pin was not saved');
-    await js('document.querySelector("[aria-label=会话选项：订单整理]").click()');
+    await openSessionMenu();
     await clickText('[role=menuitem]', '移到项目…');
     await until(() => js('document.querySelector(".moveExplanation")?.textContent.includes("客户工作资料")'), 'move must explain the original directory');
     await js('document.querySelector(".moveTargets input").click()');
@@ -634,7 +648,7 @@ app.whenReady().then(async () => {
     assert.equal(await js('document.querySelectorAll(".error").length'), 0);
 
     stage = "archive, reopen and restore the moved conversation";
-    await js('document.querySelector("[aria-label=会话选项：订单整理]").click()');
+    await openSessionMenu();
     await clickText('[role=menuitem]', '归档会话');
     await until(() => host.session(s.id).archived_at > 0, 'archive was not persisted');
     await until(() => js('Boolean(document.querySelector(".managementNotice"))'), 'archive feedback missing');
@@ -668,12 +682,12 @@ app.whenReady().then(async () => {
     assert.ok(currentRow.row[0] >= currentRow.nav[0] && currentRow.row[1] <= currentRow.nav[1], 'a short window must show the current conversation: ' + JSON.stringify(currentRow));
     if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `session-management-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
     await clickText('.themeSwitch button', '夜读');
-    await js('document.querySelector("[aria-label=会话选项：订单整理]").click()');
+    await openSessionMenu();
     await until(() => js('document.activeElement?.getAttribute("role") === "menuitem"'), 'session menu did not receive keyboard focus');
     if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `session-menu-night-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
     await js('document.activeElement.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
     await until(() => js('document.activeElement?.getAttribute("aria-label") === "会话选项：订单整理" && !document.querySelector("[role=menu]")'), 'closing the menu must return focus to its trigger');
-    await js('document.querySelector("[aria-label=会话选项：订单整理]").click()');
+    await openSessionMenu();
     await js('{const input=document.querySelector(".composer textarea");input.dispatchEvent(new PointerEvent("pointerdown",{bubbles:true}));input.focus();}');
     await until(() => js('document.activeElement === document.querySelector(".composer textarea") && !document.querySelector("[role=menu]")'), 'clicking outside the menu must not steal focus back from the editor');
     console.log(
