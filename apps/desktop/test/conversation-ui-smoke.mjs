@@ -199,6 +199,23 @@ app.whenReady().then(async () => {
         )),
       "inline App not rendered",
     );
+    stage = "compose without crowding the conversation";
+    const emptyComposerHeight = await js('document.querySelector(".composer").getBoundingClientRect().height');
+    assert.ok(emptyComposerHeight < 135, "an empty composer must leave room to read the conversation");
+    const longDraft = "第一行：保留这份输入。\n".repeat(12);
+    await js(`(()=>{const input=document.querySelector(".composer textarea");Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value").set.call(input,${JSON.stringify(longDraft)});input.dispatchEvent(new Event("input",{bubbles:true}));})()`);
+    await until(() => js('document.querySelector(".composer textarea").value.length > 100'), "draft input was lost");
+    assert.ok(await js('document.querySelector(".composer").getBoundingClientRect().height') > emptyComposerHeight + 60, "composer must grow for multiline input");
+    assert.ok(await js('document.querySelector(".composer textarea").getBoundingClientRect().height') <= 181, "long drafts must not consume the whole window");
+    await js('document.querySelector(".agentOptions summary").click()');
+    await until(() => js('document.querySelector(".agentOptions").open'), "assistant settings did not open");
+    assert.equal(await js('document.querySelector(".composer textarea").value'), longDraft, "opening settings must preserve the draft");
+    assert.equal(await js('Boolean(document.querySelector(".agentOptions .modelSetting"))'), true);
+    await js('document.querySelector(".agentOptions summary").dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));');
+    assert.equal(await js('document.querySelector(".agentOptions").open'), false, "Escape closes settings");
+    assert.equal(await js('document.activeElement === document.querySelector(".agentOptions summary")'), true, "focus returns to the menu trigger");
+    await js('const input=document.querySelector(".composer textarea");Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value").set.call(input,"");input.dispatchEvent(new Event("input",{bubbles:true}));');
+    await until(() => js('document.querySelector(".composer").getBoundingClientRect().height').then(height => height === emptyComposerHeight), "clearing a draft must release its extra space");
     stage = "edit inline review";
     const originalFrame = frame().frameTreeNodeId;
     assert.equal(
@@ -327,6 +344,16 @@ app.whenReady().then(async () => {
       () => js('!document.querySelector(".filePanel")'),
       "file preview did not close",
     );
+    stage = "open attached material from the composer";
+    const sourceText = "客户,金额\n样本甲,100.00\n样本乙,74.50\n";
+    await writeFile(join(path, "订单.csv"), sourceText);
+    await host.command("ui.attach", { sessionId: s.id, paths: ["订单.csv"] });
+    await until(() => js('Boolean(document.querySelector(".materialOpen"))'), "attached material not visible");
+    await js('document.querySelector(".materialOpen").click()');
+    await until(() => js('document.querySelector(".filePreview")?.innerText.includes("样本乙,74.50")'), "material should open the source file, not a placeholder");
+    assert.equal(await readFile(join(path, "订单.csv"), "utf8"), sourceText, "preview must not change the material");
+    assert.equal(frame().frameTreeNodeId, originalFrame, "material preview must preserve the review");
+    await js('document.querySelector("[aria-label=关闭文件面板]").click()');
     await js('document.querySelector(".transcript").scrollTop=0');
     await js(
       "new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))",
@@ -391,6 +418,7 @@ app.whenReady().then(async () => {
       );
     }
     stage = "replace review with readonly result";
+    const reviewFrame = frame().frameTreeNodeId;
     await host.ui.call(s.id, {
       operation: "present",
       revision: host.ui.read(s.id).revision,
@@ -403,7 +431,14 @@ app.whenReady().then(async () => {
       },
     });
     await until(
-      () => frame()?.executeJavaScript('document.querySelector("[role=status]")?.innerText === "内容已展示"'),
+      async () => {
+        // AppBridge can read new data before React moves the presentation to
+        // its new reply. Wait for both the host and the replacement frame.
+        if (!await js('document.querySelector(".surfaceHeading strong")?.innerText === "汇总结果"')) return false;
+        const content = frame();
+        return content && content.frameTreeNodeId !== reviewFrame &&
+          content.executeJavaScript('document.querySelector(".statusDescription")?.innerText === "待处理金额总计：174.50 元" && !document.querySelector("[role=status]")');
+      },
       "a read-only presentation must not ask for confirmation or reuse an earlier receipt",
     );
     assert.equal(await frame().executeJavaScript('document.querySelector(".primary")'), null);
@@ -471,7 +506,8 @@ app.whenReady().then(async () => {
           "uncertain delivery remains blocked after edits",
           "App anchored to original reply",
           "conversation links open native browser without authorization",
-          "real result preview",
+          "real result and attached material preview",
+          "bounded auto-growing composer and Escape-to-close assistant settings",
           "draft reopened",
           "App resources released",
           "900px viewport",

@@ -54,14 +54,14 @@ test("pending and uncertain delivery are not presented as completed", () => {
 test("read-only content does not ask for a confirmation that the user cannot give", () => {
   const document = { tree: { type: "Layout", children: [{ type: "Text" }, { type: "Status" }] } };
   assert.deepEqual(surfaceStatus(review([], { document })), {
-    label: "内容已展示", tone: "neutral",
+    label: "", tone: "neutral",
   });
   assert.equal(surfaceStatus(review([], {
     document, results: [{ createdAt: 101, files: [{ path: "说明.txt" }] }],
   })).label, "成果可查看");
   assert.equal(surfaceStatus(review([], {
     document, results: [{ createdAt: 99, files: [{ path: "旧结果.txt" }] }],
-  })).label, "内容已展示");
+  })).label, "");
   assert.equal(surfaceStatus(review([], { document, dirty: true })).label, "修改已保存");
 });
 

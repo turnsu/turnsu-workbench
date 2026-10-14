@@ -52,7 +52,8 @@ export function surfaceStatus(state, busy = false) {
   if (state.results?.some((result) =>
     result.createdAt >= state.presentation?.presented_at && result.files?.length))
     return { label: "成果可查看", tone: "success" };
-  return { label: "内容已展示", tone: "neutral" };
+  // A read-only document needs no redundant delivery announcement.
+  return { label: "", tone: "neutral" };
 }
 
 // Alignment changes presentation only; values and precision stay with the Host.

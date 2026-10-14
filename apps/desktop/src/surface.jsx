@@ -278,10 +278,10 @@ function App() {
         <section key={n.id} className="statusBlock">
           {n.label && <h2>{n.label}</h2>}
           {n.text && <p className="statusDescription">{n.text}</p>}
-          <p className="status" role="status" data-tone={status.tone}>
+          {status.label && <p className="status" role="status" data-tone={status.tone}>
             {status.label}
             {state.error ? " · " + state.error : ""}
-          </p>
+          </p>}
         </section>
       );
     }
