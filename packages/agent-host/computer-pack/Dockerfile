@@ -1,5 +1,19 @@
 FROM python:3.13.7-slim@sha256:5f55cdf0c5d9dc1a415637a5ccc4a9e18663ad203673173b8cda8f8dcacef689
 ARG TARGETARCH
+# Pair the browser version with an immutable Debian archive. A version pin
+# against the rotating mirror disappears as soon as Debian publishes an update.
+ARG DEBIAN_SNAPSHOT=20260930T000000Z
+RUN printf '%s\n' \
+    'Types: deb' \
+    "URIs: https://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/" \
+    'Suites: trixie trixie-updates' 'Components: main' \
+    'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
+    'Check-Valid-Until: no' '' \
+    'Types: deb' \
+    "URIs: https://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}/" \
+    'Suites: trixie-security' 'Components: main' \
+    'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
+    'Check-Valid-Until: no' > /etc/apt/sources.list.d/debian.sources
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl dbus-x11 xvfb openbox chromium=154.0.8037.57-1~deb13u1 libxi6 libxkbcommon0 libatspi2.0-0 fonts-noto-cjk && rm -rf /var/lib/apt/lists/*
 RUN case "$TARGETARCH" in \
       amd64) ARCH=x86_64; SHA=fff2016e0dea320df9be3aa52fc942c4ea4ca651df32cf3e950119bbc3097d29 ;; \

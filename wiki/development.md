@@ -41,7 +41,7 @@ docker build -t turnsu-computer:qa packages/agent-host/computer-pack
 TURNSU_COMPUTER_TEST_IMAGE=turnsu-computer:qa node packages/agent-host/test/verify-computer-docker.mjs
 ```
 
-第二项真实构建文件、转换、OCR 并核对原件；第四项启动真实隔离浏览器、操作公开页面，检查来源越界拒绝、停止、强制崩溃、重开回收和输出保留。Cua 0.30.4 使用父进程 liveness pipe，所有操作仍通过 `bounded` 清单；不依赖单纯杀 Docker 客户端来回收容器。回收状态无法确认时保留记录，禁止继续启动并提供重试。
+第二项真实构建文件、转换、OCR 并核对原件；第四项启动真实隔离浏览器、操作公开页面，检查来源越界拒绝、停止、强制崩溃、重开回收和输出保留。CUA 镜像的 Debian 源与 Chromium 版本一同固定到已验证快照，保留归档签名和下载校验；只允许该历史源使用过期的 Release 时间戳。升级浏览器时同时更新快照并重跑实际操作，不能对滚动源只写死包版本。Cua 0.30.4 使用父进程 liveness pipe，所有操作仍通过 `bounded` 清单；不依赖单纯杀 Docker 客户端来回收容器。回收状态无法确认时保留记录，禁止继续启动并提供重试。
 
 `TURNSU_DOCUMENT_TEST_IMAGE=turnsu-documents:qa node packages/agent-host/test/verify-native-tools.mjs <codex|pi|opencode|omp> /absolute/native-cli` 在临时原生配置中验证工具调用与原会话恢复，模型 HTTP/SSE 为合成测试服务。oh-my-pi 通过原生 `xd://` read/write 发现和调用 MCP，测试需要 Bun ≥1.3.14；CI 使用 1.4.2。该脚本不能作为客户账号推理验收。
 

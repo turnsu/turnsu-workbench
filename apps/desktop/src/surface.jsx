@@ -382,7 +382,7 @@ function App() {
               ? "修改已保存"
               : state.events[0] &&
                   ["sent", "consumed"].includes(state.events[0].state)
-                ? "已提交，助手会继续处理"
+                ? "确认内容已交给助手"
                 : ""}
         </span>
         {state.events[0]?.state === "pending" && (
