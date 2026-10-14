@@ -1,3 +1,4 @@
+import { Browser } from './browser.mjs';
 import { LocalAgentHost } from './host.mjs';
 import { normalizeAgentConnection } from './agent-connections.mjs';
 import { Manus } from './manus.mjs';
@@ -10,10 +11,12 @@ if (!directory || !process.parentPort) throw new Error('private_desktop_transpor
 const output = message => process.parentPort.postMessage(message);
 const host = new LocalAgentHost({ directory, notify: event => output({ event }) });
 const desktopRequests = new Map();
-host.computer = new Computer(host, (method, args = {}) => new Promise((resolve, reject) => {
+const desktopTransport = (method, args = {}) => new Promise((resolve, reject) => {
   const id = randomUUID(), timer = setTimeout(() => { desktopRequests.delete(id); reject(new Error('电脑运行时响应未确认，请检查当前应用后恢复。')); }, 90_000);
   desktopRequests.set(id, { resolve, reject, timer }); output({ computerRequest: { id, method, args } });
-}));
+});
+host.computer = new Computer(host, desktopTransport);
+host.browser = new Browser(host, desktopTransport);
 host.remote.manusFactory = profile => new Manus(profile, { authorize: args => new Promise((resolve, reject) => {
   const id = randomUUID(), timer = setTimeout(() => { desktopRequests.delete(id); reject(new Error('Manus 凭据刷新尚未确认，请重新连接。')); }, 70_000);
   desktopRequests.set(id, { resolve, reject, timer }); output({ credentialRequest: { id, args } });
@@ -26,6 +29,10 @@ process.parentPort.on('message', async ({ data: request }) => {
     desktopRequests.delete(reply.id); clearTimeout(pending.timer); reply.error ? pending.reject(new Error(reply.error)) : pending.resolve(reply.result); return;
   }
   try {
+    if (request.method === 'desktop.resources.reserve') {output({id:request.id,result:host.reserveDesktop(request.args.kind,request.args.id)});return;}
+    if (request.method === 'desktop.resources.release') {output({id:request.id,result:host.releaseDesktop(request.args.kind,request.args.id)});return;}
+    if (request.method === 'desktop.browser.remember') { output({id:request.id,result:host.browser.remember(request.args.sessionId,request.args.url)});return; }
+    if (request.method === 'desktop.browser.read') { output({id:request.id,result:host.browser.read(request.args.sessionId)});return; }
     if (request.method === 'shutdown') return close();
     if (JSON.stringify(request).length > 150_000) throw new Error('请求内容过长。');
     if (request.method === 'desktop.scheduler.start') { host.schedules.start(); output({ id: request.id, result: { started: true } }); return; }

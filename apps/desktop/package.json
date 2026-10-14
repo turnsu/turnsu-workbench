@@ -7,22 +7,25 @@
   "scripts": {
     "build:ui": "node scripts/build-ui.mjs",
     "build": "npm run build:ui && node scripts/build-host.mjs host-dist",
-    "start": "npm run build && electron .",
+    "start": "npm run build && node scripts/launch.mjs .",
     "package": "npm run build && node scripts/package.mjs",
     "test": "node --test src/*.test.mjs test/*.test.mjs",
-    "test:electron": "npm run build && electron test/electron-host-smoke.mjs",
-    "pretest": "node scripts/build-host.mjs host-dist"
+    "test:electron": "npm run build && node scripts/launch.mjs test/electron-host-smoke.mjs",
+    "pretest": "node scripts/build-host.mjs host-dist",
+    "test:browser": "node scripts/launch.mjs test/embedded-browser-smoke.mjs",
+    "test:conversation": "npm run build:ui && node scripts/launch.mjs test/conversation-ui-smoke.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/ext-apps": "2.0.3",
+    "lucide-react": "1.18.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "lucide-react": "1.18.0",
     "react-markdown": "10.1.0",
     "remark-gfm": "4.0.1"
   },
   "devDependencies": {
-    "esbuild": "0.25.12",
+    "@electron/packager": "20.3.0",
     "electron": "44.4.5",
-    "@electron/packager": "20.3.0"
+    "esbuild": "0.25.12"
   }
 }

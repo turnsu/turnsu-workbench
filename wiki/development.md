@@ -1,5 +1,7 @@
 # 开发指南
 
+下一版已选澄白样式，按[通用组件合同](ui-components.md)和[实施计划](next-workbench.md)打通真实路径。主验证放在 turnsu Linux 开发机的隔离目录；macOS/Windows 的可见 UI、系统权限、文件框和升级另行实测。独立设计稿的操作和截图只验证设计，不计为 Agent、CUA、文件上传或回传验收。
+
 下面命令对应当前实现。本地 To B 交付遵循[本地交付计划](roadmap.md)和[开发约束](../AGENTS.md)。可选团队与客户业务连接只有经过真实路径验收后才能列为可用能力。
 
 ## 桌面
@@ -8,6 +10,8 @@
 
 - `npm test`：Host 的 SQLite / 文件 / 协议回归，以及桌面桥接与刷新回归。
 - `npm run build`：桌面 UI 和私有 Host 独立构建，无需团队 Web 或 PostgreSQL。
+- `npm run test:conversation --prefix apps/desktop`：真实 React 对话、隔离 MCP App、修改回传、展开/收起、草稿重开与页面释放；使用明确标注的 Agent 交互夹具。
+- `npm run test:browser --prefix apps/desktop`：真实内嵌网页上传、下载、授权撤销与生命周期；无模型。Linux 无图形会话时使用 Xvfb。
 - `npm run test:electron --prefix apps/desktop`：真实 Electron 的 Host 与系统凭据边界检查。
 - `npm run package --prefix apps/desktop -- --platform=darwin --arch=arm64`：macOS 包。
 - `npm run package --prefix apps/desktop -- --platform=win32 --arch=x64`：Windows 包；跨平台打包不能代替 Windows 设备验收。
@@ -45,7 +49,7 @@ TURNSU_COMPUTER_TEST_IMAGE=turnsu-computer:qa node packages/agent-host/test/veri
 
 ## CI 与交付构建验证
 
-GitHub Actions 的 `Verify workbench` 在指向 `main` 的 PR、推送 `main` 和手动触发时运行。Linux 分别验证本地 Host／桌面逻辑、1 万条会话下的启动、分页和 Host 内存预算、构建后 Agent runtime 的实际运行，以及可选团队服务、Web、隔离 PostgreSQL 行为；Worker 镜像构建后还运行真实非特权容器中的 Pi 会话和动态子任务，验证产品网关、结果、会话记录保存与清理。macOS 与 Windows runner 安装锁定依赖、运行本地测试与真实 Electron Host／系统凭据检查，并生成桌面开发包。`main` 的无签名开发包保存在限时 7 天的 Actions artifact 中供检查。流程不使用客户凭据，不部署服务，也不发布正式安装包。Host 的合成内存预算不代表包含 Electron Renderer 和原生 Agent 的长时资源验收；跨平台打包和 Electron 无窗口检查也不能替代客户机器上的完整界面、真实 Agent 登录与权限、签名、公证、升级验收。
+GitHub Actions 的 `Verify workbench` 在指向 `main` 的 PR、推送 `main` 和手动触发时运行。Linux 分别验证本地 Host／桌面逻辑、1 万条会话下的启动、分页和 Host 内存预算、构建后 Agent runtime 的实际运行，以及可选团队服务、Web、隔离 PostgreSQL 行为；Worker 镜像构建后还运行真实非特权容器中的 Pi 会话和动态子任务，验证产品网关、结果、会话记录保存与清理。macOS 与 Windows runner 安装锁定依赖、运行本地测试、Electron 对话 App／内嵌网页，以及真实 Host／系统凭据检查，并生成桌面开发包。`main` 的无签名开发包保存在限时 7 天的 Actions artifact 中供检查。流程不使用客户凭据，不部署服务，也不发布正式安装包。Host 的合成内存预算不代表包含 Electron Renderer 和原生 Agent 的长时资源验收；跨平台打包和 Electron 无窗口检查也不能替代客户机器上的完整界面、真实 Agent 登录与权限、签名、公证、升级验收。
 
 `npm run test:team` 检查服务端与团队 Web；真实 PostgreSQL 验证使用 `npm run test:postgres:isolated --prefix services/product-api`。原生连接器仅用于用户主动授权的团队连接。
 
@@ -56,3 +60,12 @@ Agent Worker 镜像从仓库根目录构建：`docker build -f deploy/agent-imag
 先检查差异与受影响调用方；测试使用临时目录或 `_test` 数据库。只提交源码、必要测试、锁文件和当前文档。构建产物、截图库存、运行日志、会话、凭据及私人项目材料不进入仓库。
 
 跨仓库修改按职责提交：工作台保存导入消费者与客服能力，微信桥保存原生分享与交接生产者，固定兼容版本后联合验收。不要将整个桥仓库、旧应答 UI 或客户数据复制进来；协议变更同时检查旧接收方。
+
+
+## 对话内交互的接线
+
+`ConversationSurface` 是当前会话唯一的 MCP App 宿主，隔离 iframe 仅通过 AppBridge 调用白名单操作。展开只改变同一实例的布局。导航与退出先保存输入，失败保留当前工作；不能先用加载占位替换组件再保存。`UISurfaces` 持有材料、草稿、提交回执和真实成果，新会话不自动显示模板表单。
+
+外部网页仍由 `BrowserRuntime` 的独立 WebContentsView 承载，与交互 App 的权限分开。Host 的整机并发预算计入 Agent、文件、电脑、浏览器与 App，至多 2 个网页、1 个 App；这是并发保护，不是已经通过 8 小时内存验收。Linux 开发启动器在启动 Chromium 前为非 UTF-8 环境设置子进程 UTF-8 locale，避免中文文件名被底层忽略，不修改系统 locale。
+
+Codex 的 MCP 工具批准请求必须变成用户可见的确认卡，不自动接受。单次允许不回传持久授权；只有请求支持且用户明确选择“本次对话允许”时才回传对应范围，Host 的文件、网页和电脑权限仍逐次检查。协议依据：[Codex App Server](https://github.com/openai/codex/tree/rust-v0.150.1/codex-rs/app-server)。

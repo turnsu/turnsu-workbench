@@ -22,7 +22,8 @@ async function fixture(t) {
   const connectionFactory = () => ({ ready: Promise.resolve(), closed: false, close: async () => {}, request: async (method, params) => {
     requests.push({ method, params });
     if (method === 'thread/start' || method === 'thread/resume') return { thread: { id: 'native-thread', turns: [] } };
-    if (method === 'turn/start') return { turn: { id: 'native-turn' } };
+    if (method === 'model/list') return {data:[{model:'chosen-model',defaultReasoningEffort:'medium'}]};
+        if (method === 'turn/start') return { turn: { id: 'native-turn' } };
     throw new Error(method);
   } });
   const cloud = () => ({ identity: async () => identity, close: async () => {}, fileCall: async (expected, name, input) => {

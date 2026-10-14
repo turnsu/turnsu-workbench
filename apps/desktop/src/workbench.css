@@ -1,0 +1,848 @@
+/* 澄白: the conversation is the workspace; interactive content is part of it. */
+:root {
+  color: #272b32;
+  background: #fff;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+  --work-accent: #a84c30;
+  --work-muted: #787e88;
+  --work-line: #e9ebee;
+}
+button {
+  transition:
+    background 0.15s,
+    color 0.15s,
+    box-shadow 0.15s;
+}
+button:hover {
+  background: #f1f2f4;
+}
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 2px solid #ad4e30;
+  outline-offset: 3px;
+}
+button.primary {
+  background: #a84c30;
+  color: #fff;
+}
+.primary:hover {
+  background: #923f28;
+}
+.sidebar {
+  width: 224px;
+  background: #f7f8f9;
+  border-color: #e9ebee;
+  padding: 25px 12px 14px;
+}
+.brand {
+  width: 108px;
+  margin: 0 12px 26px;
+  height: 29px;
+}
+.productNav {
+  margin-bottom: 20px;
+  gap: 4px;
+}
+.productNav button {
+  font-size: 13px;
+  color: #686e78;
+  padding: 10px 12px;
+}
+.productNav [aria-current="page"] {
+  background: #eceff2;
+  color: #232932;
+}
+.openProject {
+  font-size: 12px !important;
+  padding: 9px 10px !important;
+  border: 1px solid #e0e3e7 !important;
+  background: #fff !important;
+  margin-bottom: 26px !important;
+  color: #525a64 !important;
+}
+.railHeading {
+  font-size: 11px;
+  color: #9399a2;
+  margin: 0 11px 9px;
+  letter-spacing: 0;
+}
+.projectGroup {
+  margin-bottom: 12px;
+}
+.projectButton {
+  font-size: 12px;
+  color: #555e69;
+  padding: 9px 10px;
+}
+.projectButton.selected {
+  background: transparent;
+  color: #2e343e;
+}
+.newTask {
+  color: #a84c30;
+  font-weight: 550;
+  padding: 8px 12px;
+}
+.sessionSearch {
+  border: 0;
+  background: #eef0f3;
+  margin: 9px 6px;
+  padding: 6px 8px;
+  color: #9299a2;
+}
+.sessionSearch input {
+  color: #414a56;
+}
+.sessionListHeading {
+  color: #969da6;
+  margin: 19px 11px 8px;
+}
+.sessionButton {
+  font-size: 12px;
+  color: #6d7480;
+  padding: 10px 9px 10px 11px;
+  gap: 8px;
+}
+.sessionRow.current {
+  background: #e9edf1;
+}
+.sessionRow.current .sessionButton {
+  color: #222a33;
+}
+.sessionTitle {
+  line-height: 1.6;
+}
+.taskAgent {
+  display: none;
+}
+.taskAgent.attention {
+  display: block;
+  font-size: 10px;
+  color: #a56b31;
+}
+.statusDot {
+  background: #bec4cd;
+  width: 4px;
+  height: 4px;
+}
+.statusDot.live {
+  background: #a84c30;
+  box-shadow: 0 0 0 3px #f2dfd5;
+}
+.statusDot.attention {
+  background: #bd7b30;
+  box-shadow: none;
+}
+.sessionRow .renameTrigger {
+  opacity: 0;
+  color: #8d96a3;
+}
+.sessionRow:hover .renameTrigger,
+.sessionRow:focus-within .renameTrigger {
+  opacity: 1;
+}
+.railBottom {
+  display: grid;
+  border-top: 1px solid #e6e9ed;
+  margin: 14px 5px 0;
+  padding-top: 12px;
+  gap: 3px;
+}
+.railBottom button {
+  justify-content: flex-start;
+  font-size: 12px;
+  color: #737a86;
+  padding: 9px 7px;
+}
+.localLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: #9299a3;
+  padding: 12px 8px 0;
+}
+.localLabel > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #99aa9b;
+}
+.app > main > header {
+  height: 62px;
+  padding: 0 28px;
+  background: #fff;
+  border-color: #edf0f2;
+  gap: 12px;
+}
+.app > main > header > div:first-child {
+  flex: 1;
+}
+.app > main > header strong {
+  font-size: 13px;
+  font-weight: 550;
+  color: #424a55;
+  max-width: 530px;
+}
+.breadcrumb {
+  font-size: 12px;
+  color: #99a0a9;
+  max-width: 170px;
+  overflow: hidden;
+}
+.headerActions {
+  gap: 5px;
+  flex-shrink: 0;
+}
+.headerActions > button {
+  font-size: 12px;
+  color: #7a828d;
+  padding: 8px 10px;
+}
+.headerActions > button[aria-pressed="true"] {
+  background: #f0f2f5;
+  color: #2f3742;
+}
+.workMenu {
+  position: relative;
+}
+.workMenu summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 7px;
+  color: #7c8490;
+  display: flex;
+}
+.workMenu summary::-webkit-details-marker {
+  display: none;
+}
+.workMenu > div {
+  position: absolute;
+  right: 0;
+  top: 32px;
+  z-index: 25;
+  display: grid;
+  width: 170px;
+  background: white;
+  border: 1px solid #e6e9ed;
+  box-shadow: 0 6px 24px #19253314;
+  border-radius: 10px;
+  padding: 6px;
+}
+.workMenu button {
+  justify-content: flex-start;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.workArea {
+  background: #fff;
+}
+.messageColumn {
+  max-width: 800px;
+  padding: 36px 36px 26px;
+}
+.message {
+  font-size: 14px;
+  line-height: 1.85;
+  color: #343b46;
+  margin-bottom: 25px;
+}
+.message.user {
+  background: #f3f4f6;
+  border-radius: 14px 14px 4px 14px;
+  max-width: 87%;
+  padding: 13px 18px;
+  color: #333b47;
+  white-space: pre-wrap;
+}
+.message.user p {
+  margin: 0;
+}
+.message.assistant > p:first-child {
+  margin-top: 0;
+}
+.message.tool {
+  margin: 6px 0 12px;
+  color: #8b929d;
+  font-size: 12px;
+}
+.message.tool details {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.message.tool summary {
+  font-size: 11px;
+}
+.message pre {
+  background: #f6f7f9;
+  border: 1px solid #eceef1;
+  border-radius: 9px;
+  padding: 12px;
+  overflow: auto;
+  font-size: 12px;
+}
+.message .reference {
+  color: #a84c30;
+  text-decoration-color: #d7b6a7;
+}
+.captureAction {
+  font-size: 11px;
+  color: #9299a4;
+  padding: 4px 8px;
+  margin-top: 8px;
+}
+.activity {
+  color: #9098a3;
+  font-size: 12px;
+  margin: 16px 0;
+}
+.taskWelcome {
+  max-width: 800px;
+  margin: 13vh auto 28px;
+  padding: 0 36px;
+}
+.taskWelcome .eyebrow {
+  color: #9aa0a9;
+  font-size: 12px;
+}
+.taskWelcome h1 {
+  font-size: 30px;
+  line-height: 1.5;
+  letter-spacing: -0.6px;
+  color: #303640;
+  font-weight: 550;
+  margin: 12px 0 10px;
+}
+.taskWelcome p {
+  font-size: 14px;
+  color: #8a929e;
+}
+.taskSuggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 27px;
+}
+.taskSuggestions button {
+  border: 1px solid #e8eaee;
+  background: #fff;
+  border-radius: 9px;
+  color: #737d8a;
+  font-size: 12px;
+  padding: 10px 12px;
+}
+.taskSuggestions button:hover {
+  border-color: #c7ced8;
+  background: #fafbfc;
+}
+.taskSuggestions svg {
+  color: #a0a8b2;
+}
+.welcome {
+  color: #303640;
+}
+.welcome p {
+  color: #8a929e;
+}
+.welcome small {
+  color: #939ca7;
+}
+.composerArea {
+  max-width: 800px;
+  padding: 14px 32px 19px;
+}
+.composer {
+  border: 1px solid #dfe4ea;
+  border-radius: 16px;
+  padding: 17px 16px 11px;
+  box-shadow: 0 5px 20px #26395506;
+  background: #fff;
+}
+.composer:focus-within {
+  border-color: #b9c3cf;
+  box-shadow: 0 0 0 3px #2b3e5504;
+}
+.composer textarea {
+  font-size: 14px;
+  color: #313947;
+  min-height: 48px;
+  line-height: 1.65;
+}
+.composer textarea::placeholder {
+  color: #a0a6af;
+}
+.composerToolbar {
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.composerToolbar > button {
+  color: #818997;
+  padding: 7px;
+}
+.composerToolbar .send {
+  background: #a84c30;
+  color: white;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  flex: none;
+}
+.composerToolbar .send:disabled {
+  background: #eceef1;
+  color: #b3bac4;
+}
+.agentChoice {
+  gap: 4px;
+  color: #6e7886;
+  max-width: calc(100% - 120px);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.agentChoice select {
+  max-width: 160px;
+  color: #647080;
+  font-size: 12px;
+  border: 0;
+  background: transparent;
+  padding: 6px;
+}
+.modelChoice {
+  color: #929aa6;
+  font-size: 11px;
+  padding: 6px;
+}
+.composerHint {
+  display: none;
+}
+.composerMeta {
+  font-size: 10px;
+  color: #a2a8b1;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.agentOptions {
+  font-size: 11px;
+  margin: 3px 0 0;
+  color: #929ba8;
+}
+.agentOptions > summary {
+  cursor: pointer;
+  display: inline-block;
+  padding: 3px 7px;
+}
+.agentOptions[open] {
+  padding-bottom: 8px;
+}
+.connectionSource {
+  background: #f7f8fa;
+  border: 0;
+  margin: 7px 0 0;
+  padding: 8px;
+  gap: 8px;
+  flex-wrap: wrap;
+  border-radius: 8px;
+  color: #858e9c;
+}
+.connectionSource label,
+.connectionSource button,
+.connectionSource select {
+  font-size: 11px;
+}
+.connectionSource code {
+  display: none;
+}
+.materialChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 13px;
+}
+.materialChips > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #e6e9ed;
+  background: #fafbfc;
+  border-radius: 8px;
+  padding: 7px 7px 7px 9px;
+  font-size: 12px;
+  max-width: 250px;
+  color: #626e7f;
+}
+.materialChips > span > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.materialChips button {
+  padding: 2px;
+  color: #9ba3ae;
+}
+.referenceChips > span {
+  background: #f4f6f8;
+  color: #697587;
+}
+.referenceChips small {
+  color: #929ba7;
+}
+.conversationSurface {
+  margin: 22px 0;
+  border: 1px solid #e3e7ec;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 3px 15px #21354904;
+}
+.surfaceHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #edf0f3;
+  background: #fbfcfd;
+  gap: 12px;
+}
+.surfaceHeading > span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  color: #808d9f;
+}
+.surfaceHeading strong {
+  font-size: 13px;
+  color: #404b59;
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.surfaceHeading button {
+  padding: 5px;
+  color: #929dab;
+}
+.conversationSurface iframe {
+  display: block;
+  border: 0;
+  width: 100%;
+  background: #fff;
+  flex: 1;
+  min-height: 0;
+}
+.surfaceLoading {
+  margin: 16px 24px;
+  font-size: 12px;
+  color: #8b95a3;
+}
+.conversationSurface.expanded {
+  position: fixed;
+  top: 74px;
+  bottom: 14px;
+  right: 14px;
+  width: clamp(420px, 48vw, 830px);
+  margin: 0;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 6px 28px #23344b0a;
+}
+.hasExpandedSurface .conversation {
+  margin-right: calc(clamp(420px, 48vw, 830px) + 28px);
+}
+.hasExpandedSurface .messageColumn {
+  padding: 26px 24px;
+}
+.hasExpandedSurface .composerArea {
+  padding: 12px 18px 18px;
+}
+.conversationResults {
+  margin: 26px 0;
+}
+.resultsHeading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #8a938f;
+  margin-bottom: 12px;
+}
+.conversationResults > div > p {
+  font-size: 13px;
+  color: #656f7d;
+  line-height: 1.7;
+  margin: 10px 0;
+}
+.resultFiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
+}
+.resultFiles > button {
+  justify-content: flex-start;
+  gap: 12px;
+  text-align: left;
+  padding: 13px;
+  border: 1px solid #e4e8ed;
+  border-radius: 10px;
+  background: #fff;
+  min-width: 0;
+}
+.resultFiles > button:hover {
+  border-color: #c6d0dc;
+  background: #fbfcfd;
+}
+.fileType {
+  font: 600 9px/1 system-ui;
+  letter-spacing: 0.3px;
+  display: grid;
+  place-items: center;
+  background: #f3f0ed;
+  color: #aa7055;
+  width: 36px;
+  height: 42px;
+  border: 1px solid #e9e1dc;
+  border-radius: 5px;
+  flex: none;
+}
+.resultFiles > button > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.resultFiles strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 550;
+  color: #3e4857;
+}
+.resultFiles small {
+  display: block;
+  font-size: 11px;
+  color: #98a1ae;
+  margin-top: 4px;
+}
+.resultFiles > button > svg {
+  color: #99a3b1;
+  flex: none;
+}
+.workbenchSettings {
+  width: 470px;
+  max-width: calc(100vw - 40px);
+  border: 1px solid #e0e5eb;
+  border-radius: 16px;
+  padding: 24px;
+  color: #354051;
+  box-shadow: 0 20px 100px #17263726;
+}
+.workbenchSettings::backdrop {
+  background: #19283835;
+}
+.settingsHeading,
+.settingsHeading > span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.settingsHeading {
+  justify-content: space-between;
+}
+.settingsHeading h2 {
+  font-size: 18px;
+  margin: 0;
+  font-weight: 600;
+}
+.workbenchSettings > p {
+  color: #929ba9;
+  font-size: 12px;
+  margin: 12px 0 22px;
+}
+.settingsEntry {
+  width: 100%;
+  text-align: left;
+  justify-content: flex-start;
+  padding: 16px 7px;
+  border-radius: 8px;
+  gap: 13px;
+}
+.settingsEntry > svg {
+  color: #8994a3;
+  flex: none;
+}
+.settingsEntry > span {
+  flex: 1;
+}
+.settingsEntry strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 550;
+}
+.settingsEntry small {
+  display: block;
+  margin-top: 6px;
+  color: #939ba6;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.settingsEntry + .settingsEntry {
+  border-top: 1px solid #eff1f4;
+}
+.filePanel {
+  background: #fafbfd;
+  border-color: #e6ebf0;
+}
+.filePreview {
+  color: #3e4a59;
+}
+.filePath,
+.muted {
+  color: #929dab;
+}
+.interaction {
+  background: #fafbfd;
+  border-color: #dce4ed;
+}
+.interaction strong {
+  color: #52627a;
+}
+.options button[aria-pressed="true"] {
+  background: #e9eef5;
+}
+.interaction input {
+  border-color: #dce3ec;
+}
+.error,
+.inlineError {
+  background: #fff5f0;
+  color: #a55235;
+}
+.historyNavigation {
+  border-color: #edf0f3;
+  color: #8d98a7;
+}
+.latestJump {
+  background: #fff;
+  border: 1px solid #e2e7ee;
+  color: #6e7d91;
+}
+@media (max-width: 1100px) {
+  .sidebar {
+    width: 204px;
+  }
+  .app > main > header {
+    padding: 0 22px;
+  }
+  .breadcrumb {
+    display: none;
+  }
+  .hasExpandedSurface .conversation {
+    margin-right: 0;
+  }
+  .conversationSurface.expanded {
+    left: 218px;
+    right: 14px;
+    width: auto;
+    z-index: 20;
+    box-shadow: 0 6px 50px #22355015;
+  }
+  .messageColumn {
+    padding: 28px;
+  }
+  .composerArea {
+    padding: 14px 25px 18px;
+  }
+}
+@media (max-width: 760px) {
+  .sidebar {
+    width: 180px;
+    padding-inline: 9px;
+  }
+  .brand {
+    width: 95px;
+  }
+  .app > main > header {
+    padding: 0 15px;
+  }
+  .headerActions > button {
+    font-size: 0;
+    gap: 0;
+  }
+  .messageColumn {
+    padding: 23px 20px;
+  }
+  .composerArea {
+    padding: 12px 16px 16px;
+  }
+  .composerMeta > span:last-child {
+    display: none;
+  }
+  .taskWelcome {
+    padding: 0 22px;
+    margin-top: 10vh;
+  }
+  .taskWelcome h1 {
+    font-size: 26px;
+  }
+  .taskSuggestions {
+    display: grid;
+  }
+  .conversationSurface.expanded {
+    left: 190px;
+    right: 10px;
+  }
+  .agentChoice select {
+    max-width: 115px;
+  }
+  .composer .modelChoice {
+    max-width: 135px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .surfaceHeading {
+    padding: 10px 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  button {
+    transition: none;
+  }
+  .spin {
+    animation: none;
+  }
+}
+.filePreview pre {
+  background: #f2f5f8;
+  color: #5c697b;
+  border: 1px solid #e8edf2;
+  border-radius: 8px;
+  padding: 14px;
+  white-space: pre-wrap;
+}
+.interaction > small {
+  display: block;
+  color: #929ba8;
+  font-size: 11px;
+}
+.interaction > details {
+  font-size: 11px;
+  color: #8c96a4;
+  margin-top: 12px;
+}
+.interaction > details pre {
+  max-height: 180px;
+  overflow: auto;
+  font-size: 11px;
+}
+.interaction > p {
+  font-size: 14px;
+  margin: 12px 0 8px;
+}
+.textLink{display:inline-flex;padding:0;gap:3px;vertical-align:baseline;border-radius:2px;font:inherit;text-align:left;color:#a84c30!important}.textLink:hover{background:#fff4ee}

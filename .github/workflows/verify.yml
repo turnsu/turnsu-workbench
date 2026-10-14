@@ -34,6 +34,22 @@ jobs:
         run: node packages/agent-host/test/verify-history-budget.mjs
       - name: Build desktop UI and private Host
         run: npm run build
+      - name: Prepare Electron for real renderer tests
+        run: node apps/desktop/node_modules/electron/install.js
+      - name: Exercise conversation Apps and browser transfers
+        env:
+          TURNSU_QA_ARTIFACTS: ${{ runner.temp }}/turnsu-ui-evidence
+        run: |
+          xvfb-run -a npm run test:conversation --prefix apps/desktop
+          xvfb-run -a npm run test:browser --prefix apps/desktop
+      - name: Keep actual UI evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: turnsu-ui-${{ runner.os }}
+          path: ${{ runner.temp }}/turnsu-ui-evidence
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Exercise bundled Agent runtime
         run: node apps/desktop/scripts/verify-host-bundle.mjs apps/desktop/host-dist
 
@@ -87,6 +103,20 @@ jobs:
         run: npm test
       - name: Test native Electron Host and protected credentials
         run: npm run test:electron --prefix apps/desktop
+      - name: Exercise conversation Apps and browser transfers
+        env:
+          TURNSU_QA_ARTIFACTS: ${{ runner.temp }}/turnsu-ui-evidence
+        run: |
+          npm run test:conversation --prefix apps/desktop
+          npm run test:browser --prefix apps/desktop
+      - name: Keep actual UI evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: turnsu-ui-${{ runner.os }}
+          path: ${{ runner.temp }}/turnsu-ui-evidence
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Build unsigned desktop package
         run: npm run package
       - name: Preserve macOS app permissions

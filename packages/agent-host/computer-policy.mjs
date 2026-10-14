@@ -35,6 +35,6 @@ export function computerPolicy(input, { platform = process.platform, inputDirect
   return manifest;
 }
 
-export function computerTool(manifest) {
+export function computerTool(manifest = {allow:{tools:[...new Set([...browserTools,...appTools])]}}) {
   return { name: 'turnsu_computer', description: 'Operate the single Turnsu-authorized computer. Call describe first to obtain the exact Cua schema. Only listed tools and reviewed resources are allowed. Never switch from isolation to the host computer. Stop on user takeover, permission failure or lock screen. Returned screenshots are ephemeral.', inputSchema: { type: 'object', properties: { tool: { type: 'string', enum: ['describe', ...manifest.allow.tools] }, arguments: { type: 'object' } }, required: ['tool'], additionalProperties: false } };
 }

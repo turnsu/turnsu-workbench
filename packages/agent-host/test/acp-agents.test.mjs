@@ -43,7 +43,9 @@ for (const agent of ['kimi', 'omp']) test(`${agent} ACP task keeps its native se
   assert.deepEqual(await host.command('models.list', { agent, sessionId: session.id }), [{ id: 'provider/model', name: 'Model' }]);
   await host.command('session.model', { sessionId: session.id, model: 'provider/model' });
   await host.command('session.send', { sessionId: session.id, inputId: 'first', text: 'Read the project' });
-  assert.deepEqual(sent, [{ prompt: 'Read the project', model: 'provider/model' }]);
+  assert.equal(sent.length,1); assert.equal(sent[0].model,'provider/model');
+  assert.ok(sent[0].prompt.startsWith('Read the project\n\n<workbench_context>'));
+  assert.equal((await host.command('session.read',{sessionId:session.id})).messages.find(m=>m.role==='user').text,'Read the project');
   assert.equal((await host.command('session.read', { sessionId: session.id })).native_id, `${agent}-native-1`);
   connections[0].options.onEvent({ type: 'update', turn: 1, update: { sessionUpdate: 'agent_message_chunk', messageId: 'reply', content: { type: 'text', text: 'Done' } } });
   connections[0].options.onEvent({ type: 'permission', id: 'approve', title: 'Read file', tool: 'read', options: [{ name: 'Allow once', kind: 'allow_once' }] });

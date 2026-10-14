@@ -43,6 +43,9 @@ try {
   assert.ok(windows.length, 'Isolated Chrome must expose an actual window');
   const bound = await call('get_browser_state', { session: 'turnsu-check', pid, window_id: windows[0].window_id });
   assert.equal(bound.structuredContent?.binding_quality, 'exact');
+  const preview=await host.command('computer.preview',{projectId:project.id});
+  assert.equal(preview.structuredContent?.binding_quality,'exact');
+  console.log('Preview returned:',JSON.stringify({contentTypes:preview.content?.map(c=>c.type),fields:Object.keys(preview.structuredContent||{})}));
   const context = {session: 'turnsu-check', target_id: bound.structuredContent.target_id, tab_id: bound.structuredContent.tabs[0].tab_id};
   await call('browser_navigate', {...context,url:'https://example.com'});
   const page = await call('get_browser_state', context);

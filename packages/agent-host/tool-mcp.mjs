@@ -18,11 +18,12 @@ process.stdin.on('data', bytes => {
 process.stdin.on('end', () => process.exit(0));
 function output(value) { process.stdout.write(JSON.stringify(value) + '\n'); }
 async function handle(request) {
-  if (request.method === 'initialize') return { protocolVersion: request.params?.protocolVersion || '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'turnsu-project-tools', version: '1.0.0' } };
+  if (request.method === 'initialize') return { protocolVersion: request.params?.protocolVersion || '2024-11-05', capabilities: { tools: {}, resources: {} }, serverInfo: { name: 'turnsu-project-tools', version: '1.0.0' } };
   if (request.method === 'ping') return {};
+  if (['resources/read','resources/list'].includes(request.method)) return callBroker(connection,{method:request.method,uri:request.params?.uri});
   if (request.method === 'tools/list') return { tools: await callBroker(connection, { method: 'tools/list' }) };
   if (request.method === 'tools/call') {
-    try { const result = await callBroker(connection, { method: 'tools/call', name: request.params.name, arguments: request.params.arguments, callId: `${transportId}:${request.id}` }); return { content: Array.isArray(result.content) ? result.content : [{ type: 'text', text: JSON.stringify(result) }], isError: false }; }
+    try { const result = await callBroker(connection, { method: 'tools/call', name: request.params.name, arguments: request.params.arguments, callId: `${transportId}:${request.id}` }); return { content: Array.isArray(result.content) ? result.content : [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result.structuredContent || result, ...(result._meta ? {_meta:result._meta}:{}), isError: Boolean(result.isError) }; }
     catch (error) { return { content: [{ type: 'text', text: error.message }], isError: true }; }
   }
   throw new Error('不支持这个工具协议操作。');

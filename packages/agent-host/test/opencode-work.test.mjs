@@ -43,7 +43,9 @@ test('OpenCode keeps its native session, approval, result and stop boundaries', 
   assert.deepEqual(await host.command('models.list', { agent: 'opencode', sessionId: session.id }), [{ id: 'provider/model', name: 'Model' }]);
   await host.command('session.model', { sessionId: session.id, model: 'provider/model' });
   await host.command('session.send', { sessionId: session.id, inputId: 'first', text: 'Create a report' });
-  assert.deepEqual(sent, [{ prompt: 'Create a report', model: 'provider/model' }]);
+  assert.equal(sent.length,1); assert.equal(sent[0].model,'provider/model');
+  assert.ok(sent[0].prompt.startsWith('Create a report\n\n<workbench_context>'));
+  assert.equal((await host.command('session.read',{sessionId:session.id})).messages.find(m=>m.role==='user').text,'Create a report');
   assert.equal((await host.command('session.read', { sessionId: session.id })).native_id, 'native-opencode-1');
   created[0].options.onEvent({ type: 'update', turn: 1, update: { sessionUpdate: 'agent_message_chunk', messageId: 'reply', content: { type: 'text', text: 'Report ' } } });
   created[0].options.onEvent({ type: 'update', turn: 1, update: { sessionUpdate: 'agent_message_chunk', messageId: 'reply', content: { type: 'text', text: 'ready.' } } });

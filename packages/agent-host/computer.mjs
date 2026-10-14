@@ -51,7 +51,7 @@ export class Computer {
     }
     finally { this.starting = false; }
   }
-  tools(projectId) { return this.active?.projectId === projectId && this.active.expiresAt > this.host.clock() ? [computerTool(this.active.manifest)] : []; }
+  tools() { return [computerTool()]; }
   async call(projectId, sessionId, request) {
     this.host.schedules?.assertTool(sessionId, 'computer');
     const grant = this.active;
@@ -67,10 +67,34 @@ export class Computer {
       if (this.active !== grant || grant.expiresAt <= this.host.clock()) fail('电脑操作已被暂停或撤销，请核对应用当前状态。');
       const result = await this.transport(request.tool === 'describe' ? 'describe' : 'call', { ...request, grantId: grant.id, manifestHash: digest(grant.manifest) });
       if (this.active !== grant) fail('电脑操作已被暂停或撤销，请核对应用当前状态。');
+      if(['get_browser_state','get_window_state'].includes(request.tool))this.lastTarget={grantId:grant.id,tool:request.tool,arguments:{...request.arguments}};
       return result;
     } catch(error) { await this.status().catch(()=>{}); throw error;
     } finally { this.busy = false; }
   }
+  async preview(projectId) {
+    const grant=this.active;
+    if(!grant||grant.projectId!==projectId||grant.expiresAt<=this.host.clock())throw new Error('此项目没有有效的电脑授权。');
+    if(this.busy)throw new Error('电脑操作尚未结束，请稍后查看画面。');
+    this.busy=true;this.touched=this.host.clock();
+    const check=()=>{if(this.active!==grant||grant.expiresAt<=this.host.clock())throw new Error('授权已撤销或过期。');};
+    try {
+      const catalog=await this.transport('describe',{grantId:grant.id,manifestHash:digest(grant.manifest)});check();
+      const name=grant.manifest.resources.browser?'get_browser_state':'get_window_state';
+      if(!catalog.tools.find(t=>t.name===name))throw new Error('当前 Driver 未提供可用画面。');
+      let args;
+      if(this.lastTarget?.grantId===grant.id&&this.lastTarget.tool===name)args=this.lastTarget.arguments;
+      else if(grant.manifest.resources.browser&&catalog.browser?.prepared_pid) {
+        const pid=catalog.browser.prepared_pid;
+        const windows=await this.transport('call',{tool:'list_windows',arguments:{pid},grantId:grant.id,manifestHash:digest(grant.manifest)});check();
+        const found=windows.structuredContent?.windows?.find(w=>w.pid===pid);
+        if(!found)throw new Error('尚未发现获准窗口，请等待应用打开。');
+        args={pid:found.pid,window_id:found.window_id};
+      } else throw new Error('请先让 Agent 选择获准应用中的确切窗口，再刷新该窗口的画面。');
+      const result=await this.transport('call',{tool:name,arguments:args,grantId:grant.id,manifestHash:digest(grant.manifest)});check();return result;
+    } finally {this.busy=false;}
+  }
+
   async stop() {
     this.generation++;
     const grant = this.active; this.active = null; this.owner = null;

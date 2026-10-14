@@ -51,7 +51,8 @@ const server=createServer(async(req,res)=>{
       chunks.forEach((delta,i)=>res.write(`data: ${JSON.stringify({...base,choices:[{index:0,delta,finish_reason:i===1?(needCall?'tool_calls':'stop'):null}]})}\n\n`));res.end('data: [DONE]\n\n');return;
     }
     assert.equal(path,'/v1/responses');
-    const item=needCall?{type:'function_call',id:`fc_${round}`,call_id:id,name,arguments:args,status:'completed'}:{id:`msg_${round}`,type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:'文件工具已完成，请检查项目成果。',annotations:[]}]};
+    const namespace=(body.tools||[]).find(t=>t.type==='namespace'&&t.tools?.some(tool=>tool.name===name))?.name;
+    const item=needCall?{...(namespace?{namespace}:{}),type:'function_call',id:`fc_${round}`,call_id:id,name,arguments:args,status:'completed'}:{id:`msg_${round}`,type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:'文件工具已完成，请检查项目成果。',annotations:[]}]};
     const result={id:`resp_${round}_${results.length}`,object:'response',created_at:Math.floor(Date.now()/1000),status:'completed',model:'turnsu-contract-model',output:[item],usage:{input_tokens:8,output_tokens:8,total_tokens:16,input_tokens_details:{cached_tokens:0},output_tokens_details:{reasoning_tokens:0}}};
     const events=[{type:'response.created',response:{...result,status:'in_progress',output:[]}},{type:'response.output_item.added',output_index:0,item:{...item,status:'in_progress',...(needCall?{arguments:''}:{content:[]})}}];
     if(needCall)events.push({type:'response.function_call_arguments.delta',item_id:item.id,output_index:0,delta:args},{type:'response.function_call_arguments.done',item_id:item.id,output_index:0,arguments:args});
@@ -70,7 +71,13 @@ async function configure(){
     await writeFile(join(nativeHome,'models.yml'),JSON.stringify({providers:{'turnsu-contract':{api:'openai-completions',baseUrl,apiKey:'private-fixture-key',models:[{id:'turnsu-contract-model',name:'Contract',contextWindow:128000,maxTokens:4096,supportsTools:true,input:['text'],reasoning:false,cost:{input:0,output:0,cacheRead:0,cacheWrite:0}}]}}}));
   }else await host.configureConnections([{id:'contract',name:'受控工具验证',baseUrl,protocol:agent==='codex'?'responses':'chat',apiKey:'private-fixture-key'}]);
 }
-async function wait(id){const until=Date.now()+60_000;while(Date.now()<until&&['starting','running','waiting'].includes(host.session(id).status))await new Promise(r=>setTimeout(r,100));const state=await host.command('session.read',{sessionId:id});assert.equal(state.status,'idle',state.error||JSON.stringify(state));return state;}
+async function wait(id){const until=Date.now()+60_000;while(Date.now()<until&&['starting','running','waiting'].includes(host.session(id).status)){
+  // The controlled acceptance scenario explicitly chooses Allow once through
+  // the same response command as the approval card. Never change native policy.
+  const pending=(await host.command('session.read',{sessionId:id})).interactions;
+  for(const item of pending){assert.equal(item.method,'mcpServer/elicitation/request');await host.command('interaction.respond',{sessionId:id,id:item.id,decision:'accept'});}
+  await new Promise(r=>setTimeout(r,100));
+}const state=await host.command('session.read',{sessionId:id});assert.equal(state.status,'idle',state.error||JSON.stringify(state));return state;}
 try{
   host=openHost();await configure();
   const project=await host.command('project.open',{path:projectPath});
@@ -83,7 +90,7 @@ try{
   await host.command('session.send',{sessionId:session.id,inputId:'native-create',text:'使用 turnsu_document 创建客户订单 Excel。'});
   const firstState=await wait(session.id);assert.ok(toolResults.length,'actual native tool result did not return to model: '+JSON.stringify({tools:[...new Set(seenTools)],session:firstState}));
   const receipts=host.db.prepare("SELECT result FROM capability_receipts WHERE status='completed'").all();
-  outputPath=receipts.map(r=>JSON.parse(r.result)).find(r=>r.path)?.path;assert.ok(outputPath,'no completed real file receipt');assert.ok((await readFile(join(projectPath,outputPath))).length>100);
+  outputPath=receipts.map(r=>JSON.parse(r.result)).find(r=>r.path)?.path;assert.ok(outputPath,'no completed real file receipt: '+JSON.stringify({tools:[...new Set(seenTools)],toolResults,receipts}));assert.ok((await readFile(join(projectPath,outputPath))).length>100);
   const nativeId=host.session(session.id).native_id;
   await host.close();round=1;calls[1]={operation:'read',path:outputPath};host=openHost();await configure();
   await host.command('session.send',{sessionId:session.id,inputId:'native-read',text:`用文件工具读取上次成果 ${outputPath}，核对金额。`});

@@ -112,7 +112,7 @@ export class Capabilities {
     catch (e) { if (e.code !== 'EEXIST') throw e; const stat = await lstat(destination); if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== content.length || hash(await readFile(destination)) !== hash(content)) error('同名技能已存在且内容不同。已保留原文件，请先在项目中检查。'); }
     this.host.changed(); return { path: '.agents/skills/turnsu-documents/SKILL.md', hash: hash(content) };
   }
-  tools(projectId) { return this.list(projectId).grant?.active && this.list(projectId).documents.status === 'enabled' ? [documentTool] : []; }
+  tools() { return [documentTool]; }
   call(projectId, sessionId, request, callId) {
     this.host.schedules?.assertTool(sessionId, 'documents');
     const id = callId ? hash(`${projectId}:${sessionId || 'manual'}:${callId}`) : randomUUID();

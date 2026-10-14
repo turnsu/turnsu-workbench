@@ -33,7 +33,7 @@ export class ToolBroker {
   }
   async connection(sessionId) {
     const session = this.host.session(sessionId);
-    if (!this.host.capabilities.tools(session.project_id).length && !this.host.computer?.tools(session.project_id).length) return null;
+    if (!this.host.sessionTools(session).length) return null;
     await this.start();
     const old = [...this.tokens].find(([, id]) => id === sessionId);
     const token = old?.[0] || randomBytes(32).toString('hex'); this.tokens.set(token, sessionId);
@@ -47,11 +47,11 @@ export class ToolBroker {
     const sessionId = this.tokens.get(request.token);
     if (!sessionId || this.host.closing) throw new Error('工具连接已失效，请恢复会话。');
     const session = this.host.session(sessionId);
-    if (request.method === 'tools/list') return [...this.host.capabilities.tools(session.project_id), ...(this.host.computer?.tools(session.project_id) || [])];
+    if (request.method === 'resources/read') return this.host.ui.resource(request.uri);
+    if (request.method === 'resources/list') return {resources:[{uri:'ui://turnsu/intelligence.html',name:'Turnsu Intelligence UI',mimeType:'text/html;profile=mcp-app'}]};
+    if (request.method === 'tools/list') return this.host.sessionTools(session);
     if (request.method !== 'tools/call' || !['starting', 'running', 'waiting'].includes(session.status)) throw new Error('工具只能在当前正在执行的任务中调用。');
-    if (request.name === 'turnsu_document') return this.host.capabilities.call(session.project_id, sessionId, request.arguments || {}, request.callId);
-    if (request.name === 'turnsu_computer' && this.host.computer) return this.host.computer.call(session.project_id, sessionId, request.arguments || {});
-    throw new Error('工具未授权。');
+    return this.host.callSessionTool(session,request.name,request.arguments || {},request.callId);
   }
   release(sessionId) { for (const [token, id] of this.tokens) if (id === sessionId) this.tokens.delete(token); }
   async close() {

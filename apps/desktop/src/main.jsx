@@ -1,3 +1,6 @@
+import { ConversationSurface, flushConversationSurface } from './ConversationSurface.jsx';
+import { WorkbenchSettings } from './WorkbenchSettings.jsx';
+import { EmbeddedPane } from './EmbeddedPane.jsx';
 import { ProjectMaterialPicker } from './ProjectMaterialPicker.jsx';
 import { AgentConnectionsDialog } from './AgentConnectionsDialog.jsx';
 import { RemoteTaskPanel } from './RemoteTaskPanel.jsx';
@@ -18,7 +21,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { FolderOpen, Plus, ArrowUp, ArrowDown, Square, Files, X, ChevronRight, ChevronLeft, FileText, Folder, RotateCcw, LoaderCircle, Check, ShieldCheck, MessageSquare, BookOpen, Laptop, Pencil, Search, Settings2 } from "lucide-react";
+import { FolderOpen, Plus, ArrowUp, ArrowDown, Square, Files, X, ChevronRight, ChevronLeft, FileText, Folder, RotateCcw, LoaderCircle, Check, ShieldCheck, MessageSquare, BookOpen, Laptop, Pencil, Search, Settings2, Paperclip, Globe, Clock, Sparkles, ArrowUpRight, MoreHorizontal } from "lucide-react";
 import "./style.css";
 import "./scaffold.css";
 import "./skill-os.css";
@@ -27,6 +30,7 @@ import { CloudDialog } from "./CloudDialog.jsx";
 import { SyncDialog, syncLabels } from "./SyncDialog.jsx";
 import { WeChatImportDialog } from './WeChatImportDialog.jsx';
 import './wechat-import.css';
+import './workbench.css';
 
 const command = (method, args = {}) => invoke("local_command", { method, args });
 const labels = { idle: "可以继续", starting: "正在连接 Agent", running: "正在处理", waiting: "需要你的回应", stopping: "正在停止", interrupted: "可以恢复", failed: "需要处理" };
@@ -34,8 +38,8 @@ const active = (status) => ["starting", "running", "waiting", "stopping"].includ
 const agentName = (agent) => ({ pi: 'Pi', claude: 'Claude Code', codex: 'Codex', opencode: 'OpenCode', kimi: 'Kimi Code', omp: 'oh-my-pi', manus: 'Manus', 'workbuddy-local': 'WorkBuddy 本地', 'workbuddy-cloud': 'WorkBuddy 云端', muse: 'Muse' }[agent] || agent);
 const sessionState = (status) => ({ starting: "连接中", running: "进行中", waiting: "待回应", stopping: "停止中", interrupted: "已中断", failed: "需处理" })[status] || "";
 
-function Markdown({ children }) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: ({ alt }) => <span>[图片：{alt || "未加载外部图片"}]</span>, a: ({ children }) => <span className="reference">{children}</span> }}>{children}</ReactMarkdown>;
+function Markdown({ children, onOpenLink }) {
+  return <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: ({ alt }) => <span>[图片：{alt || "未加载外部图片"}]</span>, a: ({ children, href }) => onOpenLink && /^https?:\/\//i.test(href || '') ? <button className="reference textLink" onClick={()=>onOpenLink(href)}>{children}<ArrowUpRight size={12}/></button> : <span className="reference">{children}</span> }}>{children}</ReactMarkdown>;
 }
 function Interaction({ item, sessionId, report }) {
   const [answers, setAnswers] = useState(() => Object.fromEntries(item.questions.map((q) => [q.id, q.prefill || ""]))); const [saving, setSaving] = useState(false);
@@ -50,12 +54,15 @@ function Interaction({ item, sessionId, report }) {
     {item.questions.length ? item.questions.map((q) => <label key={q.id}>{q.question}
       {q.options?.length > 0 && <div className="options">{q.options.map((o) => <button key={o.label} title={o.description} onClick={() => setAnswers((a) => ({ ...a, [q.id]: q.multiSelect ? (Array.isArray(a[q.id]) && a[q.id].includes(o.label) ? a[q.id].filter((v) => v !== o.label) : [...(Array.isArray(a[q.id]) ? a[q.id] : []), o.label]) : o.label }))} aria-pressed={Array.isArray(answers[q.id]) ? answers[q.id].includes(o.label) : answers[q.id] === o.label}>{o.label}</button>)}</div>}
       {q.multiline ? <textarea value={Array.isArray(answers[q.id]) ? answers[q.id].join(", ") : answers[q.id] || ""} onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))} aria-label={q.question} /> : <input type={q.isSecret ? "password" : "text"} value={Array.isArray(answers[q.id]) ? answers[q.id].join(", ") : answers[q.id] || ""} onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))} placeholder="填写回答" />}
-    </label>) : <pre>{item.command}</pre>}
-    <div className="interactionActions">{item.acpChoices?.length > 1 ? <><button disabled={saving} onClick={() => respond('decline')}>取消</button>{item.acpChoices.map(option => <button key={option.id} className="primary" disabled={saving} onClick={() => respond('select', option.id)}>{option.label}</button>)}</> : <>{item.method.startsWith("claude/") && item.questions.length > 0 && <button disabled={saving} onClick={() => respond("decline")}>取消</button>}{item.method.startsWith("pi/") && item.questions.length > 0 && <button disabled={saving} onClick={() => respond("cancel")}>取消</button>}{item.questions.length ? <button className="primary" disabled={saving || item.questions.some((q) => Array.isArray(answers[q.id]) ? !answers[q.id].length : !answers[q.id]?.trim())} onClick={() => respond()}>提交回答</button> : <><button disabled={saving} onClick={() => respond("decline")}>拒绝</button><button className="primary" disabled={saving} onClick={() => respond("accept")}>{item.method === "pi/confirm" ? "确认" : "允许一次"}</button></>}</>}</div>
+    </label>) : item.method==='mcpServer/elicitation/request'?<><p>{item.command}</p><small>仍按当前工作已授权的范围执行。</small><details><summary>查看操作详情</summary><pre>{item.details}</pre></details></>:<pre>{item.command}</pre>}
+    <div className="interactionActions">{item.acpChoices?.length > 1 ? <><button disabled={saving} onClick={() => respond('decline')}>取消</button>{item.acpChoices.map(option => <button key={option.id} className="primary" disabled={saving} onClick={() => respond('select', option.id)}>{option.label}</button>)}</> : <>{item.method.startsWith("claude/") && item.questions.length > 0 && <button disabled={saving} onClick={() => respond("decline")}>取消</button>}{item.method.startsWith("pi/") && item.questions.length > 0 && <button disabled={saving} onClick={() => respond("cancel")}>取消</button>}{item.questions.length ? <button className="primary" disabled={saving || item.questions.some((q) => Array.isArray(answers[q.id]) ? !answers[q.id].length : !answers[q.id]?.trim())} onClick={() => respond()}>提交回答</button> : <><button disabled={saving} onClick={() => respond("decline")}>拒绝</button>{item.supportsSessionApproval&&<button disabled={saving} onClick={()=>respond("accept_session")}>本次对话允许</button>}<button className="primary" disabled={saving} onClick={() => respond("accept")}>{item.method === "pi/confirm" ? "确认" : "允许一次"}</button></>}</>}</div>
   </section>;
 }
 
 function App() {
+  const [embeddedOpen,setEmbeddedOpen] = useState(false);
+  const [surfaceState,setSurfaceState]=useState(null),[surfaceExpanded,setSurfaceExpanded]=useState(false),[settingsOpen,setSettingsOpen]=useState(false);
+  const settingsButton=useRef(null);
   const [view, setView] = useState('workbench');
   const [computerState, setComputerState] = useState(null);
   useEffect(() => { let live = true; const read = () => command('computer.status').then(value => { if (live) setComputerState(value); }).catch(() => {}); read(); const sub = listen(({ payload }) => { if (payload.type === 'computer-changed') read(); }); return () => { live = false; sub.then(off => off()); }; }, []);
@@ -106,6 +113,8 @@ function App() {
   const [agentId, setAgentId] = useState("codex");
   const [schedulesOpen, setSchedulesOpen] = useState(false);
   const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
+  const overlayOpen = settingsOpen || agentConnectionsOpen || connectionsOpen || capabilitiesOpen || schedulesOpen || Boolean(captureOpen) || workOpen || syncOpen || cloudOpen || wechatOpen || referencePicker || view !== 'workbench';
+  useEffect(()=>{if(embeddedOpen)invoke('embedded_suspend',{suspended:overlayOpen}).catch(e=>setError(e.message));},[overlayOpen,embeddedOpen]);
   const [agentPreference, setAgentPreference] = useState(null), [preferenceSaving, setPreferenceSaving] = useState(false);
   const manualAgentVersion = useRef(0);
   const [creatingSession, setCreatingSession] = useState(false);
@@ -119,6 +128,13 @@ function App() {
   const lastMessageSignature = useRef(null);
   const [awayFromBottom, setAwayFromBottom] = useState(false), [hasNewContent, setHasNewContent] = useState(false);
   currentFiles.current = { projectId, filePanel, folder };
+  useEffect(()=>{
+    let live=true,timer;setSurfaceState(null);setSurfaceExpanded(false);
+    if(!sessionId||!['codex','pi','opencode','kimi','omp'].includes(agentId))return;
+    const read=()=>command('ui.read',{sessionId}).then(value=>{if(live)setSurfaceState(value);}).catch(e=>{if(live)setError(e.message);});
+    read();const sub=listen(({payload})=>{if(payload.sessionId===sessionId&&['ui-changed','changed'].includes(payload.type)){clearTimeout(timer);timer=setTimeout(read,100);}});
+    return()=>{live=false;clearTimeout(timer);sub.then(off=>off());};
+  },[sessionId,agentId]);
   const project = workspace.projects.find((p) => p.id === projectId);
   const projectSessions = workspace.sessions.filter((s) => s.project_id === projectId);
   const filteredSessions = projectSessions;
@@ -154,6 +170,7 @@ function App() {
     const id = selected.current, version = ++historyVersion.current;
     setHistoryLoading(true); setError('');
     try {
+      await flushConversationSurface();
       if (direction === 'latest') {
         const value = await command('session.read', { sessionId: id });
         if (selected.current === id && version === historyVersion.current) { atBottom.current = true; setAwayFromBottom(false); setHasNewContent(false); setHistoryPage(null); setSession(value); }
@@ -218,7 +235,7 @@ function App() {
     } catch (e) { setError(String(e)); setReady(false); }
     finally { setBooting(false); }
   }
-  useEffect(() => beforeClose(async () => { clearTimeout(draftTimer.current); await navigation.current.save(); }), []);
+  useEffect(() => beforeClose(async () => { clearTimeout(draftTimer.current); await flushConversationSurface(); await navigation.current.save(); }), []);
   useEffect(() => {
     let dispose, mounted = true;
     listen(({ payload }) => {
@@ -262,8 +279,11 @@ function App() {
 
   async function selectProject(id, nextSession = null) {
     if (sending || creatingSession) return;
-    clearTimeout(draftTimer.current); setDraftLoading(true); setDraftLoadFailed(false); setNavigationStage("saving");
+    clearTimeout(draftTimer.current); setDraftLoading(true); setDraftLoadFailed(false);
     try {
+      await flushConversationSurface();
+      setNavigationStage('saving');
+      if(embeddedOpen){await invoke('embedded_hide');setEmbeddedOpen(false);}
       await navigation.current.select(id, nextSession, {
         start() {
           ++historyVersion.current; setHistoryPage(null); setHistoryLoading(false);
@@ -273,7 +293,7 @@ function App() {
             loadSessionIndex({ projectId: id });
           }
           ++draftVersion.current; ++fileVersion.current; ++modelRequest.current; setModelsLoading(false); setFileList(null); setPreview(null); setImportNotice(''); setFileError(''); setModel(""); setModels(null); setAgentId(indexQuery.current.projectId === id ? workspace.agentPreference?.agentId || 'codex' : workspace.agents.find(agent => agent.installed)?.id || 'codex'); setAgentPreference(null); setConnectionId("");
-          setView('workbench'); setWorkOpen(false); setSyncOpen(false); setWechatOpen(false); setProjectId(id); selected.current = nextSession; setSessionId(nextSession); setSession(null); setError(""); setDraft(""); setReferences([]); setReferencePicker(false); setDraftStatus(""); setFilePanel(false); pendingSend.current = null; atBottom.current = true; lastMessageSignature.current = null; setAwayFromBottom(false); setHasNewContent(false);
+          setView('workbench'); setWorkOpen(false); setSyncOpen(false); setWechatOpen(false); setProjectId(id); selected.current = nextSession; setSurfaceState(null);setSurfaceExpanded(false);setSessionId(nextSession); setSession(null); setError(""); setDraft(""); setReferences([]); setReferencePicker(false); setDraftStatus(""); setFilePanel(false); pendingSend.current = null; atBottom.current = true; lastMessageSignature.current = null; setAwayFromBottom(false); setHasNewContent(false);
         },
         loaded({ draft: saved, session: value }) {
           setDraft(saved.text); setReferences(saved.references); setDraftLoading(false); setDraftLoadFailed(false); setNavigationStage(null);
@@ -319,10 +339,8 @@ function App() {
     if (references.length >= 4) { setError("每次最多引用 4 份资料。"); return; }
     changeDraft(draft, [...references, path]); closeReferencePicker();
   }
-  function useProjectFilePath(path) {
-    const fileLine = `项目文件路径：${JSON.stringify(path)}`;
-    changeDraft(draft.trim() ? `${draft.trimEnd()}\n${fileLine}` : `请尝试读取当前${fileLine}。`);
-    closeReferencePicker();
+  async function useProjectFilePath(path) {
+    try{await addMaterialPaths([path]);closeReferencePicker();}catch(e){setError(e.message);}
   }
   async function addPreviewReference(path) {
     if (previewRefChecking) return;
@@ -433,38 +451,65 @@ function App() {
     catch (e) { if (version === fileVersion.current) setFileError(String(e)); }
     finally { if (version === fileVersion.current) setFileLoading(false); }
   }
+  async function ensureConversation() {
+    if(selected.current)return selected.current;
+    await command('draft.save',{projectId,text:draft,references});
+    const value=await command('session.create',{projectId,agent:agentId,connectionId:chosenConnectionId||null});
+    await command('draft.save',{projectId,sessionId:value.id,text:draft,references});
+    await command('draft.save',{projectId,text:'',references:[]});
+    navigation.current.adopt(projectId,value.id,draft,references);selected.current=value.id;setSessionId(value.id);setSession(value);
+    if(model)await command('session.model',{sessionId:value.id,model});
+    await refresh(false);return value.id;
+  }
+  async function addMaterialPaths(paths) {
+    const id=await ensureConversation();
+    const value=await command('ui.attach',{sessionId:id,paths});
+    if(selected.current===id)setSurfaceState(value);
+  }
   async function importFiles() {
-    if (!projectId || importingFiles) return;
-    setImportingFiles(true); setImportNotice(''); setFileError('');
+    if(!projectId||importingFiles||remoteAgent)return;
+    setImportingFiles(true);setError('');
     try {
-      const result = await invoke('import_files', { projectId });
-      if (!result) return;
-      setFilePanel(true);
-      await listFiles('Imported');
-      setImportNotice(result.imported.length ? `已导入 ${result.imported.length} 个文件到 Imported，原文件未更改。` : '没有文件导入。');
-      if (result.failed.length) setFileError(result.failed.map(file => `${file.name}：${file.reason}`).join('；'));
-    } catch (error) { setFileError(String(error)); setFilePanel(true); }
-    finally { setImportingFiles(false); }
+      const result=await invoke('import_files',{projectId});
+      if(!result)return;
+      if(result.imported.length)await addMaterialPaths(result.imported.map(f=>f.path));
+      if(result.failed.length)setError(result.failed.map(f=>f.name+'：'+f.reason).join('；'));
+    }catch(e){setError(e.message);}finally{setImportingFiles(false);}
+  }
+  async function showBrowser(url) {
+    try{const id=await ensureConversation();if(typeof url==='string')await invoke('browser_open',{sessionId:id,url});setSurfaceExpanded(false);setFilePanel(false);setEmbeddedOpen(true);}catch(e){setError(e.message);}
+  }
+  async function expandSurface(value){
+    if(value){await invoke('embedded_hide');setEmbeddedOpen(false);setFilePanel(false);}setSurfaceExpanded(value);
+  }
+  async function showResult(file){
+    await invoke('embedded_hide');setEmbeddedOpen(false);setSurfaceExpanded(false);
+    if(!/\.(pdf|docx|xlsx|pptx|png|jpe?g|webp)$/i.test(file.path))setFilePanel(true);
+    await readFile(file);
   }
   async function openProjectFile(path) {
     setFileError('');
-    try { await invoke(/\.(?:txt|md|markdown|csv|tsv|pdf|docx|xlsx|pptx|png|jpe?g|webp)$/i.test(path) ? 'open_project_file' : 'reveal_project_file', { projectId, path }); }
+    try { await invoke(/\.(?:txt|json|md|markdown|csv|tsv|pdf|docx|xlsx|pptx|png|jpe?g|webp)$/i.test(path) ? 'open_project_file' : 'reveal_project_file', { projectId, path }); }
     catch (error) { setFileError(String(error)); }
   }
 
-  return <div className="app">
+  const activeSurface = !historyPage && surfaceState?.sessionId === sessionId && surfaceState.presentation;
+  const surfaceAnchor = activeSurface && (visibleMessages.some(m => m.id === activeSurface.anchor) ? activeSurface.anchor : visibleMessages.at(-1)?.id);
+  const inlineSurface = activeSurface && <ConversationSurface key={'surface-'+sessionId} sessionId={sessionId} title={surfaceState.document.title} expanded={surfaceExpanded} onExpand={expandSurface}/>;
+
+  return <div className={`app ${surfaceExpanded ? 'hasExpandedSurface' : ''}`}>
     {computerState?.grant && <div className="computerIndicator" role="status"><strong>{computerState.grant.mode === "local" ? "本机电脑操作已授权" : "隔离电脑已启用"}</strong><span>到期 {new Date(computerState.grant.expiresAt).toLocaleTimeString()}</span><button onClick={() => command("computer.stop").then(() => setComputerState(null)).catch(e => setError(e.message))}>暂停并撤销</button></div>}
     <aside className="sidebar">
       <img className="brand" src="./brand/turnsu-lockup.svg" alt="Turnsu" />
-      <nav className="productNav" aria-label="主要区域"><Button variant={view === 'workbench' ? 'secondary' : 'ghost'} aria-current={view === 'workbench' ? 'page' : undefined} onClick={() => setView('workbench')}><MessageSquare size={17}/>工作台</Button><Button variant={view === 'skills' ? 'secondary' : 'ghost'} aria-current={view === 'skills' ? 'page' : undefined} onClick={() => setView('skills')}><BookOpen size={17}/>Skill OS</Button></nav>
-      <Button variant="outline" className="openProject" disabled={sending || creatingSession} onClick={openProject}><FolderOpen size={17} />打开项目<span>＋</span></Button>
-      <div className="railHeading">项目</div>
+      <nav className="productNav" aria-label="主要区域"><Button variant={view === 'workbench' ? 'secondary' : 'ghost'} aria-current={view === 'workbench' ? 'page' : undefined} onClick={() => setView('workbench')}><MessageSquare size={17}/>工作台</Button><Button variant={view === 'skills' ? 'secondary' : 'ghost'} aria-current={view === 'skills' ? 'page' : undefined} onClick={async() => {try{await flushConversationSurface();setView('skills');}catch(e){setError(e.message);}}}><BookOpen size={17}/>常用方法</Button></nav>
+      <Button variant="outline" className="openProject" disabled={sending || creatingSession} onClick={openProject}><FolderOpen size={17} />打开工作文件夹<span>＋</span></Button>
+      <div className="railHeading">工作空间</div>
       <nav aria-label="项目与任务">{!ready && <p className="railEmpty" role="status">{booting ? "正在读取本机项目…" : "本地项目暂不可用"}</p>}{workspace.projects.map((p) => <div className="projectGroup" key={p.id}>
         <button className={`projectButton ${projectId === p.id ? "selected" : ""}`} disabled={sending || creatingSession} onClick={() => selectProject(p.id)}><Folder size={16} /><span>{p.sharing?.title || p.name}</span></button>
         {projectId === p.id && <>
-          <button className={`sessionButton newTask ${!sessionId ? "current" : ""}`} disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { if (sessionId || view !== 'workbench' || draftLoadFailed) selectProject(p.id); }}><Plus size={15} />新任务</button>
-          {<label className="sessionSearch"><Search size={14}/><input aria-label="查找当前项目会话" placeholder="查找会话" value={sessionSearch} maxLength={200} onChange={e => searchSessions(e.target.value)}/>{sessionSearch && <button aria-label="清除会话搜索" onClick={() => searchSessions("")}><X size={13}/></button>}</label>}
-          <div className="sessionListHeading">{sessionSearch ? "搜索结果" : "最近会话"} <span>{indexLoading ? "读取中…" : sessionPage.total || 0}</span></div>
+          <button className={`sessionButton newTask ${!sessionId ? "current" : ""}`} disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { if (sessionId || view !== 'workbench' || draftLoadFailed) selectProject(p.id); }}><Plus size={15} />新工作</button>
+          {<label className="sessionSearch"><Search size={14}/><input aria-label="查找当前项目会话" placeholder="搜索工作" value={sessionSearch} maxLength={200} onChange={e => searchSessions(e.target.value)}/>{sessionSearch && <button aria-label="清除会话搜索" onClick={() => searchSessions("")}><X size={13}/></button>}</label>}
+          <div className="sessionListHeading">{sessionSearch ? "搜索结果" : "最近工作"} <span>{indexLoading ? "读取中…" : sessionPage.total || 0}</span></div>
           {indexError && <p className="railEmpty" role="alert">会话列表读取失败。<button onClick={() => loadSessionIndex(indexQuery.current)}>重试</button></p>}
           <div aria-busy={indexLoading} className={indexLoading ? "sessionIndex loading" : "sessionIndex"}>
           {filteredSessions.map((s) => editingSessionId === s.id ? <form className="sessionRename" key={s.id} onSubmit={renameSession} onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); finishRename(); } }}><input autoFocus aria-label="会话名称" maxLength={80} required value={editedTitle} disabled={renameSaving} onChange={e => setEditedTitle(e.target.value)}/><button aria-label="保存会话名称" disabled={renameSaving || !editedTitle.trim()} type="submit"><Check size={14}/></button><button aria-label="取消重命名" disabled={renameSaving} type="button" onClick={finishRename}><X size={14}/></button></form> : <div className={`sessionRow ${sessionId === s.id ? "current" : ""}`} key={s.id}><button className="sessionButton" aria-current={sessionId === s.id ? 'page' : undefined} aria-label={`${s.title}，${agentName(s.agent)}${sessionState(s.status) ? `，${sessionState(s.status)}` : ""}`} title={`${s.title} · ${agentName(s.agent)} · ${new Date(s.updated_at).toLocaleString()}`} disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { if (sessionId !== s.id || view !== 'workbench' || draftLoadFailed) selectProject(p.id, s.id); }}><span className={`statusDot ${active(s.status) ? "live" : ""} ${['waiting', 'failed', 'interrupted'].includes(s.status) ? "attention" : ""}`} /><span className="sessionTitle">{s.title}</span><small className={`taskAgent ${['waiting', 'failed', 'interrupted'].includes(s.status) ? "attention" : ""}`}>{sessionState(s.status) || ({ pi: 'Pi', claude: 'CC', opencode: 'OC', codex: 'C', kimi: 'KM', omp: 'OMP' }[s.agent] || '?')}</small></button><button ref={element => { if (element) renameButtons.current.set(s.id, element); else renameButtons.current.delete(s.id); }} className="renameTrigger" aria-label={`重命名会话：${s.title}`} title="重命名" disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { setEditingSessionId(s.id); setEditedTitle(s.title); }}><Pencil size={13}/></button></div>)}
@@ -478,13 +523,9 @@ function App() {
         </>}
       </div>)}</nav>
       {!workspace.projects.length && ready && <p className="railEmpty">打开一个文件夹，<br />从已有资料开始工作。</p>}
-      <button ref={teamButton} className="teamConnection" onClick={() => setCloudOpen(true)}><Plus size={15}/>连接团队</button>
-      <button ref={agentButton} className="teamConnection" onClick={() => setAgentConnectionsOpen(true)}><Settings2 size={15}/>连接 Agent</button>
-      <button ref={connectionButton} className="teamConnection" onClick={openConnections}><Settings2 size={15}/>模型连接</button>
-      <button className="teamConnection" onClick={() => setSchedulesOpen(true)}><Settings2 size={15}/>定时任务</button>
-      <button className="teamConnection" onClick={() => setCapabilitiesOpen(true)}><Settings2 size={15}/>能力与权限</button>
-      <div className="localFoot"><Laptop size={15} /><span>本地工作台<small>项目与会话保存在这台电脑</small></span></div>
+      <div className="railBottom"><button onClick={() => setSchedulesOpen(true)}><Clock size={16}/>定时任务</button><button ref={settingsButton} onClick={()=>setSettingsOpen(true)}><Settings2 size={16}/>设置</button><span className="localLabel"><span/>本地工作空间</span></div>
     </aside>
+    {settingsOpen&&<WorkbenchSettings onClose={()=>{setSettingsOpen(false);settingsButton.current?.focus();}} onAgents={()=>{setSettingsOpen(false);setAgentConnectionsOpen(true);}} onModels={e=>{setSettingsOpen(false);openConnections(e);}} onCapabilities={()=>{setSettingsOpen(false);setCapabilitiesOpen(true);}} onTeam={()=>{setSettingsOpen(false);setCloudOpen(true);}}/>}
     {agentConnectionsOpen && <AgentConnectionsDialog agents={workspace.agents} onClose={() => { setAgentConnectionsOpen(false); agentButton.current?.focus(); }} onChanged={async () => { await readAgentConnections(); await refresh(); }} onTrial={project ? tryAgent : null} onHosted={() => { setAgentConnectionsOpen(false); setCloudOpen(true); }}/> }
     {connectionsOpen && <ModelConnectionsDialog onClose={closeConnections} onChanged={readConnections}/>}
     {capabilitiesOpen && <CapabilitiesDialog project={project} onClose={() => setCapabilitiesOpen(false)}/>}
@@ -498,19 +539,17 @@ function App() {
       <header><div>{project ? <><span className="breadcrumb">{project.sharing?.title || project.name}<ChevronRight size={13} /></span><strong>{session?.title || (sessionId ? workspace.sessions.find(s => s.id === sessionId)?.title : null) || "新任务"}</strong></> : <strong>我的工作台</strong>}</div>
         {project?.sharing && <button ref={workButton} onClick={() => setWorkOpen(true)}>团队工作</button>}
         {project?.sharing && <button ref={syncButton} className={`syncBadge ${project.sharing.status}`} onClick={() => setSyncOpen(true)}>{syncLabels[project.sharing.status]}</button>}
-        {project && <button onClick={() => setWechatOpen(true)}><FileText size={16}/>微信资料</button>}
-        {project && <button disabled={importingFiles || Boolean(project.sharing)} title={project.sharing ? '团队项目的文件可能同步给成员；请在团队文件中核对共享范围。私有导入请打开本地项目。' : '复制文件到当前本地项目，保留原文件'} onClick={importFiles}><Plus size={16} />{importingFiles ? '正在导入…' : '导入文件'}</button>}
-        {project && <button aria-pressed={filePanel} onClick={() => { setFilePanel(!filePanel); if (!filePanel) listFiles(); }}><Files size={16} />项目文件</button>}
+        <div className="headerActions">{project&&<button aria-pressed={filePanel} onClick={()=>{setSurfaceExpanded(false);setEmbeddedOpen(false);invoke('embedded_hide').catch(e=>setError(e.message));setFilePanel(!filePanel);if(!filePanel)listFiles();}}><Files size={16}/>文件</button>}{project&&!remoteAgent&&<button aria-pressed={embeddedOpen} onClick={()=>embeddedOpen?invoke('embedded_hide').then(()=>setEmbeddedOpen(false)).catch(e=>setError(e.message)):showBrowser()}><Globe size={16}/>网页</button>}{project&&<details className="workMenu"><summary aria-label="更多工作选项"><MoreHorizontal size={19}/></summary><div><button onClick={()=>setWechatOpen(true)}>导入微信资料</button><button onClick={()=>setCapabilitiesOpen(true)}>文件与电脑操作</button></div></details>}</div>
       </header>
       <div className="workArea"><section className="conversation">
         {error && <div className="error" role="alert"><span>{error}</span><button aria-label="关闭提示" onClick={() => setError("")}><X size={15} /></button></div>}
-        {booting ? <div className="workbenchLoading" role="status"><LoaderCircle className="spin" size={22}/><strong>正在恢复本机工作台</strong><span>读取项目、上次会话与草稿…</span></div> : !ready ? <div className="workbenchLoading" role="alert"><strong>暂时无法读取本机工作台</strong><span>项目和会话仍保存在这台电脑。</span><button onClick={initialize}>重新读取</button></div> : !project ? <div className="welcome"><img src="./brand/turnsu-symbol.svg" alt="" /><h1>从手边的项目开始</h1><p>用你自己的 Agent，处理文件、推进工作。<br />不需要先配置云端工作台。</p><button className="primary" onClick={openProject}><FolderOpen size={18} />打开本地项目</button><small>文件保留在原来的位置</small></div> : <>
+        {booting ? <div className="workbenchLoading" role="status"><LoaderCircle className="spin" size={22}/><strong>正在恢复本机工作台</strong><span>读取项目、上次会话与草稿…</span></div> : !ready ? <div className="workbenchLoading" role="alert"><strong>暂时无法读取本机工作台</strong><span>项目和会话仍保存在这台电脑。</span><button onClick={initialize}>重新读取</button></div> : !project ? <div className="welcome"><img src="./brand/turnsu-symbol.svg" alt="" /><h1>把手边的工作，交给助手</h1><p>整理资料、处理表格、准备文档。<br />从一个工作文件夹开始。</p><button className="primary" onClick={openProject}><FolderOpen size={18} />打开本地项目</button><small>文件保留在原来的位置</small></div> : <>
           {(historyNavigation?.older || historyPage) && <nav className="historyNavigation" aria-label="对话记录"><button disabled={historyLoading || !historyNavigation?.older} onClick={() => readHistory('before', historyNavigation.older)}><ChevronLeft size={14}/>查看更早</button>{historyPage && <><span>较早的对话</span><button disabled={historyLoading || !historyNavigation?.newer} onClick={() => readHistory('after', historyNavigation.newer)}>查看较新<ChevronRight size={14}/></button><button disabled={historyLoading} onClick={() => readHistory('latest')}>回到最新</button></>}{historyLoading && <span role="status">读取中…</span>}</nav>}
           <div className="transcript" ref={transcript} onScroll={() => { const el = transcript.current; const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 90; atBottom.current = nearBottom; setAwayFromBottom(!nearBottom && el.scrollHeight > el.clientHeight + 90); if (nearBottom) setHasNewContent(false); }}>
-            {navigationStage ? <div className="workbenchLoading" role="status"><LoaderCircle className="spin" size={20}/><strong>{navigationStage === "saving" ? "正在保存当前草稿" : "正在打开会话"}</strong><span>{navigationStage === "saving" ? "保存完成后继续切换" : "读取会话、引用资料与草稿…"}</span></div> : draftLoadFailed ? <div className="workbenchLoading" role="status"><strong>这段会话暂时打不开</strong><span>草稿仍保存在本机。可以重试读取。</span><button onClick={() => selectProject(projectId, sessionId)}>重新读取</button></div> : !visibleMessages.length ? <div className="taskWelcome"><span className="eyebrow">{project.sharing?.title || project.name}</span><h1>今天想完成什么？</h1><p>说说目标，Agent 会在这个项目里与你一起完成。</p>{session && active(session.status) && <div className="activity"><LoaderCircle className="spin" size={14}/>{labels[session.status]}</div>}</div> : <div className="messageColumn">{visibleMessages.map((m) => <article key={m.id} className={`message ${m.role}`}>
-              {m.role === "tool" ? <details><summary>{m.kind === "file" ? <FileText size={14} /> : <ChevronRight size={14} />}<span>{m.kind === "file" ? "文件变更" : "执行操作"}</span></summary><pre>{m.text}</pre></details> : m.role === "user" ? <><p>{m.text}</p>{m.references?.map(file => <SentFileReference key={referenceKey(file)} sessionId={sessionId} inputId={m.id} file={file}/>)}</> : <Markdown>{m.text}</Markdown>}
-              {m.role === "assistant" && m.kind === "text" && session.status === "idle" && session.lastSubmission?.status === "completed" && !session.capture && !session.loopCapture && !session.localLoopTrial && <><button className="captureAction" onClick={e => { captureTrigger.current = e.currentTarget; setCaptureOpen({ session, message: m }); }}>整理为技能</button><button className="captureAction" onClick={e => { captureTrigger.current = e.currentTarget; setCaptureOpen({ session, message: m, kind: 'loop' }); }}>整理为 Loop</button></>}
-            </article>)}{session.interactions?.map((item) => <Interaction key={item.id} item={item} sessionId={sessionId} report={setError} />)}
+            {navigationStage ? <div className="workbenchLoading" role="status"><LoaderCircle className="spin" size={20}/><strong>{navigationStage === "saving" ? "正在保存当前草稿" : "正在打开会话"}</strong><span>{navigationStage === "saving" ? "保存完成后继续切换" : "读取会话、引用资料与草稿…"}</span></div> : draftLoadFailed ? <div className="workbenchLoading" role="status"><strong>这段会话暂时打不开</strong><span>草稿仍保存在本机。可以重试读取。</span><button onClick={() => selectProject(projectId, sessionId)}>重新读取</button></div> : !visibleMessages.length ? <div className="taskWelcome"><span className="eyebrow">{project.sharing?.title || project.name}</span><h1>今天想完成什么？</h1><p>添加材料，说清你想得到的结果。</p><div className="taskSuggestions">{['整理这些文件，提炼重点','分析表格，整理一份结论','帮我起草一份工作文档'].map(text=><button key={text} onClick={()=>{changeDraft(text);composerInput.current?.focus();}}><Sparkles size={14}/>{text}</button>)}</div>{session && active(session.status) && <div className="activity"><LoaderCircle className="spin" size={14}/>{labels[session.status]}</div>}</div> : <div className="messageColumn">{visibleMessages.flatMap((m) => [<article key={m.id} className={`message ${m.role}`}>
+              {m.role === "tool" ? <details><summary>{m.kind === "file" ? <FileText size={14} /> : <ChevronRight size={14} />}<span>{m.kind === "file" ? "文件变更" : "执行操作"}</span></summary><pre>{m.text}</pre></details> : m.role === "user" ? <><p>{m.text}</p>{m.references?.map(file => <SentFileReference key={referenceKey(file)} sessionId={sessionId} inputId={m.id} file={file}/>)}</> : <Markdown onOpenLink={showBrowser}>{m.text}</Markdown>}
+              {m.id === visibleMessages.at(-1)?.id && m.role === "assistant" && m.kind === "text" && session.status === "idle" && session.lastSubmission?.status === "completed" && !session.capture && !session.loopCapture && !session.localLoopTrial && <><button className="captureAction" onClick={e => { captureTrigger.current = e.currentTarget; setCaptureOpen({ session, message: m }); }}>保存为常用方法</button><button className="captureAction" onClick={e => { captureTrigger.current = e.currentTarget; setCaptureOpen({ session, message: m, kind: 'loop' }); }}>保存为工作流程</button></>}
+            </article>, ...(m.id === surfaceAnchor ? [inlineSurface] : [])])}{!historyPage&&surfaceState?.sessionId===sessionId&&surfaceState?.results?.length>0&&<section className="conversationResults" aria-label="工作成果"><div className="resultsHeading"><Check size={15}/><span>已生成的文件</span></div>{surfaceState.results.map(result=><div key={result.id}>{result.summary&&<p>{result.summary}</p>}<div className="resultFiles">{result.files.map(file=><button key={file.path} onClick={()=>showResult(file)}><span className="fileType">{file.path.split('.').at(-1).toUpperCase().slice(0,5)}</span><span><strong>{basename(file.path)}</strong><small>打开查看 · {file.bytes<1024?'不到 1 KB':Math.ceil(file.bytes/1024)+' KB'}</small></span><ArrowUpRight size={16}/></button>)}</div></div>)}</section>}{session.interactions?.map((item) => <Interaction key={item.id} item={item} sessionId={sessionId} report={setError} />)}
             {active(session.status) && <div className="activity"><LoaderCircle className="spin" size={14} />{labels[session.status]}</div>}
             {session.error && <div className="inlineError">{session.error}</div>}
             </div>}
@@ -525,21 +564,23 @@ function App() {
             {session?.method && <div className="methodNotice"><span>已选择技能：<strong>{session.method.skillName}</strong> · v{session.method.version}</span><small>描述任务后发送，由你的 Agent 使用</small></div>}
             {session?.sharedWork && <div className="sharedWorkNotice"><span>{session.sharedWork.canContinueOffline ? `团队暂时无法连接。上次资料：${new Date(session.sharedWork.contextFetchedAt).toLocaleString()}。新内容先保存在本机，恢复后核验权限并同步。` : session.sharedWork.error || (session.sharedWork.pending ? '请求与答复正在同步到团队…' : '本次请求与最终答复对工作成员可见')}</span>{(session.sharedWork.error || session.sharedWork.pending > 0 || session.sharedWork.canContinueOffline) && <button onClick={() => control(session.sharedWork.workItemId ? 'work.retry' : 'work.finish')}>重试共享</button>}{session.sharedWork.canContinueOffline && !active(session.status) && <button disabled={!draft.trim() || sending || modelsLoading || draftLoading || !chosenAgent?.installed || session.status === 'interrupted'} onClick={() => send(true)}>用上次资料在本机继续</button>}</div>}
             {session?.status === "interrupted" && <div className="resume"><span>上次执行已中断。恢复后检查结果，再继续。</span><button onClick={() => control("session.resume")}><RotateCcw size={14} />恢复会话</button></div>}
-            <div className="composer">{!remoteAgent && <div className="connectionSource"><label htmlFor="connection-source">模型来源</label><select id="connection-source" value={chosenConnectionId} disabled={Boolean(sessionId && (!session || session.native_id || session.lastSubmission)) || draftLoading || sending || modelsLoading || creatingSession} onChange={e => chooseConnection(e.target.value)}><option value="">跟随原生 Agent</option>{connections.filter(c => c.agents.includes(agentId)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}{chosenConnectionId && !chosenConnection && <option value={chosenConnectionId}>连接不可用</option>}</select>{chosenConnection && <code title={chosenConnection.baseUrl}>{chosenConnection.baseUrl}</code>}<button onClick={openConnections}>管理连接</button></div>}
+            <div className="composer">{surfaceState?.sessionId===sessionId&&surfaceState?.assets.length>0&&<div className="materialChips" aria-label="当前工作材料">{surfaceState.assets.map(file=><span key={file.path}><FileText size={16}/><span title={file.path}>{basename(file.path)}</span><button aria-label={'移除材料 '+basename(file.path)} disabled={sending||active(session?.status)} onClick={()=>command('ui.detach',{sessionId,path:file.path}).then(setSurfaceState).catch(e=>setError(e.message))}><X size={13}/></button></span>)}</div>}
               {remoteAgent && <div className="remoteComposer"><label>Agent 账号<select aria-label="Agent 账号" value={chosenAgentConnectionId} disabled={Boolean(sessionId) || sending} onChange={e => updateRemoteDraft(remoteMaterials, e.target.value)}><option value="">选择已连接账号</option>{agentConnections.filter(c => !c.revoked && (c.provider === agentId || c.agents?.includes(agentId))).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}{chosenAgentConnectionId && !agentConnections.some(c => c.id === chosenAgentConnectionId) && <option value={chosenAgentConnectionId}>此任务绑定的账号</option>}</select></label><button onClick={() => setAgentConnectionsOpen(true)}>管理 Agent</button>{chosenAgent?.files && <ProjectMaterialPicker key={projectId} projectId={projectId} paths={remoteMaterials.split('\n').map(p=>p.trim()).filter(Boolean)} disabled={sending} onChange={paths=>updateRemoteDraft(paths.join('\n'),chosenAgentConnectionId)}/>}<label className="externalConsent"><input type="checkbox" checked={allowExternal} disabled={sending} onChange={e => setAllowExternal(e.target.checked)}/>将本次提示词、引用内容与选定材料交给 {chosenAgent?.name}；其原生工具权限由该服务管理。</label></div>}
               {references.length > 0 && <div className="referenceChips" aria-label="已引用资料">{references.map(selection => <span key={referenceKey(selection)}><FileText size={14}/><span title={referenceLabel(selection)}>{referenceLabel(selection)}{typeof selection !== "string" && <small> · {selection.kind === "work-decision" ? "决定" : selection.kind === "work-entry" ? "共享进展" : selection.kind === "wechat-import" ? "微信导入" : "历史版本"}</small>}</span><button disabled={sending || creatingSession || draftLoading} aria-label={`移除引用 ${referenceLabel(selection)}`} onClick={() => changeDraft(draft, references.filter(item => referenceKey(item) !== referenceKey(selection)))}><X size={13}/></button></span>)}</div>}<Textarea ref={composerInput} aria-label="任务描述" placeholder={sessionId ? "继续这项工作…" : "描述你想完成的工作…"} value={draft} disabled={draftLoading || sending || creatingSession} onChange={(e) => changeDraft(e.target.value)} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={(e) => { if (e.key === "@" && !composing.current && !e.nativeEvent.isComposing && (!e.currentTarget.selectionStart || /\s/.test(draft[e.currentTarget.selectionStart - 1]))) { e.preventDefault(); setReferencePicker(true); return; } if (e.key === "Enter" && !e.shiftKey && !composing.current && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
-              <div className="composerToolbar"><button className="referenceTrigger" aria-label="引用资料" title="引用资料（@）" disabled={sending || creatingSession || draftLoading} onClick={() => setReferencePicker(true)}>＠</button><span className="agentChoice"><select aria-label="执行 Agent" value={agentId} disabled={Boolean(sessionId) || sending || draftLoading || modelsLoading} onChange={(e) => { ++manualAgentVersion.current; setAgentId(e.target.value); setConnectionId(""); setModels(null); setModel(""); }}>
+              <div className="composerToolbar">{!remoteAgent&&<button aria-label="添加文件" title="添加文件" disabled={importingFiles||sending||creatingSession||draftLoading||active(session?.status)||Boolean(project.sharing)} onClick={importFiles}>{importingFiles?<LoaderCircle className="spin" size={17}/>:<Paperclip size={17}/>}</button>}<button className="referenceTrigger" aria-label="引用资料" title="引用资料（@）" disabled={sending || creatingSession || draftLoading} onClick={() => setReferencePicker(true)}>＠</button><span className="agentChoice"><select aria-label="执行 Agent" value={agentId} disabled={Boolean(sessionId) || sending || draftLoading || modelsLoading} onChange={(e) => { ++manualAgentVersion.current; setAgentId(e.target.value); setConnectionId(""); setModels(null); setModel(""); }}>
                 {workspace.agents.map(agent => <option key={agent.id} value={agent.id}>{agent.name}{agent.installed ? '' : agent.kind ? ' · 未连接' : ' · 未安装'}</option>)}
               </select> {!remoteAgent && (models ? <select aria-label="执行模型" value={model} disabled={draftLoading || sending || active(session?.status)} onChange={(e) => chooseModel(e.target.value)}><option value="" disabled={Boolean(chosenConnectionId)}>{chosenConnectionId ? "请选择网关模型" : "沿用会话配置"}</option>{models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select> : <button className="modelChoice" disabled={draftLoading || sending || modelsLoading || active(session?.status)} onClick={loadModels}>{modelsLoading ? "读取模型…" : (model || "选择模型")}</button>)}</span><span className="composerHint">{remoteAgent ? (chosenAgent?.installed ? "按选定材料交接" : "请先连接 Agent") : chosenAgent?.installed ? (agentId === "pi" ? "使用 Pi 本机权限" : "在此项目工作") : `请先安装 ${chosenAgent?.name || agentId} CLI`}</span>{active(session?.status) && !answering ? <button disabled={remoteAgent && chosenAgent?.stop === false} title={remoteAgent && chosenAgent?.stop === false ? "请在原生应用中停止" : undefined} className="send" aria-label="停止执行" onClick={() => control("session.stop")}><Square size={15} /></button> : <button className="send" aria-label="发送任务" disabled={!draft.trim() || sending || modelsLoading || draftLoading || !chosenAgent?.installed || session?.status === "interrupted" || (remoteAgent && (!allowExternal || !chosenAgentConnectionId))} onClick={send}>{sending ? <LoaderCircle className="spin" size={17} /> : <ArrowUp size={18} />}</button>}</div>
-            </div><div className="composerMeta"><span>{draftStatus || (remoteAgent ? "选定内容会外发 · 账号不等于工具授权" : session?.sharedWork ? "团队工作 · 工具日志和原生历史保留在本机" : project.sharing ? "文件与团队共享 · 对话仅在本机" : agentId === "pi" ? "Pi 按本机配置运行 · 扩展请求会在这里显示" : "仅在本机 · 需要权限时会询问你")}</span>{!sessionId && agentPreference ? <span className="agentPreferenceActions"><button disabled={preferenceSaving || agentPreference.project === agentId} onClick={() => saveAgentPreference('project')}>{agentPreference.project === agentId ? '本项目默认' : '设为本项目默认'}</button><button disabled={preferenceSaving || agentPreference.personal === agentId} onClick={() => saveAgentPreference('personal')}>{agentPreference.personal === agentId ? '个人默认' : '设为个人默认'}</button></span> : <span>@ 资料和方法 · Enter 发送</span>}</div>
+              <details className="agentOptions"><summary>助手选项</summary>{!remoteAgent && <div className="connectionSource"><label htmlFor="connection-source">模型来源</label><select id="connection-source" value={chosenConnectionId} disabled={Boolean(sessionId && (!session || session.native_id || session.lastSubmission)) || draftLoading || sending || modelsLoading || creatingSession} onChange={e => chooseConnection(e.target.value)}><option value="">跟随原生 Agent</option>{connections.filter(c => c.agents.includes(agentId)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}{chosenConnectionId && !chosenConnection && <option value={chosenConnectionId}>连接不可用</option>}</select>{chosenConnection && <code title={chosenConnection.baseUrl}>{chosenConnection.baseUrl}</code>}<button onClick={openConnections}>管理连接</button></div>}</details>
+            </div><div className="composerMeta"><span>{draftStatus || (remoteAgent ? "选定内容会外发 · 账号不等于工具授权" : session?.sharedWork ? "团队工作 · 工具日志和原生历史保留在本机" : project.sharing ? "文件与团队共享 · 对话仅在本机" : agentId === "pi" ? "Pi 按本机配置运行 · 扩展请求会在这里显示" : "文件保存在本机 · 执行范围由你确认")}</span>{!sessionId && agentPreference ? <span className="agentPreferenceActions"><button disabled={preferenceSaving || agentPreference.project === agentId} onClick={() => saveAgentPreference('project')}>{agentPreference.project === agentId ? '本项目默认' : '设为本项目默认'}</button><button disabled={preferenceSaving || agentPreference.personal === agentId} onClick={() => saveAgentPreference('personal')}>{agentPreference.personal === agentId ? '个人默认' : '设为个人默认'}</button></span> : <span>Enter 发送 · Shift + Enter 换行</span>}</div>
           </div>
         </>}
       </section>
-      {filePanel && project && <aside className="filePanel"><div className="fileHeader"><strong>{preview ? basename(preview.path) : "项目文件"}</strong><button aria-label="关闭文件面板" onClick={() => setFilePanel(false)}><X size={16} /></button></div><div className="fileTools"><button onClick={() => preview ? setPreview(null) : listFiles(folder.split("/").slice(0, -1).join("/"))} disabled={!preview && !folder}><ChevronLeft size={15} />返回</button><button aria-label="刷新项目文件" onClick={() => listFiles(folder)}><RotateCcw size={15} /></button></div>
+      {embeddedOpen && sessionId && <EmbeddedPane key={sessionId} sessionId={sessionId} onClose={()=>invoke('embedded_hide').then(()=>setEmbeddedOpen(false)).catch(e=>setError(e.message))} />}
+      {filePanel && !embeddedOpen && !surfaceExpanded && project && <aside className="filePanel"><div className="fileHeader"><strong>{preview ? basename(preview.path) : "项目文件"}</strong><button aria-label="关闭文件面板" onClick={() => setFilePanel(false)}><X size={16} /></button></div><div className="fileTools"><button onClick={() => preview ? setPreview(null) : listFiles(folder.split("/").slice(0, -1).join("/"))} disabled={!preview && !folder}><ChevronLeft size={15} />返回</button><button aria-label="刷新项目文件" onClick={() => listFiles(folder)}><RotateCcw size={15} /></button></div>
         {importNotice && <p className="importNotice" role="status">{importNotice}</p>}
         {preview && <div className="referencePreviewAction"><button disabled={sending || creatingSession || draftLoading || previewRefChecking || references.length >= 4 || references.includes(preview.path)} onClick={() => addPreviewReference(preview.path)}><FileText size={14}/>{previewRefChecking ? '检查中…' : references.includes(preview.path) ? '已引用到任务' : '引用到任务'}</button><button onClick={() => openProjectFile(preview.path)}>系统打开</button></div>}
         {fileError && <div className="inlineError" role="alert">{fileError}</div>}
-        {fileLoading ? <div className="fileLoading" role="status"><LoaderCircle className="spin" size={16}/>正在读取项目文件…</div> : preview ? <div className="filePreview">{/\.md$/i.test(preview.path) ? <Markdown>{preview.text}</Markdown> : <pre>{preview.text}</pre>}</div> : <div className="fileList"><p className="filePath">{folder || project.sharing?.title || project.name}</p>{fileList?.entries.map((f) => <div className="fileEntry" key={f.path}><button onClick={() => readFile(f)}>{f.directory ? <Folder size={16} /> : <FileText size={16} />}<span>{f.name}</span>{f.directory && <ChevronRight size={13} />}</button>{!f.directory && <button className="nativeFileAction" onClick={() => openProjectFile(f.path)}>{/\.(?:txt|md|markdown|csv|tsv|pdf|docx|xlsx|pptx|png|jpe?g|webp)$/i.test(f.path) ? '系统打开' : '定位'}</button>}</div>)}{fileList?.entries.length === 0 && <p className="muted">这个文件夹还没有文件。</p>}{fileList?.truncated && <p className="muted">当前显示前 500 项，请进入子文件夹查看。</p>}</div>}
+        {fileLoading ? <div className="fileLoading" role="status"><LoaderCircle className="spin" size={16}/>正在读取项目文件…</div> : preview ? <div className="filePreview">{/\.md$/i.test(preview.path) ? <Markdown>{preview.text}</Markdown> : <pre>{preview.text}</pre>}</div> : <div className="fileList"><p className="filePath">{folder || project.sharing?.title || project.name}</p>{fileList?.entries.map((f) => <div className="fileEntry" key={f.path}><button onClick={() => readFile(f)}>{f.directory ? <Folder size={16} /> : <FileText size={16} />}<span>{f.name}</span>{f.directory && <ChevronRight size={13} />}</button>{!f.directory && <button className="nativeFileAction" onClick={() => openProjectFile(f.path)}>{/\.(?:txt|json|md|markdown|csv|tsv|pdf|docx|xlsx|pptx|png|jpe?g|webp)$/i.test(f.path) ? '系统打开' : '定位'}</button>}</div>)}{fileList?.entries.length === 0 && <p className="muted">这个文件夹还没有文件。</p>}{fileList?.truncated && <p className="muted">当前显示前 500 项，请进入子文件夹查看。</p>}</div>}
       </aside>}
       </div>
     </main>}

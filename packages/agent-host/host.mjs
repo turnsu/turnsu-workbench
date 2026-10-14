@@ -1,3 +1,4 @@
+import { UISurfaces } from './ui-surfaces.mjs';
 import { RemoteTasks } from './remote-tasks.mjs';
 import { remoteAgents, normalizeAgentConnection } from './agent-connections.mjs';
 import { sessionIndex } from './session-index.mjs';
@@ -57,7 +58,7 @@ export class LocalAgentHost {
     this.claudeFactory = claudeFactory; this.claudeConnections = new Map(); this.claudeStreams = new Map();
     this.opencodeFactory = opencodeFactory; this.opencodeConnections = new Map(); this.acpMessages = new Map();
     this.kimiFactory = kimiFactory; this.kimiConnections = new Map(); this.ompFactory = ompFactory; this.ompConnections = new Map();
-    this.directory = directory; this.piFactory = piFactory; this.piConnections = new Map(); this.piErrors = new Map(); this.modelCatalogs = new Map();
+    this.desktopResources = new Map(); this.directory = directory; this.piFactory = piFactory; this.piConnections = new Map(); this.piErrors = new Map(); this.modelCatalogs = new Map();
     this.store = openStore(directory); this.db = this.store.db;
     this.agentPreferences = new AgentPreferences(this.db);
     this.wechat = new WeChatImports(this, { ...(wechatRoot === undefined ? {} : { bridgeRoot: wechatRoot }), ...(wechatGroupRoot === undefined ? {} : { groupRoot: wechatGroupRoot }) });
@@ -72,9 +73,18 @@ export class LocalAgentHost {
     this.connection = null; this.liveSessions = new Set(); this.interactions = new Map(); this.operations = new Set();
     this.remote = new RemoteTasks(this);
     this.schedules = new LocalSchedules(this);
-    this.capabilities = new Capabilities(this); this.toolBroker = new ToolBroker(this);
+    this.capabilities = new Capabilities(this); this.ui = new UISurfaces(this); this.toolBroker = new ToolBroker(this);
     if (this.db.prepare('SELECT 1 FROM shared_projects LIMIT 1').get()) this.sharing();
     if (this.db.prepare('SELECT 1 FROM shared_work_sessions LIMIT 1').get()) this.teamWork();
+  }
+  sessionTools(session) { return [...this.capabilities.tools(session.project_id), ...(this.computer?.tools(session.project_id) || []), ...(['codex','pi','opencode','kimi','omp'].includes(session.agent) ? [...this.ui.tools(), ...(this.browser?.tools() || [])] : [])]; }
+  callSessionTool(session, name, args, callId) {
+    if (!['starting','running','waiting'].includes(this.session(session.id).status)) return Promise.reject(new Error('工具只能在正在执行的会话中使用。'));
+    if (name === 'turnsu_ui') return this.ui.call(session.id,args);
+    if (name === 'turnsu_browser' && this.browser) return this.browser.call(session.id,args);
+    if (name === 'turnsu_document') return this.capabilities.call(session.project_id,session.id,args,callId);
+    if (name === 'turnsu_computer' && this.computer) return this.computer.call(session.project_id,session.id,args);
+    return Promise.reject(new Error('未授权的工具。'));
   }
   touchNative(id) { this.nativeTouched.set(id, this.clock()); }
   reapIdleConnections() {
@@ -157,8 +167,16 @@ export class LocalAgentHost {
     for (const id of this.operations) if (!sessions.some(s => s.id === id)) sessions.push(this.session(id));
     const local = sessions.filter(s => !remoteAgents[s.agent]).length, remote = sessions.length - local;
     const documents = this.capabilities?.pending.size || 0, computer = this.computer?.active || this.computer?.starting ? 1 : 0;
-    return { local, remote, documents, computer, units: local + documents + computer, limit: 4 };
+    const browser=[...this.desktopResources.values()].filter(v=>v==='browser').length, surfaces=[...this.desktopResources.values()].filter(v=>v==='surface').length;
+    return { local, remote, documents, computer, browser, surfaces, units: local + documents + computer + browser + surfaces, limit: 6 };
   }
+  reserveDesktop(kind,id) {
+    if(!['browser','surface'].includes(kind)||typeof id!=='string'||id.length>150)throw new Error('资源申请无效。');
+    const key=kind+':'+id;if(this.desktopResources.has(key))return this.resourceUsage();
+    const usage=this.resourceUsage();if((kind==='browser'&&usage.browser>=2)||(kind==='surface'&&usage.surfaces>=1))throw new Error('驻留页面已达到上限，请先关闭一页；未保存工作会保留。');
+    this.requireResource(kind);this.desktopResources.set(key,kind);return this.resourceUsage();
+  }
+  releaseDesktop(kind,id){this.desktopResources.delete(kind+':'+id);return this.resourceUsage();}
   requireResource(kind) {
     const used = this.resourceUsage();
     if ((kind === 'remote' && used.remote >= 4) || (kind === 'agent' && used.local >= 2) || (kind !== 'remote' && used.units >= used.limit)) throw new Error('工作台资源已占用，请等待或停止现有任务后再执行。');
@@ -258,10 +276,12 @@ export class LocalAgentHost {
     if (remoteAgents[session.agent]) { this.remote.adapter(session); return session; }
     const connection = await this.codex(session.connection_id);
     if (this.liveSessions.has(id)) return session;
-    const params = { ...(session.connection_id ? { modelProvider: `turnsu_${session.connection_id.replaceAll("-", "")}` } : {}), cwd: session.cwd, approvalPolicy: "on-request", approvalsReviewer: "user", sandbox: "workspace-write", ...(session.model ? { model: session.model } : {}) };
+    const servers=await this.toolBroker.mcp(id);
+    const config={mcp_servers:Object.fromEntries(servers.map(server=>[server.name,{command:server.command,args:server.args,env:Object.fromEntries(server.env.map(e=>[e.name,e.value])),startup_timeout_sec:15,tool_timeout_sec:90}]))};
+    const params = { config, ...(session.connection_id ? { modelProvider: `turnsu_${session.connection_id.replaceAll("-", "")}` } : {}), cwd: session.cwd, approvalPolicy: "on-request", approvalsReviewer: "user", sandbox: "workspace-write", ...(session.model ? { model: session.model } : {}) };
     const result = session.native_id
       ? await connection.request("thread/resume", { ...params, threadId: session.native_id })
-      : await connection.request("thread/start", { ...params, dynamicTools: [...this.capabilities.tools(session.project_id), ...(this.computer?.tools(session.project_id) || [])].map(tool => ({ type: 'function', name: tool.name, description: tool.description, inputSchema: tool.inputSchema })) });
+      : await connection.request("thread/start", params);
     if (!result?.thread?.id) throw new Error("Codex 未返回有效会话。");
     this.db.prepare("UPDATE sessions SET native_id=? WHERE id=?").run(result.thread.id, id);
     this.liveSessions.add(id);
@@ -466,17 +486,30 @@ export class LocalAgentHost {
       this.updateSession(session.id, params.turn.status === "completed" ? "idle" : params.turn.status === "interrupted" ? "interrupted" : "failed", params.turn.error?.message || null);
       this.work?.publishFinal(session.id, this.session(session.id).status);
     }
+    if(method==='serverRequest/resolved') {
+      for(const [key,item] of this.interactions)if(item.sessionId===session.id&&item.nativeId===params.requestId)this.interactions.delete(key);
+      if(this.session(session.id).status==='waiting'&&![...this.interactions.values()].some(item=>item.sessionId===session.id))this.updateSession(session.id,'running');
+    }
     if (method === "error" && !params.willRetry) this.updateSession(session.id, "failed", params.error?.message || "Agent 执行失败，请检查登录或稍后恢复。");
   }
   onRequest({ id, method, params }, connection = this.connection) {
     const session = params?.threadId && this.db.prepare("SELECT * FROM sessions WHERE native_id=?").get(params.threadId);
     if (!session) { connection.reject(id); return; }
+    if (method === 'mcpServer/elicitation/request' && params.mode === 'form' &&
+      params._meta?.codex_approval_kind === 'mcp_tool_call' &&
+      params.requestedSchema?.type === 'object' && params.requestedSchema.properties &&
+      Object.keys(params.requestedSchema.properties).length === 0 && !(params.requestedSchema.required?.length)) {
+      const key=randomUUID(), input=params._meta.tool_params||{};
+      const descriptions={read:'读取当前工作需要的资料',present:'在对话中展示可核对的内容',wait:'接收你确认的内容',publish:'将实际文件显示为工作成果',create:'创建工作文件',edit:'修改工作文件',convert:'转换文件格式'};
+      const own=params.serverName==='turnsu';
+      const target=typeof input.output==='string'?input.output:typeof input.path==='string'?input.path:'';
+      const command=own?(descriptions[input.operation]||'使用当前工作的工具')+(target?'：'+target:''):'服务 '+String(params.serverName).slice(0,120)+' 请求执行工具操作。';
+      const hints=params._meta.persist;
+      this.interactions.set(key,{id:key,nativeId:id,sessionId:session.id,method,title:'允许助手继续这一步？',command,questions:[],details:JSON.stringify({service:params.serverName,request:params.message,arguments:input},null,2).slice(0,12000),supportsSessionApproval:hints==='session'||Array.isArray(hints)&&hints.includes('session')});
+      this.updateSession(session.id,'waiting');return;
+    }
     if (method === 'item/tool/call') {
-      const action = params.tool === 'turnsu_document' && busyStates.has(session.status)
-        ? this.capabilities.call(session.project_id, session.id, params.arguments || {}, params.callId)
-        : params.tool === 'turnsu_computer' && busyStates.has(session.status) && this.computer
-          ? this.computer.call(session.project_id, session.id, params.arguments || {})
-        : Promise.reject(new Error('工具未授权或执行已结束。'));
+      const action = this.callSessionTool(session, params.tool, params.arguments || {}, params.callId);
       action.then(result => connection.respond(id, { contentItems: Array.isArray(result.content) ? result.content.filter(c => c.type === 'text' || c.type === 'image').map(c => c.type === 'image' ? { type: 'inputImage', imageUrl: `data:${c.mimeType};base64,${c.data}` } : { type: 'inputText', text: c.text }) : [{ type: 'inputText', text: JSON.stringify(result) }], success: true }), error => connection.respond(id, { contentItems: [{ type: 'inputText', text: error.message }], success: false })).catch(() => {});
       return;
     }
@@ -521,9 +554,18 @@ export class LocalAgentHost {
     if (method === 'remote.recover') return this.remote.recover(args);
     if (method === 'remote.download') return this.remote.artifact(args);
     if (method === 'remote.materials') return (await this.remote.files(args.projectId, args.paths)).map(({ data, ...metadata }) => metadata);
+    if (method === 'ui.resource') { this.ui.ensure(args.sessionId); return this.ui.resource(args.uri); }
+    if (method === 'ui.context') return this.ui.context(args.sessionId,args.value);
+    if (method === 'ui.detach') return this.ui.detach(args);
+    if (method === 'ui.read') return this.ui.read(args.sessionId);
+    if (method === 'ui.save') return this.ui.save(args);
+    if (method === 'ui.attach') return this.ui.attach(args);
+    if (method === 'ui.commit') return this.ui.commit(args);
+    if (method === 'ui.deliver') return this.ui.deliver(args);
     if (method.startsWith('computer.')) {
       if (!this.computer) throw new Error('电脑操作需要桌面工作台。');
       if (method === 'computer.status') return this.computer.status();
+      if (method === 'computer.preview') return this.computer.preview(args.projectId);
       if (method === 'computer.start') return this.computer.start(args);
       if (method === 'computer.stop') return this.computer.stop();
       if (method === 'computer.history') return this.computer.history(args.projectId);
@@ -724,7 +766,7 @@ export class LocalAgentHost {
           this.modelCatalogs.set(args.agent, models); return models;
         }
         const connection = await this.codex(); let cursor = null, models = [];
-        do { const page = await connection.request("model/list", { limit: 100, ...(cursor ? { cursor } : {}) }); models.push(...page.data.filter((m) => !m.hidden).map((m) => ({ id: m.model, name: m.displayName }))); cursor = page.nextCursor; } while (cursor);
+        do { const page = await connection.request("model/list", { limit: 100, ...(cursor ? { cursor } : {}) }); models.push(...page.data.filter((m) => !m.hidden).map((m) => ({ id: m.model, name: m.displayName, defaultReasoningEffort: m.defaultReasoningEffort }))); cursor = page.nextCursor; } while (cursor);
         this.modelCatalogs.set("codex", models); return models;
       }
       case "session.model": {
@@ -813,6 +855,7 @@ export class LocalAgentHost {
         finally { this.operations.delete(id); }
       }
       case "session.send": {
+        const display = args.displayText === undefined ? args.text : text(args.displayText);
         const prompt = text(args.text), inputId = text(args.inputId, 128), session = this.session(args.sessionId);
         const paths = referencePaths(args.references);
         this.references.check(inputId, session.id, prompt, paths);
@@ -839,6 +882,7 @@ export class LocalAgentHost {
           nativePrompt = this.loopCapture.prepare(session.id, nativePrompt);
           nativePrompt = await this.localLoopTrials.prepare(session.id, nativePrompt);
           nativePrompt = await this.nativeLoops.prepare(session.id, nativePrompt);
+          nativePrompt = await this.ui.prepare(session.id, nativePrompt);
           const method = this.methods?.state(session.id);
           const nativeLoop = this.nativeLoops.state(session.id);
           const sharedPrompt = prompt + (files.length ? `\n\n引用资料：${files.map(file => file.label || file.path).join("、")}` : "");
@@ -848,8 +892,8 @@ export class LocalAgentHost {
         this.db.exec("BEGIN IMMEDIATE");
         try {
           this.db.prepare("INSERT INTO submissions VALUES(?,?,?,NULL,'sending')").run(inputId, session.id, prompt);
-          this.db.prepare("INSERT INTO messages VALUES(?,?,?,?,'text',?)").run(inputId, session.id, "user", prompt, Date.now());
-          this.db.prepare("UPDATE sessions SET title=CASE WHEN title='新任务' THEN ? ELSE title END,status='starting',error=NULL,updated_at=? WHERE id=?").run(prompt.slice(0, 42), Date.now(), session.id);
+          this.db.prepare("INSERT INTO messages VALUES(?,?,?,?,'text',?)").run(inputId, session.id, "user", display, Date.now());
+          this.db.prepare("UPDATE sessions SET title=CASE WHEN title='新任务' THEN ? ELSE title END,status='starting',error=NULL,updated_at=? WHERE id=?").run(display.slice(0, 42), Date.now(), session.id);
           if (prepared.context) {
             this.db.prepare('INSERT INTO shared_work_turns VALUES(?,?,?,?)').run(inputId, session.id, JSON.stringify(prepared.context), nativePrompt);
           }
@@ -907,7 +951,17 @@ export class LocalAgentHost {
           }
           const connection = await this.codex(session.connection_id);
           dispatched = true;
-          const result = await connection.request("turn/start", { threadId: native.native_id, ...(native.model ? { model: native.model } : {}), clientUserMessageId: inputId, input: [{ type: "text", text: nativePrompt, text_elements: [] }] });
+          let effort;
+          if(native.model&&!native.connection_id) {
+            let catalog=this.modelCatalogs.get(this.modelCatalogKey(native));
+            if(!catalog?.some(m=>m.id===native.model&&m.defaultReasoningEffort)) {
+              const page=await connection.request('model/list',{limit:100});
+              catalog=page.data.map(m=>({id:m.model,defaultReasoningEffort:m.defaultReasoningEffort}));
+            }
+            effort=catalog.find(m=>m.id===native.model)?.defaultReasoningEffort;
+            if(!catalog.some(m=>m.id===native.model)&&!native.connection_id)throw Object.assign(new Error('当前模型不在执行器目录中，请刷新模型列表后重新选择。'),{rejected:true});
+          }
+          const result = await connection.request("turn/start", { threadId: native.native_id, ...(effort?{effort}:{}), ...(native.model ? { model: native.model } : {}), clientUserMessageId: inputId, input: [{ type: "text", text: nativePrompt, text_elements: [] }] });
           this.db.prepare("UPDATE submissions SET native_turn_id=?,status=CASE WHEN status='sending' THEN 'accepted' ELSE status END WHERE id=?").run(result.turn.id, inputId);
           if (this.session(session.id).status === "starting") this.updateSession(session.id, "running");
           return this.readSession(session.id);
@@ -918,6 +972,7 @@ export class LocalAgentHost {
       }
       case "session.stop": {
         const session = this.session(args.sessionId);
+        this.ui.waiters.get(session.id)?.();
         if (this.computer?.owner === session.id) await this.computer.stop();
         if (remoteAgents[session.agent]) return this.remote.action({ sessionId: session.id, requestId: args.requestId || randomUUID(), operation: 'stop' });
         if (acpAgents.has(session.agent)) {
@@ -987,6 +1042,10 @@ export class LocalAgentHost {
           const answers = {};
           for (const question of item.questions) answers[question.id] = { answers: [text(args.answers?.[question.id], 20_000)] };
           response = { answers };
+        } else if(item.method==='mcpServer/elicitation/request') {
+          if(!['accept','decline','accept_session'].includes(args.decision))throw new Error('请选择允许或拒绝。');
+          if(args.decision==='accept_session'&&!item.supportsSessionApproval)throw new Error('此请求不支持在本次对话中记住选择。');
+          response={action:args.decision==='decline'?'decline':'accept',content:args.decision==='decline'?null:{},...(args.decision==='accept_session'?{_meta:{persist:'session'}}:{})};
         } else {
           if (!["accept", "decline"].includes(args.decision)) throw new Error("请选择允许一次或拒绝。");
           response = { decision: args.decision };
@@ -1017,5 +1076,5 @@ export class LocalAgentHost {
       default: throw new Error("工作台不支持这个操作。");
     }
   }
-  async close() { const cleanupErrors=[]; this.closing = true; clearInterval(this.idleTimer); await this.schedules.close(); await this.remote.close(); await this.toolBroker.close(); try { await this.computer?.close(); } catch(e) { cleanupErrors.push(e); } try { await this.capabilities.close(); } catch(e) { cleanupErrors.push(e); } await this.reaping; await this.projectMembers?.close(); await this.projectCreation?.close(); await this.memberAgentWork?.close(); await this.capture.close(); await this.loopCapture.close(); await this.localLoopTrials.close(); await this.localLoopPublication.close(); await this.nativeLoops.close(); await this.publication?.close(); await this.loops?.close(); await this.methods?.close(); await this.work?.close(); await this.shared?.close(); await Promise.all([this.cloud?.close(), ...[...this.codexConnections.values()].map(c => c.close()), ...[...this.piConnections.values(), ...this.claudeConnections.values(), ...this.opencodeConnections.values(), ...this.kimiConnections.values(), ...this.ompConnections.values()].map((c) => c.close())]); if(cleanupErrors.length)throw new AggregateError(cleanupErrors,cleanupErrors.map(e=>e.message).join(' ')); this.store.close(); }
+  async close() { const cleanupErrors=[]; this.closing = true; clearInterval(this.idleTimer); await this.schedules.close(); await this.remote.close(); await this.toolBroker.close(); this.ui.close(); try { await this.computer?.close(); } catch(e) { cleanupErrors.push(e); } try { await this.capabilities.close(); } catch(e) { cleanupErrors.push(e); } await this.reaping; await this.projectMembers?.close(); await this.projectCreation?.close(); await this.memberAgentWork?.close(); await this.capture.close(); await this.loopCapture.close(); await this.localLoopTrials.close(); await this.localLoopPublication.close(); await this.nativeLoops.close(); await this.publication?.close(); await this.loops?.close(); await this.methods?.close(); await this.work?.close(); await this.shared?.close(); await Promise.all([this.cloud?.close(), ...[...this.codexConnections.values()].map(c => c.close()), ...[...this.piConnections.values(), ...this.claudeConnections.values(), ...this.opencodeConnections.values(), ...this.kimiConnections.values(), ...this.ompConnections.values()].map((c) => c.close())]); if(cleanupErrors.length)throw new AggregateError(cleanupErrors,cleanupErrors.map(e=>e.message).join(' ')); this.store.close(); }
 }
