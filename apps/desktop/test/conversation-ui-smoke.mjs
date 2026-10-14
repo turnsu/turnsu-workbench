@@ -19,8 +19,9 @@ protocol.registerSchemesAsPrivileged(
     privileges: { standard: true, secure: true, supportFetchAPI: true },
   })),
 );
+let stage = "startup";
 const deadline = setTimeout(() => {
-  console.error("Conversation UI exceeded 75 seconds");
+  console.error("Conversation UI exceeded 75 seconds at " + stage);
   app.exit(1);
 }, 75000);
 app.on("window-all-closed", () => {});
@@ -87,6 +88,7 @@ app.whenReady().then(async () => {
                 { key: "amount", label: "金额" },
               ],
             },
+            { id: "state", type: "Status" },
             { id: "note", type: "Field", label: "报告用途", binding: "note" },
             {
               id: "confirm",
@@ -173,6 +175,7 @@ app.whenReady().then(async () => {
       }
     });
     const js = (source) => window.webContents.executeJavaScript(source);
+    stage = "load production renderer";
     await window.loadURL("turnsu://app/index.html");
     await until(
       () => js('Boolean(document.querySelector(".projectButton"))'),
@@ -196,8 +199,19 @@ app.whenReady().then(async () => {
         )),
       "inline App not rendered",
     );
+    stage = "edit inline review";
     const originalFrame = frame().frameTreeNodeId;
+    assert.equal(
+      await frame().executeJavaScript('document.querySelector("[role=status]").innerText'),
+      "等待你确认",
+      "a new review should explain that it needs the employee\'s confirmation",
+    );
     assert.equal(await js('document.querySelectorAll("iframe").length'), 1);
+    assert.deepEqual(
+      await frame().executeJavaScript('(()=>{const cell=document.querySelector("tbody td:last-child");return [cell.innerText,getComputedStyle(cell).textAlign]})()'),
+      ["174.50 元", "right"],
+      "amount alignment must preserve the original value and precision",
+    );
     assert.equal(
       await frame().executeJavaScript("typeof window.turnsuDesktop"),
       "undefined",
@@ -210,6 +224,7 @@ app.whenReady().then(async () => {
       () => host.ui.read(s.id).document.data.note === "周一团队会议",
       "edited draft did not persist",
     );
+    stage = "expand and collapse review";
     for (let i = 0; i < 4; i++) {
       await js('document.querySelector("[aria-label=展开内容]").click()');
       await until(
@@ -230,11 +245,23 @@ app.whenReady().then(async () => {
         "collapse failed",
       );
     }
+    await js('document.querySelector("[aria-label=收起导航]").click()');
+    await until(() => js('document.querySelector(".sidebar").hidden'), "navigation did not collapse");
+    assert.equal(frame().frameTreeNodeId, originalFrame, "changing workspace width must preserve the App");
+    await js('document.querySelector("[aria-label=展开导航]").click()');
+    await until(() => js('!document.querySelector(".sidebar").hidden'), "navigation did not reopen");
     assert.equal(host.resourceUsage().surfaces, 1);
+    await until(
+      () => frame().executeJavaScript('!document.querySelector(".primary").disabled'),
+      "review did not finish saving before confirmation",
+    );
+    stage = "deliver confirmation";
     const waiting = host.ui.call(s.id, { operation: "wait" });
     await frame().executeJavaScript(
       'document.querySelector(".primary").click()',
     );
+    await until(() => host.ui.read(s.id).events.some(event => event.state === "consumed"),
+      "confirmation did not reach the waiting Agent tool");
     const event = await waiting;
     assert.equal(event.values.note, "周一团队会议");
     assert.equal(event.assets.length, 0);
@@ -246,11 +273,26 @@ app.whenReady().then(async () => {
       "submitted action should not repeat",
     );
     assert.equal(host.ui.read(s.id).events.length, 1);
+    await until(
+      () => frame().executeJavaScript('document.querySelector("[role=status]").innerText === "确认内容已交给助手"'),
+      "after confirmation the status must acknowledge delivery instead of inviting another action",
+    );
+    assert.equal(
+      await frame().executeJavaScript('document.querySelector(".primary").innerText'),
+      "已确认",
+      "the submitted button acknowledges confirmation without claiming the task is completed",
+    );
+    assert.equal(
+      await frame().executeJavaScript('document.querySelector("footer")?.innerText || ""'),
+      "",
+      "a delivery receipt should not be repeated below the status",
+    );
     host.message(s.id, "complete", "assistant", "汇总已完成，可打开[工作参考资料](" + website + ")。");
     host.notify({type: "changed", sessionId:s.id});
     await until(() => js('Boolean(document.querySelector(".textLink"))'), "new reply not visible");
     assert.equal(frame().frameTreeNodeId, originalFrame, "new replies must not remount the App");
     assert.equal(await js('Boolean(document.querySelector(".conversationSurface").nextElementSibling?.textContent.includes("汇总已完成"))'), true, "App must stay beside its original reply");
+    stage = "open conversation website";
     await js('document.querySelector(".textLink").click()');
     await until(() => embedded.browser.bound?.view.webContents.getURL() === website, "conversation link did not open embedded website");
     assert.match(await embedded.browser.bound.view.webContents.executeJavaScript("document.body.innerText"), /内部示例资料已打开/);
@@ -258,6 +300,7 @@ app.whenReady().then(async () => {
     await js('document.querySelector("[aria-label=收起网页]").click()');
     await until(() => !embedded.browser.bound, "website did not hide");
     assert.equal(frame().frameTreeNodeId, originalFrame, "browsing must preserve the App draft");
+    stage = "publish and preview result file";
     await writeFile(
       join(path, "汇总说明.txt"),
       "合计 174.50 元；用途：周一团队会议。",
@@ -295,6 +338,7 @@ app.whenReady().then(async () => {
         (await window.webContents.capturePage()).toPNG(),
       );
     }
+    stage = "release and reopen draft";
     await js('document.querySelector(".newTask").click()');
     await until(
       () => host.resourceUsage().surfaces === 0,
@@ -311,6 +355,7 @@ app.whenReady().then(async () => {
         )),
       "reopened App lost human input",
     );
+    stage = "expand narrow viewport";
     window.setSize(900, 700);
     await js('document.querySelector("[aria-label=展开内容]").click()');
     await until(
@@ -345,6 +390,71 @@ app.whenReady().then(async () => {
         (await window.webContents.capturePage()).toPNG(),
       );
     }
+    stage = "replace review with readonly result";
+    await host.ui.call(s.id, {
+      operation: "present",
+      revision: host.ui.read(s.id).revision,
+      document: {
+        title: "汇总结果",
+        tree: { id: "result", type: "Layout", children: [
+          { id: "summary", type: "Text", text: "合计 174.50 元，说明文件可在对话中打开。" },
+          { id: "state", type: "Status", label: "处理结果", text: "待处理金额总计：174.50 元" },
+        ] },
+      },
+    });
+    await until(
+      () => frame()?.executeJavaScript('document.querySelector("[role=status]")?.innerText === "内容已展示"'),
+      "a read-only presentation must not ask for confirmation or reuse an earlier receipt",
+    );
+    assert.equal(await frame().executeJavaScript('document.querySelector(".primary")'), null);
+    assert.equal(
+      await frame().executeJavaScript('document.querySelector(".statusDescription").innerText'),
+      "待处理金额总计：174.50 元",
+      "Agent-authored status details must remain visible separately from runtime state",
+    );
+    stage = "show published result and partial failure";
+    const resultFrame = frame().frameTreeNodeId;
+    await host.ui.call(s.id, { operation: "publish", paths: ["汇总说明.txt"], summary: "汇总结果可查看。" });
+    await until(
+      () => frame().executeJavaScript('document.querySelector("[role=status]")?.innerText === "成果可查看"'),
+      "actual results should be distinguishable from a pending review",
+    );
+    host.updateSession(s.id, "failed", "另一份材料处理失败，已生成的说明仍保留。");
+    await until(
+      () => frame().executeJavaScript('document.querySelector("[role=status]")?.dataset.tone === "error"'),
+      "partial failure must not retain a success indication",
+    );
+    assert.equal(await js('Boolean(document.querySelector(".resultFiles button"))'), true);
+    stage = "uncertain confirmation after edits";
+    host.updateSession(s.id, "idle");
+    await host.ui.call(s.id, {
+      operation: "present", revision: host.ui.read(s.id).revision,
+      document: {
+        title: "继续核对", data: { note: "周一团队会议" },
+        tree: { id: "review", type: "Layout", children: [
+          { id: "state", type: "Status" },
+          { id: "note", type: "Field", label: "报告用途", binding: "note" },
+          { id: "confirm", type: "Action", label: "确认修改", action: "submit" },
+        ] },
+      },
+    });
+    await host.ui.commit({ sessionId: s.id, revision: host.ui.read(s.id).revision, requestId: "lost-reply" });
+    // Simulate a lost delivery reply, not another successful business execution.
+    host.db.prepare("UPDATE ui_events SET state='uncertain' WHERE id=?").run("lost-reply");
+    host.ui.changed(s.id);
+    await until(
+      () => frame()?.executeJavaScript('document.querySelector("[role=status]")?.innerText === "请在对话中核对接收状态"'),
+      "an uncertain delivery must explain the need to check the conversation",
+    );
+    assert.equal(frame().frameTreeNodeId, resultFrame, "updates at the same reply must preserve the App context");
+    await frame().executeJavaScript(
+      'const input=document.querySelector("input");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(input,"补充用途");input.dispatchEvent(new Event("input",{bubbles:true}));',
+    );
+    await until(() => host.ui.read(s.id).dirty, "edited input was not saved");
+    assert.equal(await frame().executeJavaScript('document.querySelector(".primary").disabled'), true);
+    const receiptCount = host.ui.read(s.id).events.length;
+    await frame().executeJavaScript('document.querySelector(".primary").click()');
+    assert.equal(host.ui.read(s.id).events.length, receiptCount, "editing must not enable a duplicate uncertain submission");
     console.log(
       JSON.stringify({
         status: "passed",
@@ -356,6 +466,9 @@ app.whenReady().then(async () => {
           "edited data returned to waiting tool",
           "same iframe across expand/collapse",
           "duplicate action disabled",
+          "confirmation status and button acknowledge delivery",
+          "read-only result and partial failure are not pending confirmations",
+          "uncertain delivery remains blocked after edits",
           "App anchored to original reply",
           "conversation links open native browser without authorization",
           "real result preview",
@@ -367,6 +480,10 @@ app.whenReady().then(async () => {
     );
   } catch (e) {
     console.error(e.stack);
+    for (const child of window?.webContents.mainFrame.framesInSubtree || []) {
+      if (child.url === "turnsu-ui://app/intelligence.html")
+        console.error("App frame:", await child.executeJavaScript("document.body.innerText"));
+    }
     if (window && !window.isDestroyed())
       console.error(
         await window.webContents.executeJavaScript("document.body.innerText"),

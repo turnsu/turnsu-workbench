@@ -1,34 +1,41 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./surface.css";
+import { FileText, Plus, Check, ArrowRight } from "lucide-react";
 import { surfaceBridge } from "./surface-bridge.mjs";
+import {
+  presentationEvents,
+  confirmationState,
+  surfaceStatus,
+  numericColumns,
+} from "./surface-state.mjs";
 const api = (method, args) => surfaceBridge.invoke(method, args);
-const labels = {
-  idle: "可以继续",
-  starting: "准备执行",
-  running: "执行中",
-  waiting: "等待回应",
-  stopping: "正在停止",
-  failed: "需要处理",
-  interrupted: "请回会话恢复",
-};
+const hasStatus = (node) =>
+  node?.type === "Status" || node?.children?.some(hasStatus);
 function DataView({ node, value, onChange, disabled }) {
   const [page, setPage] = useState(0);
   const rows = Array.isArray(value) ? value : [],
     cols = node.columns || [],
     last = Math.max(0, Math.ceil(rows.length / 40) - 1);
+  const numbers = numericColumns(rows, cols);
   useEffect(() => setPage((p) => Math.min(p, last)), [last]);
   return (
     <section className="dataView">
-      <h2>{node.label}</h2>
+      {node.label && <h2>{node.label}</h2>}
       {rows.length ? (
         <>
           <div className="tableScroll">
-            <table>
+            <table aria-label={node.label || "核对数据"}>
               <thead>
                 <tr>
                   {cols.map((c) => (
-                    <th key={c.key}>{c.label}</th>
+                    <th
+                      key={c.key}
+                      scope="col"
+                      className={numbers.has(c.key) ? "numeric" : undefined}
+                    >
+                      {c.label}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -37,7 +44,10 @@ function DataView({ node, value, onChange, disabled }) {
                   <tr key={r.id || page * 40 + i}>
                     {cols.length ? (
                       cols.map((c) => (
-                        <td key={c.key}>
+                        <td
+                          key={c.key}
+                          className={numbers.has(c.key) ? "numeric" : undefined}
+                        >
                           {c.editable ? (
                             <input
                               aria-label={
@@ -245,16 +255,16 @@ function App() {
       );
     if (n.type === "Assets")
       return (
-        <section key={n.id}>
+        <section key={n.id} className="assets">
           <div className="sectionTitle">
             <h2>{n.label || "选定材料"}</h2>
             <button disabled={busy} onClick={() => act("import")}>
-              ＋ 选择文件
+              <Plus size={15}/>添加文件
             </button>
           </div>
           <ul className="materialNames">
             {state.assets.map((file) => (
-              <li key={file.path}>{file.path.split("/").at(-1)}</li>
+              <li key={file.path}><FileText size={18}/><span><strong>{file.path.split("/").at(-1)}</strong><small>项目材料{Number.isFinite(file.bytes) ? ` · ${file.bytes < 1024 ? "不到 1" : Math.ceil(file.bytes / 1024)} KB` : ""}</small></span></li>
             ))}
           </ul>
           {!state.assets.length && (
@@ -262,43 +272,52 @@ function App() {
           )}
         </section>
       );
-    if (n.type === "Status")
+    if (n.type === "Status") {
+      const status = surfaceStatus({ ...state, error: error || state.error }, busy);
       return (
-        <p key={n.id} className="status" role="status">
-          {labels[state.status] || state.status}
-          {state.error ? " · " + state.error : ""}
-        </p>
+        <section key={n.id} className="statusBlock">
+          {n.label && <h2>{n.label}</h2>}
+          {n.text && <p className="statusDescription">{n.text}</p>}
+          <p className="status" role="status" data-tone={status.tone}>
+            {status.label}
+            {state.error ? " · " + state.error : ""}
+          </p>
+        </section>
       );
-    if (n.type === "Action")
+    }
+    if (n.type === "Action") {
+      const confirmation = n.action === "submit" ? confirmationState(state) : null;
+      const submitted = Boolean(confirmation);
+      const label = !submitted
+        ? n.label || "提交"
+        : confirmation === "uncertain"
+          ? "接收状态待核对"
+          : confirmation === "confirmed"
+            ? "已确认"
+            : confirmation === "pending"
+              ? "已确认，等待接收"
+            : "正在交给助手";
       return (
         <button
           key={n.id}
           className="primary"
-          disabled={
-            busy ||
-            (n.action === "submit" &&
-              !state.dirty &&
-              state.events.some(
-                (e) =>
-                  e.created_at >= state.presentation?.presented_at &&
-                  [
-                    "sent",
-                    "consumed",
-                    "dispatching",
-                    "pending",
-                    "uncertain",
-                  ].includes(e.state),
-              ))
-          }
+          data-confirmation={confirmation || undefined}
+          disabled={busy || submitted}
           onClick={() => act(n.action)}
         >
-          {busy ? "正在提交…" : n.label || "提交"}
+          {confirmation === "confirmed" && <Check size={15}/>}
+          {busy ? "正在提交…" : label}
+          {!submitted && !busy && <ArrowRight size={15}/>}
         </button>
       );
+    }
     if (n.type === "Field") {
       const shared = { disabled: busy, "aria-label": n.label || n.binding };
       return (
-        <label key={n.id} className="field">
+        <label
+          key={n.id}
+          className={"field" + (n.variant === "boolean" ? " boolean" : "")}
+        >
           {n.label || n.binding}
           {n.variant === "boolean" ? (
             <input
@@ -348,6 +367,16 @@ function App() {
         <p role="status">{error || "正在读取当前任务…"}</p>
       </main>
     );
+  const currentEvent = presentationEvents(state)[0];
+  const feedback = Object.keys(pending.current).length
+    ? "正在保存…"
+    : hasStatus(state.document.tree)
+      ? ""
+      : state.dirty
+      ? "修改已保存"
+      : ["sent", "consumed"].includes(currentEvent?.state)
+        ? "确认内容已交给助手"
+        : "";
   return (
     <main>
       {error && (
@@ -374,31 +403,24 @@ function App() {
         </div>
       )}
       {render(state.document.tree)}
-      <footer aria-live="polite">
-        <span>
-          {Object.keys(pending.current).length
-            ? "正在保存…"
-            : state.dirty
-              ? "修改已保存"
-              : state.events[0] &&
-                  ["sent", "consumed"].includes(state.events[0].state)
-                ? "确认内容已交给助手"
-                : ""}
-        </span>
-        {state.events[0]?.state === "pending" && (
-          <button
-            disabled={busy}
-            onClick={() =>
-              run(() => api("deliver", { requestId: state.events[0].id }))
-            }
-          >
-            继续处理
-          </button>
-        )}
-        {state.events[0]?.state === "uncertain" && (
-          <span>尚未确认是否已接收，请在对话中核对，避免重复执行。</span>
-        )}
-      </footer>
+      {(feedback || ["pending", "uncertain"].includes(currentEvent?.state)) && (
+        <footer aria-live="polite">
+          {feedback && <span>{feedback}</span>}
+          {currentEvent?.state === "pending" && (
+            <button
+              disabled={busy}
+              onClick={() =>
+                run(() => api("deliver", { requestId: currentEvent.id }))
+              }
+            >
+              继续处理
+            </button>
+          )}
+          {currentEvent?.state === "uncertain" && (
+            <span>尚未确认是否已接收，请在对话中核对，避免重复执行。</span>
+          )}
+        </footer>
+      )}
     </main>
   );
 }
