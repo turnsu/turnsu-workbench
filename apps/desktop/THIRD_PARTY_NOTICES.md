@@ -1,5 +1,15 @@
 # Third-party component notice
 
+## Noto reading fonts
+
+Noto Sans SC (400–600) and Noto Serif SC (600) are bundled as unmodified Google Fonts WOFF2 subsets,
+under the SIL Open Font License 1.1. Source URLs and SHA-256 hashes are recorded in
+src/fonts/manifest.json. The application ships both full license notices at
+dist/fonts/OFL-noto-sans-sc.txt and dist/fonts/OFL-noto-serif-sc.txt.
+Fonts load from the local package, not from Google at runtime. No system font installation is required.
+
+## Company component adaptation
+
 The desktop UI adapts the Button, Badge, Input, Textarea primitives and design tokens from
 [turnsu/frontend-scaffold](https://github.com/turnsu/frontend-scaffold/tree/02203ea4ecdd2da3a2c22e7accc196f5b5e7ab35)
 at commit `02203ea4ecdd2da3a2c22e7accc196f5b5e7ab35`. The upstream application uses

@@ -70,3 +70,39 @@ test('a failed destination read remains non-writable and can be retried without 
   failRead = false; await navigation.select(f.project.id, b.id, callbacks);
   assert.equal(navigation.current.text, '草稿 B'); assert.deepEqual(navigation.current.references, ['B.md']);
 });
+
+test('opening an organized conversation uses its original draft owner, including after restart', async t => {
+  const f = await fixture(t), [a] = f.sessions;
+  const targetPath = join(f.project.path, '归类项目'); await mkdir(targetPath);
+  const target = await f.host.command('project.open', { path: targetPath });
+  await f.host.command('session.move', { sessionId: a.id, projectId: target.id });
+  await f.reopen();
+  const navigation = new LocalDraftNavigation((method, args) => f.host.command(method, args));
+  let displayedLocation;
+  await navigation.select(target.id, a.id, {
+    locate: sessionId => f.host.command('session.locate', { sessionId }),
+    start: location => { displayedLocation = location; }, loaded() {},
+  });
+  assert.equal(displayedLocation.projectId, target.id);
+  assert.equal(navigation.current.projectId, f.project.id);
+  assert.equal(navigation.current.text, '草稿 A');
+  navigation.edit('移入项目后继续写的草稿', ['原工作资料.md']); await navigation.save();
+  await f.reopen();
+  assert.deepEqual(await f.host.command('draft.read', { projectId: f.project.id, sessionId: a.id }), { text: '移入项目后继续写的草稿', references: ['原工作资料.md'] });
+  assert.deepEqual(await f.host.command('draft.read', { projectId: target.id }), { text: '', references: [] });
+});
+
+test('a delayed location lookup cannot redirect a newer selection or overwrite its draft', async t => {
+  const f = await fixture(t), [a, b, c] = f.sessions, blocked = deferred(), started = deferred();
+  const navigation = new LocalDraftNavigation((method, args) => f.host.command(method, args));
+  const displayed = [], callbacks = {
+    async locate(sessionId) { const result = await f.host.command('session.locate', { sessionId }); if (sessionId === b.id) { started.resolve(); await blocked.promise; } return result; },
+    start: location => displayed.push(location.id), loaded() {},
+  };
+  await navigation.select(f.project.id, a.id, callbacks);
+  const pending = navigation.select(f.project.id, b.id, callbacks); await started.promise;
+  await navigation.select(f.project.id, c.id, callbacks); blocked.resolve(); await pending;
+  assert.deepEqual(displayed, [a.id, c.id]);
+  assert.equal(navigation.current.sessionId, c.id);
+  assert.equal(navigation.current.text, '草稿 C');
+});

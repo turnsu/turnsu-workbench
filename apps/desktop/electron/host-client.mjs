@@ -1,8 +1,16 @@
 // Private request channel. An uncertain result is never retried automatically.
 export class HostClient {
-  constructor(child, notify = () => {}) {
+  constructor(child, notify = () => {}, computer = null, authorize = null) {
     this.child = child; this.pending = new Map(); this.sequence = 0; this.closed = false;
     child.on('message', message => {
+      if (message.credentialRequest) {
+        const { id, args } = message.credentialRequest;
+        Promise.resolve().then(() => { if (!authorize) throw new Error('授权服务不可用。'); return authorize(args); }).then(result => child.postMessage({ credentialReply: { id, result } }), error => child.postMessage({ credentialReply: { id, error: error.message } })).catch(() => {}); return;
+      }
+      if (message.computerRequest) {
+        const { id, method, args } = message.computerRequest;
+        Promise.resolve().then(() => { if (!computer) throw new Error('电脑运行时不可用。'); return computer(method, args); }).then(result => child.postMessage({ computerReply: { id, result } }), error => child.postMessage({ computerReply: { id, error: error.message } })).catch(() => {}); return;
+      }
       if (message.event) { notify(message.event); return; }
       const request = this.pending.get(message.id); if (!request) return;
       clearTimeout(request.timer); this.pending.delete(message.id);

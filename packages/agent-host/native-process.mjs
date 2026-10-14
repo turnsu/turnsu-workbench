@@ -4,16 +4,18 @@ import { execFile } from 'node:child_process';
 
 // npm's Windows .cmd shims cannot be spawned with shell:false. Resolve only known CLI entries;
 // never interpolate user paths, prompts or model IDs through cmd.exe.
-export function nativeCommand(binary, args, nodeBinary) {
+export function nativeCommand(binary, args, nodeBinary, bunBinary = null) {
   if (!binary?.toLowerCase().endsWith('.cmd')) return { file: binary, args };
   const entries = {
     'codex.cmd': ['@openai/codex/bin/codex.js'],
     'pi.cmd': ['@mariozechner/pi-coding-agent/dist/cli.js', '@earendil-works/pi-coding-agent/dist/cli.js'],
     'claude.cmd': ['@anthropic-ai/claude-code/cli.js'],
-    'opencode.cmd': ['opencode-ai/bin/opencode.exe'],
+    'opencode.cmd': ['opencode-ai/bin/opencode.exe', 'opencode-ai/bin/opencode'],
+    'omp.cmd': ['@oh-my-pi/pi-coding-agent/dist/cli.js'],
   }[basename(binary).toLowerCase()];
   const entry = entries?.map(p => join(dirname(binary), 'node_modules', p)).find(p => existsSync(p));
   if (entry?.toLowerCase().endsWith('.exe')) return { file: entry, args, entry };
+  if (basename(binary).toLowerCase() === 'omp.cmd') { if (!entry || !bunBinary) throw new Error('oh-my-pi 需要 Bun，请按官方指引安装 Bun 与 oh-my-pi。'); return { file: bunBinary, args: [entry, ...args], entry }; }
   if (!entry || !nodeBinary) throw new Error('无法启动这个 Windows CLI，请检查 Node.js 与原生 Agent 的安装。');
   return { file: nodeBinary, args: [entry, ...args], entry };
 }

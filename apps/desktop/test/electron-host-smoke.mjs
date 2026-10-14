@@ -8,12 +8,13 @@ import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HostClient } from '../electron/host-client.mjs';
 import { ConnectionVault } from '../electron/connection-vault.mjs';
+import { ComputerRuntime } from '../host-dist/computer-runtime.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const temp = await mkdtemp(join(tmpdir(), 'turnsu-electron-'));
 app.setPath('userData', join(temp, 'browser'));
 app.whenReady().then(async () => {
-let host, server;
+let host, server, computer;
 try {
   const directory = join(temp, 'state'); await mkdir(directory, { mode: 0o700 });
   const projectPath = join(temp, '真实项目'); await mkdir(projectPath);
@@ -37,7 +38,9 @@ try {
   assert.ok(!JSON.stringify(vault.list()).includes('isolated-test-key'));
   const reopened = new ConnectionVault(directory, safeStorage); await reopened.read(); assert.equal(reopened.profiles[0].apiKey, 'isolated-test-key');
   await assert.rejects(reopened.prepare({ ...reopened.profiles[0], baseUrl: 'https://other.example/v1' }), /新建连接/);
-  function start() { const child = utilityProcess.fork(join(root, 'host-dist/desktop-entry.mjs'), [directory], { stdio: 'pipe', serviceName: 'Turnsu test host' }); child.stdout?.resume(); child.stderr?.on('data', data => process.stderr.write(data)); return new HostClient(child); }
+  // Match the production main-process owner without installing or starting a Driver.
+  computer = new ComputerRuntime(directory);
+  function start() { const child = utilityProcess.fork(join(root, 'host-dist/desktop-entry.mjs'), [directory], { stdio: 'pipe', serviceName: 'Turnsu test host' }); child.stdout?.resume(); child.stderr?.on('data', data => process.stderr.write(data)); return new HostClient(child, undefined, (method, args) => computer.dispatch(method, args)); }
   host = start(); await host.request('desktop.connections.configure', { connections: reopened.profiles });
   const project = await host.request('project.open', { path: projectPath });
   const task = await host.request('session.create', { projectId: project.id, agent: 'codex', connectionId: reopened.profiles[0].id });
@@ -45,6 +48,7 @@ try {
   await host.request('session.model', { sessionId: task.id, model: 'company-model' });
   await host.request('draft.save', { projectId: project.id, sessionId: task.id, text: '关闭后继续的本地草稿' });
   await host.close(); assert.equal(host.closed, true);
+  assert.equal((await computer.dispatch('status')).active, null);
   host = start(); await host.request('desktop.connections.configure', { connections: reopened.profiles });
   const restored = await host.request('session.read', { sessionId: task.id });
   assert.equal(restored.connection_id, task.connection_id); assert.equal(restored.model, 'company-model');
@@ -52,6 +56,6 @@ try {
   await assert.rejects(host.request('project.open', { path: '/' }), /项目文件夹/);
   console.log(JSON.stringify({ status: 'passed', electron: process.versions.electron, node: process.versions.node, evidence: ['OS encrypted credential reopen', 'real utility process / SQLite / gateway HTTP', 'task source and draft reopen', 'graceful Host exit'], realProvider: false }));
 } catch (error) { process.stderr.write(String(error.stack) + '\n'); process.exitCode = 1; }
-finally { await host?.close(); if (server) await new Promise(resolve => server.close(resolve)); await rm(temp, { recursive: true, force: true }); app.exit(process.exitCode || 0); }
+finally { await host?.close(); await computer?.close(); if (server) await new Promise(resolve => server.close(resolve)); await rm(temp, { recursive: true, force: true }); app.exit(process.exitCode || 0); }
 
 });
