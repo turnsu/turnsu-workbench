@@ -14,13 +14,33 @@ export async function flushConversationSurface() {
 }
 const methods = new Set(["read", "save", "submit", "deliver", "import"]);
 
-export function ConversationSurface({ sessionId, title, expanded, onExpand }) {
+export function ConversationSurface({ sessionId, title, expanded, onExpand, theme = "light" }) {
+  const toggle = useRef(null);
+  const connectedBridge = useRef(null);
+  const hostContext = useRef(null);
+  hostContext.current = { theme, platform: "desktop", displayMode: expanded ? "fullscreen" : "inline", availableDisplayModes: ["inline", "fullscreen"] };
   const frame = useRef(null),
     actions = useRef({ onExpand });
   actions.current = { onExpand };
   const [height, setHeight] = useState(260),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true);
+  useEffect(() => {
+    connectedBridge.current?.setHostContext(hostContext.current);
+  }, [theme, expanded]);
+  useEffect(() => {
+    if (!expanded) return;
+    toggle.current?.focus({ preventScroll: true });
+    const close = event => {
+      if (event.key === 'Escape' && !event.defaultPrevented) {
+        event.preventDefault();
+        actions.current.onExpand(false);
+        toggle.current?.focus({ preventScroll: true });
+      }
+    };
+    document.addEventListener('keydown', close);
+    return () => document.removeEventListener('keydown', close);
+  }, [expanded]);
   useEffect(() => {
     let disposed = false,
       bridge,
@@ -50,12 +70,7 @@ export function ConversationSurface({ sessionId, title, expanded, onExpand }) {
         { name: "turnsu-workbench", version: "1.0.0" },
         { serverTools: {}, updateModelContext: { text: {} } },
         {
-          hostContext: {
-            theme: "light",
-            platform: "desktop",
-            displayMode: "inline",
-            availableDisplayModes: ["inline", "fullscreen"],
-          },
+          hostContext: hostContext.current,
         },
       );
       bridge.oncalltool = async ({ name, arguments: input }) => {
@@ -93,7 +108,10 @@ export function ConversationSurface({ sessionId, title, expanded, onExpand }) {
         return { mode };
       };
       bridge.oninitialized = async () => {
+        if (disposed) return;
         initialized = true;
+        connectedBridge.current = bridge;
+        bridge.setHostContext(hostContext.current);
         await bridge.sendToolInput({ arguments: { operation: "read" } });
         await bridge.sendToolResult({
           content: [],
@@ -129,6 +147,7 @@ export function ConversationSurface({ sessionId, title, expanded, onExpand }) {
     });
     return () => {
       disposed = true;
+      if (connectedBridge.current === bridge) connectedBridge.current = null;
       off?.();
       if (current === controller) current = null;
       disposal = opening
@@ -151,11 +170,12 @@ export function ConversationSurface({ sessionId, title, expanded, onExpand }) {
           <strong>{title}</strong>
         </span>
         <button
+          ref={toggle}
           aria-label={expanded ? "收起到对话" : "展开内容"}
           title={expanded ? "收起到对话" : "展开内容"}
           onClick={() => onExpand(!expanded)}
         >
-          {expanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          {expanded ? <><Minimize2 size={16} /><span>返回对话</span></> : <Maximize2 size={16} />}
         </button>
       </div>
       {error && (

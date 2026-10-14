@@ -237,6 +237,17 @@ app.whenReady().then(async () => {
     await frame().executeJavaScript(
       'const input=document.querySelector("input");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(input,"周一团队会议");input.dispatchEvent(new Event("input",{bubbles:true}));',
     );
+    stage = "change reading theme with an edited App";
+    await frame().executeJavaScript('window.qaThemeMessages=[];window.addEventListener("message", event=>{if(event.data?.method==="ui/notifications/host-context-changed")window.qaThemeMessages.push(event.data.params.theme);});');
+    await js('Array.from(document.querySelectorAll(".themeSwitch button")).find(button=>button.textContent.includes("夜读")).click()');
+    await until(async () => await js('document.documentElement.dataset.theme === "dark"') && await frame().executeJavaScript('matchMedia("(prefers-color-scheme: dark)").matches && getComputedStyle(document.documentElement).backgroundColor === "rgb(44, 45, 41)"'), "the sandboxed App must follow the workbench night theme");
+    assert.equal(frame().frameTreeNodeId, originalFrame, "theme changes must not recreate the App");
+    assert.equal(await frame().executeJavaScript('document.querySelector("input").value'), "周一团队会议", "theme changes must preserve in-progress edits");
+    await until(() => frame().executeJavaScript('window.qaThemeMessages.includes("dark")'), "MCP host context must describe the selected theme");
+    assert.equal(await js('localStorage.getItem("turnsu.appearance")'), "dark");
+    await js('Array.from(document.querySelectorAll(".themeSwitch button")).find(button=>button.textContent.includes("纸白")).click()');
+    await until(() => frame().executeJavaScript('!matchMedia("(prefers-color-scheme: dark)").matches && getComputedStyle(document.documentElement).backgroundColor === "rgb(251, 249, 243)"'), "returning to paper must update the existing App");
+    assert.equal(frame().frameTreeNodeId, originalFrame);
     await until(
       () => host.ui.read(s.id).document.data.note === "周一团队会议",
       "edited draft did not persist",
@@ -344,6 +355,44 @@ app.whenReady().then(async () => {
       () => js('!document.querySelector(".filePanel")'),
       "file preview did not close",
     );
+    stage = "find outputs without losing the conversation";
+    const setDraft = async text => js(`(()=>{const input=document.querySelector('.composer textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,${JSON.stringify(text)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await setDraft("保留这段补充要求");
+    await until(() => js('document.querySelector(".composer textarea").value === "保留这段补充要求"'), "follow-up draft missing");
+    await js('document.querySelector(".outputsTrigger").click()');
+    await until(() => js('document.querySelector(".outputsPanel")?.innerText.includes("汇总说明.txt")'), "published file must be discoverable from the task header");
+    assert.equal(await js('document.querySelector(".outputsPanel time").dateTime'), new Date(host.ui.read(s.id).results[0].createdAt).toISOString(), "output time must come from the saved publication receipt");
+    assert.equal(await js('document.querySelector(".composer textarea").value'), "保留这段补充要求", "opening outputs must preserve the conversation draft");
+    assert.equal(frame().frameTreeNodeId, originalFrame, "outputs must not create or replace the interactive App");
+    if (process.env.TURNSU_QA_ARTIFACTS) {
+      await mkdir(process.env.TURNSU_QA_ARTIFACTS, { recursive: true });
+      await js('Promise.all(document.querySelector(".outputsPanel").getAnimations().map(animation=>animation.finished))');
+      await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `conversation-outputs-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
+      await js('Array.from(document.querySelectorAll(".themeSwitch button")).find(button=>button.textContent.includes("夜读")).click()');
+      await until(() => frame().executeJavaScript('getComputedStyle(document.documentElement).backgroundColor === "rgb(44, 45, 41)"'), "outputs and embedded content must use night colors together");
+      await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `conversation-night-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
+      await js('Array.from(document.querySelectorAll(".themeSwitch button")).find(button=>button.textContent.includes("纸白")).click()');
+      await until(() => frame().executeJavaScript('getComputedStyle(document.documentElement).backgroundColor === "rgb(251, 249, 243)"'), "outputs must return to paper colors");
+    }
+    await js('document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+    await until(() => js('!document.querySelector(".outputsPanel")'), "Escape must close task outputs");
+    assert.equal(await js('document.activeElement.className'), "outputsTrigger", "closing outputs must restore keyboard focus");
+    await js('document.querySelector(".outputsTrigger").click()');
+    await until(() => js('Boolean(document.querySelector(".surfaceShortcut"))'), "interactive content must be listed with task outputs");
+    await js('document.querySelector(".surfaceShortcut").click()');
+    await until(() => js('Boolean(document.querySelector(".conversationSurface.expanded")) && !document.querySelector(".outputsPanel")'), "the output shortcut must open the existing App");
+    assert.equal(frame().frameTreeNodeId, originalFrame, "opening a review from outputs must reuse its iframe");
+    assert.match(await js('document.querySelector(".conversationSurface.expanded .surfaceHeading button").textContent'), /返回对话/, "expanded content needs a clear return action");
+    assert.equal(await frame().executeJavaScript('document.querySelector("input").value'), "周一团队会议", "output shortcut must preserve the human review draft");
+    await js('document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+    await until(() => js('!document.querySelector(".conversationSurface.expanded")'), "Escape from expanded header must return to the conversation");
+    assert.equal(await js('document.activeElement.getAttribute("aria-label")'), "展开内容", "focus must stay on the same review after returning");
+    await js('document.querySelector(".outputsTrigger").click()');
+    await until(() => js('Boolean(document.querySelector(".outputsPanel .resultFile"))'), "result shortcut missing");
+    await js('document.querySelector(".outputsPanel .resultFile").click()');
+    await until(() => js('document.querySelector(".filePreview")?.innerText.includes("174.50") && !document.querySelector(".outputsPanel")'), "result shortcut must open the actual project file");
+    await js('document.querySelector("[aria-label=关闭文件面板]").click()');
+    await setDraft("");
     stage = "open attached material from the composer";
     const sourceText = "客户,金额\n样本甲,100.00\n样本乙,74.50\n";
     await writeFile(join(path, "订单.csv"), sourceText);
@@ -366,12 +415,30 @@ app.whenReady().then(async () => {
       );
     }
     stage = "release and reopen draft";
+    await js('document.querySelector(".outputsTrigger").click()');
+    await until(() => js('Boolean(document.querySelector(".outputsPanel"))'), "outputs did not open before navigation");
     await js('document.querySelector(".newTask").click()');
     await until(
       () => host.resourceUsage().surfaces === 0,
       "App resources were not released on navigation",
     );
     assert.equal(await js('document.querySelectorAll("iframe").length'), 0);
+    assert.equal(await js('Boolean(document.querySelector(".outputsPanel"))'), false, "a new task must not show the previous task's outputs");
+    await setDraft("请保留我原来写好的要求。");
+    await js('Array.from(document.querySelectorAll(".taskSuggestions button")).find(button=>button.textContent.includes("分析表格")).click()');
+    await until(() => js('document.querySelector(".composer textarea").value.includes("分析表格")'), "starter suggestion was not added");
+    assert.ok(await js('document.querySelector(".composer textarea").value.startsWith("请保留我原来写好的要求。")'), "a starter must never replace an existing draft");
+    await setDraft("");
+    await until(() => js('document.querySelector(".composer textarea").value === "" && !document.querySelector(".composerMeta").textContent.includes("正在保存")'), "clearing the new-task draft must settle before leaving it");
+    if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `new-work-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
+    stage = "restore appearance after renderer restart";
+    await js('Array.from(document.querySelectorAll(".themeSwitch button")).find(button=>button.textContent.includes("夜读")).click()');
+    await until(() => js('localStorage.getItem("turnsu.appearance") === "dark"'), "appearance was not saved");
+    await window.loadURL("turnsu://app/index.html");
+    await until(() => js('Boolean(document.querySelector(".taskWelcome")) && document.documentElement.dataset.theme === "dark"'), "reopening the workbench must restore the chosen reading theme");
+    assert.equal(await js('document.querySelectorAll("iframe").length'), 0, "appearance restoration must not resurrect old Apps");
+    if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `new-work-night-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
+    await js('Array.from(document.querySelectorAll(".themeSwitch button")).find(button=>button.textContent.includes("纸白")).click()');
     await js('document.querySelector(".sessionRow .sessionButton").click()');
     await until(
       async () =>
@@ -500,6 +567,8 @@ app.whenReady().then(async () => {
           "production conversation and sandboxed MCP App",
           "edited data returned to waiting tool",
           "same iframe across expand/collapse",
+          "paper/night theme follows MCP host context without losing edits",
+          "reading appearance survives renderer restart without reopening Apps",
           "duplicate action disabled",
           "confirmation status and button acknowledge delivery",
           "read-only result and partial failure are not pending confirmations",
@@ -508,6 +577,9 @@ app.whenReady().then(async () => {
           "conversation links open native browser without authorization",
           "real result and attached material preview",
           "bounded auto-growing composer and Escape-to-close assistant settings",
+          "task output shortcuts preserve drafts and reuse the same App",
+          "task output files open real project content",
+          "new task releases previous outputs and suggestions preserve existing input",
           "draft reopened",
           "App resources released",
           "900px viewport",
