@@ -1,5 +1,7 @@
 import { ConversationSurface, flushConversationSurface } from './ConversationSurface.jsx';
 import { WorkbenchSettings } from './WorkbenchSettings.jsx';
+import { ProjectsDialog, MoveSessionDialog, SessionActions, RenameSessionDialog } from './WorkspaceNavigation.jsx';
+
 import { EmbeddedPane } from './EmbeddedPane.jsx';
 import { ProjectMaterialPicker } from './ProjectMaterialPicker.jsx';
 import { AgentConnectionsDialog } from './AgentConnectionsDialog.jsx';
@@ -21,7 +23,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { FolderOpen, Plus, ArrowUp, ArrowDown, Square, Files, X, ChevronRight, ChevronLeft, FileText, Folder, RotateCcw, LoaderCircle, Check, ShieldCheck, MessageSquare, BookOpen, Laptop, Pencil, Search, Settings2, Paperclip, Globe, Clock, ArrowUpRight, MoreHorizontal, PanelLeft, Table2, AtSign, ChevronDown, ArrowRight, PanelsTopLeft, Sparkles, Sun, Moon } from "lucide-react";
+import { FolderOpen, Plus, ArrowUp, ArrowDown, Square, Files, X, ChevronRight, ChevronLeft, FileText, Folder, RotateCcw, LoaderCircle, Check, ShieldCheck, MessageSquare, BookOpen, Laptop, Pencil, Search, Settings2, Paperclip, Globe, Clock, ArrowUpRight, MoreHorizontal, PanelLeft, Table2, AtSign, ChevronDown, ArrowRight, PanelsTopLeft, Sparkles, Sun, Moon, Archive, ArchiveRestore, Pin } from "lucide-react";
 import "./style.css";
 import "./scaffold.css";
 import "./skill-os.css";
@@ -31,6 +33,7 @@ import { SyncDialog, syncLabels } from "./SyncDialog.jsx";
 import { WeChatImportDialog } from './WeChatImportDialog.jsx';
 import './wechat-import.css';
 import './workbench.css';
+import './workspace-navigation.css';
 
 const command = (method, args = {}) => invoke("local_command", { method, args });
 const labels = { idle: "可以继续", starting: "正在连接 Agent", running: "正在处理", waiting: "需要你的回应", stopping: "正在停止", interrupted: "可以恢复", failed: "需要处理" };
@@ -138,6 +141,11 @@ function App() {
   const [workspace, setWorkspace] = useState({ projects: [], sessions: [], agents: [] });
   const [booting, setBooting] = useState(true);
   const [projectId, setProjectId] = useState(null), [sessionId, setSessionId] = useState(null), [session, setSession] = useState(null);
+  const [collectionId, setCollectionId] = useState(null);
+  const [sessionView, setSessionView] = useState('recent'), [allProjectSessions, setAllProjectSessions] = useState(false);
+  const [projectsOpen, setProjectsOpen] = useState(false), [movingSession, setMovingSession] = useState(null), [sessionMenu, setSessionMenu] = useState(null);
+  const [managementBusy, setManagementBusy] = useState(false), [managementNotice, setManagementNotice] = useState(null);
+  const projectManagerTrigger = useRef(null), searchInput = useRef(null);
   const [sessionSearch, setSessionSearch] = useState("");
   const [indexLoading, setIndexLoading] = useState(false), [indexError, setIndexError] = useState("");
   const indexQuery = useRef({}), indexVersion = useRef(0), indexTimer = useRef(null);
@@ -160,7 +168,7 @@ function App() {
   const [agentId, setAgentId] = useState("codex");
   const [schedulesOpen, setSchedulesOpen] = useState(false);
   const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
-  const overlayOpen = settingsOpen || agentConnectionsOpen || connectionsOpen || capabilitiesOpen || schedulesOpen || Boolean(captureOpen) || workOpen || syncOpen || cloudOpen || wechatOpen || referencePicker || view !== 'workbench';
+  const overlayOpen = Boolean(editingSessionId) || projectsOpen || Boolean(movingSession) || Boolean(sessionMenu) || settingsOpen || agentConnectionsOpen || connectionsOpen || capabilitiesOpen || schedulesOpen || Boolean(captureOpen) || workOpen || syncOpen || cloudOpen || wechatOpen || referencePicker || view !== 'workbench';
   useEffect(()=>{if(embeddedOpen)invoke('embedded_suspend',{suspended:overlayOpen}).catch(e=>setError(e.message));},[overlayOpen,embeddedOpen]);
   const [agentPreference, setAgentPreference] = useState(null), [preferenceSaving, setPreferenceSaving] = useState(false);
   const manualAgentVersion = useRef(0);
@@ -183,8 +191,9 @@ function App() {
     return()=>{live=false;clearTimeout(timer);sub.then(off=>off());};
   },[sessionId,agentId]);
   const project = workspace.projects.find((p) => p.id === projectId);
-  const projectSessions = workspace.sessions.filter((s) => s.project_id === projectId);
-  const filteredSessions = projectSessions;
+  const collectionProject = workspace.projects.find(p => p.id === collectionId) || project;
+  const filteredSessions = workspace.sessions;
+  const isArchived = Boolean(session?.archived_at);
   const sessionPage = workspace.sessionPage || {};
   const visibleMessages = historyPage?.messages || session?.messages || [];
   const historyNavigation = historyPage?.page || session?.messagePage;
@@ -262,10 +271,14 @@ function App() {
   }
   function searchSessions(value) {
     setSessionSearch(value); clearTimeout(indexTimer.current);
-    const query = { projectId: indexQuery.current.projectId, search: value };
+    const query = { ...indexQuery.current, search: value, before: undefined, after: undefined };
     // Invalidate older reads immediately, including queued streaming refreshes.
     indexQuery.current = query; ++indexVersion.current; setIndexLoading(true);
     indexTimer.current = setTimeout(() => loadSessionIndex(query), 180);
+  }
+  function filterSessions(archived, allProjects = allProjectSessions) {
+    setSessionView(archived ? 'archived' : 'recent'); setAllProjectSessions(allProjects);
+    loadSessionIndex({ projectId: collectionId, search: sessionSearch, archived, allProjects });
   }
   async function initialize() {
     setBooting(true); setError("");
@@ -277,7 +290,7 @@ function App() {
         if (saved.sessionId) {
           try { previous = await command('session.locate', { sessionId: saved.sessionId }); } catch {}
         }
-        await selectProject(saved.projectId, previous?.projectId === saved.projectId ? previous.id : null);
+        await selectProject(previous?.projectId || saved.projectId, previous?.id || null);
       }
     } catch (e) { setError(String(e)); setReady(false); }
     finally { setBooting(false); }
@@ -302,7 +315,7 @@ function App() {
     initialize();
     return () => { mounted = false; dispose?.(); clearTimeout(refreshTimer.current); clearTimeout(indexTimer.current); };
   }, []);
-  useEffect(() => { if (projectId) localStorage.setItem("turnsu.lastSelection", JSON.stringify({ projectId, sessionId })); }, [projectId, sessionId]);
+  useEffect(() => { if (collectionId) localStorage.setItem("turnsu.lastSelection", JSON.stringify({ projectId: collectionId, sessionId })); }, [collectionId, sessionId]);
   useEffect(() => {
     if (!session) return;
     const last = session.messages?.at(-1);
@@ -324,20 +337,25 @@ function App() {
     return () => { current = false; };
   }, [project?.sharing?.syncedAt, projectId, filePanel, preview?.path]);
 
-  async function selectProject(id, nextSession = null) {
+  async function selectProject(id, nextSession = null, { keepSearch = false, surfaceSaved = false } = {}) {
     if (sending || creatingSession) return;
     clearTimeout(draftTimer.current); setDraftLoading(true); setDraftLoadFailed(false);
     try {
-      await flushConversationSurface();
+      if (!surfaceSaved) await flushConversationSurface();
       setNavigationStage('saving');
       if(embeddedOpen){await invoke('embedded_hide');setEmbeddedOpen(false);}
-      await navigation.current.select(id, nextSession, {
-        start() {
+      const navigated = await navigation.current.select(id, nextSession, {
+        locate: sessionId => command('session.locate', { sessionId }),
+        start(location) {
+          id = location.workingProjectId || location.projectId;
+          const nextCollection = location.projectId;
+          setCollectionId(nextCollection); setSessionMenu(null);
           ++historyVersion.current; setHistoryPage(null); setHistoryLoading(false);
           setNavigationStage("reading"); setEditingSessionId(null);
-          if (indexQuery.current.projectId !== id) {
-            setSessionSearch(""); setWorkspace(w => ({ ...w, sessions: [], sessionPage: {} }));
-            loadSessionIndex({ projectId: id });
+          if (!keepSearch || Boolean(indexQuery.current.archived) !== Boolean(location.archived)) {
+            setSessionSearch(""); setSessionView(location.archived ? 'archived' : 'recent'); setAllProjectSessions(false);
+            setWorkspace(w => ({ ...w, sessions: [], sessionPage: {} }));
+            loadSessionIndex({ projectId: nextCollection, archived: Boolean(location.archived) });
           }
           ++draftVersion.current; ++fileVersion.current; ++modelRequest.current; setModelsLoading(false); setFileList(null); setPreview(null); setImportNotice(''); setFileError(''); setModel(""); setModels(null); setAgentId(indexQuery.current.projectId === id ? workspace.agentPreference?.agentId || 'codex' : workspace.agents.find(agent => agent.installed)?.id || 'codex'); setAgentPreference(null); setConnectionId("");
           setOutputsOpen(false); setView('workbench'); setWorkOpen(false); setSyncOpen(false); setWechatOpen(false); setProjectId(id); selected.current = nextSession; setSurfaceState(null);setSurfaceExpanded(false);setSessionId(nextSession); setSession(null); setError(""); setDraft(""); setReferences([]); setReferencePicker(false); setDraftStatus(""); setFilePanel(false); pendingSend.current = null; atBottom.current = true; lastMessageSignature.current = null; setAwayFromBottom(false); setHasNewContent(false);
@@ -347,21 +365,61 @@ function App() {
           if (value) { setSession(value); pendingSend.current = value.pendingInput || null; setModel(value.model || ""); setAgentId(value.agent); setConnectionId(value.connection_id || ""); }
         },
       });
+      if (!navigated) return false;
       if (!nextSession && navigation.current.current?.projectId === id && !selected.current) {
         const choiceVersion = manualAgentVersion.current;
         const preference = await command('agent.preference.read', { projectId: id });
         if (navigation.current.current?.projectId === id && !selected.current) { setAgentPreference(preference); if (choiceVersion === manualAgentVersion.current) setAgentId(preference.agentId); }
       }
+      return true;
     } catch (e) {
       const loaded = Boolean(navigation.current.current?.loaded);
       setNavigationStage(null);
       setError(loaded ? `草稿未能保存，已保留当前输入。请重试切换任务。${String(e)}` : String(e));
       setDraftLoading(!loaded); setDraftLoadFailed(!loaded);
+      return false;
     }
   }
   async function openProject() {
-    try { const p = await invoke("open_project"); if (p) { await refresh(); await selectProject(p.id); } }
-    catch (e) { setError(String(e)); }
+    try { const p = await invoke("open_project"); if (p) { await refresh(); return await selectProject(p.id); } return false; }
+    catch (e) { setError(String(e)); return false; }
+  }
+  function closeSessionMenu({ restoreFocus = true } = {}) {
+    const anchor = sessionMenu?.anchor;
+    setSessionMenu(null);
+    if (restoreFocus) requestAnimationFrame(() => (anchor?.isConnected ? anchor : searchInput.current)?.focus());
+  }
+  async function manageProject(method, args) { await command(method, args); await refresh(false).catch(e => setError(`项目已更新，列表暂时未刷新：${e.message}`)); }
+  async function manageSession(method, item, args = {}) {
+    if (managementBusy) return;
+    setManagementBusy(true); setError('');
+    try {
+      if (selected.current === item.id) { clearTimeout(draftTimer.current); await flushConversationSurface(); await navigation.current.save(); }
+      const value = await command(method, { sessionId: item.id, ...args });
+      setSession(current => current?.id === value.id ? value : current);
+      await refresh(false).catch(e => setIndexError(`操作已保存，列表暂时未刷新：${e.message}`));
+      return value;
+    } finally { setManagementBusy(false); }
+  }
+  async function archiveSession(item, archived) {
+    try {
+      const value = await manageSession('session.archive', item, { archived });
+      if (!value) return;
+      // manageSession saved both drafts before changing archive state. That state
+      // unmounts the App; do not ask its now-closed bridge to save a second time.
+      if (archived && selected.current === item.id) await selectProject(value.collection_project_id || value.project_id, null, { surfaceSaved: true });
+      // Restoring from the list may leave another open conversation. Its App
+      // still needs the normal save-before-navigation path.
+      if (!archived) await selectProject(value.collection_project_id || value.project_id, value.id);
+      setManagementNotice({ text: archived ? '会话已归档，历史、成果和草稿都已保留。' : '已恢复到最近会话。', ...(archived ? { undo: () => archiveSession(value, false) } : {}) });
+    } catch (e) { setError(e.message); }
+  }
+  async function moveSession(targetId) {
+    const value = await manageSession('session.move', movingSession, { projectId: targetId });
+    if (!value) return;
+    setMovingSession(null);
+    await selectProject(targetId, value.id);
+    setManagementNotice({ text: '会话已移入所选项目，继续使用原工作文件夹。' });
   }
   async function saveAgentPreference(scope) {
     if (!projectId || sessionId || preferenceSaving) return;
@@ -401,7 +459,7 @@ function App() {
     finally { setPreviewRefChecking(false); }
   }
   async function send(continueOffline = false) {
-    if (!draft.trim() || draftLoading || modelsLoading || sending || (active(session?.status) && !answering)) return;
+    if (isArchived || !draft.trim() || draftLoading || modelsLoading || sending || (active(session?.status) && !answering)) return;
     if (remoteAgent && (!allowExternal || !chosenAgentConnectionId)) { setError("请选择 Agent 账号，并确认本次提示词与材料外发。"); return; }
     if (!remoteAgent && chosenConnectionId && !model) { setError("请先读取此连接的模型目录并选择模型。"); return; }
     ++historyVersion.current; setHistoryPage(null); setHistoryLoading(false); atBottom.current = true;
@@ -482,7 +540,7 @@ function App() {
   function finishRename() {
     const id = editingSessionId;
     setEditingSessionId(null); setEditedTitle("");
-    requestAnimationFrame(() => renameButtons.current.get(id)?.focus());
+    requestAnimationFrame(() => (renameButtons.current.get(id) || searchInput.current)?.focus());
   }
   async function listFiles(path = "") {
     const version = ++fileVersion.current; setFileLoading(true); setPreview(null); setFileList(null); setFileError(""); setFolder(path);
@@ -551,34 +609,39 @@ function App() {
   // A new presentation can move to another reply. Moving an existing iframe
   // destroys its browser context, so re-establish AppBridge for that presentation.
   // Expanding, collapsing, and updates at the same reply keep the App context.
-  const inlineSurface = activeSurface && <ConversationSurface key={'surface-'+sessionId+'-'+activeSurface.anchor} sessionId={sessionId} title={surfaceState.document.title} expanded={surfaceExpanded} onExpand={expandSurface} theme={theme}/>;
+  const inlineSurface = activeSurface && !isArchived && <ConversationSurface key={'surface-'+sessionId+'-'+activeSurface.anchor} sessionId={sessionId} title={surfaceState.document.title} expanded={surfaceExpanded} onExpand={expandSurface} theme={theme}/>;
 
   return <div className={`app ${surfaceExpanded ? 'hasExpandedSurface' : ''} ${sidebarOpen ? '' : 'sidebarCollapsed'}`}>
     {computerState?.grant && <div className="computerIndicator" role="status"><strong>{computerState.grant.mode === "local" ? "本机电脑操作已授权" : "隔离电脑已启用"}</strong><span>到期 {new Date(computerState.grant.expiresAt).toLocaleTimeString()}</span><button onClick={() => command("computer.stop").then(() => setComputerState(null)).catch(e => setError(e.message))}>暂停并撤销</button></div>}
     <aside className="sidebar" aria-label="工作导航" id="work-navigation" hidden={!sidebarOpen}>
       <div className="brandRow"><img className="brand" src={theme === "dark" ? "./brand/turnsu-lockup-light.svg" : "./brand/turnsu-lockup.svg"} alt="Turnsu" /><span>AI 工作台</span></div>
-      <Button variant="primary" className="newTask" disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { if (projectId) selectProject(projectId); else openProject(); }}><Plus size={17}/><span>新工作</span><Pencil size={14}/></Button>
+      <Button variant="primary" className="newTask" disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { if (collectionId) selectProject(collectionId); else openProject(); }}><Plus size={17}/><span>新工作</span><Pencil size={14}/></Button>
       <div className="railPrimary"><button aria-current={view === 'workbench' ? 'page' : undefined} onClick={() => setView('workbench')}><MessageSquare size={17}/>对话</button><button aria-current={view === 'skills' ? 'page' : undefined} onClick={async() => {try{await flushConversationSurface();setView('skills');}catch(e){setError(e.message);}}}><BookOpen size={17}/>常用方法</button></div>
-      <details className="projectSwitcher"><summary><Folder size={16}/><span>{project?.sharing?.title || project?.name || '选择工作文件夹'}</span><ChevronDown size={14}/></summary><div className="projectChoices"><span>工作文件夹</span>{workspace.projects.map(p=><button key={p.id} className={`projectButton ${projectId === p.id ? 'selected' : ''}`} disabled={sending || creatingSession || Boolean(navigationStage)} onClick={event=>{event.currentTarget.closest('details').open=false;selectProject(p.id);}}><Folder size={15}/><span>{p.sharing?.title || p.name}</span>{projectId===p.id&&<Check size={14}/>}</button>)}<button className="openProject" disabled={sending || creatingSession} onClick={event=>{event.currentTarget.closest('details').open=false;openProject();}}><Plus size={15}/>打开工作文件夹</button></div></details>
+      <details className="projectSwitcher"><summary><Folder size={16}/><span>{collectionProject?.sharing?.title || collectionProject?.name || '选择工作文件夹'}</span><ChevronDown size={14}/></summary><div className="projectChoices"><span>工作文件夹</span>{workspace.projects.map(p=><button key={p.id} className={`projectButton ${collectionId === p.id ? 'selected' : ''}`} disabled={sending || creatingSession || Boolean(navigationStage)} onClick={event=>{event.currentTarget.closest('details').open=false;selectProject(p.id);}}><Folder size={15}/><span>{p.sharing?.title || p.name}</span>{p.pinned_at>0&&<Pin size={12}/>} {collectionId===p.id&&<Check size={14}/>}</button>)}<button className="openProject" disabled={sending || creatingSession} onClick={event=>{event.currentTarget.closest('details').open=false;openProject();}}><Plus size={15}/>打开工作文件夹</button><button ref={projectManagerTrigger} onClick={event=>{event.currentTarget.closest('details').open=false;setProjectsOpen(true);}}><Settings2 size={15}/>管理项目</button></div></details>
       <nav aria-label="项目与任务">{!ready && <p className="railEmpty" role="status">{booting ? "正在读取本机项目…" : "本地项目暂不可用"}</p>}
-        {project && <>
-          {<label className="sessionSearch"><Search size={14}/><input aria-label="查找当前项目会话" placeholder="搜索对话" value={sessionSearch} maxLength={200} onChange={e => searchSessions(e.target.value)}/>{sessionSearch && <button aria-label="清除会话搜索" onClick={() => searchSessions("")}><X size={13}/></button>}</label>}
-          <div className="sessionListHeading">{sessionSearch ? "搜索结果" : "最近工作"} <span>{indexLoading ? "读取中…" : sessionPage.total || 0}</span></div>
+        {collectionProject && <>
+          <div className="sessionFilters" role="group" aria-label="会话范围"><button aria-pressed={sessionView === 'recent'} onClick={() => filterSessions(false)}>最近会话</button><button aria-pressed={sessionView === 'archived'} onClick={() => filterSessions(true)}><Archive size={13}/>已归档</button></div>
+          {<label className="sessionSearch"><Search size={14}/><input ref={searchInput} aria-label={allProjectSessions ? "查找所有项目会话" : "查找当前项目会话"} placeholder={sessionView === 'archived' ? "搜索已归档会话" : "搜索对话"} value={sessionSearch} maxLength={200} onChange={e => searchSessions(e.target.value)}/>{sessionSearch && <button aria-label="清除会话搜索" onClick={() => searchSessions("")}><X size={13}/></button>}</label>}
+          <div className="sessionListHeading"><span>{indexLoading ? "读取中…" : `${sessionPage.total || 0} 段会话`}</span><div className="sessionSearchScope"><button aria-pressed={allProjectSessions} title={allProjectSessions ? '当前显示所有项目的会话' : '当前只显示本项目的会话'} onClick={() => filterSessions(sessionView === 'archived', !allProjectSessions)}>{allProjectSessions ? '仅看本项目' : '查找所有项目'}</button></div></div>
           {indexError && <p className="railEmpty" role="alert">会话列表读取失败。<button onClick={() => loadSessionIndex(indexQuery.current)}>重试</button></p>}
           <div aria-busy={indexLoading} className={indexLoading ? "sessionIndex loading" : "sessionIndex"}>
-          {filteredSessions.map((s) => editingSessionId === s.id ? <form className="sessionRename" key={s.id} onSubmit={renameSession} onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); finishRename(); } }}><input autoFocus aria-label="会话名称" maxLength={80} required value={editedTitle} disabled={renameSaving} onChange={e => setEditedTitle(e.target.value)}/><button aria-label="保存会话名称" disabled={renameSaving || !editedTitle.trim()} type="submit"><Check size={14}/></button><button aria-label="取消重命名" disabled={renameSaving} type="button" onClick={finishRename}><X size={14}/></button></form> : <div className={`sessionRow ${sessionId === s.id ? "current" : ""}`} key={s.id}><button className="sessionButton" aria-current={sessionId === s.id ? 'page' : undefined} aria-label={`${s.title}，${agentName(s.agent)}${sessionState(s.status) ? `，${sessionState(s.status)}` : ""}`} title={`${s.title} · ${agentName(s.agent)} · ${new Date(s.updated_at).toLocaleString()}`} disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { if (sessionId !== s.id || view !== 'workbench' || draftLoadFailed) selectProject(projectId, s.id); }}><span className={`statusDot ${active(s.status) ? "live" : ""} ${['waiting', 'failed', 'interrupted'].includes(s.status) ? "attention" : ""}`} /><span className="sessionSummary"><span className="sessionTitle">{s.title}</span><span className="sessionMeta"><span>{agentName(s.agent)}</span><span className={['waiting', 'failed', 'interrupted'].includes(s.status) ? 'needsAttention' : undefined}>{sessionState(s.status) || new Date(s.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span></span></span></button><button ref={element => { if (element) renameButtons.current.set(s.id, element); else renameButtons.current.delete(s.id); }} className="renameTrigger" aria-label={`重命名会话：${s.title}`} title="重命名" disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { setEditingSessionId(s.id); setEditedTitle(s.title); }}><Pencil size={13}/></button></div>)}
-          {!indexLoading && sessionSearch && filteredSessions.length === 0 && <p className="railEmpty">当前项目没有匹配的会话。</p>}
+          {filteredSessions.map((s) => <div className={`sessionRow ${sessionId === s.id ? "current" : ""}`} key={s.id}><button className="sessionButton" aria-current={sessionId === s.id ? 'page' : undefined} aria-label={`${s.title}，${agentName(s.agent)}${sessionState(s.status) ? `，${sessionState(s.status)}` : ""}`} title={`${s.title} · ${agentName(s.agent)} · ${new Date(s.updated_at).toLocaleString()}`} disabled={sending || creatingSession || Boolean(navigationStage)} onClick={() => { if (sessionId !== s.id || view !== 'workbench' || draftLoadFailed) selectProject(s.collection_project_id || s.project_id, s.id, { keepSearch: true }); }}><span className={`statusDot ${active(s.status) ? "live" : ""} ${['waiting', 'failed', 'interrupted'].includes(s.status) ? "attention" : ""}`} /><span className="sessionSummary"><span className="sessionTitle">{s.pinned_at>0&&<Pin size={11} className="pinMark"/>}{s.title}</span><span className="sessionMeta"><span className="sessionProjectName">{allProjectSessions ? workspace.projects.find(p => p.id === (s.collection_project_id || s.project_id))?.name : agentName(s.agent)}</span><span className={['waiting', 'failed', 'interrupted'].includes(s.status) ? 'needsAttention' : undefined}>{sessionState(s.status) || new Date(s.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span></span></span></button><button ref={element => { if (element) renameButtons.current.set(s.id, element); else renameButtons.current.delete(s.id); }} className="sessionMenuTrigger" aria-label={`会话选项：${s.title}`} title="会话选项" aria-haspopup="menu" aria-expanded={sessionMenu?.session.id === s.id} disabled={managementBusy || sending || creatingSession || Boolean(navigationStage)} onClick={event => setSessionMenu({ session: s, anchor: event.currentTarget })}><MoreHorizontal size={16}/></button></div>)}
+          {!indexLoading && filteredSessions.length === 0 && <p className="railEmpty">{sessionSearch ? "没有匹配的会话，可调整关键词或查找所有项目。" : sessionView === "archived" ? "归档的会话会收在这里，随时可以恢复。" : "还没有会话，从一项新工作开始。"}</p>}
           </div>
           {(sessionPage.older || sessionPage.newer || indexQuery.current.before || indexQuery.current.after) && <nav className="sessionPagination" aria-label="会话列表分页">
-            <button disabled={indexLoading || !sessionPage.newer} onClick={() => loadSessionIndex({ projectId, search: sessionSearch, after: sessionPage.newer })}><ChevronLeft size={14}/>较新</button>
-            <button disabled={indexLoading} onClick={() => loadSessionIndex({ projectId, search: sessionSearch })}>回到最近</button>
-            <button disabled={indexLoading || !sessionPage.older} onClick={() => loadSessionIndex({ projectId, search: sessionSearch, before: sessionPage.older })}>更早<ChevronRight size={14}/></button>
+            <button disabled={indexLoading || !sessionPage.newer} onClick={() => loadSessionIndex({ ...indexQuery.current, before: undefined, after: sessionPage.newer })}><ChevronLeft size={14}/>较新</button>
+            <button disabled={indexLoading} onClick={() => loadSessionIndex({ ...indexQuery.current, before: undefined, after: undefined })}>回到最近</button>
+            <button disabled={indexLoading || !sessionPage.older} onClick={() => loadSessionIndex({ ...indexQuery.current, after: undefined, before: sessionPage.older })}>更早<ChevronRight size={14}/></button>
           </nav>}
         </>}
       </nav>
       {!workspace.projects.length && ready && <p className="railEmpty">打开一个文件夹，<br />从已有资料开始工作。</p>}
       <div className="railBottom"><button onClick={() => setSchedulesOpen(true)}><Clock size={17}/>定时任务</button><button ref={settingsButton} onClick={()=>setSettingsOpen(true)}><Settings2 size={17}/>设置</button><div className="themeSwitch" role="group" aria-label="阅读外观"><button aria-pressed={theme === "light"} onClick={()=>setTheme("light")}><Sun size={15}/>纸白</button><button aria-pressed={theme === "dark"} onClick={()=>setTheme("dark")}><Moon size={15}/>夜读</button></div><div className="localLabel"><span className="localAvatar"><Laptop size={17}/></span><span><strong>本机工作空间</strong><small>项目与会话保存在这台电脑</small></span></div></div>
     </aside>
+    {sessionMenu && <SessionActions {...sessionMenu} busy={managementBusy} onClose={closeSessionMenu} onRename={() => { setError(''); setEditingSessionId(sessionMenu.session.id); setEditedTitle(sessionMenu.session.title); }} onPin={() => manageSession('session.pin', sessionMenu.session, { pinned: !sessionMenu.session.pinned_at }).catch(e => setError(e.message))} onMove={() => setMovingSession(sessionMenu.session)} onArchive={() => archiveSession(sessionMenu.session, !sessionMenu.session.archived_at)}/>}
+    {editingSessionId && <RenameSessionDialog value={editedTitle} busy={renameSaving} error={error} onChange={setEditedTitle} onSubmit={renameSession} onClose={finishRename}/>}
+    {projectsOpen && <ProjectsDialog projects={workspace.projects} currentId={collectionId} onClose={() => { setProjectsOpen(false); projectManagerTrigger.current?.closest('details')?.querySelector('summary')?.focus(); }} onAction={manageProject} onOpen={async id => { if (await selectProject(id)) setProjectsOpen(false); }} onOpenFolder={async () => { if (await openProject()) setProjectsOpen(false); }}/>}
+    {movingSession && <MoveSessionDialog session={movingSession} projects={workspace.projects} onClose={() => { const id=movingSession.id;setMovingSession(null);requestAnimationFrame(()=>renameButtons.current.get(id)?.focus()); }} onMove={moveSession}/>}
     {settingsOpen&&<WorkbenchSettings onClose={()=>{setSettingsOpen(false);settingsButton.current?.focus();}} onAgents={()=>{setSettingsOpen(false);setAgentConnectionsOpen(true);}} onModels={e=>{setSettingsOpen(false);openConnections(e);}} onCapabilities={()=>{setSettingsOpen(false);setCapabilitiesOpen(true);}} onTeam={()=>{setSettingsOpen(false);setCloudOpen(true);}}/>}
     {agentConnectionsOpen && <AgentConnectionsDialog agents={workspace.agents} onClose={() => { setAgentConnectionsOpen(false); agentButton.current?.focus(); }} onChanged={async () => { await readAgentConnections(); await refresh(); }} onTrial={project ? tryAgent : null} onHosted={() => { setAgentConnectionsOpen(false); setCloudOpen(true); }}/> }
     {connectionsOpen && <ModelConnectionsDialog onClose={closeConnections} onChanged={readConnections}/>}
@@ -590,12 +653,14 @@ function App() {
     {cloudOpen && <CloudDialog localProject={project} onClose={() => setCloudOpen(false)} onJoin={async p => { await refresh(); await selectProject(p.id, p.id === projectId ? sessionId : null); }}/>}
     {wechatOpen && project && <WeChatImportDialog projectId={projectId} team={Boolean(session?.sharedWork)} selected={references} onReference={selection => { addReference(selection); setWechatOpen(false); }} onClose={() => setWechatOpen(false)}/>}
     {view === 'skills' ? <main className="skillMain"><SkillOSPanel project={project} agents={workspace.agents} workSession={session?.sharedWork?.workItemId ? { id: session.sharedWork.workItemId, title: session.title } : null} onOpen={async s => { await refresh(); await selectProject(s.project_id, s.id); }} onReturn={() => setView('workbench')}/></main> : <main>
-      <header><div className="workspaceHeading"><button className="sidebarToggle" aria-label={sidebarOpen ? "收起导航" : "展开导航"} aria-expanded={sidebarOpen} aria-controls="work-navigation" onClick={()=>setSidebarOpen(open=>!open)}><PanelLeft size={18}/></button><div className="taskIdentity">{project ? <><span className="breadcrumb">{project.sharing?.title || project.name}</span>{session ? <button className="taskTitle" aria-label="重命名当前会话" title={session.title + " · 点击重命名"} onClick={()=>{setSidebarOpen(true);setEditingSessionId(session.id);setEditedTitle(session.title);}}>{session.title}<ChevronDown size={13}/></button> : <strong>{sessionId ? workspace.sessions.find(s => s.id === sessionId)?.title || '正在打开会话' : '新工作'}</strong>}</> : <strong>我的工作台</strong>}</div></div>
+      <header><div className="workspaceHeading"><button className="sidebarToggle" aria-label={sidebarOpen ? "收起导航" : "展开导航"} aria-expanded={sidebarOpen} aria-controls="work-navigation" onClick={()=>setSidebarOpen(open=>!open)}><PanelLeft size={18}/></button><div className="taskIdentity">{project ? <><span className="breadcrumb">{collectionProject?.sharing?.title || collectionProject?.name || project.name}{isArchived ? " · 已归档" : ""}</span>{session ? <button className="taskTitle" aria-label="重命名当前会话" title={session.title + " · 点击重命名"} onClick={()=>{setError('');setEditingSessionId(session.id);setEditedTitle(session.title);}}>{session.title}<ChevronDown size={13}/></button> : <strong>{sessionId ? workspace.sessions.find(s => s.id === sessionId)?.title || '正在打开会话' : '新工作'}</strong>}</> : <strong>我的工作台</strong>}</div></div>
 
         {project?.sharing && <button ref={workButton} onClick={() => setWorkOpen(true)}>团队工作</button>}
         {project?.sharing && <button ref={syncButton} className={`syncBadge ${project.sharing.status}`} onClick={() => setSyncOpen(true)}>{syncLabels[project.sharing.status]}</button>}
         <div className="headerActions">{sessionId&&<button className="outputsTrigger" ref={outputsButton} aria-label="查看本次成果" aria-pressed={outputsOpen} onClick={()=>toggleOutputs().catch(e=>setError(e.message))}><PanelsTopLeft size={16}/>成果{resultCount>0&&<span>{resultCount}</span>}</button>}{project&&<button aria-pressed={filePanel} onClick={()=>{setOutputsOpen(false);setSurfaceExpanded(false);setEmbeddedOpen(false);invoke('embedded_hide').catch(e=>setError(e.message));setFilePanel(!filePanel);if(!filePanel)listFiles();}}><Files size={16}/>文件</button>}{project&&!remoteAgent&&<button aria-pressed={embeddedOpen} onClick={()=>embeddedOpen?invoke('embedded_hide').then(()=>setEmbeddedOpen(false)).catch(e=>setError(e.message)):showBrowser()}><Globe size={16}/>浏览器</button>}{project&&<details className="workMenu"><summary aria-label="更多工作选项"><MoreHorizontal size={19}/></summary><div><button onClick={()=>setWechatOpen(true)}>导入微信资料</button><button onClick={()=>setCapabilitiesOpen(true)}>文件与电脑操作</button></div></details>}</div>
       </header>
+      {managementNotice && <div className="managementNotice" role="status"><span>{managementNotice.text}</span>{managementNotice.undo && <button disabled={managementBusy} onClick={managementNotice.undo}>撤销归档</button>}<button aria-label="关闭管理提示" onClick={() => setManagementNotice(null)}><X size={14}/></button></div>}
+      {session?.collection_project_id && <div className="workingDirectoryNotice"><Folder size={14}/><span title={project?.path}>工作文件夹仍为 {project?.name} · {project?.path}</span><button onClick={()=>{setFilePanel(true);setOutputsOpen(false);listFiles();}}>查看文件</button></div>}
       <div className="workArea"><section className={`conversation ${project && ready && !navigationStage && !draftLoadFailed && !visibleMessages.length ? "isEmpty" : ""}`}>
         {error && <div className="error" role="alert"><span>{error}</span><button aria-label="关闭提示" onClick={() => setError("")}><X size={15} /></button></div>}
         {booting ? <div className="workbenchLoading" role="status"><LoaderCircle className="spin" size={22}/><strong>正在恢复本机工作台</strong><span>读取项目、上次会话与草稿…</span></div> : !ready ? <div className="workbenchLoading" role="alert"><strong>暂时无法读取本机工作台</strong><span>项目和会话仍保存在这台电脑。</span><button onClick={initialize}>重新读取</button></div> : !project ? <div className="welcome"><img src="./brand/turnsu-symbol.svg" alt="" /><h1>把手边的工作，交给助手</h1><p>整理资料、处理表格、准备文档。<br />从一个工作文件夹开始。</p><button className="primary" onClick={openProject}><FolderOpen size={18} />打开本地项目</button><small>文件保留在原来的位置</small></div> : <>
@@ -604,7 +669,7 @@ function App() {
             {navigationStage ? <div className="workbenchLoading" role="status"><LoaderCircle className="spin" size={20}/><strong>{navigationStage === "saving" ? "正在保存当前草稿" : "正在打开会话"}</strong><span>{navigationStage === "saving" ? "保存完成后继续切换" : "读取会话、引用资料与草稿…"}</span></div> : draftLoadFailed ? <div className="workbenchLoading" role="status"><strong>这段会话暂时打不开</strong><span>草稿仍保存在本机。可以重试读取。</span><button onClick={() => selectProject(projectId, sessionId)}>重新读取</button></div> : !visibleMessages.length ? <div className="taskWelcome"><img src="./brand/turnsu-symbol.svg" alt=""/><h1>今天，一起完成什么？</h1><p>把文件和想法带进来，让助手帮你推进工作。</p>{session && active(session.status) && <div className="activity"><LoaderCircle className="spin" size={14}/>{labels[session.status]}</div>}</div> : <div className="messageColumn">{visibleMessages.flatMap((m, index) => [<article key={m.id} className={`message ${m.role}`} data-slot="message" data-align={m.role === "user" ? "end" : "start"}>
               {m.role === "assistant" && (index === 0 || visibleMessages[index - 1].role !== "assistant") && <div className="messageAuthor"><span className="assistantAvatar"><img src="./brand/turnsu-symbol.svg" alt=""/></span><span>{agentName(session.agent)}</span><span className="authorRule"/></div>}
               {m.role === "tool" ? <details><summary>{m.kind === "file" ? <FileText size={14} /> : <ChevronRight size={14} />}<span>{m.kind === "file" ? "文件变更" : "执行操作"}</span></summary><pre>{m.text}</pre></details> : m.role === "user" ? <><p>{m.text}</p>{m.references?.map(file => <SentFileReference key={referenceKey(file)} sessionId={sessionId} inputId={m.id} file={file}/>)}</> : <Markdown onOpenLink={showBrowser}>{m.text}</Markdown>}
-              {m.id === visibleMessages.at(-1)?.id && m.role === "assistant" && m.kind === "text" && session.status === "idle" && session.lastSubmission?.status === "completed" && !session.capture && !session.loopCapture && !session.localLoopTrial && <><button className="captureAction" onClick={e => { captureTrigger.current = e.currentTarget; setCaptureOpen({ session, message: m }); }}>保存为常用方法</button><button className="captureAction" onClick={e => { captureTrigger.current = e.currentTarget; setCaptureOpen({ session, message: m, kind: 'loop' }); }}>保存为工作流程</button></>}
+              {m.id === visibleMessages.at(-1)?.id && m.role === "assistant" && m.kind === "text" && !isArchived && session.status === "idle" && session.lastSubmission?.status === "completed" && !session.capture && !session.loopCapture && !session.localLoopTrial && <><button className="captureAction" onClick={e => { captureTrigger.current = e.currentTarget; setCaptureOpen({ session, message: m }); }}>保存为常用方法</button><button className="captureAction" onClick={e => { captureTrigger.current = e.currentTarget; setCaptureOpen({ session, message: m, kind: 'loop' }); }}>保存为工作流程</button></>}
             </article>, ...(m.id === surfaceAnchor ? [inlineSurface] : [])])}{!historyPage&&surfaceState?.sessionId===sessionId&&surfaceState?.results?.length>0&&<section className="conversationResults" aria-label="工作成果"><div className="resultsHeading"><span><Check size={15}/>这项工作的已保存成果</span><button onClick={()=>toggleOutputs().catch(e=>setError(e.message))}>查看本次成果<ArrowRight size={14}/></button></div>{surfaceState.results.map(result=><div key={result.id}><ResultTime result={result}/>{result.summary&&<p>{result.summary}</p>}<div className="resultFiles">{result.files.map(file=><ResultFile key={file.path} file={file} onOpen={showResult}/>)}</div></div>)}</section>}{session.interactions?.map((item) => <Interaction key={item.id} item={item} sessionId={sessionId} report={setError} />)}
             {active(session.status) && <div className="activity"><LoaderCircle className="spin" size={14} />{labels[session.status]}</div>}
             {session.error && <div className="inlineError">{session.error}</div>}
@@ -612,6 +677,7 @@ function App() {
           </div>
           {!navigationStage && !historyPage && !draftLoadFailed && awayFromBottom && <button className="latestJump" onClick={goToLatest}><ArrowDown size={14}/>{hasNewContent ? "有新内容 · 回到底部" : "回到底部"}</button>}
           <div className="composerArea">
+            {isArchived ? <div className="archiveNotice"><Archive size={20}/><span>这段会话已归档<small>历史、文件和草稿都保留着。恢复后可以继续工作。</small></span><button className="primary" disabled={managementBusy} onClick={() => archiveSession(session, false)}><ArchiveRestore size={15}/>恢复会话</button></div> : <>
             {session && active(session.status) && <div className={`executionStrip ${session.status}`} role="status"><span>{session.status==='waiting'?<ShieldCheck size={15}/>:<LoaderCircle size={15} className="spin"/>}{labels[session.status]}</span><button onClick={goToLatest}>查看进展<ArrowDown size={13}/></button></div>}
             {session?.remote && <RemoteTaskPanel key={session.id} session={session} onChanged={refresh}/>}
             {session?.localLoopTrial && <div className="methodNotice"><span>本机试做 · {session.localLoopTrial.name}</span><button disabled={active(session.status)} onClick={e => { captureTrigger.current = e.currentTarget; setCaptureOpen({ session, kind: 'local-trial' }); }}>核对试做结果</button></div>}
@@ -629,13 +695,14 @@ function App() {
               </select></span>{!remoteAgent && <details className="agentOptions"><summary aria-label="助手选项" title="模型与连接设置"><span className="composerModel">{model || "模型设置"}</span><Settings2 size={15}/></summary><div className="connectionSource"><div className="assistantSettingsTitle">助手设置<span>{agentName(agentId)}</span></div>{!sessionId && agentPreference && <div className="agentPreferenceActions"><button disabled={preferenceSaving || agentPreference.project === agentId} onClick={() => saveAgentPreference('project')}>{agentPreference.project === agentId ? '本项目默认' : '设为本项目默认'}</button><button disabled={preferenceSaving || agentPreference.personal === agentId} onClick={() => saveAgentPreference('personal')}>{agentPreference.personal === agentId ? '个人默认' : '设为个人默认'}</button></div>}<label className="modelSetting">执行模型 {!remoteAgent && (models ? <select aria-label="执行模型" value={model} disabled={draftLoading || sending || active(session?.status)} onChange={(e) => chooseModel(e.target.value)}><option value="" disabled={Boolean(chosenConnectionId)}>{chosenConnectionId ? "请选择网关模型" : "沿用会话配置"}</option>{models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select> : <button className="modelChoice" disabled={draftLoading || sending || modelsLoading || active(session?.status)} onClick={loadModels}>{modelsLoading ? "读取模型…" : (model || "选择模型")}</button>)}</label><label htmlFor="connection-source">模型来源</label><select id="connection-source" value={chosenConnectionId} disabled={Boolean(sessionId && (!session || session.native_id || session.lastSubmission)) || draftLoading || sending || modelsLoading || creatingSession} onChange={e => chooseConnection(e.target.value)}><option value="">跟随原生 Agent</option>{connections.filter(c => c.agents.includes(agentId)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}{chosenConnectionId && !chosenConnection && <option value={chosenConnectionId}>连接不可用</option>}</select>{chosenConnection && <code title={chosenConnection.baseUrl}>{chosenConnection.baseUrl}</code>}<button className="manageConnections" onClick={openConnections}>管理模型连接<ArrowUpRight size={14}/></button></div></details>}<span className={chosenAgent?.installed ? "composerHint" : "composerUnavailable"}>{remoteAgent ? (chosenAgent?.installed ? "按选定材料交接" : "请先连接 Agent") : chosenAgent?.installed ? (agentId === "pi" ? "使用 Pi 本机权限" : "在此项目工作") : `请先安装 ${chosenAgent?.name || agentId} CLI`}</span>{active(session?.status) && !answering ? <button disabled={remoteAgent && chosenAgent?.stop === false} title={remoteAgent && chosenAgent?.stop === false ? "请在原生应用中停止" : undefined} className="send" aria-label="停止执行" onClick={() => control("session.stop")}><Square size={15} /></button> : <button className="send" aria-label="发送任务" disabled={!draft.trim() || sending || modelsLoading || draftLoading || !chosenAgent?.installed || session?.status === "interrupted" || (remoteAgent && (!allowExternal || !chosenAgentConnectionId))} onClick={send}>{sending ? <LoaderCircle className="spin" size={17} /> : <ArrowUp size={18} />}</button>}</div>
 
             </div>{!visibleMessages.length && !navigationStage && <div className="taskSuggestions">{[{Icon:Files,label:"整理资料",prompt:"整理这些文件，提炼重点"},{Icon:Table2,label:"分析表格",prompt:"分析表格，整理一份结论"},{Icon:FileText,label:"起草文档",prompt:"帮我起草一份工作文档"}].map(({Icon,label,prompt})=><button key={label} onClick={()=>{changeDraft(draft.trim()?draft+'\n\n'+prompt:prompt);composerInput.current?.focus();}}><Icon size={16}/>{label}<ArrowUpRight size={13}/></button>)}</div>}<div className="composerMeta"><span>{draftStatus || (remoteAgent ? "选定内容会外发 · 账号不等于工具授权" : session?.sharedWork ? "团队工作 · 工具日志和原生历史保留在本机" : project.sharing ? "文件与团队共享 · 对话仅在本机" : agentId === "pi" ? "Pi 按本机配置运行 · 扩展请求会在这里显示" : "文件保存在本机 · 执行范围由你确认")}</span><span className="keyboardHint">Enter 发送 <span>·</span> Shift + Enter 换行</span></div>
+            </>}
           </div>
         </>}
       </section>
       {outputsOpen && project && <aside className="outputsPanel" aria-label="本次成果">
         <div className="outputsHeader"><div><h2 ref={outputsHeading} tabIndex={-1}>本次成果</h2><p>这项工作产出的内容，都在这里。</p></div><button aria-label="关闭成果面板" onClick={()=>{setOutputsOpen(false);outputsButton.current?.focus();}}><X size={18}/></button></div>
         <div className="outputsBody">
-          {activeSurface && <section><h3>交互内容</h3><button className="surfaceShortcut" onClick={()=>expandSurface(true).catch(e=>setError(e.message))}><span><PanelsTopLeft size={20}/></span><span><strong>{currentSurface.document.title}</strong><small>展开查看</small></span><ArrowUpRight size={16}/></button></section>}
+          {activeSurface && !isArchived && <section><h3>交互内容</h3><button className="surfaceShortcut" onClick={()=>expandSurface(true).catch(e=>setError(e.message))}><span><PanelsTopLeft size={20}/></span><span><strong>{currentSurface.document.title}</strong><small>展开查看</small></span><ArrowUpRight size={16}/></button></section>}
           <section><h3>已保存的文件{resultCount>0&&<span>{resultCount}</span>}</h3>{currentSurface?.results?.length?currentSurface.results.map(result=><div className="outputGroup" key={result.id}><ResultTime result={result}/>{result.summary&&<p>{result.summary}</p>}<div className="resultFiles">{result.files.map(file=><ResultFile key={file.path} file={file} onOpen={showResult}/>)}</div></div>):<p className="outputEmpty">助手生成文件后，会出现在这里。你也可以在对话中继续补充要求。</p>}</section>
           {currentSurface?.assets?.length>0&&<section className="outputSources"><h3>使用的材料<span>{currentSurface.assets.length}</span></h3>{currentSurface.assets.map(file=><button key={file.path} onClick={()=>showResult(file)}><FileText size={16}/><span>{basename(file.path)}</span><ArrowUpRight size={14}/></button>)}</section>}
         </div>

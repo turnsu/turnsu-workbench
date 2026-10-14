@@ -2,6 +2,7 @@ import { UISurfaces } from './ui-surfaces.mjs';
 import { RemoteTasks } from './remote-tasks.mjs';
 import { remoteAgents, normalizeAgentConnection } from './agent-connections.mjs';
 import { sessionIndex } from './session-index.mjs';
+import { organize, organizationCommands } from './session-organization.mjs';
 import { AgentPreferences } from './agent-preferences.mjs';
 import { WeChatImports } from './wechat-imports.mjs';
 import { ModelConnections, normalizeConnection } from './model-connections.mjs';
@@ -195,7 +196,7 @@ export class LocalAgentHost {
   snapshot(args = {}) {
     if (args.projectId) this.project(args.projectId);
     const agents = [...discoverAgents(), ...this.remote.agents()];
-    return { projects: this.db.prepare("SELECT * FROM projects ORDER BY updated_at DESC").all().map(p => ({ ...p, sharing: this.shared?.snapshot(p.id) || null })),
+    return { projects: this.db.prepare("SELECT p.*,COALESCE(o.pinned_at,0) AS pinned_at,(SELECT count(*) FROM sessions s WHERE COALESCE(s.collection_project_id,s.project_id)=p.id AND s.archived_at=0) AS session_count FROM projects p LEFT JOIN project_organization o ON o.project_id=p.id ORDER BY COALESCE(o.pinned_at,0) DESC,p.updated_at DESC,p.id DESC").all().map(p => ({ ...p, sharing: this.shared?.snapshot(p.id) || null })),
       ...sessionIndex(this.db, args),
       activeSessionCount: this.db.prepare("SELECT count(*) AS count FROM sessions WHERE status IN ('starting','running','waiting','stopping')").get().count,
       agents, agentPreference: this.agentPreferences.read(args.projectId, agents) };
@@ -530,6 +531,8 @@ export class LocalAgentHost {
     return candidate;
   }
   async command(method, args = {}) {
+    if (organizationCommands.has(method)) return organize(this, method, args);
+    if (['session.send','session.resume','session.model','session.connection','ui.attach','ui.detach','ui.commit','ui.deliver','remote.action','remote.recover','managed.finish','managed.resolve'].includes(method) && this.session(args.sessionId).archived_at) throw new Error('这段会话已归档，请先恢复到最近会话后继续。');
     if (method === 'capabilities.cleanup') return this.capabilities.cleanup();
     if (method === 'capabilities.list') return this.capabilities.list(args.projectId);
     if (method === 'capabilities.install') return this.capabilities.install(args);
@@ -728,7 +731,7 @@ export class LocalAgentHost {
       case 'wechat.import': return this.wechat.import(args.projectId, args.id);
       case 'wechat.imports': return this.wechat.list(args.projectId, { before: args.before });
       case 'wechat.records': return this.wechat.records(args.projectId, args.id, args.offset || 0);
-      case "session.locate": { const s = this.session(args.sessionId); return { id: s.id, projectId: s.project_id }; }
+      case "session.locate": { const s = this.session(args.sessionId); return { id: s.id, projectId: s.collection_project_id || s.project_id, ...(s.collection_project_id ? { workingProjectId: s.project_id } : {}), ...(s.archived_at ? { archived: true } : {}) }; }
       case "connections.list": return this.modelConnections.list();
       case "connections.usage": return { sessions: this.db.prepare("SELECT count(*) AS count FROM sessions WHERE connection_id=?").get(text(args.id, 64)).count };
       case "connections.check": return { models: await this.modelConnections.models(text(args.id, 64)), verified: 'catalog-only' };

@@ -1,0 +1,83 @@
+.sessionFilters { display: flex; gap: 4px; padding: 0 3px 8px; }
+.sessionFilters button { flex: 1; min-height: 30px; color: var(--work-muted); font-size: 12px; border-radius: 6px; }
+.sessionFilters button[aria-pressed="true"] { color: var(--work-ink); background: var(--work-selected); font-weight: 500; }
+.sessionSearch { margin-bottom: 8px; }
+.sessionListHeading { align-items: center; margin-bottom: 6px; }
+.sessionSearchScope { display: flex; justify-content: flex-end; }
+.sessionSearchScope button { padding: 3px 5px; font-size: 11px; color: var(--work-muted); }
+.sessionSearchScope button[aria-pressed="true"] { color: var(--work-accent); }
+.sessionTitle .pinMark { display: inline; vertical-align: -1px; margin-right: 5px; color: var(--work-muted); }
+.sessionMeta .sessionProjectName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; }
+.sessionRow .sessionMenuTrigger { opacity: 0; color: var(--work-muted); padding: 6px; margin-right: 2px; flex: none; }
+.sessionRow:hover .sessionMenuTrigger, .sessionRow:focus-within .sessionMenuTrigger, .sessionRow .sessionMenuTrigger[aria-expanded="true"] { opacity: 1; }
+.sessionActionsMenu { position: fixed; z-index: 110; width: 220px; padding: 6px; border: 1px solid var(--work-line-strong); border-radius: 10px; background: var(--work-surface); box-shadow: 0 10px 30px #0002; color: var(--work-ink); }
+.sessionActionsMenu .menuTitle { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 7px 9px; color: var(--work-muted); font-size: 12px; }
+.sessionActionsMenu button { display: flex; width: 100%; justify-content: flex-start; gap: 10px; font-size: 13px; min-height: 36px; padding: 8px 9px; }
+.sessionActionsMenu button:focus { outline: 2px solid var(--work-accent-line); outline-offset: -2px; background: var(--work-hover); }
+.sessionActionsMenu small { display: block; color: var(--work-muted); font-size: 12px; padding: 9px; border-top: 1px solid var(--work-line); }
+.workspaceDialog { width: min(610px, calc(100vw - 40px)); padding: 24px; max-height: min(720px, calc(100vh - 48px)); border: 1px solid var(--work-line-strong); border-radius: 14px; background: var(--work-surface); color: var(--work-ink); box-shadow: 0 24px 72px #0003; overflow: auto; }
+.workspaceDialog::backdrop { background: #17181266; }
+.workspaceDialogHeading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+.workspaceDialog h2 { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
+.workspaceDialogHeading p { font-size: 13px; line-height: 1.7; color: var(--work-muted); margin: 0; }
+.workspaceDialogHeading > button { padding: 5px; color: var(--work-muted); }
+.managementSearch { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--work-line); border-radius: 8px; background: var(--work-paper); color: var(--work-muted); margin-bottom: 15px; }
+.managementSearch input { padding: 0; min-width: 0; width: 100%; border: 0; background: transparent; outline: none; font-size: 14px; }
+.managementSearch:focus-within { outline: 2px solid var(--work-accent-line); }
+.managedProjectList, .moveTargets { max-height: 380px; overflow: auto; scrollbar-width: thin; }
+.managedProject { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--work-line); }
+.managedProject:last-child { border-bottom: 0; }
+.managedProjectOpen { display: flex; align-items: flex-start; min-width: 0; flex: 1; text-align: left; gap: 12px; padding: 9px 8px; }
+.managedProjectOpen > svg { color: var(--work-accent); flex: none; margin-top: 2px; }
+.managedProjectOpen > span { min-width: 0; display: grid; gap: 6px; }
+.managedProjectOpen strong { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 500; }
+.managedProjectOpen strong > small { font-size: 11px; color: var(--work-accent); background: var(--work-accent-soft); border-radius: 4px; padding: 1px 5px; }
+.managedProjectOpen small, .projectLocation { font-size: 12px; line-height: 1.6; color: var(--work-muted); }
+.projectLocation { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.projectActions { display: flex; gap: 2px; }
+.projectActions button { color: var(--work-muted); padding: 7px; }
+.projectActions button[aria-pressed="true"] { color: var(--work-accent); background: var(--work-accent-soft); }
+.workspaceDialogFooter { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--work-line); }
+.workspaceDialogFooter button { font-size: 14px; min-height: 36px; padding: 8px 13px; }
+.workspaceDialogFooter > small { color: var(--work-muted); font-size: 12px; margin-right: auto; }
+.projectNameForm { width: 100%; padding: 6px; }
+.projectNameForm label { display: grid; gap: 8px; font-size: 13px; }
+.projectNameForm input { width: 100%; padding: 10px; border: 1px solid var(--work-line-strong); border-radius: 7px; }
+.projectNameForm small { display: block; font-size: 12px; color: var(--work-muted); margin: 9px 0; }
+.projectNameForm > div { display: flex; justify-content: flex-end; gap: 8px; }
+.managementEmpty { padding: 22px 12px; font-size: 13px; color: var(--work-muted); text-align: center; line-height: 1.8; }
+.moveSessionTitle { overflow-wrap: anywhere; max-width: 450px; }
+.moveExplanation { display: flex; gap: 11px; padding: 14px; border: 1px solid var(--work-line); border-radius: 8px; background: var(--work-soft); font-size: 13px; }
+.moveExplanation svg { flex: none; margin-top: 3px; color: var(--work-muted); }
+.moveExplanation span { min-width: 0; }
+.moveExplanation strong { display: block; font-weight: 500; margin: 6px 0 3px; }
+.moveExplanation small { font-size: 12px; color: var(--work-muted); overflow-wrap: anywhere; }
+.moveHint { color: var(--work-muted); font-size: 13px; line-height: 1.8; margin: 14px 0 20px; }
+.moveTargets label { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid transparent; border-radius: 8px; cursor: pointer; }
+.moveTargets label.selected { background: var(--work-soft); border-color: var(--work-line-strong); }
+.moveTargets input { width: 15px; height: 15px; accent-color: var(--work-accent); flex: none; }
+.moveTargets label > svg { flex: none; color: var(--work-muted); }
+.moveTargets label > span { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.moveTargets strong { font-size: 14px; font-weight: 500; }
+.moveTargets small { font-size: 12px; color: var(--work-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workingDirectoryNotice { display: flex; align-items: center; gap: 8px; padding: 9px 24px; border-bottom: 1px solid var(--work-line); font-size: 12px; line-height: 1.6; color: var(--work-muted); }
+.workingDirectoryNotice > svg { flex: none; }
+.workingDirectoryNotice > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; }
+.workingDirectoryNotice button { font-size: 12px; padding: 3px 5px; }
+.archiveNotice { display: flex; align-items: center; gap: 13px; padding: 18px; border: 1px solid var(--work-line); border-radius: 10px; background: var(--work-surface); }
+.archiveNotice > span { flex: 1; font-size: 14px; }
+.archiveNotice small { display: block; font-size: 12px; color: var(--work-muted); margin-top: 6px; }
+.archiveNotice button { font-size: 13px; padding: 8px 12px; }
+.managementNotice { display: flex; gap: 10px; justify-content: space-between; padding: 9px 24px; font-size: 13px; color: var(--work-ink); background: var(--work-soft); border-bottom: 1px solid var(--work-line); }
+.managementNotice button { font-size: 12px; padding: 1px 5px; }
+@media (max-height: 780px) {
+  .sidebar .brandRow { margin-bottom: 16px; }
+  .sidebar > .newTask { margin-bottom: 10px; }
+  .sidebar .railPrimary { margin-bottom: 14px; }
+  .sidebar .projectSwitcher { margin-bottom: 10px; }
+  .sidebar .railBottom { padding-top: 8px; margin-top: 8px; }
+  .sidebar .themeSwitch { margin-top: 7px; }
+  .sidebar .localLabel { padding-top: 8px; }
+}
+@media (max-width: 700px) { .workspaceDialog { padding: 18px; } .workspaceDialogFooter { flex-wrap: wrap; } .archiveNotice { flex-wrap: wrap; } .workingDirectoryNotice { padding-inline: 14px; } }
+@media (hover: none) { .sessionRow .sessionMenuTrigger { opacity: 1; } }

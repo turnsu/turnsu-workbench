@@ -69,9 +69,14 @@ async function invoke(operation, args = {}) {
       if (!args || typeof args.method !== 'string' || args.method.length > 100 || ['project.open', 'files.import', 'files.resolve', 'cloud.authorization'].includes(args.method) || args.method.startsWith('desktop.') || JSON.stringify(args).length > 150_000) throw new Error('不支持这个桌面操作。');
       if (args.method === 'session.stop') embedded.browser.revoke(args.args?.sessionId);
       if (args.method === 'capabilities.install' && (await computer.status()).installing) throw new Error('正在准备电脑环境，请完成后再准备文件环境。');
+      if (args.method === 'session.archive' && args.args?.archived === true) {
+        const archived = await host.request(args.method, args.args);
+        embedded.browser.revoke(args.args.sessionId);
+        return archived;
+      }
       return host.request(args.method, args.args);
     case 'open_project': {
-      const selected = await dialog.showOpenDialog(window, { title: '打开本地项目', properties: ['openDirectory'] });
+      const selected = await dialog.showOpenDialog(window, { title: '打开工作文件夹', properties: ['openDirectory', 'createDirectory'] });
       if (selected.canceled || !selected.filePaths[0]) return null;
       return host.request('project.open', { path: selected.filePaths[0] });
     }

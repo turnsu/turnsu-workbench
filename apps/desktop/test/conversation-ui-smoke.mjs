@@ -188,7 +188,7 @@ app.whenReady().then(async () => {
         return { ok: false, error: e.message };
       }
     });
-    const js = (source) => window.webContents.executeJavaScript(source);
+    const js = (source) => window.webContents.executeJavaScript(source).catch(error => { throw new Error(`${stage}: ${source.slice(0,240)}`, { cause: error }); });
     stage = "load production renderer";
     await window.loadURL("turnsu://app/index.html");
     await until(
@@ -596,6 +596,86 @@ app.whenReady().then(async () => {
     const receiptCount = host.ui.read(s.id).events.length;
     await frame().executeJavaScript('document.querySelector(".primary").click()');
     assert.equal(host.ui.read(s.id).events.length, receiptCount, "editing must not enable a duplicate uncertain submission");
+    stage = "manage projects and organize the existing conversation";
+    const targetPath = join(directory, '每周工作'); await mkdir(targetPath);
+    const target = await host.command('project.open', { path: targetPath });
+    const clickText = (selector, text) => js(`Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(el => el.textContent.trim() === ${JSON.stringify(text)}).click()`);
+    await until(() => js('document.querySelectorAll(".projectButton").length === 2'), 'new project did not reach navigation');
+    await js('document.querySelector(".projectSwitcher summary").click()');
+    await clickText('.projectChoices button', '管理项目');
+    await until(() => js('Boolean(document.querySelector("[aria-label=搜索项目]"))'), 'project management did not open');
+    await js('document.querySelector("[aria-label=重命名项目：每周工作]").click()');
+    await js('{const input=document.querySelector("[aria-label=项目名称]");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(input,"每周归档");input.dispatchEvent(new Event("input",{bubbles:true}));}');
+    await clickText('.projectNameForm button', '保存名称');
+    await until(() => host.project(target.id).name === '每周归档', 'project name was not saved');
+    assert.equal(host.project(target.id).path, target.path, 'renaming must not change the directory');
+    await until(() => js('Boolean(document.querySelector("[aria-label=置顶项目：每周归档]"))'), 'renamed project not rendered');
+    await js('document.querySelector("[aria-label=置顶项目：每周归档]").click()');
+    await until(() => js('document.querySelector("[aria-label=取消置顶项目：每周归档]")?.getAttribute("aria-pressed") === "true"'), 'project pin was not shown');
+    await js('document.querySelector("[aria-label=关闭项目管理]").click()');
+    await js('document.querySelector("[aria-label=重命名当前会话]").click()');
+    await until(() => js('Boolean(document.querySelector("[aria-label=会话名称]"))'), 'session rename did not open');
+    await js('{const input=document.querySelector("[aria-label=会话名称]");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(input,"订单整理");input.dispatchEvent(new Event("input",{bubbles:true}));}');
+    await js('document.querySelector("[aria-label=保存会话名称]").click()');
+    await until(() => js('document.querySelector(".taskTitle")?.textContent === "订单整理"'), 'session title was not saved');
+    await setDraft('迁移后继续核对，保留原文件夹和这段草稿。');
+    await js('document.querySelector("[aria-label=会话选项：订单整理]").click()');
+    await clickText('[role=menuitem]', '置顶会话');
+    await until(() => host.session(s.id).pinned_at > 0, 'session pin was not saved');
+    await js('document.querySelector("[aria-label=会话选项：订单整理]").click()');
+    await clickText('[role=menuitem]', '移到项目…');
+    await until(() => js('document.querySelector(".moveExplanation")?.textContent.includes("客户工作资料")'), 'move must explain the original directory');
+    await js('document.querySelector(".moveTargets input").click()');
+    await clickText('.workspaceDialogFooter button', '移到所选项目');
+    await until(() => js('document.querySelector(".breadcrumb")?.textContent === "每周归档" && document.querySelector(".composer textarea")?.value === "迁移后继续核对，保留原文件夹和这段草稿。"'), 'moving lost the task or its original draft');
+    assert.equal(host.session(s.id).project_id, p.id);
+    assert.equal(host.session(s.id).collection_project_id, target.id);
+    await until(() => frame()?.executeJavaScript('document.querySelector("input")?.value === "补充用途"'), 'moving lost the Intelligence UI draft');
+    assert.equal(await js('document.querySelectorAll(".error").length'), 0);
+
+    stage = "archive, reopen and restore the moved conversation";
+    await js('document.querySelector("[aria-label=会话选项：订单整理]").click()');
+    await clickText('[role=menuitem]', '归档会话');
+    await until(() => host.session(s.id).archived_at > 0, 'archive was not persisted');
+    await until(() => js('Boolean(document.querySelector(".managementNotice"))'), 'archive feedback missing');
+    assert.equal(await js('document.querySelector(".error")?.textContent || ""'), '', 'archive must not flush a closed App or report a false save failure');
+    await until(() => js('Boolean(document.querySelector(".taskWelcome")) && !document.querySelector(".archiveNotice")'), 'archiving the current conversation should open new work');
+    assert.equal(host.ui.read(s.id).document.data.note, '补充用途');
+    assert.equal(await js('document.querySelectorAll(".sessionRow").length'), 0);
+    await clickText('.sessionFilters button', '已归档');
+    await until(() => js('Boolean(document.querySelector(".sessionRow .sessionButton"))'), 'archived conversation cannot be found');
+    await js('document.querySelector(".sessionRow .sessionButton").click()');
+    await until(() => js('Boolean(document.querySelector(".archiveNotice"))'), 'archive must open in read-only mode');
+    assert.equal(await js('document.querySelectorAll(".composer textarea, iframe").length'), 0, 'archives must not mount editable Apps');
+    await js('document.querySelector(".resultFiles button").click()');
+    await until(() => js('document.querySelector(".filePreview")?.textContent.includes("174.50")'), 'archiving hid the original result file');
+    await window.loadURL('turnsu://app/index.html');
+    await until(() => js('Boolean(document.querySelector(".archiveNotice")) && document.querySelector(".breadcrumb")?.textContent.includes("每周归档")'), 'reopening did not preserve archived organization');
+    await clickText('.archiveNotice button', '恢复会话');
+    await until(() => js('document.querySelector(".composer textarea")?.value === "迁移后继续核对，保留原文件夹和这段草稿。"'), 'restoring lost the saved follow-up draft');
+    await until(() => frame()?.executeJavaScript('document.querySelector("input")?.value === "补充用途"'), 'restoring lost the edited App');
+    assert.equal(host.session(s.id).archived_at, 0);
+    assert.equal(host.session(s.id).project_id, p.id);
+    assert.equal(host.session(s.id).pinned_at > 0, true);
+    await js('document.querySelector(".projectSwitcher summary").click()');
+    await clickText('.projectButton', '客户工作资料');
+    await until(() => js('document.querySelectorAll(".sessionRow").length === 0'), 'moved conversation still belongs to source navigation');
+    await clickText('.sessionSearchScope button', '查找所有项目');
+    await until(() => js('document.querySelector(".sessionRow")?.textContent.includes("每周归档")'), 'all-project lookup cannot locate a moved conversation');
+    await js('document.querySelector(".sessionRow .sessionButton").click()');
+    await until(() => js('document.querySelector(".composer textarea")?.value === "迁移后继续核对，保留原文件夹和这段草稿。"'), 'global lookup lost the conversation');
+    const currentRow = await js('(() => { const row=document.querySelector(".sessionRow.current").getBoundingClientRect(), nav=document.querySelector("nav[aria-label=项目与任务]").getBoundingClientRect(); return {row: [row.top, row.bottom], nav: [nav.top, nav.bottom]}; })()');
+    assert.ok(currentRow.row[0] >= currentRow.nav[0] && currentRow.row[1] <= currentRow.nav[1], 'a short window must show the current conversation: ' + JSON.stringify(currentRow));
+    if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `session-management-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
+    await clickText('.themeSwitch button', '夜读');
+    await js('document.querySelector("[aria-label=会话选项：订单整理]").click()');
+    await until(() => js('document.activeElement?.getAttribute("role") === "menuitem"'), 'session menu did not receive keyboard focus');
+    if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `session-menu-night-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
+    await js('document.activeElement.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+    await until(() => js('document.activeElement?.getAttribute("aria-label") === "会话选项：订单整理" && !document.querySelector("[role=menu]")'), 'closing the menu must return focus to its trigger');
+    await js('document.querySelector("[aria-label=会话选项：订单整理]").click()');
+    await js('{const input=document.querySelector(".composer textarea");input.dispatchEvent(new PointerEvent("pointerdown",{bubbles:true}));input.focus();}');
+    await until(() => js('document.activeElement === document.querySelector(".composer textarea") && !document.querySelector("[role=menu]")'), 'clicking outside the menu must not steal focus back from the editor');
     console.log(
       JSON.stringify({
         status: "passed",
@@ -622,6 +702,9 @@ app.whenReady().then(async () => {
           "task output files open real project content",
           "new task releases previous outputs and suggestions preserve existing input",
           "draft reopened",
+          "project display name and pin persist without moving directories",
+          "session rename, pin, move and global lookup retain original files and both drafts",
+          "archive releases interactive App and remains readable across restart; restore retains drafts",
           "App resources released",
           "900px viewport",
         ],
@@ -629,6 +712,7 @@ app.whenReady().then(async () => {
     );
   } catch (e) {
     console.error(e.stack);
+    if (process.env.TURNSU_QA_ARTIFACTS && window && !window.isDestroyed()) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `conversation-failure-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
     for (const child of window?.webContents.mainFrame.framesInSubtree || []) {
       if (child.url === "turnsu-ui://app/intelligence.html")
         console.error("App frame:", await child.executeJavaScript("document.body.innerText"));

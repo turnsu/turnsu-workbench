@@ -86,6 +86,12 @@ export function openStore(directory) {
     if (!db.prepare("PRAGMA table_info(sessions)").all().some(column => column.name === "connection_id")) db.exec("ALTER TABLE sessions ADD COLUMN connection_id TEXT");
     if (!db.prepare("PRAGMA table_info(sessions)").all().some((column) => column.name === "model")) db.exec("ALTER TABLE sessions ADD COLUMN model TEXT");
     if (!db.prepare("PRAGMA table_info(sessions)").all().some((column) => column.name === "agent")) db.exec("ALTER TABLE sessions ADD COLUMN agent TEXT NOT NULL DEFAULT 'codex'");
+    // Organization is independent of the original execution project and native ID.
+    for (const [name, type] of [['collection_project_id', 'TEXT REFERENCES projects(id)'], ['archived_at', 'INTEGER NOT NULL DEFAULT 0'], ['pinned_at', 'INTEGER NOT NULL DEFAULT 0']]) {
+      if (!db.prepare('PRAGMA table_info(sessions)').all().some(column => column.name === name)) db.exec(`ALTER TABLE sessions ADD COLUMN ${name} ${type}`);
+    }
+    db.exec(`CREATE INDEX IF NOT EXISTS sessions_collection_recent ON sessions(COALESCE(collection_project_id,project_id),archived_at,pinned_at DESC,updated_at DESC,id DESC);
+      CREATE TABLE IF NOT EXISTS project_organization(project_id TEXT PRIMARY KEY REFERENCES projects(id),pinned_at INTEGER NOT NULL DEFAULT 0);`);
     if (!db.prepare('PRAGMA table_info(shared_work_sessions)').all().some(c => c.name === 'actor_user_id')) db.exec('ALTER TABLE shared_work_sessions ADD COLUMN actor_user_id TEXT');
     if (!db.prepare('PRAGMA table_info(shared_work_sessions)').all().some(c => c.name === 'access_state')) db.exec("ALTER TABLE shared_work_sessions ADD COLUMN access_state TEXT NOT NULL DEFAULT 'unknown'");
     if (!db.prepare('PRAGMA table_info(shared_work_starts)').all().some(c => c.name === 'create_data')) db.exec('ALTER TABLE shared_work_starts ADD COLUMN create_data TEXT');
