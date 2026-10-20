@@ -1,0 +1,64 @@
+/* Research: one semantic palette for the workbench and isolated first-party Apps. */
+:root {
+  --font-ui: 'Inter', 'PingFang SC', 'Noto Sans SC', sans-serif;
+  --font-title: 'Source Serif 4', 'Songti SC', 'Noto Serif SC', serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', monospace;
+  --reading-extra: 0px;
+  --type-caption: calc(11.5px + var(--reading-extra));
+  --type-label: calc(10.5px + var(--reading-extra));
+  --type-eyebrow: calc(11px + var(--reading-extra));
+  --type-helper: calc(12.5px + var(--reading-extra));
+  --type-nav: calc(13px + var(--reading-extra));
+  --type-control: calc(12.5px + var(--reading-extra));
+  --type-data: calc(14px + var(--reading-extra));
+  --type-body: calc(14px + var(--reading-extra));
+  --type-reading: calc(14px + var(--reading-extra));
+  --type-section: calc(18px + var(--reading-extra));
+  --type-title: calc(20px + var(--reading-extra));
+  --type-metric: calc(24px + var(--reading-extra));
+  --space-card-top: 20px;
+  --space-card-inline: 22px;
+  --space-card-bottom: 16px;
+  --space-section: 18px;
+  --space-row: 11px;
+  --space-cell: 10px;
+  --research-paper: #f3f3f1;
+  --research-surface: #fff;
+  --research-soft: #f7f6f3;
+  --research-highlight: #fbf8f2;
+  --research-request: #f1f0ed;
+  --research-ink: #161513;
+  --research-secondary: #5e5b55;
+  --research-weak: #8d8a84;
+  --research-line: #e7e4df;
+  --research-line-strong: #d6d2ca;
+  --research-positive: #0e7c45;
+  --research-negative: #c2362b;
+  --research-warning: #9a5b13;
+  --research-focus: #2f5beb;
+  --research-selection: #e8edff;
+  --research-primary: var(--research-ink);
+  --research-on-primary: var(--research-surface);
+  --radius-control: 7px;
+  --radius-card: 12px;
+  color-scheme: light;
+}
+:root[data-text-size="large"] { --reading-extra: 2px; }
+:root[data-theme="dark"] {
+  --research-paper: #141414;
+  --research-surface: #1c1c1c;
+  --research-soft: #232322;
+  --research-highlight: #29251e;
+  --research-request: #292827;
+  --research-ink: #edebe6;
+  --research-secondary: #b3b0aa;
+  --research-weak: #84817b;
+  --research-line: rgba(255,255,255,.08);
+  --research-line-strong: rgba(255,255,255,.16);
+  --research-positive: #5bc48a;
+  --research-negative: #f07a6e;
+  --research-warning: #e0a458;
+  --research-focus: #8aa8ff;
+  --research-selection: #273353;
+  color-scheme: dark;
+}

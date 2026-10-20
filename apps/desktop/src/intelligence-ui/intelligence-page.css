@@ -1,0 +1,33 @@
+/* One Research presentation for the OpenUI library in native and external hosts. */
+.turnsuIntelligencePage { min-width: 0; color: var(--ui-ink); font: var(--type-body)/1.5 var(--font-ui); }
+.turnsuIntelligencePage > fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.turnsuIntelligencePage .iui-image-unavailable { display: grid; justify-items: center; align-content: center; gap: 8px; padding: 12px; font-size: var(--type-helper); color: var(--ui-muted); }
+.turnsuIntelligencePage [role="alert"] { margin-bottom: 16px; }
+.turnsuIntelligencePage :focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+.turnsuIntelligencePage .iui-title { margin: 0; line-height: 1.38; letter-spacing: -.005em; text-transform: none; }
+.turnsuIntelligencePage .iui-title:is(.iui-title-sm,.iui-title-md,.iui-title-lg,.iui-title-xl) { font-size: var(--type-title); font-weight: 400; }
+.turnsuIntelligencePage .iui-label { color: var(--ui-muted); font: 600 var(--type-label)/1.5 var(--font-ui); letter-spacing: .07em; }
+.turnsuIntelligencePage .iui-field > .iui-label { color: var(--ui-ink); font-size: var(--type-helper); letter-spacing: 0; font-weight: 500; }
+.turnsuIntelligencePage .iui-input { border-radius: 7px; border: 1px solid var(--ui-line-strong); padding: 8px 10px; font: var(--type-data)/1.5 var(--font-ui); box-shadow: none; }
+.turnsuIntelligencePage .iui-card { padding: 20px 22px 16px; border-radius: 12px; line-height: 1.5; }
+.turnsuIntelligencePage .iui-card .iui-card { border: 0; border-radius: 0; padding: 0; background: transparent; }
+.turnsuIntelligencePage .iui-button:disabled { opacity: 1; background: var(--ui-soft); color: var(--ui-muted); border-color: var(--ui-line); cursor: default; }
+.turnsuIntelligencePage .iui-button[data-confirmation="confirmed"] { color: var(--research-positive); border-color: transparent; }
+.turnsuIntelligencePage .iui-text, .turnsuIntelligencePage .iui-markdown { line-height: 1.5; }
+.turnsuIntelligencePage .iui-table-scroll { border-radius: 0; border: 0; border-block: 1px solid var(--ui-line); }
+.turnsuIntelligencePage .iui-table th { background: var(--ui-surface); font: 600 var(--type-label)/1.5 var(--font-ui); letter-spacing: .07em; }
+.turnsuIntelligencePage .iui-table td, .turnsuIntelligencePage .iui-table th { padding: 10px; }
+.turnsuIntelligencePage .iui-grid:has(> .statusBlock) { gap: 0 !important; border-top: 1px solid var(--ui-line); }
+.turnsuIntelligencePage .iui-grid > .statusBlock { border-top: 0; border-left: 1px solid var(--ui-line); padding: 12px 14px; }
+.turnsuIntelligencePage .iui-grid > .statusBlock:first-child { border-left: 0; padding-left: 0; }
+.resultFiles { margin-top: 18px; }
+@container (max-width: 520px) {
+  .turnsuIntelligencePage .iui-grid:has(> .statusBlock) { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+  .turnsuIntelligencePage .iui-grid > .statusBlock:nth-child(odd) { border-left: 0; padding-left: 0; }
+  .turnsuIntelligencePage .iui-grid > .statusBlock:nth-child(n+3) { border-top: 1px solid var(--ui-line); }
+  .turnsuIntelligencePage .iui-card { padding: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .turnsuIntelligencePage *, .turnsuIntelligencePage *::before, .turnsuIntelligencePage *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+.turnsuIntelligencePage .iui-button-lg { min-height: 30px; padding: 5px 12px; font-size: var(--type-control); }
+.turnsuIntelligencePage .iui-col > .iui-button { width: auto; max-width: 100%; white-space: normal; }

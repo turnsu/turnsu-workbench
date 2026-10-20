@@ -1,4 +1,4 @@
-import { UISurfaces } from './ui-surfaces.mjs';
+import { UISurfaces } from './ui/surfaces.mjs';
 import { RemoteTasks } from './remote-tasks.mjs';
 import { remoteAgents, normalizeAgentConnection } from './agent-connections.mjs';
 import { sessionIndex } from './session-index.mjs';
@@ -562,6 +562,7 @@ export class LocalAgentHost {
     if (method === 'ui.detach') return this.ui.detach(args);
     if (method === 'ui.read') return this.ui.read(args.sessionId);
     if (method === 'ui.save') return this.ui.save(args);
+    if (method === 'ui.media') return this.ui.media(args);
     if (method === 'ui.attach') return this.ui.attach(args);
     if (method === 'ui.commit') return this.ui.commit(args);
     if (method === 'ui.deliver') return this.ui.deliver(args);

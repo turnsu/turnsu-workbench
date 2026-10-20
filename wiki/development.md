@@ -1,6 +1,6 @@
 # 开发指南
 
-下一版已选澄白样式，按[通用组件合同](ui-components.md)和[实施计划](next-workbench.md)打通真实路径。主验证放在 turnsu Linux 开发机的隔离目录；macOS/Windows 的可见 UI、系统权限、文件框和升级另行实测。独立设计稿的操作和截图只验证设计，不计为 Agent、CUA、文件上传或回传验收。
+当前工作台采用 v5A Research 与单一 OpenUI 渲染器，按[通用组件合同](ui-components.md)和[实施计划](next-workbench.md)打通真实路径。主验证放在 turnsu Linux 开发机的隔离目录；macOS/Windows 的可见 UI、系统权限、文件框和升级另行实测。独立设计稿的操作和截图只验证设计，不计为 Agent、CUA、文件上传或回传验收。
 
 下面命令对应当前实现。本地 To B 交付遵循[本地交付计划](roadmap.md)和[开发约束](../AGENTS.md)。可选团队与客户业务连接只有经过真实路径验收后才能列为可用能力。
 

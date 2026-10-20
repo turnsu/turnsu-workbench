@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { LocalAgentHost } from '../host.mjs';
-import { LocalDraftNavigation } from '../../../apps/desktop/src/local-draft-navigation.mjs';
+import { LocalDraftNavigation } from '../../../apps/desktop/src/workbench/local-draft-navigation.mjs';
 
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
 async function fixture(t) {

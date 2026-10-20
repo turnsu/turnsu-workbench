@@ -1,0 +1,82 @@
+import assert from 'node:assert/strict';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
+// Controlled orders through the production App, SQLite and confirmation tool.
+// This proves behavior; the real-Agent acceptance is recorded separately.
+export async function checkResearchComponents({ js, frame, until, host, session, window, changeAppearance, capturePaintedPage }) {
+  const previousSession = host.session(session.id), previousDraft = host.ui.read(session.id).document.data;
+  session = await host.command('session.create', { projectId: previousSession.collection_project_id || previousSession.project_id, agent: 'codex' });
+  await host.command('session.rename', { sessionId: session.id, title: 'Research 订单核对（验收数据）' });
+  host.message(session.id, 'research-example', 'assistant', '以下为组件交互验收用的订单数据。确认前保留草稿，不生成报告。');
+  const rows = [{ id: 'a', order: 'TEST-001', customer: '样本甲', amount: '100.00' }, { id: 'b', order: 'TEST-002', customer: '样本乙', amount: '74.50' }];
+  const program = `root = Col([
+    Title("订单资料核对"),
+    ResearchSummary("两笔订单已对齐，确认份数后生成报告", "每份包含两笔原始订单。先核对金额和用途，确认后再交给当前助手。", "订单核对"),
+    Grid([Metric("单份金额", "174.50 元", "100.00 + 74.50"), Metric("核对份数", $copies + " 份", "按当前输入计算"), Metric("本次预估", @Format(174.5 * $copies, "number", 2) + " 元", "单份金额 × 份数"), Metric("原始记录", "2 笔", "来自订单.csv")], 4, 130),
+    ResearchSection("原始记录", [ReviewTable($rows, [{key:"order",label:"订单号"},{key:"customer",label:"客户"},{key:"amount",label:"金额（元）"}])]),
+    ResearchSection("确认范围", [Grid([Input($copies, "份数", "number"), Input($purpose, "报告用途")], 2, 220)]),
+    Comparison("本次将处理", ["核对所选订单与报告用途", "生成独立的新版报告"], "原件保留", ["订单.csv 保持原值", "已有报告保持不变"]),
+    ResearchNote("金额是草稿计算结果；只有点击确认后，助手才会收到这次要求。", "确认前"),
+    KeyValue([{label:"核算口径",value:"每份包含完整的两笔订单"}]),
+    ActionBar([Button("确认并生成报告", @ToAssistant("按确认份数生成新版报告", {copies:$copies,total:174.5*$copies,purpose:$purpose}))], "生成报告并登记到本次成果"),
+    Sources([{label:"订单.csv · 原始金额"}])
+  ])\n$copies = 2\n$purpose = "内部核对"\n$rows = []`;
+  await host.ui.call(session.id, { operation: 'present', revision: host.ui.read(session.id).revision, document: {
+    format: 'openui', title: '订单资料核对', program, data: { $copies: 2, $purpose: '内部核对', $rows: rows },
+  } });
+  window.setContentSize(1180, 820);
+  const selectSession = () => js(`(() => { const button=[...document.querySelectorAll('.sessionButton')].find(item=>item.textContent.includes('Research 订单核对（验收数据）')); if(!button || button.disabled) return false; button.click(); return true; })()`);
+  await until(selectSession, 'component conversation did not appear');
+  await until(() => frame()?.executeJavaScript('document.querySelectorAll(".statusBlock").length === 4'), 'Research metrics did not render');
+  await changeAppearance('明亮');
+  assert.equal(await frame().executeJavaScript('document.querySelectorAll(".iui-title").length'), 0, 'the host already provides the document title');
+  assert.equal(await frame().executeJavaScript('document.querySelector(".researchSummary h2").textContent'), '两笔订单已对齐，确认份数后生成报告');
+  assert.equal(await frame().executeJavaScript('document.querySelectorAll(".metricContext").length'), 4, 'each number needs its comparison or basis');
+  assert.equal(await frame().executeJavaScript('document.querySelector(".metricUnit").textContent'), ' 元');
+  assert.equal(await frame().executeJavaScript('document.querySelectorAll(".dataView nav").length'), 0, 'two rows do not need disabled pagination');
+  assert.equal(await frame().executeJavaScript('getComputedStyle(document.querySelector(".iui-grid:has(> .statusBlock)")).gridTemplateColumns.split(" ").length'), 4);
+  assert.equal(await frame().executeJavaScript('getComputedStyle(document.querySelector(".researchActionBar button")).minHeight'), '30px');
+  const input = value => frame().executeJavaScript(`{const input=document.querySelector('input[aria-label="份数"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));}`);
+  await input('4');
+  await until(() => host.ui.read(session.id).document.data.$copies === 4, 'quantity did not persist');
+  assert.equal(await frame().executeJavaScript('document.querySelectorAll(".statusDescription")[2].innerText'), '698.00 元', 'calculation must update without another model turn');
+  assert.equal(host.ui.read(session.id).events.length, 0, 'editing is not confirmation');
+  assert.deepEqual(host.ui.read(session.id).document.data.$rows, rows);
+  // Reopen through the real renderer; preserve the same Host source and draft.
+  await window.loadURL("turnsu://app/index.html");
+  await until(selectSession, 'saved conversation must be available after reopening the workbench');
+  await until(() => frame()?.executeJavaScript('document.querySelector("input[aria-label=份数]")?.value === "4"').catch(() => false), 'draft did not restore after renderer reload');
+  await input('-');
+  await frame().executeJavaScript('document.querySelector("[data-task-submit]").click()');
+  assert.equal(host.ui.read(session.id).events.length, 0, 'invalid visible numeric input must block confirmation');
+  await input('4');
+  if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, 'research-components-wide.png'), (await capturePaintedPage()).toPNG());
+  const frameId = frame().frameTreeNodeId;
+  await js('document.querySelector(".conversationSurface iframe").style.width="375px";document.querySelector(".conversationSurface").scrollIntoView({block:"start"});');
+  await until(() => frame().executeJavaScript('innerWidth === 375'), '375px width not applied');
+  const narrow = await frame().executeJavaScript(`(()=>({columns:getComputedStyle(document.querySelector('.iui-grid:has(> .statusBlock)')).gridTemplateColumns.split(' ').length,comparison:getComputedStyle(document.querySelector('.researchComparison')).gridTemplateColumns.split(' ').length,width:document.documentElement.scrollWidth,viewport:innerWidth,metric:getComputedStyle(document.querySelector('.statusDescription')).fontSize}))()`);
+  assert.equal(narrow.columns, 2); assert.equal(narrow.comparison, 1);
+  assert.ok(narrow.width <= narrow.viewport, '375px content must not scroll horizontally'); assert.equal(narrow.metric, '24px');
+  if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, 'research-components-375-light.png'), (await capturePaintedPage()).toPNG());
+  await changeAppearance('暗色');
+  assert.equal(frame().frameTreeNodeId, frameId);
+  assert.equal(await frame().executeJavaScript('document.querySelector("input[aria-label=份数]").value'), '4');
+  if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, 'research-components-375-dark.png'), (await capturePaintedPage()).toPNG());
+  await js('document.querySelector(".conversationSurface iframe").style.width="";');
+  await changeAppearance('明亮');
+  const waiting = host.ui.call(session.id, { operation: 'wait' });
+  await frame().executeJavaScript('{const button=document.querySelector("[data-task-submit]");button.click();button.click();}');
+  const event = await waiting;
+  assert.equal(event.values.$copies, 4); assert.equal(event.action.context.total, 698);
+  assert.equal(host.ui.read(session.id).events.length, 1, 'double click must create only one human confirmation');
+  assert.equal(host.ui.read(session.id).results.length, 0, 'confirmation does not manufacture output');
+  const next = { format: 'openui', title: '订单资料核对', program, data: { $copies: 7, $purpose: '第二轮核对', $rows: rows } };
+  await host.ui.call(session.id, { operation: 'present', revision: host.ui.read(session.id).revision, document: { ...next, streaming: true } });
+  await until(() => frame().executeJavaScript('document.querySelector("fieldset")?.disabled'), 'streaming content must disable editing and confirmation');
+  await host.ui.call(session.id, { operation: 'present', revision: host.ui.read(session.id).revision, document: next });
+  await until(() => frame().executeJavaScript('document.querySelector("input[aria-label=份数]")?.value === "7" && !document.querySelector("fieldset").disabled'), 'a new presentation must use its new source data');
+  assert.equal(host.ui.read(session.id).dirty, false, 'renderer initialization must not create a user edit');
+  assert.deepEqual(host.ui.read(previousSession.id).document.data, previousDraft, 'acceptance must preserve the previous conversation');
+  window.setContentSize(1180, 820);
+}

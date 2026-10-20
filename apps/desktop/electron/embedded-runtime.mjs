@@ -11,6 +11,8 @@ export class EmbeddedRuntime {
     Object.assign(this, { window, host, notify });
     this.inline = null;
     this.binding = null;
+    this.surfaceEpoch = 0;
+    this.surfaceDisposal = Promise.resolve();
     this.browser = new BrowserRuntime({
       window,
       host,
@@ -21,6 +23,30 @@ export class EmbeddedRuntime {
       recursive: true,
       mode: 0o700,
     });
+    // React cannot run its cleanup after a renderer reload or crash. Release
+    // the old App lease here so the saved task can reconnect to the same Host.
+    this.resetRenderer = () => {
+      this.surfaceEpoch++;
+      const previous = this.inline;
+      this.inline = null;
+      this.browser.unmount();
+      this.binding = null;
+      for (const page of this.browser.pages.values()) this.browser.revoke(page.sessionId);
+      const opening = this.surfaceOpening;
+      this.surfaceDisposal = this.surfaceDisposal.then(async () => {
+        // An old in-flight reservation must settle before a new renderer can
+        // reserve the same session; otherwise its cleanup could release us.
+        await opening?.catch(() => {});
+        if (previous) await this.host.request("desktop.resources.release", { kind: "surface", id: previous.id });
+      });
+      this.surfaceDisposal.catch(() => {}); // surfaced by the next open/close
+
+    };
+    this.navigation = (_event, _url, inPlace, mainFrame) => {
+      if (mainFrame && !inPlace) this.resetRenderer();
+    };
+    window.webContents.on("did-start-navigation", this.navigation);
+    window.webContents.on("render-process-gone", this.resetRenderer);
   }
   bounds(value) {
     const [w, h] = this.window.getContentSize();
@@ -55,6 +81,8 @@ export class EmbeddedRuntime {
         return this.host.request("ui.read", { sessionId });
       case "save":
         return this.host.request("ui.save", { ...args, sessionId });
+      case "media":
+        return this.host.request("ui.media", { ...args, sessionId });
       case "submit":
         await this.host.request("ui.commit", { ...args, sessionId });
         return this.host.request("ui.deliver", {
@@ -65,6 +93,7 @@ export class EmbeddedRuntime {
         return this.host.request("ui.deliver", {
           sessionId,
           requestId: args.requestId,
+          continueConfirmed: args.continueConfirmed === true,
         });
       case "import": {
         const selected = await dialog.showOpenDialog(this.window, {
@@ -122,19 +151,31 @@ export class EmbeddedRuntime {
         })
         .catch(() => {});
   }
-  async invoke(operation, args = {}) {
-    if (operation === "surface_open") {
-      if (this.inline) throw new Error("请先保存并关闭上一段交互内容。");
+  async openSurface(sessionId) {
+    const epoch = this.surfaceEpoch;
+    await this.surfaceDisposal;
+    if (epoch !== this.surfaceEpoch) throw new Error("界面已重开，请从当前对话继续。");
+    if (this.inline || this.surfaceOpening) throw new Error("请先保存并关闭上一段交互内容。");
+    const opening = this.surfaceOpening = (async () => {
       const s = await this.host.request("session.read", {
-        sessionId: args.sessionId,
+        sessionId,
       });
       await this.host.request("desktop.resources.reserve", {
         kind: "surface",
         id: s.id,
       });
+      if (epoch !== this.surfaceEpoch) {
+        await this.host.request("desktop.resources.release", { kind: "surface", id: s.id });
+        throw new Error("界面已重开，请从当前对话继续。");
+      }
       this.inline = { id: s.id, project_id: s.project_id, token: randomUUID() };
       return { token: this.inline.token };
-    }
+    })();
+    try { return await opening; }
+    finally { if (this.surfaceOpening === opening) this.surfaceOpening = null; }
+  }
+  async invoke(operation, args = {}) {
+    if (operation === "surface_open") return this.openSurface(args.sessionId);
     if (operation === "surface_call") return this.surfaceCall(args);
     if (operation === "surface_close") {
       if (this.inline?.token === args.token) {
@@ -215,6 +256,10 @@ export class EmbeddedRuntime {
     this.browser.bound?.view.setVisible(!value);
   }
   async close() {
+    this.window.webContents.removeListener("did-start-navigation", this.navigation);
+    this.window.webContents.removeListener("render-process-gone", this.resetRenderer);
+    this.resetRenderer();
+    await this.surfaceDisposal;
     await this.hide();
     if (this.inline)
       await this.invoke("surface_close", { token: this.inline.token });

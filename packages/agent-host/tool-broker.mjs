@@ -48,7 +48,7 @@ export class ToolBroker {
     if (!sessionId || this.host.closing) throw new Error('工具连接已失效，请恢复会话。');
     const session = this.host.session(sessionId);
     if (request.method === 'resources/read') return this.host.ui.resource(request.uri);
-    if (request.method === 'resources/list') return {resources:[{uri:'ui://turnsu/intelligence.html',name:'Turnsu Intelligence UI',mimeType:'text/html;profile=mcp-app'}]};
+    if (request.method === 'resources/list') return {resources:[{uri:'ui://turnsu/intelligence.html',name:'Turnsu Intelligence UI',mimeType:'text/html;profile=mcp-app'},{uri:'turnsu://ui/library',name:'Turnsu OpenUI 组件、函数与动作',mimeType:'text/markdown'}]};
     if (request.method === 'tools/list') return this.host.sessionTools(session);
     if (request.method !== 'tools/call' || !['starting', 'running', 'waiting'].includes(session.status)) throw new Error('工具只能在当前正在执行的任务中调用。');
     return this.host.callSessionTool(session,request.name,request.arguments || {},request.callId);

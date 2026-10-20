@@ -1,13 +1,17 @@
 // Production React renderer + sandboxed MCP App + real SQLite. Presentation is
 // supplied by a controlled Agent fixture; this is not real-model acceptance.
-import { app, BrowserWindow, ipcMain, protocol, net } from "electron";
+import { app, BrowserWindow, ipcMain, protocol, net, nativeTheme } from "electron";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join, dirname, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
 import { Browser } from "../../../packages/agent-host/browser.mjs";
+import { checkResearchComponents } from './research-ui-check.mjs';
+import { nativeUiCsp } from "../../../packages/agent-host/ui/csp.mjs";
 import { LocalAgentHost } from "../../../packages/agent-host/host.mjs";
 import { EmbeddedRuntime } from "../electron/embedded-runtime.mjs";
 import { bundledFontResponse } from "../electron/bundled-fonts.mjs";
@@ -22,10 +26,11 @@ protocol.registerSchemesAsPrivileged(
 );
 let stage = "startup";
 const deadline = setTimeout(() => {
-  console.error("Conversation UI exceeded 75 seconds at " + stage);
+  console.error("Conversation UI exceeded 120 seconds at " + stage);
   app.exit(1);
-}, 75000);
+}, 120000);
 app.on("window-all-closed", () => {});
+nativeTheme.themeSource = "light";
 let host, embedded, window, server;
 const until = async (fn, label) => {
   const end = Date.now() + 12000;
@@ -45,8 +50,23 @@ app.whenReady().then(async () => {
     const website = "http://127.0.0.1:" + server.address().port + "/";
     const path = join(directory, "客户工作资料");
     await mkdir(path);
+    const nativeStarts = [];
     host = new LocalAgentHost({
       directory: join(directory, "state"),
+      connectionFactory: () => ({
+        ready: Promise.resolve(),
+        request: async (method, args) => {
+          if (method === "thread/start" || method === "thread/resume")
+            return { thread: { id: "controlled-conversation", turns: [] } };
+          if (method === "turn/start") {
+            nativeStarts.push(args);
+            return { turn: { id: "controlled-continuation" } };
+          }
+          if (method === "model/list") return { data: [{ model: "qa-model", displayName: "验收模型", hidden: false }], nextCursor: null };
+          throw Error("Unexpected controlled Agent call: " + method);
+        },
+        close: async () => {},
+      }),
       notify: (payload) =>
         window &&
         !window.isDestroyed() &&
@@ -57,7 +77,9 @@ app.whenReady().then(async () => {
         projectId: p.id,
         agent: "codex",
       });
-    host.message(s.id, "request", "user", "核对这份表格，确认后生成说明。");
+    host.message(s.id, "request", "user", "核对这份表格，确认后生成说明。\n只处理选定资料。\n核对每一笔金额。\n标明来源。\n保留原始文件。\n先展示汇总。\n让我填写报告用途。\n等我确认后再生成文件。\n不得对外发送。");
+    host.message(s.id, "tool-read", "tool", "读取选定订单，保留原件", "command");
+    host.message(s.id, "tool-check", "tool", "核对金额 100.00 + 74.50 = 174.50", "command");
     host.message(s.id, "reply", "assistant", "请核对金额，并补充报告的用途。");
     host.db
       .prepare("UPDATE sessions SET title=? WHERE id=?")
@@ -75,6 +97,7 @@ app.whenReady().then(async () => {
         data: {
           rows: [{ id: "a", item: "合计", amount: "174.50 元" }],
           note: "",
+          total: "174.50",
         },
         tree: {
           id: "review",
@@ -89,7 +112,7 @@ app.whenReady().then(async () => {
                 { key: "amount", label: "金额" },
               ],
             },
-            { id: "state", type: "Status" },
+            { id: "state", type: "Status", label: "复算合计", binding: "total" },
             { id: "note", type: "Field", label: "报告用途", binding: "note" },
             {
               id: "confirm",
@@ -111,13 +134,15 @@ app.whenReady().then(async () => {
               ? host.browser.remember(a.sessionId, a.url)
               : m === "desktop.browser.read"
                 ? host.browser.read(a.sessionId)
+                : m === 'desktop.browser.deliver'
+                  ? host.browser.deliver(a.sessionId, a.paths)
                 : host.command(m, a),
     };
     const fontRequests = { workbench: new Set(), app: new Set() };
     protocol.handle("turnsu", async (request) => {
       const url = new URL(request.url),
         file = resolve(root, "dist", "." + decodeURIComponent(url.pathname));
-      if (url.pathname.endsWith(".woff2")) fontRequests.workbench.add(request.url);
+      if (/\.(?:woff2|ttf)$/.test(url.pathname)) fontRequests.workbench.add(request.url);
       if (url.hostname !== "app" || !file.startsWith(join(root, "dist") + sep))
         return new Response("", { status: 404 });
       const r = await net.fetch(pathToFileURL(file).href);
@@ -139,7 +164,7 @@ app.whenReady().then(async () => {
         headers: {
           "Content-Type": "text/html",
           "Content-Security-Policy":
-            "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src 'self'; img-src data:; connect-src 'none'",
+            nativeUiCsp,
         },
       });
     });
@@ -169,12 +194,17 @@ app.whenReady().then(async () => {
         window.webContents.send("desktop:host-event", payload),
     });
     host.browser = new Browser(host, (_method, args) => embedded.browser.call(args));
+    const nativeOpens = [];
     ipcMain.handle("desktop:invoke", async (event, operation, args = {}) => {
       try {
         assert.equal(event.senderFrame, window.webContents.mainFrame);
         let value;
         if (operation === "local_command")
           value = await host.command(args.method, args.args);
+        else if (operation === 'open_project_file') {
+          await host.command('files.resolve', args);
+          nativeOpens.push({projectId:args.projectId,path:args.path}); value={opened:true};
+        }
         else if (
           operation === "agent_connection_list" ||
           operation === "connection_list"
@@ -189,13 +219,16 @@ app.whenReady().then(async () => {
       }
     });
     const js = (source) => window.webContents.executeJavaScript(source).catch(error => { throw new Error(`${stage}: ${source.slice(0,240)}`, { cause: error }); });
+    if (process.env.TURNSU_QA_ARTIFACTS) await mkdir(process.env.TURNSU_QA_ARTIFACTS, { recursive: true });
     stage = "load production renderer";
     await window.loadURL("turnsu://app/index.html");
     await until(
-      () => js('Boolean(document.querySelector(".projectButton"))'),
+      () => js('Boolean(document.querySelector(".projectSwitcher"))'),
       "project not visible",
     );
-    await js('document.querySelector(".projectButton").click()');
+    await js('document.querySelector(".projectSwitcher").click()');
+    await until(() => js('Boolean(document.querySelector(".researchMenuItem"))'), 'project choices did not open');
+    await js('document.querySelector(".researchMenuItem").click()');
     await until(
       () => js('Boolean(document.querySelector(".sessionRow .sessionButton"))'),
       "session not visible",
@@ -205,6 +238,34 @@ app.whenReady().then(async () => {
       window.webContents.mainFrame.framesInSubtree.find(
         (f) => f.url === "turnsu-ui://app/intelligence.html",
       );
+    const changeAppearance = async label => {
+      await js('document.querySelector(".appearanceMenu").click()');
+      assert.ok(await js('document.querySelector(".researchMenu").checkVisibility()'), 'appearance choices must be visible before selection');
+      assert.ok(await js('(()=>{const r=document.querySelector(".researchMenu").getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight;})()'), 'appearance choices must stay inside the window after moving to the sidebar footer');
+      await js(`Array.from(document.querySelectorAll('.researchMenuItem')).find(button=>button.textContent===${JSON.stringify(label)}).click()`);
+      await until(() => js('!document.querySelector(".researchMenu")'), 'selecting appearance must close the menu');
+      await until(() => js('document.activeElement===document.querySelector(".appearanceMenu")'), 'appearance returns keyboard focus to its trigger');
+    };
+    const capturePaintedPage = async () => {
+      const painted = 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))';
+      await js(painted);
+      return window.webContents.capturePage();
+    };
+    let capturedReadingSettings = false;
+    const changeTextSize = async value => {
+      await js('document.querySelector("button[aria-label=设置]").click()');
+      await until(() => js('Boolean(document.querySelector("input[name=text-size]"))'), 'reading settings did not open');
+      assert.equal(await js('getComputedStyle(document.querySelector(".settingsEntry strong")).fontWeight'), '500');
+      await js(`{const input=document.querySelector('input[name="text-size"][value="${value}"]');input.focus();input.click();}`);
+      await until(() => js(`document.documentElement.dataset.textSize === '${value}'`), 'text size did not change');
+      assert.equal(await js('document.activeElement?.name'), 'text-size', 'resizing must keep the selected control focused');
+      if (process.env.TURNSU_QA_ARTIFACTS && value === 'large' && !capturedReadingSettings) {
+        await js('(async()=>{await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));return true;})()');
+        await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `reading-settings-${process.platform}.png`), (await capturePaintedPage()).toPNG());
+        capturedReadingSettings = true;
+      }
+      await js('document.querySelector("[aria-label=关闭设置]").click()');
+    };
     await until(
       async () =>
         frame() &&
@@ -213,46 +274,66 @@ app.whenReady().then(async () => {
         )),
       "inline App not rendered",
     );
-    stage = "load local Chinese reading fonts inside the sandbox";
+    stage = "load packaged typography in both documents";
     const readingFontEvidence = '(' + (async () => {
+      const checked = await Promise.all(['Inter', 'Source Serif 4', 'IBM Plex Mono', 'Noto Sans SC'].map(async family => {
+        const faces = await document.fonts.load(`400 16px "${family}"`, family === 'Noto Sans SC' ? '金额确认' : 'Turnsu 174.50');
+        return { family, loaded: faces.some(face => face.status === 'loaded') };
+      }));
       await document.fonts.ready;
       const loaded = [...document.fonts].filter(font => font.status === 'loaded' && font.family.includes('Noto Sans SC')).length;
-      return { loaded, family: getComputedStyle(document.body).fontFamily, chinese: document.fonts.check('400 16px "Noto Sans SC"', '金额确认') };
+      return { loaded, checked, family: getComputedStyle(document.body).fontFamily, chinese: document.fonts.check('400 16px "Noto Sans SC"', '金额确认') };
     }).toString() + ')()';
     const appFonts = await frame().executeJavaScript(readingFontEvidence);
     const workbenchFonts = await js(readingFontEvidence);
     for (const fonts of [appFonts, workbenchFonts]) {
       assert.ok(fonts.loaded > 0 && fonts.chinese, "actual Chinese font data must load, not just a CSS fallback name: " + JSON.stringify(fonts));
       assert.match(fonts.family, /Noto Sans SC/);
+      assert.match(fonts.family, /Inter/);
+      assert.ok(fonts.checked.every(font => font.loaded), 'bundled font binaries must actually decode: ' + JSON.stringify(fonts.checked));
     }
-    for (const requests of Object.values(fontRequests)) {
-      assert.ok(requests.size > 0 && requests.size < 202, "load only used font subsets, never preload the whole collection");
+    assert.match(await js('getComputedStyle(document.querySelector(".taskTitle")).fontFamily'), /Source Serif 4/);
+    assert.match(await frame().executeJavaScript('getComputedStyle(document.querySelector("td.numeric")).fontFamily'), /Inter/);
+    for (const [documentName, requests] of Object.entries(fontRequests)) {
+      assert.ok(requests.size > 0 && requests.size < 205, "load only used font subsets, never preload the whole collection");
+      if (documentName === 'workbench') for (const family of ['inter-', 'source-serif-4-', 'ibm-plex-mono-']) assert.ok([...requests].some(url => url.includes('/'+family)), 'each Research font family must decode through a packaged route: '+family);
       assert.ok([...requests].every(url => /^turnsu(?:-ui)?:\/\/app\/fonts\//.test(url)), "font requests must remain inside the desktop package");
     }
-    const fontUrl = [...fontRequests.app][0];
+    const fontUrl = [...fontRequests.app].find(url => url.endsWith(".woff2"));
     const fontResponse = await bundledFontResponse(new Request(fontUrl), root);
     assert.equal(fontResponse.status, 200);
     assert.equal(fontResponse.headers.get("Content-Type"), "font/woff2");
     assert.equal(Buffer.from(await fontResponse.arrayBuffer()).subarray(0, 4).toString(), "wOF2");
-    for (const url of ["turnsu-ui://other/fonts/noto-sans-sc-000-AAAAAAAA.woff2", "turnsu-ui://app/fonts/../../electron/main.mjs", "turnsu-ui://app/fonts/noto-sans-sc-000-AAAAAAAA.woff2?path=credentials"]) {
+    for (const url of ["turnsu-ui://other/fonts/noto-sans-sc-000-AAAAAAAA.woff2", "turnsu-ui://app/fonts/../../electron/main.mjs", "turnsu-ui://app/fonts/noto-sans-sc-000-AAAAAAAA.woff2?path=credentials", "turnsu-ui://app/fonts/red-hat-other-000-AAAAAAAA.woff2", "turnsu-ui://app/fonts/red-hat-text-001-AAAAAAAA.woff2"]) {
       assert.equal((await bundledFontResponse(new Request(url), root)).status, 404, "font access must not expose another host, arbitrary files or query-controlled paths");
     }
     assert.equal((await bundledFontResponse(new Request(fontUrl, { method: "POST" }), root)).status, 404, "font route is read-only");
     stage = "compose without crowding the conversation";
     const emptyComposerHeight = await js('document.querySelector(".composer").getBoundingClientRect().height');
+    assert.ok(emptyComposerHeight < 160, 'the idle composer with a selected material must leave room for the actual task');
     assert.ok(emptyComposerHeight < 135, "an empty composer must leave room to read the conversation");
     const longDraft = "第一行：保留这份输入。\n".repeat(12);
     await js(`(()=>{const input=document.querySelector(".composer textarea");Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value").set.call(input,${JSON.stringify(longDraft)});input.dispatchEvent(new Event("input",{bubbles:true}));})()`);
     await until(() => js('document.querySelector(".composer textarea").value.length > 100'), "draft input was lost");
     assert.ok(await js('document.querySelector(".composer").getBoundingClientRect().height') > emptyComposerHeight + 60, "composer must grow for multiline input");
     assert.ok(await js('document.querySelector(".composer textarea").getBoundingClientRect().height') <= 181, "long drafts must not consume the whole window");
-    await js('document.querySelector(".agentOptions summary").click()');
-    await until(() => js('document.querySelector(".agentOptions").open'), "assistant settings did not open");
+    await js('document.querySelector(".agentOptionsTrigger").click()');
+    await until(() => js('Boolean(document.querySelector(".connectionSource"))'), "assistant settings did not open");
     assert.equal(await js('document.querySelector(".composer textarea").value'), longDraft, "opening settings must preserve the draft");
-    assert.equal(await js('Boolean(document.querySelector(".agentOptions .modelSetting"))'), true);
-    await js('document.querySelector(".agentOptions summary").dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));');
-    assert.equal(await js('document.querySelector(".agentOptions").open'), false, "Escape closes settings");
-    assert.equal(await js('document.activeElement === document.querySelector(".agentOptions summary")'), true, "focus returns to the menu trigger");
+    assert.equal(await js('Boolean(document.querySelector(".connectionSource .modelSetting"))'), true);
+    await js('document.querySelector(".modelChoice").click()');
+    await until(() => js('Boolean(document.querySelector(".researchSelect"))'), 'the model catalog must expose selectable models');
+    await js('document.querySelector(".researchSelect").click()');
+    await until(() => js('Boolean(document.querySelector(".researchSelectPopup [role=option]"))'), 'the model menu must open within the assistant popup');
+    await js('[...document.querySelectorAll(".researchSelectPopup [role=option]")].find(item=>item.textContent.includes("验收模型")).focus()');
+    window.webContents.sendInputEvent({type:'keyDown',keyCode:'Enter'}); window.webContents.sendInputEvent({type:'keyUp',keyCode:'Enter'});
+    await until(() => host.session(s.id).model === 'qa-model', 'a visible model selection must persist to the current session');
+    await until(() => js('!document.querySelector(".researchSelectPopup")?.checkVisibility()'), 'choosing a model must close only its options');
+    assert.equal(await js('document.querySelector(".composer textarea").value'), longDraft, 'model selection must retain the current request');
+    await until(() => js('document.querySelector(".connectionSource").contains(document.activeElement)'), 'assistant options must receive keyboard focus');
+    window.webContents.sendInputEvent({type:'keyDown',keyCode:'Escape'}); window.webContents.sendInputEvent({type:'keyUp',keyCode:'Escape'});
+    await until(() => js('!document.querySelector(".connectionSource")'), 'Escape closes settings');
+    await until(() => js('document.activeElement === document.querySelector(".agentOptionsTrigger")'), 'focus returns to the menu trigger');
     await js('const input=document.querySelector(".composer textarea");Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value").set.call(input,"");input.dispatchEvent(new Event("input",{bubbles:true}));');
     await until(() => js('document.querySelector(".composer").getBoundingClientRect().height').then(height => height === emptyComposerHeight), "clearing a draft must release its extra space");
     stage = "edit inline review";
@@ -273,20 +354,95 @@ app.whenReady().then(async () => {
       "undefined",
       "sandbox must not expose desktop IPC",
     );
+    assert.equal(await frame().executeJavaScript('document.querySelector(".statusDescription").textContent'), '174.50', 'a persisted Status binding must show the actual reviewed amount, independently of task progress');
+    stage = "move the presentation anchor without replacing the editing App";
+    await frame().executeJavaScript('window.researchInstanceMarker = "original-realm";document.querySelector("input").focus()');
+    host.message(s.id, 'anchor-update', 'assistant', '继续核对用途，当前工作页保持打开。');
+    const beforeAnchor = host.ui.read(s.id);
+    await host.ui.call(s.id, { operation: 'present', revision: beforeAnchor.revision, document: beforeAnchor.document });
+    await until(() => js('document.querySelector(".surfaceMount").previousElementSibling?.textContent.includes("继续核对用途，当前工作页保持打开")'), 'presentation did not follow its new message anchor');
+    assert.equal(frame().frameTreeNodeId, originalFrame, 'a new anchor must reuse the existing browsing context');
+    assert.equal(await frame().executeJavaScript('window.researchInstanceMarker'), 'original-realm', 'same DOM element is insufficient: the App realm must not reload');
+    assert.equal(await frame().executeJavaScript('document.activeElement === document.querySelector("input")'), true, 'streaming anchor updates must not steal editing focus');
     await frame().executeJavaScript(
       'const input=document.querySelector("input");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(input,"周一团队会议");input.dispatchEvent(new Event("input",{bubbles:true}));',
     );
+    stage = "disclose requirements and grouped activity without losing the App draft";
+    assert.equal(await js('document.querySelector(".requestExpand").getAttribute("aria-expanded")'), 'false');
+    await js('document.querySelector(".requestExpand").click()');
+    assert.ok(await js('!document.querySelector(".requestExcerpt") && document.querySelector(".message.user").innerText.includes("不得对外发送")'), 'expansion must reveal the full original requirements');
+    assert.equal(await js('document.querySelector(".toolActivityGroup").open'), false);
+    stage = "show live work and settle activity without hiding the answer";
+    host.updateSession(s.id, 'running');
+    await until(() => js('document.querySelector(".toolActivityGroup").open'), 'live work must reveal its actual operations');
+    assert.ok(await js('document.querySelector(".toolActivityList").innerText.includes("读取选定订单，保留原件") && document.querySelector(".toolActivityList").innerText.includes("核对金额 100.00 + 74.50 = 174.50")'), 'operations must be recognizable without opening a second generic disclosure');
+    await js('{document.querySelector(".composer textarea").focus();const t=document.querySelector(".transcript");t.scrollTop=t.scrollHeight;t.dispatchEvent(new Event("scroll"));}');
+    host.updateSession(s.id, 'idle');
+    await until(() => js('!document.querySelector(".toolActivityGroup").open'), 'settled activity should fold while the answer stays visible');
+    assert.ok(await js('Array.from(document.querySelectorAll(".message.assistant")).some(message=>message.checkVisibility() && message.innerText.includes("请核对金额"))'), 'folding tools must never hide an ordinary assistant reply');
+    for (const status of ['failed', 'waiting']) {
+      host.updateSession(s.id, status);
+      await until(() => js(`document.querySelector('.toolActivityGroup').dataset.phase === '${status}' && document.querySelector('.toolActivityGroup').open`), 'failed work and requests for input must keep their records available');
+    }
+    await js('document.querySelector(".toolActivityGroup > summary").focus()');
+    host.updateSession(s.id, 'idle');
+    await until(() => js('document.querySelector(".toolActivityGroup").dataset.phase === "settled"'), 'activity should receive completion');
+    assert.ok(await js('document.querySelector(".toolActivityGroup").open'), 'completion must not collapse content while the user has focus inside it');
+    await js('{document.querySelector(".composer textarea").focus();const t=document.querySelector(".transcript");t.scrollTop=t.scrollHeight;t.dispatchEvent(new Event("scroll"));}');
+    await until(() => js('!document.querySelector(".toolActivityGroup").open'), 'automatic folding may resume when the user leaves the records');
+    await js('document.querySelector(".toolActivityGroup > summary").click()');
+    assert.ok(await js('document.querySelector(".toolActivityList").checkVisibility() && document.querySelectorAll(".toolActivityList .message").length === 2 && document.querySelector(".toolActivityList").innerText.includes("174.50")'), 'one disclosure must reveal the original short operations directly');
+    await js('document.querySelector(".composer textarea").focus()');
+    host.updateSession(s.id, 'running');
+    await until(() => js('document.querySelector(".toolActivityGroup").dataset.phase === "running"'), 'manual expansion should receive live updates');
+    host.updateSession(s.id, 'idle');
+    await until(() => js('document.querySelector(".toolActivityGroup").dataset.phase === "settled"'), 'manual expansion should receive completion');
+    assert.ok(await js('document.querySelector(".toolActivityGroup").open'), 'an explicit expansion must survive streaming and completion');
+    assert.equal(frame().frameTreeNodeId, originalFrame, 'opening transcript disclosures must retain the live App');
+    assert.equal(await frame().executeJavaScript('document.querySelector("input").value'), '周一团队会议');
+    await js('document.querySelector(".toolActivityGroup > summary").click();document.querySelector(".requestExpand").click()');
+    stage = "dismiss reading menu with keyboard and outside click";
+    await js('document.querySelector(".appearanceMenu").click()');
+    await js('document.querySelector(".researchMenuItem").focus();document.activeElement.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+    await until(() => js('!document.querySelector(".researchMenu") && document.activeElement===document.querySelector(".appearanceMenu")'), 'Escape must close appearance choices and restore focus');
+    await js('document.querySelector(".appearanceMenu").click()');
+    await js('document.querySelector(".composer textarea").dispatchEvent(new PointerEvent("pointerdown",{bubbles:true}))');
+    await until(() => js('!document.querySelector(".researchMenu")'), 'outside click must dismiss appearance choices');
     stage = "change reading theme with an edited App";
+    assert.equal(await frame().executeJavaScript('getComputedStyle(document.documentElement).getPropertyValue("--color-ring-primary").trim()'), '#2f5beb', 'light Host context must use the shared focus role');
+    assert.deepEqual(await js('[".railPrimary [aria-current=page]",".taskTitle"].map(selector=>getComputedStyle(document.querySelector(selector)).fontWeight)'), ['500', '400']);
     await frame().executeJavaScript('window.qaThemeMessages=[];window.addEventListener("message", event=>{if(event.data?.method==="ui/notifications/host-context-changed")window.qaThemeMessages.push(event.data.params.theme);});');
-    await js('Array.from(document.querySelectorAll(".themeSwitch button")).find(button=>button.textContent.includes("夜读")).click()');
-    await until(async () => await js('document.documentElement.dataset.theme === "dark"') && await frame().executeJavaScript('matchMedia("(prefers-color-scheme: dark)").matches && getComputedStyle(document.documentElement).backgroundColor === "rgb(44, 45, 41)"'), "the sandboxed App must follow the workbench night theme");
+    await changeAppearance('暗色');
+    await until(async () => await js('document.documentElement.dataset.theme === "dark"') && await frame().executeJavaScript('matchMedia("(prefers-color-scheme: dark)").matches && getComputedStyle(document.documentElement).backgroundColor === "rgb(28, 28, 28)"'), "the sandboxed App must follow the workbench night theme");
+    assert.equal(await frame().executeJavaScript('getComputedStyle(document.documentElement).getPropertyValue("--color-ring-primary").trim()'), '#8aa8ff', 'dark Host context must use the Research document focus role');
     assert.equal(frame().frameTreeNodeId, originalFrame, "theme changes must not recreate the App");
     assert.equal(await frame().executeJavaScript('document.querySelector("input").value'), "周一团队会议", "theme changes must preserve in-progress edits");
     await until(() => frame().executeJavaScript('window.qaThemeMessages.includes("dark")'), "MCP host context must describe the selected theme");
     assert.equal(await js('localStorage.getItem("turnsu.appearance")'), "dark");
-    await js('Array.from(document.querySelectorAll(".themeSwitch button")).find(button=>button.textContent.includes("纸白")).click()');
-    await until(() => frame().executeJavaScript('!matchMedia("(prefers-color-scheme: dark)").matches && getComputedStyle(document.documentElement).backgroundColor === "rgb(251, 249, 243)"'), "returning to paper must update the existing App");
+    await changeAppearance('明亮');
+    await until(() => frame().executeJavaScript('!matchMedia("(prefers-color-scheme: dark)").matches && getComputedStyle(document.documentElement).backgroundColor === "rgb(255, 255, 255)"'), "returning to paper must update the existing App");
     assert.equal(frame().frameTreeNodeId, originalFrame);
+    stage = "follow actual system changes and resize the same App";
+    await changeAppearance('跟随系统');
+    await until(() => js('localStorage.getItem("turnsu.appearance") === "system"'), 'system preference was not stored');
+    await frame().executeJavaScript('(()=>{const input=document.querySelector("input");input.focus({preventScroll:true});input.setSelectionRange(2,4);})()');
+    nativeTheme.themeSource = 'dark';
+    await until(async () => await js('document.documentElement.dataset.theme === "dark"') && await frame().executeJavaScript('getComputedStyle(document.documentElement).backgroundColor === "rgb(28, 28, 28)"'), 'actual system change did not reach the same App');
+    assert.deepEqual(await frame().executeJavaScript('(()=>{const input=document.querySelector("input");return [document.activeElement===input,input.selectionStart,input.selectionEnd,input.value];})()'), [true, 2, 4, '周一团队会议'], 'system appearance changes must preserve input focus and selection');
+    const standardRowHeight = await frame().executeJavaScript('document.querySelector("tbody tr").getBoundingClientRect().height');
+    await changeTextSize('large');
+    await until(() => frame().executeJavaScript('getComputedStyle(document.querySelector("input")).fontSize === "16px"'), 'standard MCP styles did not resize App inputs');
+    assert.ok(await frame().executeJavaScript('document.querySelector("tbody tr").getBoundingClientRect().height') > standardRowHeight, 'large text must increase table row height');
+    assert.equal(await js('getComputedStyle(document.querySelector(".message.assistant")).fontSize'), '16px');
+    assert.equal(frame().frameTreeNodeId, originalFrame, 'text size changes must reuse the original App');
+    assert.equal(await frame().executeJavaScript('document.querySelector("input").value'), '周一团队会议');
+    await changeTextSize('standard');
+    await changeAppearance('明亮');
+    nativeTheme.themeSource = 'light';
+    nativeTheme.themeSource = 'dark';
+    await js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+    assert.equal(await js('document.documentElement.dataset.theme'), 'light', 'an explicit preference must override the system');
+    nativeTheme.themeSource = 'light';
     await until(
       () => host.ui.read(s.id).document.data.note === "周一团队会议",
       "edited draft did not persist",
@@ -319,13 +475,13 @@ app.whenReady().then(async () => {
     await until(() => js('!document.querySelector(".sidebar").hidden'), "navigation did not reopen");
     assert.equal(host.resourceUsage().surfaces, 1);
     await until(
-      () => frame().executeJavaScript('!document.querySelector(".primary").disabled'),
+      () => frame().executeJavaScript('!document.querySelector("[data-task-submit]").disabled'),
       "review did not finish saving before confirmation",
     );
     stage = "deliver confirmation";
     const waiting = host.ui.call(s.id, { operation: "wait" });
     await frame().executeJavaScript(
-      'document.querySelector(".primary").click()',
+      'document.querySelector("[data-task-submit]").click()',
     );
     await until(() => host.ui.read(s.id).events.some(event => event.state === "consumed"),
       "confirmation did not reach the waiting Agent tool");
@@ -335,35 +491,52 @@ app.whenReady().then(async () => {
     await until(
       async () =>
         await frame().executeJavaScript(
-          'document.querySelector(".primary").disabled',
+          'document.querySelector("[data-task-submit]").disabled',
         ),
       "submitted action should not repeat",
     );
     assert.equal(host.ui.read(s.id).events.length, 1);
     await until(
-      () => frame().executeJavaScript('document.querySelector("[role=status]").innerText === "确认内容已交给助手"'),
-      "after confirmation the status must acknowledge delivery instead of inviting another action",
+      () => frame().executeJavaScript('document.querySelector("[role=status]").innerText === "本轮已结束，尚未返回文件成果；确认内容已保留"'),
+      "an idle Agent without returned files must expose the missing result instead of a success indication",
     );
     assert.equal(
-      await frame().executeJavaScript('document.querySelector(".primary").innerText'),
+      await frame().executeJavaScript('document.querySelector("[data-task-submit]").innerText'),
       "已确认",
       "the submitted button acknowledges confirmation without claiming the task is completed",
     );
-    assert.equal(
-      await frame().executeJavaScript('document.querySelector("footer")?.innerText || ""'),
-      "",
-      "a delivery receipt should not be repeated below the status",
+    assert.deepEqual(
+      await frame().executeJavaScript('[...document.querySelectorAll("footer button")].map(button => button.innerText)'),
+      ["继续处理"],
+      "the original confirmation needs an explicit recovery action, not another submit button",
     );
+    assert.equal(nativeStarts.length, 0, "a saved confirmation must not resume automatically");
+    await frame().executeJavaScript('document.querySelector("footer button").click()');
+    await until(() => nativeStarts.length === 1 && host.ui.read(s.id).events[0].state === "sent",
+      "the visible continuation must reach the same Agent through the production bridge");
+    assert.match(JSON.stringify(nativeStarts[0]), /周一团队会议/);
+    assert.match(JSON.stringify(nativeStarts[0]), /先核对/);
+    assert.equal(host.ui.read(s.id).events.length, 1);
+    host.updateSession(s.id, "idle");
     host.message(s.id, "complete", "assistant", "汇总已完成，可打开[工作参考资料](" + website + ")。");
     host.notify({type: "changed", sessionId:s.id});
     await until(() => js('Boolean(document.querySelector(".textLink"))'), "new reply not visible");
     assert.equal(frame().frameTreeNodeId, originalFrame, "new replies must not remount the App");
-    assert.equal(await js('Boolean(document.querySelector(".conversationSurface").nextElementSibling?.textContent.includes("汇总已完成"))'), true, "App must stay beside its original reply");
+    assert.equal(await js('Boolean(document.querySelector(".surfaceMount").previousElementSibling?.textContent.includes("继续核对用途，当前工作页保持打开"))'), true, "App must stay beside its original reply when continuation adds a new turn");
     stage = "open conversation website";
     await js('document.querySelector(".textLink").click()');
     await until(() => embedded.browser.bound?.view.webContents.getURL() === website, "conversation link did not open embedded website");
     assert.match(await embedded.browser.bound.view.webContents.executeJavaScript("document.body.innerText"), /内部示例资料已打开/);
     assert.equal(embedded.browser.state(s.id).grant, null, "opening a link must not authorize automation");
+    const browserContent = embedded.browser.bound.view.webContents;
+    await js('document.querySelector(".workMenu").click()');
+    await until(() => !embedded.browser.bound.view.getVisible(), 'the native browser must yield to a Base UI menu');
+    await js('document.querySelector(".researchMenuItem").focus()');
+    window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+    window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+    await until(() => embedded.browser.bound.view.getVisible(), 'closing the menu must restore the native browser');
+    assert.equal(embedded.browser.bound.view.webContents, browserContent, 'opening a menu must not recreate or navigate the browser');
+
     await js('document.querySelector("[aria-label=收起网页]").click()');
     await until(() => !embedded.browser.bound, "website did not hide");
     assert.equal(frame().frameTreeNodeId, originalFrame, "browsing must preserve the App draft");
@@ -372,14 +545,24 @@ app.whenReady().then(async () => {
       join(path, "汇总说明.txt"),
       "合计 174.50 元；用途：周一团队会议。",
     );
+    host.updateSession(s.id, "waiting");
+    await until(
+      () => frame().executeJavaScript('document.querySelector("footer [role=status]")?.innerText === "请在对话中回应"'),
+      "the working page must show the original Agent's pending approval",
+    );
     await host.ui.call(s.id, {
       operation: "publish",
       paths: ["汇总说明.txt"],
       summary: "汇总说明已生成，可继续修改。",
     });
+    host.updateSession(s.id, "idle");
+    await until(
+      () => frame().executeJavaScript('document.querySelector("footer [role=status]")?.innerText === "确认内容已交给助手"'),
+      "the working page must refresh after approval",
+    );
     await until(
       () => js('Boolean(document.querySelector(".resultFiles button"))'),
-      "result file not returned to conversation",
+      "the Host must show the actual published file in the conversation",
     );
     await js('document.querySelector(".resultFiles button").click()');
     await until(
@@ -394,6 +577,17 @@ app.whenReady().then(async () => {
       () => js('!document.querySelector(".filePanel")'),
       "file preview did not close",
     );
+    stage = "open native Agent file citation";
+    host.message(s.id, "file-citation", "assistant", ':codex-file-citation{path="' + join(p.path, "汇总说明.txt") + '" artifact_kind="document" purpose="output"}');
+    host.notify({ type: "changed", sessionId: s.id });
+    await until(() => js('[...document.querySelectorAll(".message.assistant .textLink")].some(button=>button.textContent.includes("汇总说明.txt"))'),
+      "native file reference must render a named link, not raw protocol text");
+    assert.equal(await js('document.querySelector(".transcript").textContent.includes(":codex-file-citation{")'), false);
+    await js('[...document.querySelectorAll(".message.assistant .textLink")].find(button=>button.textContent.includes("汇总说明.txt")).click()');
+    await until(() => js('document.querySelector(".filePreview")?.innerText.includes("174.50")'),
+      "native Agent file link must open the registered project result");
+    assert.equal(frame().frameTreeNodeId, originalFrame);
+    await js('document.querySelector("[aria-label=关闭文件面板]").click()');
     stage = "find outputs without losing the conversation";
     const setDraft = async text => js(`(()=>{const input=document.querySelector('.composer textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,${JSON.stringify(text)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     await setDraft("保留这段补充要求");
@@ -406,16 +600,18 @@ app.whenReady().then(async () => {
     if (process.env.TURNSU_QA_ARTIFACTS) {
       await mkdir(process.env.TURNSU_QA_ARTIFACTS, { recursive: true });
       await js('Promise.all(document.querySelector(".outputsPanel").getAnimations().map(animation=>animation.finished))');
-      await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `conversation-outputs-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
-      await js('Array.from(document.querySelectorAll(".themeSwitch button")).find(button=>button.textContent.includes("夜读")).click()');
-      await until(() => frame().executeJavaScript('getComputedStyle(document.documentElement).backgroundColor === "rgb(44, 45, 41)"'), "outputs and embedded content must use night colors together");
-      await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `conversation-night-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
-      await js('Array.from(document.querySelectorAll(".themeSwitch button")).find(button=>button.textContent.includes("纸白")).click()');
-      await until(() => frame().executeJavaScript('getComputedStyle(document.documentElement).backgroundColor === "rgb(251, 249, 243)"'), "outputs must return to paper colors");
+      await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `conversation-outputs-${process.platform}.png`), (await capturePaintedPage()).toPNG());
+      await changeAppearance('暗色');
+      await until(() => frame().executeJavaScript('getComputedStyle(document.documentElement).backgroundColor === "rgb(28, 28, 28)"'), "outputs and embedded content must use night colors together");
+      await js('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+      assert.deepEqual(await js('[".newTask", ".outputsPanel", ".outputsPanel .resultFile"].map(selector=>getComputedStyle(document.querySelector(selector)).backgroundColor)'), ['rgb(28, 28, 28)', 'rgb(28, 28, 28)', 'rgba(0, 0, 0, 0)'], 'flat file rows must inherit the dark panel immediately without flashing pale backgrounds under dark-theme text');
+      await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `conversation-night-${process.platform}.png`), (await capturePaintedPage()).toPNG());
+      await changeAppearance('明亮');
+      await until(() => frame().executeJavaScript('getComputedStyle(document.documentElement).backgroundColor === "rgb(255, 255, 255)"'), "outputs must return to paper colors");
     }
     await js('document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
     await until(() => js('!document.querySelector(".outputsPanel")'), "Escape must close task outputs");
-    assert.equal(await js('document.activeElement.className'), "outputsTrigger", "closing outputs must restore keyboard focus");
+    assert.ok(await js('document.activeElement === document.querySelector(".outputsTrigger")'), "closing outputs must restore keyboard focus");
     await js('document.querySelector(".outputsTrigger").click()');
     await until(() => js('Boolean(document.querySelector(".surfaceShortcut"))'), "interactive content must be listed with task outputs");
     await js('document.querySelector(".surfaceShortcut").click()');
@@ -423,6 +619,8 @@ app.whenReady().then(async () => {
     assert.equal(frame().frameTreeNodeId, originalFrame, "opening a review from outputs must reuse its iframe");
     assert.match(await js('document.querySelector(".conversationSurface.expanded .surfaceHeading button").textContent'), /返回对话/, "expanded content needs a clear return action");
     assert.equal(await frame().executeJavaScript('document.querySelector("input").value'), "周一团队会议", "output shortcut must preserve the human review draft");
+    assert.equal(await js('document.querySelector(".composerArea").inert'), true, 'covered conversation controls must leave the keyboard and accessibility order');
+    assert.equal(await js('document.querySelector(".surfaceMount").inert'), false, 'the expanded App must remain interactive');
     await js('document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
     await until(() => js('!document.querySelector(".conversationSurface.expanded")'), "Escape from expanded header must return to the conversation");
     assert.equal(await js('document.activeElement.getAttribute("aria-label")'), "展开内容", "focus must stay on the same review after returning");
@@ -442,7 +640,11 @@ app.whenReady().then(async () => {
     assert.equal(await readFile(join(path, "订单.csv"), "utf8"), sourceText, "preview must not change the material");
     assert.equal(frame().frameTreeNodeId, originalFrame, "material preview must preserve the review");
     await js('document.querySelector("[aria-label=关闭文件面板]").click()');
-    await js('document.querySelector(".transcript").scrollTop=0');
+    await until(async () => {
+      const size = await frame().executeJavaScript('({ content: document.body.getBoundingClientRect().height, viewport: innerHeight })');
+      return size.content > 680 || size.content <= size.viewport + 2;
+    }, 'an ordinary inline App must fit its reported height without a second scrollbar');
+    await js('document.querySelector(".conversationSurface").scrollIntoView({block:"center",behavior:"instant"})');
     await js(
       "new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))",
     );
@@ -450,7 +652,7 @@ app.whenReady().then(async () => {
       await mkdir(process.env.TURNSU_QA_ARTIFACTS, { recursive: true });
       await writeFile(
         join(process.env.TURNSU_QA_ARTIFACTS, `conversation-inline-${process.platform}.png`),
-        (await window.webContents.capturePage()).toPNG(),
+        (await capturePaintedPage()).toPNG(),
       );
     }
     stage = "release and reopen draft";
@@ -469,15 +671,18 @@ app.whenReady().then(async () => {
     assert.ok(await js('document.querySelector(".composer textarea").value.startsWith("请保留我原来写好的要求。")'), "a starter must never replace an existing draft");
     await setDraft("");
     await until(() => js('document.querySelector(".composer textarea").value === "" && !document.querySelector(".composerMeta").textContent.includes("正在保存")'), "clearing the new-task draft must settle before leaving it");
-    if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `new-work-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
+    if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `new-work-${process.platform}.png`), (await capturePaintedPage()).toPNG());
     stage = "restore appearance after renderer restart";
-    await js('Array.from(document.querySelectorAll(".themeSwitch button")).find(button=>button.textContent.includes("夜读")).click()');
+    await changeTextSize("large");
+    await changeAppearance('暗色');
     await until(() => js('localStorage.getItem("turnsu.appearance") === "dark"'), "appearance was not saved");
     await window.loadURL("turnsu://app/index.html");
     await until(() => js('Boolean(document.querySelector(".taskWelcome")) && document.documentElement.dataset.theme === "dark"'), "reopening the workbench must restore the chosen reading theme");
     assert.equal(await js('document.querySelectorAll("iframe").length'), 0, "appearance restoration must not resurrect old Apps");
-    if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `new-work-night-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
-    await js('Array.from(document.querySelectorAll(".themeSwitch button")).find(button=>button.textContent.includes("纸白")).click()');
+    assert.equal(await js('document.documentElement.dataset.textSize'), "large", "text size must survive reopening");
+    await changeTextSize("standard");
+    if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `new-work-night-${process.platform}.png`), (await capturePaintedPage()).toPNG());
+    await changeAppearance('明亮');
     await js('document.querySelector(".sessionRow .sessionButton").click()');
     await until(
       async () =>
@@ -520,7 +725,7 @@ app.whenReady().then(async () => {
           process.env.TURNSU_QA_ARTIFACTS,
           `conversation-expanded-${process.platform}.png`,
         ),
-        (await window.webContents.capturePage()).toPNG(),
+        (await capturePaintedPage()).toPNG(),
       );
     }
     stage = "replace review with readonly result";
@@ -530,29 +735,46 @@ app.whenReady().then(async () => {
       revision: host.ui.read(s.id).revision,
       document: {
         title: "汇总结果",
+        data: { files: ["汇总说明.txt", "尚未生成.txt"] },
         tree: { id: "result", type: "Layout", children: [
           { id: "summary", type: "Text", text: "合计 174.50 元，说明文件可在对话中打开。" },
           { id: "state", type: "Status", label: "处理结果", text: "待处理金额总计：174.50 元" },
+          { id: "files", type: "Assets", label: "成果文件", binding: "files" },
         ] },
       },
     });
     await until(
       async () => {
-        // AppBridge can read new data before React moves the presentation to
-        // its new reply. Wait for both the host and the replacement frame.
+        // New content and its anchor update inside the existing App bridge.
         if (!await js('document.querySelector(".surfaceHeading strong")?.innerText === "汇总结果"')) return false;
         const content = frame();
-        return content && content.frameTreeNodeId !== reviewFrame &&
+        return content && content.frameTreeNodeId === reviewFrame &&
           content.executeJavaScript('document.querySelector(".statusDescription")?.innerText === "待处理金额总计：174.50 元" && !document.querySelector("[role=status]")');
       },
       "a read-only presentation must not ask for confirmation or reuse an earlier receipt",
     );
-    assert.equal(await frame().executeJavaScript('document.querySelector(".primary")'), null);
+    assert.equal(await frame().executeJavaScript('document.querySelector("[data-task-submit]")'), null);
+    assert.equal(await frame().executeJavaScript('getComputedStyle(document.querySelector(".statusDescription")).fontWeight'), '400');
     assert.equal(
       await frame().executeJavaScript('document.querySelector(".statusDescription").innerText'),
       "待处理金额总计：174.50 元",
       "Agent-authored status details must remain visible separately from runtime state",
     );
+    stage = "open a bound file from the real result App";
+    const readonlyFrame = frame().frameTreeNodeId;
+    assert.equal(await frame().executeJavaScript('document.querySelector(".assets").innerText.includes("订单.csv")'), false,
+      "result file binding must not be replaced with input materials");
+    assert.equal(await frame().executeJavaScript('document.querySelector(".assets").innerText.includes("添加文件")'), false,
+      "a bound file list is read-only");
+    assert.equal(await frame().executeJavaScript('document.querySelector(\'button[aria-label="打开文件：尚未生成.txt"]\')?.disabled'), true,
+      "an unregistered Agent-proposed file must not become an openable result");
+    await frame().executeJavaScript('document.querySelector(\'button[aria-label="打开文件：汇总说明.txt"]\').click()');
+    await until(() => js('document.querySelector(".filePreview")?.innerText.includes("174.50")'),
+      "the sandboxed result App must open the actual published file through the workbench");
+    assert.equal(await js('Boolean(document.querySelector(".conversationSurface.expanded"))'), false,
+      "opening an App result returns to the conversation with its file panel");
+    assert.equal(frame().frameTreeNodeId, readonlyFrame, "opening a bound result must preserve the App instance");
+    await js('document.querySelector("[aria-label=关闭文件面板]").click()');
     stage = "show published result and partial failure";
     const resultFrame = frame().frameTreeNodeId;
     await host.ui.call(s.id, { operation: "publish", paths: ["汇总说明.txt"], summary: "汇总结果可查看。" });
@@ -592,9 +814,9 @@ app.whenReady().then(async () => {
       'const input=document.querySelector("input");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(input,"补充用途");input.dispatchEvent(new Event("input",{bubbles:true}));',
     );
     await until(() => host.ui.read(s.id).dirty, "edited input was not saved");
-    assert.equal(await frame().executeJavaScript('document.querySelector(".primary").disabled'), true);
+    assert.equal(await frame().executeJavaScript('document.querySelector("[data-task-submit]").disabled'), true);
     const receiptCount = host.ui.read(s.id).events.length;
-    await frame().executeJavaScript('document.querySelector(".primary").click()');
+    await frame().executeJavaScript('document.querySelector("[data-task-submit]").click()');
     assert.equal(host.ui.read(s.id).events.length, receiptCount, "editing must not enable a duplicate uncertain submission");
     stage = "manage projects and organize the existing conversation";
     const targetPath = join(directory, '每周工作'); await mkdir(targetPath);
@@ -614,9 +836,9 @@ app.whenReady().then(async () => {
       })()`), 'session menu trigger did not become available');
       await until(() => js('Boolean(document.querySelector("[role=menu]"))'), 'session menu did not open');
     };
-    await until(() => js('document.querySelectorAll(".projectButton").length === 2'), 'new project did not reach navigation');
-    await js('document.querySelector(".projectSwitcher summary").click()');
-    await clickText('.projectChoices button', '管理项目');
+    await js('document.querySelector(".projectSwitcher").click()');
+    await until(() => js('[...document.querySelectorAll(".researchMenuItem")].some(item=>item.textContent.includes("每周工作"))'), 'new project did not reach navigation');
+    await clickText('.researchMenuItem', '管理项目');
     await until(() => js('Boolean(document.querySelector("[aria-label=搜索项目]"))'), 'project management did not open');
     await js('document.querySelector("[aria-label=重命名项目：每周工作]").click()');
     await js('{const input=document.querySelector("[aria-label=项目名称]");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(input,"每周归档");input.dispatchEvent(new Event("input",{bubbles:true}));}');
@@ -671,10 +893,10 @@ app.whenReady().then(async () => {
     assert.equal(host.session(s.id).archived_at, 0);
     assert.equal(host.session(s.id).project_id, p.id);
     assert.equal(host.session(s.id).pinned_at > 0, true);
-    await js('document.querySelector(".projectSwitcher summary").click()');
-    await clickText('.projectButton', '客户工作资料');
+    await js('document.querySelector(".projectSwitcher").click()');
+    await clickText('.researchMenuItem', '客户工作资料');
     await until(() => js('document.querySelectorAll(".sessionRow").length === 0'), 'moved conversation still belongs to source navigation');
-    await clickText('.sessionSearchScope button', '查找所有项目');
+    await js('document.querySelector("[aria-label=查找所有项目]").click()');
     await until(() => js('document.querySelector(".sessionRow")?.textContent.includes("每周归档")'), 'all-project lookup cannot locate a moved conversation');
     await js('document.querySelector(".sessionRow .sessionButton").click()');
     await until(() => js('document.querySelector(".composer textarea")?.value === "迁移后继续核对，保留原文件夹和这段草稿。"'), 'global lookup lost the conversation');
@@ -683,16 +905,27 @@ app.whenReady().then(async () => {
     await until(() => js('innerWidth === 880 && innerHeight === 640'), 'short content viewport did not resize');
     const currentRow = await js('(() => { const row=document.querySelector(".sessionRow.current").getBoundingClientRect(), nav=document.querySelector("nav[aria-label=项目与任务]").getBoundingClientRect(); return {row: [row.top, row.bottom], nav: [nav.top, nav.bottom]}; })()');
     assert.ok(currentRow.row[0] >= currentRow.nav[0] && currentRow.row[1] <= currentRow.nav[1], 'a short window must show the current conversation: ' + JSON.stringify(currentRow));
-    if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `session-management-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
-    await clickText('.themeSwitch button', '夜读');
+    stage = "resize restored App and capture short window";
+    await changeTextSize('large');
+    await until(() => frame()?.executeJavaScript('(() => { const input=document.querySelector("input"); return Boolean(input && getComputedStyle(input).fontSize === "16px"); })()'), 'large text did not reach the restored App');
+    const largeBounds = await js('(() => { const row=document.querySelector(".sessionRow.current").getBoundingClientRect(), nav=document.querySelector("nav[aria-label=项目与任务]").getBoundingClientRect(); return {row:[row.top,row.bottom],nav:[nav.top,nav.bottom],width:document.body.scrollWidth,viewport:innerWidth}; })()');
+    assert.ok(largeBounds.row[0] >= largeBounds.nav[0] && largeBounds.row[1] <= largeBounds.nav[1], 'large text must keep the current conversation visible: ' + JSON.stringify(largeBounds));
+    assert.ok(largeBounds.width <= largeBounds.viewport, 'large text must not overflow the workbench');
+    if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `reading-large-${process.platform}.png`), (await capturePaintedPage()).toPNG());
+    await changeTextSize('standard');
+    if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `session-management-${process.platform}.png`), (await capturePaintedPage()).toPNG());
+    await changeAppearance('暗色');
     await openSessionMenu();
     await until(() => js('document.activeElement?.getAttribute("role") === "menuitem"'), 'session menu did not receive keyboard focus');
-    if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `session-menu-night-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
+    await until(() => js('getComputedStyle(document.querySelector(".sessionActionsMenu")).opacity === "1"'), 'the visible session menu did not finish opening');
+    if (process.env.TURNSU_QA_ARTIFACTS) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `session-menu-night-${process.platform}.png`), (await capturePaintedPage()).toPNG());
     await js('document.activeElement.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
     await until(() => js('document.activeElement?.getAttribute("aria-label") === "会话选项：订单整理" && !document.querySelector("[role=menu]")'), 'closing the menu must return focus to its trigger');
     await openSessionMenu();
     await js('{const input=document.querySelector(".composer textarea");input.dispatchEvent(new PointerEvent("pointerdown",{bubbles:true}));input.focus();}');
     await until(() => js('document.activeElement === document.querySelector(".composer textarea") && !document.querySelector("[role=menu]")'), 'clicking outside the menu must not steal focus back from the editor');
+    stage = 'Research component layout and responsive editing';
+    await checkResearchComponents({ js, frame, until, host, session:s, window, changeAppearance, capturePaintedPage });
     console.log(
       JSON.stringify({
         status: "passed",
@@ -702,10 +935,10 @@ app.whenReady().then(async () => {
         fonts: { workbenchSubsets: fontRequests.workbench.size, appSubsets: fontRequests.app.size },
         evidence: [
           "production conversation and sandboxed MCP App",
-          "offline Chinese fonts loaded in both actual documents through a read-only packaged route",
+          "Shared component typography and CJK font binaries decoded through read-only packaged routes; tabular numerals and display roles checked",
           "edited data returned to waiting tool",
           "same iframe across expand/collapse",
-          "paper/night theme follows MCP host context without losing edits",
+          "system/light/dark and text size follow standard MCP context without losing edits",
           "reading appearance survives renderer restart without reopening Apps",
           "duplicate action disabled",
           "confirmation status and button acknowledge delivery",
@@ -728,8 +961,9 @@ app.whenReady().then(async () => {
       }),
     );
   } catch (e) {
-    console.error(e.stack);
-    if (process.env.TURNSU_QA_ARTIFACTS && window && !window.isDestroyed()) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `conversation-failure-${process.platform}.png`), (await window.webContents.capturePage()).toPNG());
+    process.exitCode = 1;
+    console.error(`Conversation UI failed at ${stage}:`, e?.stack || e);
+    if (process.env.TURNSU_QA_ARTIFACTS && window && !window.isDestroyed()) await writeFile(join(process.env.TURNSU_QA_ARTIFACTS, `conversation-failure-${process.platform}.png`), (await window.webContents.capturePage()).toPNG()).catch(error => console.error("Could not save diagnostic screenshot:", error.message));
     for (const child of window?.webContents.mainFrame.framesInSubtree || []) {
       if (child.url === "turnsu-ui://app/intelligence.html")
         console.error("App frame:", await child.executeJavaScript("document.body.innerText"));

@@ -56,3 +56,18 @@ Kimi Code 与 oh-my-pi 当前通过各自原生配置选择模型；工作台可
 | `deploy` | 可选服务部署 |
 
 不在桌面构建中引入团队 Web 或服务端运行依赖。原生 Skill 导出保持对可执行内容、隐藏配置和外部依赖的拒绝边界；未来连接器须另行验证来源、权限和版本，不能借 Skill 安装绕过。
+
+## 源码职责分层
+
+| 目录 | 责任 |
+| --- | --- |
+| `apps/desktop/src/workbench/` | 导航、对话流、输入区、原生批准与工作台编排 |
+| `apps/desktop/src/intelligence-ui/` | 单一 OpenUI 渲染器、Research 组合、草稿与受限 App 桥；上游改编源码独立存放 |
+| `apps/desktop/src/shared/`、`platform/` | 共用控件、视觉、字体；桌面桥接口 |
+| `apps/desktop/src/features/` | 文件、浏览器、连接、能力、方法、计划、团队、微信按功能分类 |
+| `apps/desktop/electron/` | 原生窗口、浏览器视图、系统文件框与私有 Host 生命周期 |
+| `packages/agent-host/ui/` | 页面合同、旧数据单向迁移、SQLite 草稿、确认、成果与固定媒体服务 |
+| `apps/desktop/test/unit/`、`test/` | 纯状态逻辑与生产 Electron 场景；构建工具在 `scripts/` |
+| `packages/agent-host/test/ui/` | Host 页面迁移、版本、只读数据与确认回归 |
+
+根部 `src/main.jsx`、`src/surface.jsx` 只启动入口。工作台与内嵌 App 共用 React/Research 体系；OpenUI 不取代 Electron 或 Host，不增加第二个会话、权限或文件状态源。变更应放在责任所属目录，引用实际拥有该状态的模块，避免根目录再次堆积功能文件。

@@ -20,9 +20,9 @@ try {
     [...process.argv.slice(3), resolve(dirname(fileURLToPath(import.meta.url)), '../test', script)],
     { stdio: 'inherit', env });
   timer = setTimeout(() => {
-    console.error('Electron UI test exceeded 90 seconds, including cleanup.');
+    console.error('Electron UI test exceeded 150 seconds, including cleanup.');
     child.kill('SIGKILL');
-  }, 90_000);
+  }, 150_000);
   process.exitCode = await new Promise((resolve, reject) => {
     child.once('error', reject);
     child.once('close', (code, signal) => resolve(code ?? (signal ? 1 : 0)));

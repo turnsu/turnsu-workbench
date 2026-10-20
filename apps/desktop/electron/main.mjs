@@ -1,3 +1,4 @@
+import { nativeUiCsp } from "../host-dist/ui-csp.mjs";
 import { EmbeddedRuntime } from './embedded-runtime.mjs';
 import { bundledFontResponse } from './bundled-fonts.mjs';
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, net, nativeImage, Notification, powerMonitor, protocol, safeStorage, session, shell, Tray, utilityProcess } from 'electron';
@@ -201,7 +202,7 @@ else {
     if(new URL(request.url).pathname.startsWith('/fonts/'))return bundledFontResponse(request,root);
     if(request.url!=='turnsu-ui://app/intelligence.html'||request.method!=='GET'||!embedded?.inline)return new Response('Not found',{status:404});
     const resource=await host.request('ui.resource',{sessionId:embedded.inline.id});
-    return new Response(resource.contents[0].text,{headers:{'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src 'self'; img-src data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"}});
+    return new Response(resource.contents[0].text,{headers:{'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':nativeUiCsp}});
   });
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   session.defaultSession.setPermissionCheckHandler(() => false);
@@ -211,7 +212,7 @@ else {
   const hostRoot = resolve(root.replace(/\.asar$/, '.asar.unpacked'), 'host-dist');
   process.env.TURNSU_COMPUTER_PACK = resolve(hostRoot, 'computer-pack');
   computer = new ComputerRuntime(stateDirectory, payload => { if (window && !window.isDestroyed()) window.webContents.send('desktop:host-event', payload); });
-  const child = utilityProcess.fork(resolve(hostRoot, 'desktop-entry.mjs'), [stateDirectory], { serviceName: 'Turnsu Local Host', stdio: 'pipe', env: { ...process.env, TURNSU_UI_RESOURCE:resolve(root,'dist/ui-app.html'), TURNSU_GATEWAY_EXTENSION: resolve(hostRoot, 'pi-gateway-extension.mjs'), TURNSU_DOCUMENT_PACK: resolve(hostRoot, 'document-pack'), TURNSU_TOOL_MCP: resolve(hostRoot, 'tool-mcp.mjs'), TURNSU_TOOLS_EXTENSION: resolve(hostRoot, 'pi-tools-extension.mjs') } });
+  const child = utilityProcess.fork(resolve(hostRoot, 'desktop-entry.mjs'), [stateDirectory], { serviceName: 'Turnsu Local Host', stdio: 'pipe', env: { ...process.env, TURNSU_UI_RESOURCE:resolve(root,'dist/ui-app.html'), TURNSU_UI_LIBRARY:resolve(root,'dist/openui-library.md'), TURNSU_GATEWAY_EXTENSION: resolve(hostRoot, 'pi-gateway-extension.mjs'), TURNSU_DOCUMENT_PACK: resolve(hostRoot, 'document-pack'), TURNSU_TOOL_MCP: resolve(hostRoot, 'tool-mcp.mjs'), TURNSU_TOOLS_EXTENSION: resolve(hostRoot, 'pi-tools-extension.mjs') } });
   // Host/SDK diagnostics can contain private paths. UI errors travel through the structured channel.
   child.stdout?.resume(); child.stderr?.resume();
   host = new HostClient(child, payload => {

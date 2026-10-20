@@ -41,3 +41,15 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## OpenUI and Research controls
+
+The intelligent interaction renderer uses @openuidev/react-lang 1.0.0 and a
+modified copy of the MIT-licensed Open Intelligent UI component library at
+commit 03213439358bf3408ad61a46ec9e3230c5572e48. Its source provenance is kept
+with the library; the upstream chat, storage and model gateway are not used.
+See licenses/open-intelligent-ui-LICENSE and the generated dist/licenses inventory.
+Base UI provides keyboard and focus behavior for the shared Research controls.
+Onevra informed the activity disclosure behavior (licenses/onevra.txt).
+Research fonts are bundled under their OFL notices; no remote font service is
+needed for the workbench.

@@ -9,19 +9,25 @@
     "build": "npm run build:ui && node scripts/build-host.mjs host-dist",
     "start": "npm run build && node scripts/launch.mjs .",
     "package": "npm run build && node scripts/package.mjs",
-    "test": "node --test src/*.test.mjs test/*.test.mjs",
+    "test": "node --test test/unit/*.test.mjs",
     "test:electron": "npm run build && node scripts/launch.mjs test/electron-host-smoke.mjs",
     "pretest": "node scripts/build-host.mjs host-dist",
     "test:browser": "node scripts/test-ui.mjs browser",
     "test:conversation": "npm run build:ui && node scripts/test-ui.mjs conversation"
   },
   "dependencies": {
+    "@base-ui/react": "1.9.0",
     "@modelcontextprotocol/ext-apps": "2.0.3",
+    "@openuidev/lang-core": "1.0.0",
+    "@openuidev/react-lang": "1.0.0",
+    "katex": "0.16.47",
     "lucide-react": "1.18.0",
+    "maplibre-gl": "6.13.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-markdown": "10.1.0",
-    "remark-gfm": "4.0.1"
+    "remark-gfm": "4.0.1",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",

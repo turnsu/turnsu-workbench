@@ -1,0 +1,158 @@
+@import '../shared/fonts.css';
+@import '../shared/research-controls.css';
+/* Same semantic palette as the workbench; the embedded App has its own document. */
+:root {
+  --reading-extra: max(0px, calc(var(--font-text-sm-size, 14px) - 14px));
+  --type-control: var(--font-text-xs-size, 12.5px);
+  --type-data: var(--font-text-sm-size, 14px);
+  --type-body: var(--font-text-md-size, 14px);
+  --type-reading: var(--font-text-lg-size, 14px);
+  --type-section: var(--font-heading-sm-size, 18px);
+  --type-title: var(--font-heading-md-size, 20px);
+  --ui-surface: var(--color-background-primary, var(--research-surface));
+  --ui-ink: var(--color-text-primary, var(--research-ink));
+  --ui-muted: var(--color-text-secondary, var(--research-secondary));
+  --ui-line: var(--color-border-secondary, var(--research-line));
+  --ui-line-strong: var(--color-border-primary, var(--research-line-strong));
+  --ui-soft: var(--color-background-tertiary, var(--research-soft));
+  --ui-primary: var(--color-background-inverse, var(--research-primary));
+  --ui-accent: var(--color-text-info, var(--research-focus));
+  --ui-primary-foreground: var(--color-text-inverse, var(--research-on-primary));
+  --ui-danger-soft: var(--color-background-danger, #fbeee9);
+  --ui-danger-line: var(--color-border-danger, #dcb7ac);
+  --ui-disabled-ink: var(--color-text-disabled, var(--ui-muted));
+  --ui-primary-hover: var(--research-primary);
+  --ui-accent-soft: var(--color-background-info, var(--research-selection));
+  --ui-green: var(--color-text-success, #35684e);
+  --ui-warning: var(--color-text-warning, #895f29);
+  --ui-danger: var(--color-text-danger, #a33f36);
+  --ui-focus: var(--color-ring-primary, var(--ui-accent));
+  --openui-foreground: var(--ui-surface);
+  --openui-text-neutral-primary: var(--ui-ink);
+  --openui-text-neutral-secondary: var(--ui-muted);
+  --openui-font-body: var(--font-sans, var(--font-ui, system-ui));
+  --ui-motion: cubic-bezier(.2,.8,.2,1);
+  font: var(--type-body)/1.5 var(--font-sans, var(--font-ui));
+  scrollbar-color: var(--ui-line-strong) transparent;
+  scrollbar-width: thin;
+  color: var(--ui-ink);
+  background: var(--ui-surface);
+  color-scheme: light;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+/* Standard host context owns theme and typography in this isolated document. */
+:root[data-theme="dark"] {
+    --ui-surface: var(--color-background-primary, var(--research-surface));
+    --ui-ink: var(--color-text-primary, var(--research-ink));
+    --ui-muted: var(--color-text-secondary, var(--research-secondary));
+    --ui-line: var(--color-border-secondary, var(--research-line));
+    --ui-line-strong: var(--color-border-primary, var(--research-line-strong));
+    --ui-soft: var(--color-background-tertiary, var(--research-soft));
+    --ui-primary: var(--color-background-inverse, var(--research-primary));
+    --ui-accent: var(--color-text-info, var(--research-primary));
+    --ui-primary-hover: var(--research-primary);
+    --ui-primary-foreground: var(--color-text-inverse, var(--research-on-primary));
+    --ui-accent-soft: var(--color-background-info, var(--research-selection));
+    --ui-green: var(--color-text-success, #8bc9a4);
+    --ui-warning: var(--color-text-warning, #ddc291);
+    --ui-danger: var(--color-text-danger, #e4a899);
+    --ui-danger-soft: var(--color-background-danger, #3c2a25);
+    --ui-danger-line: var(--color-border-danger, #8b5d50);
+    --ui-disabled-ink: var(--color-text-disabled, var(--ui-muted));
+    color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+::selection { background: var(--ui-accent-soft); color: var(--ui-ink); }
+input, textarea { caret-color: var(--ui-accent); }
+main { margin: 0; padding: 0;  container-type: inline-size;}
+main[data-host="external"] { padding: 16px; }
+h2 { color: var(--ui-muted);    margin: 0 0 10px;    font: 600 var(--type-label)/1.5 var(--font-sans, var(--font-ui)); letter-spacing: .07em; text-transform: uppercase;}
+p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.muted, small { color: var(--ui-muted); font-size: var(--type-control); }
+button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 30px; font: inherit; font-size: var(--type-control); font-weight: 500; cursor: pointer; border: 1px solid var(--ui-line); border-radius: var(--border-radius-sm, 7px); background: var(--ui-surface); color: var(--ui-ink); padding: 5px 11px; }
+button svg { flex: none; }
+button:hover:not(:disabled) { background: var(--ui-soft); border-color: var(--ui-line-strong); }
+button:disabled { background: var(--ui-soft); border-color: var(--ui-line); color: var(--ui-disabled-ink); cursor: default; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 3px; }
+.primary { border-radius: 7px; min-height: 30px; background: var(--ui-primary); color: var(--ui-primary-foreground); border-color: var(--ui-primary); font-size: var(--type-control); font-weight: 500; padding: 5px 12px; justify-self: start; }
+.primary:disabled { background: var(--ui-soft); border-color: var(--ui-line); color: var(--ui-disabled-ink); }
+.primary:hover:not(:disabled) { background: var(--ui-primary-hover); border-color: var(--ui-primary-hover); }
+.primary[data-confirmation="confirmed"] { background: var(--ui-soft); border-color: transparent; color: var(--ui-green); }
+input, textarea, select { width: 100%; min-width: 0; font: inherit; font-size: var(--type-data); font-weight: 400; line-height: 1.5; border: 1px solid var(--ui-line-strong); border-radius: var(--border-radius-sm, 7px); padding: 8px 10px; color: var(--ui-ink); background: var(--ui-surface); box-shadow: none; }
+input:hover:not(:disabled), textarea:hover:not(:disabled), select:hover:not(:disabled) { border-color: var(--ui-line-strong); }
+input:disabled, textarea:disabled, select:disabled { background: var(--ui-soft); color: var(--ui-muted); }
+input[type="checkbox"] { width: 17px; height: 17px; margin: 0; accent-color: var(--ui-accent); }
+textarea { min-height: 88px; resize: vertical; }
+.sectionTitle { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.sectionTitle h2 { margin: 0; }
+.materialNames { display: grid; flex-wrap: wrap; gap: 0; padding: 0; margin: 10px 0 0; list-style: none; }
+.materialNames li { display: flex; gap: 10px; align-items: center; border: 0; background: transparent; border-radius: 0; padding: 11px 0; min-width: 0; max-width: 100%;   border-top: 1px solid var(--ui-line);}
+.materialNames li > svg { color: var(--ui-muted); flex: none; }
+.materialNames li > span { min-width: 0; }
+.materialNames li.fileReference { padding: 0; border: 0; }
+.materialNames .fileReference button { width: 100%; justify-content: flex-start; gap: 10px; text-align: left; padding: 11px 0;  border: 0; border-top: 1px solid var(--ui-line); border-radius: 0; background: transparent;}
+.materialNames .fileReference button > span { flex: 1; min-width: 0; }
+.materialNames .fileReference button > svg { flex: none; color: var(--ui-muted); }
+.materialNames strong { display: block; font-size: var(--type-control); font-weight: 500; color: var(--ui-ink); overflow-wrap: anywhere; }
+.materialNames small { display: block; font-size: var(--type-caption); color: var(--ui-muted); margin-top: 2px; }
+.statusBlock { display: grid; gap: 6px;  padding-top: 12px; border-top: 1px solid var(--ui-line);}
+.statusBlock h2 { margin: 0;  font-size: var(--type-caption); font-weight: 400; letter-spacing: 0; text-transform: none;}
+.statusDescription { padding: 0; border-top: 0; font-size: var(--type-body); font-weight: 400; line-height: 1.5; color: var(--ui-ink); font-variant-numeric: tabular-nums; }
+.status { display: flex; align-items: baseline; gap: 7px; color: var(--ui-muted); font-size: var(--type-helper); line-height: 1.5; }
+.status::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: none; align-self: center; }
+.status[data-tone="success"] { color: var(--ui-green); }
+.status[data-tone="working"] { color: var(--ui-muted); }
+.status[data-tone="waiting"] { color: var(--ui-warning); }
+.status[data-tone="warning"] { color: var(--ui-warning); }
+.status[data-tone="error"] { color: var(--ui-danger); }
+.error { color: var(--ui-danger); background: var(--ui-danger-soft); border: 1px solid var(--ui-danger-line); border-radius: var(--border-radius-sm, 7px); padding: 14px; margin-bottom: 18px; font-size: var(--type-control); }
+.error button { display: flex; margin-top: 12px; }
+.tableScroll { overflow: auto; max-height: 360px; border-block: 1px solid var(--ui-line); scrollbar-width: thin; }
+table { width: 100%; border-collapse: collapse; text-align: left; font-size: var(--type-data); line-height: 1.5; }
+tr { height: auto; }
+th { position: sticky; top: 0; background: var(--ui-surface); color: var(--ui-muted); font-size: var(--type-label); font-weight: 600; z-index: 1;  letter-spacing: .07em; text-transform: uppercase;}
+td, th { border-bottom: 1px solid var(--ui-line); padding: var(--space-cell); max-width: 300px; overflow-wrap: anywhere;  }
+tbody tr:hover, tbody tr:focus-within { background: var(--ui-soft); }
+tr:last-child td { border-bottom: 0;  }
+.numeric { text-align: right; font-variant-numeric: tabular-nums;  font-family: var(--font-sans, var(--font-ui)); }
+td.numeric { color: var(--ui-ink); font-weight: 400; }
+td input { padding: 6px 8px; font-size: var(--type-control); }
+td.numeric input { text-align: right; font-variant-numeric: tabular-nums;  font-family: var(--font-sans, var(--font-ui)); }
+nav { display: flex; align-items: center; gap: 12px; padding-top: 12px; font-size: var(--type-control); color: var(--ui-muted); }
+nav:has(button:disabled + span + button:disabled) { display: none; }
+footer { border-top: 1px solid var(--ui-line); margin-top: 18px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; padding-top: 12px; color: var(--ui-muted); font-size: var(--type-caption); }
+footer:empty, footer > span:empty { display: none; }
+@media (max-width: 440px) {
+  main { padding: 0; }
+  td, th { padding: 10px 12px; }
+  .sectionTitle { align-items: flex-start; flex-wrap: wrap; }
+  .primary { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Theme colors update immediately; pressing a button never moves an input. */
+
+
+/* Typography gives business data a hierarchy without inventing comparisons. */
+.statusBlock[data-metric] .statusDescription { font-size: var(--type-metric); font-weight: 500; line-height: 1.25; letter-spacing: -.02em; }
+.metricUnit { font-size: .6em; letter-spacing: 0; font-weight: 400; white-space: pre; }
+.surfaceSources { flex-basis: 100%; overflow-wrap: anywhere; color: var(--ui-muted); font-size: var(--type-caption); }
+.dataRows { max-height: 360px; overflow: auto; border-block: 1px solid var(--ui-line); }
+.dataRow { padding: 11px 0; }
+.dataRow + .dataRow { border-top: 1px solid var(--ui-line); }
+.dataRow:hover, .dataRow:focus-within { background: var(--research-highlight); }
+.dataRowTitle { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.dataLabel, .dataRow dt { font-size: var(--type-caption); color: var(--ui-muted); font-weight: 400; }
+.dataRowTitle strong { font-size: var(--type-body); font-weight: 500; overflow-wrap: anywhere; }
+.dataRow dl { display: grid; gap: 7px; margin: 10px 0 0; }
+.dataRow dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.dataRow dd { margin: 0; min-width: 0; font-size: var(--type-data); overflow-wrap: anywhere; }
+.dataRow input { max-width: 100%; }
+.comparisonRows .dataRow dl { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.comparisonRows .dataRow dl > div { display: grid; align-content: start; gap: 6px; border-left: 1px solid var(--ui-line); padding-left: 14px; }
+.comparisonRows .dataRow dl > div:first-child { border: 0; padding: 0; }
+.comparisonRows .dataRow dl > div:first-child dd { color: var(--ui-muted); }
+.comparisonRows .dataRow dl > div:last-child dd { font-weight: 500; }
