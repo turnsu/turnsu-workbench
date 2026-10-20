@@ -17,7 +17,7 @@ export async function flushConversationSurface() {
 }
 const methods = new Set(["read", "save", "submit", "deliver", "import", "open_file", "media"]);
 
-export function ConversationSurface({ sessionId, title, container, anchor, expanded, onExpand, onOpenFile, theme = "light", textSize = "standard" }) {
+export function ConversationSurface({ sessionId, title, container, anchor, expanded, onExpand, onOpenFile, onOpenLink, theme = "light", textSize = "standard" }) {
   const [mount] = useState(() => {
     const element = document.createElement("div");
     element.className = "surfaceMount";
@@ -40,8 +40,8 @@ export function ConversationSurface({ sessionId, title, container, anchor, expan
   const hostContext = useRef(null);
   hostContext.current = { ...hostContext.current, theme, platform: "desktop", displayMode: expanded ? "fullscreen" : "inline", availableDisplayModes: ["inline", "fullscreen"] };
   const frame = useRef(null),
-    actions = useRef({ onExpand, onOpenFile });
-  actions.current = { onExpand, onOpenFile };
+    actions = useRef({ onExpand, onOpenFile, onOpenLink });
+  actions.current = { onExpand, onOpenFile, onOpenLink };
   const [height, setHeight] = useState(260),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true);
@@ -150,8 +150,8 @@ export function ConversationSurface({ sessionId, title, container, anchor, expan
         return {};
       };
       bridge.onopenlink = async ({ url }) => {
-        if (disposed || !/^https?:\/\//i.test(url)) throw new Error('链接无效。');
-        await invoke('browser_open', { sessionId, url });
+        if (disposed || !/^https?:\/\//i.test(url) || !actions.current.onOpenLink) throw new Error('链接无效。');
+        await actions.current.onOpenLink(url, sessionId);
         return {};
       };
       bridge.onsizechange = ({ height: value }) => {

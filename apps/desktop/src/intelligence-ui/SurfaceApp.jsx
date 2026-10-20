@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import "./surface.css";
 import { FileText, ArrowUpRight } from "lucide-react";
 import { surfaceBridge } from "./surface-bridge.mjs";
-import { IntelligencePage } from './IntelligencePage.jsx';
+import { IntelligencePage, INVALID_INPUT_MESSAGE } from './IntelligencePage.jsx';
 import {
   presentationEvents,
   confirmationState,
@@ -23,6 +23,7 @@ export default function App() {
     request = useRef(null),
     autosave = useRef(null),
     stateRef = useRef(null),
+    page = useRef(null),
     saveCallback = useRef(null),
     saveQueue = useRef(Promise.resolve()),
     operating = useRef(false);
@@ -33,6 +34,7 @@ export default function App() {
     const editing = Object.keys(pending.current).length > 0;
     if (alive.current && (!editing || canRebaseSurfaceEdits(pendingBase.current, s, pending.current))) {
       if (editing) { pendingRevision.current = s.revision; pendingBase.current = s; }
+      if (stateRef.current?.presentation?.revision !== s.presentation?.revision) setError('');
       stateRef.current = s;
       setState(s);
       setDraft({ ...s.document.data, ...pending.current });
@@ -62,6 +64,7 @@ export default function App() {
   }
   async function persist() {
     clearTimeout(autosave.current);
+    page.current?.validate();
     if (!Object.keys(pending.current).length) return stateRef.current;
     const values = { ...pending.current };
     const base = pendingBase.current || stateRef.current;
@@ -197,13 +200,13 @@ export default function App() {
           </Button>
         </div>
       )}
-      <IntelligencePage document={{ ...state.document, data: draft }}
+      <IntelligencePage ref={page} document={{ ...state.document, data: draft }}
         task={{ state, busy, disabled: busy || state.readOnly, confirmation: confirmationState({ ...state, dirty: state.dirty || Object.keys(pending.current).length > 0 }), act,
           openFile: path => run(() => api('open_file', { path })) }}
         onChange={changeValues} onConfirm={action => {
           if (confirmationState({ ...stateRef.current, dirty: stateRef.current.dirty || Object.keys(pending.current).length > 0 })) return;
           return act('submit', action);
-        }} onError={setError}/>
+        }} onError={setError} onEdit={() => setError(previous => previous === INVALID_INPUT_MESSAGE ? '' : previous)}/>
       {state.readOnly && state.assets?.length > 0 && <section className="assets" aria-label="已保存的材料">
         <ul className="materialNames">{state.assets.map(file => <li className="fileReference" key={file.path}><Button aria-label={'打开文件：' + file.path.split('/').at(-1)} disabled={busy || !state.fileAccess} onClick={() => run(() => api('open_file', { path: file.path }))}><FileText size={18}/><span><strong>{file.path.split('/').at(-1)}</strong><small>已保存的材料</small></span><ArrowUpRight size={16}/></Button></li>)}</ul>
       </section>}

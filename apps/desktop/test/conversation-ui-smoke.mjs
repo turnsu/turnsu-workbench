@@ -194,10 +194,12 @@ app.whenReady().then(async () => {
         window.webContents.send("desktop:host-event", payload),
     });
     host.browser = new Browser(host, (_method, args) => embedded.browser.call(args));
-    const nativeOpens = [];
+    const nativeOpens = [], surfaceCalls = [];
     ipcMain.handle("desktop:invoke", async (event, operation, args = {}) => {
       try {
         assert.equal(event.senderFrame, window.webContents.mainFrame);
+        if (operation === 'surface_call') surfaceCalls.push(args.method);
+        if (operation === 'surface_call' && args.method === 'import') throw Error('This regression must block invalid imports before opening the OS picker.');
         let value;
         if (operation === "local_command")
           value = await host.command(args.method, args.args);
@@ -925,7 +927,7 @@ app.whenReady().then(async () => {
     await js('{const input=document.querySelector(".composer textarea");input.dispatchEvent(new PointerEvent("pointerdown",{bubbles:true}));input.focus();}');
     await until(() => js('document.activeElement === document.querySelector(".composer textarea") && !document.querySelector("[role=menu]")'), 'clicking outside the menu must not steal focus back from the editor');
     stage = 'Research component layout and responsive editing';
-    await checkResearchComponents({ js, frame, until, host, session:s, window, changeAppearance, capturePaintedPage });
+    await checkResearchComponents({ js, frame, until, host, session:s, window, embedded, website, surfaceCalls, changeAppearance, capturePaintedPage });
     console.log(
       JSON.stringify({
         status: "passed",

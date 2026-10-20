@@ -25,6 +25,8 @@ v5A Research 的阅读顺序是结论、依据、调整与确认、来源。白�
 
 `turnsu_ui present` 接受 `{format:"openui", title, program, data, streaming?}`。`program` 是 OpenUI 声明语言，`$variable` 与同一份 Host 草稿绑定；`@Set` 只改变本地状态。`Query("task_data", {name}, fallback)` 只读当前页面数据，不允许模型指定任意工具。`@ToAssistant` 经过可见输入校验、版本校验和幂等确认后交给原 Agent；生成中、未解决的渲染错误及接收状态不确定时不能提交。
 
+调整或导入之后，先让用户核对，再用独立按钮确认。当前固定的 react-lang 版本不会等待组合内的宿主动作，确认上下文也可能在修改前求值，因此 `ToAssistant`、`ImportFiles`、`ContinueTask`、`OpenUrl` 和 `CopyToClipboard` 必须独立使用；含这些动作的多步 `Action([...])` 会在执行第一步前明确拒绝。仅组合本地 `Set/Reset` 仍可用。未完成的数字输入在保存、切换任务和退出前会提示修正，不能把旧值当作已保存的新输入。
+
 业务数据、金额精度和计算口径来自任务来源，不能套用文档示例数值。Host 已显示 `document.title`，正文从结论开始。新内容不能覆盖未提交的修改。旧树形页面在 Host 读取时单向转成 OpenUI，保留原数据键、只读列约束、revision、时间和确认回执；浏览器端没有第二个旧渲染器。
 
 界面合同与持久化放在 `packages/agent-host/ui/`；App 与 Research 组件在 `apps/desktop/src/intelligence-ui/`；共用视觉与基础操作在 `src/shared/`。迁移及确认回归在 Host 的 `test/ui/`，桌面状态测试在 `test/unit/`，生产 Electron 路径由 `test/conversation-ui-smoke.mjs` 和 `test/research-ui-check.mjs` 覆盖。受控 Agent 检查与真实 Agent 验收分别记录，不能相互替代。

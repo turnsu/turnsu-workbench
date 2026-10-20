@@ -59,6 +59,7 @@ const catalogOptions = {
   tools: [{ name: 'task_data', description: 'Read an existing key of document.data by its exact name. Returns {value: JSON}. This is NOT a file reader. Arguments: {name: string}.' }],
   additionalRules: ['Read source files with your authorized file tools, then put verified rows in document.data (for example $rows) and bind ReviewTable($rows, columns). Prefer direct bindings; Query is unnecessary for already available data. Never pass a filename to task_data unless it is an actual document.data key.',
     'Save local state; only a human @ToAssistant action confirms execution. TaskFiles may only open paths already returned in the task assets or results; a file read by the Agent is not automatically an attached material. Use a source label for other verified files.',
+    'Host actions must be standalone: never combine ToAssistant, ImportFiles, ContinueTask, OpenUrl or CopyToClipboard with another step in Action([...]). Such plans are rejected before any step executes. Let the person adjust or import, review the updated page, then confirm with a separate button. Multiple local Set/Reset steps are supported.',
     'Images and route lookups use declared public providers through the current task; report failures rather than inventing media.',
     'Only Query("task_data",{name:...},{value:null}) is available. Mutation, @Run and arbitrary tool names are unavailable. Report missing data; never fabricate mock data or execute business operations from a component.'],
 };

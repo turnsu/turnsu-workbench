@@ -329,6 +329,8 @@ test("a new conversation has no task form; only an Agent presentation adds inter
     },
   });
   assert.equal(state.presentation.anchor, "review-request");
+  const presentationRevision = state.presentation.revision;
+  assert.equal(presentationRevision, state.revision);
   state = await f.host.command("ui.save", {
     sessionId: f.s.id,
     revision: state.revision,
@@ -337,10 +339,26 @@ test("a new conversation has no task form; only an Agent presentation adds inter
   await f.reopen();
   const restored = await f.host.command("ui.read", { sessionId: f.s.id });
   assert.equal(restored.document.data.note, "保留原始金额");
+  assert.equal(restored.presentation.revision, presentationRevision, 'draft saves and reopening do not start a new presentation');
   assert.equal(
     restored.presentation.presented_at,
     state.presentation.presented_at,
   );
+});
+test('historical presentation metadata gains a stable identity without rewriting the page', async (t) => {
+  const f = await setup(t);
+  const document = { format: 'openui', title: '核对', program: 'root = Text("原始内容")', data: {} };
+  const before = await f.host.ui.call(f.s.id, { operation: 'present', revision: 1, document });
+  f.host.db.exec('ALTER TABLE ui_presentation DROP COLUMN revision');
+  await f.reopen();
+  const restored = f.host.ui.read(f.s.id);
+  assert.equal(restored.presentation.revision, 0);
+  assert.equal(restored.presentation.presented_at, before.presentation.presented_at);
+  assert.equal(restored.revision, before.revision);
+  assert.deepEqual(restored.document, before.document);
+  const next = await f.host.ui.call(f.s.id, { operation: 'present', revision: restored.revision, document });
+  assert.equal(next.presentation.revision, next.revision);
+  assert.ok(next.presentation.revision > restored.presentation.revision);
 });
 test("composer attachments reach the selected Agent, preserve the original, and can be removed without deleting files", async (t) => {
   const f = await setup(t);

@@ -25,6 +25,8 @@ export class UISurfaces {
       CREATE TABLE IF NOT EXISTS ui_presentation(session_id TEXT PRIMARY KEY REFERENCES sessions(id),anchor TEXT,presented_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS ui_context(session_id TEXT PRIMARY KEY REFERENCES sessions(id),content TEXT NOT NULL);
       UPDATE ui_events SET state='uncertain' WHERE state='dispatching';`);
+    if (!this.db.prepare('PRAGMA table_info(ui_presentation)').all().some(column => column.name === 'revision'))
+      this.db.exec('ALTER TABLE ui_presentation ADD COLUMN revision INTEGER NOT NULL DEFAULT 0');
   }
   ensure(sessionId) {
     const s = this.host.session(sessionId);
@@ -55,7 +57,7 @@ export class UISurfaces {
     const presentation =
       this.db
         .prepare(
-          "SELECT anchor,presented_at FROM ui_presentation WHERE session_id=?",
+          "SELECT anchor,presented_at,revision FROM ui_presentation WHERE session_id=?",
         )
         .get(s.id) || null;
     const results = JSON.parse(row.results);
@@ -387,9 +389,9 @@ export class UISurfaces {
             .get(sessionId)?.id || null;
         this.db
           .prepare(
-            "INSERT INTO ui_presentation VALUES(?,?,?) ON CONFLICT(session_id) DO UPDATE SET anchor=excluded.anchor,presented_at=excluded.presented_at",
+            "INSERT INTO ui_presentation(session_id,anchor,presented_at,revision) VALUES(?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET anchor=excluded.anchor,presented_at=excluded.presented_at,revision=excluded.revision",
           )
-          .run(sessionId, anchor, Date.now());
+          .run(sessionId, anchor, Date.now(), state.revision + 1);
         this.db.exec("COMMIT");
       } catch (error) {
         this.db.exec("ROLLBACK");

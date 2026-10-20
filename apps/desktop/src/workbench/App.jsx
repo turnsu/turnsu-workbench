@@ -582,8 +582,17 @@ export default function App() {
       if(result.failed.length)setError(result.failed.map(f=>f.name+'：'+f.reason).join('；'));
     }catch(e){setError(e.message);}finally{setImportingFiles(false);}
   }
-  async function showBrowser(url) {
-    try{const id=await ensureConversation();if(typeof url==='string')await invoke('browser_open',{sessionId:id,url});setOutputsOpen(false);setSurfaceExpanded(false);setFilePanel(false);setEmbeddedOpen(true);}catch(e){setError(e.message);}
+  async function showBrowser(url, expectedSessionId) {
+    try {
+      const id = expectedSessionId || await ensureConversation();
+      if (selected.current !== id) throw new Error('当前对话已切换，请在原对话打开链接。');
+      if (typeof url === 'string') await invoke('browser_open', { sessionId: id, url });
+      if (selected.current !== id) throw new Error('当前对话已切换，网页保留在原对话。');
+      setOutputsOpen(false); setSurfaceExpanded(false); setFilePanel(false); setEmbeddedOpen(true);
+    } catch (e) {
+      setError(e.message);
+      if (expectedSessionId) throw e;
+    }
   }
   async function expandSurface(value){
     if(value){setOutputsOpen(false);await invoke('embedded_hide');setEmbeddedOpen(false);setFilePanel(false);}setSurfaceExpanded(value);
@@ -609,7 +618,7 @@ export default function App() {
   const surfaceAnchor = activeSurface && (visibleMessages.some(m => m.id === activeSurface.anchor) ? activeSurface.anchor : visibleMessages.at(-1)?.id);
   // One connected App mount follows the presentation anchor without
   // recreating its iframe, bridge, selection or unsaved fields.
-  const inlineSurface = activeSurface && !isArchived && <ConversationSurface key={'surface-'+sessionId} container={timeline} anchor={surfaceAnchor} sessionId={sessionId} title={surfaceState.document.title} expanded={surfaceExpanded} onExpand={expandSurface} onOpenFile={showResult} theme={theme} textSize={textSize}/>;
+  const inlineSurface = activeSurface && !isArchived && <ConversationSurface key={'surface-'+sessionId} container={timeline} anchor={surfaceAnchor} sessionId={sessionId} title={surfaceState.document.title} expanded={surfaceExpanded} onExpand={expandSurface} onOpenFile={showResult} onOpenLink={showBrowser} theme={theme} textSize={textSize}/>;
 
   return <div className={`app ${surfaceExpanded ? 'hasExpandedSurface' : ''} ${sidebarOpen ? '' : 'sidebarCollapsed'}`}>
     {computerState?.grant && <div className="computerIndicator" role="status"><strong>{computerState.grant.mode === "local" ? "本机电脑操作已授权" : "隔离电脑已启用"}</strong><span>到期 {new Date(computerState.grant.expiresAt).toLocaleTimeString()}</span><button onClick={() => command("computer.stop").then(() => setComputerState(null)).catch(e => setError(e.message))}>暂停并撤销</button></div>}

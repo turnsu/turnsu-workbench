@@ -47,6 +47,7 @@
     "Host confirmation states disable ToAssistant actions without disabling local calculations",
     "Explicit Format precision preserves trailing zeros; invalid visible numeric input blocks confirmation",
     "Research appearance uses the shared workbench tokens; exact images never substitute on failure; optional public media and graph failures preserve explicit limits",
-    "Chinese control labels, single Host title and Research conclusion/context/evidence/action/source composition"
+    "Chinese control labels, single Host title and Research conclusion/context/evidence/action/source composition",
+    "Mixed Host action plans rejected before execution to avoid react-lang 1.0 asynchronous partial actions and stale confirmation contexts"
   ]
 }

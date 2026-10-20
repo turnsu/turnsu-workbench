@@ -11,7 +11,8 @@ import {
 } from "@openuidev/react-lang";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { z } from "zod/v4";
-import { useTaskAction } from '../../task-context';
+import { useTask, useTaskAction } from '../../task-context';
+import { actionPlanError } from '../../task-state.mjs';
 import { Glyph } from "./glyph";
 import { bg, children, color, onColor, cx, option, radius, radiusSchema, space, textOf, toOption, type Option } from "./style";
 
@@ -21,7 +22,10 @@ type Plan = Parameters<ReturnType<typeof useTriggerAction>>[2];
 function useRunAction() {
   const trigger = useTriggerAction();
   const formName = useFormName();
+  const task = useTask();
   return (message: string, plan: unknown, sendLabel: boolean) => {
+    const error = actionPlanError(plan);
+    if (error) { task.reportError?.(error); return; }
     if (plan) void trigger(message, formName, plan as Plan);
     else if (sendLabel) void trigger(message, formName);
   };
