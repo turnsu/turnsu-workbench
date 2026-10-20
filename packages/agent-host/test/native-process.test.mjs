@@ -20,3 +20,11 @@ test('OpenCode npm shim resolves its native executable without invoking cmd.exe'
   await mkdir(join(root, 'node_modules/opencode-ai/bin'), { recursive: true }); await writeFile(entry, 'fixture');
   assert.deepEqual(nativeCommand(join(root, 'opencode.cmd'), ['acp'], null), { file: entry, args: ['acp'], entry });
 });
+
+test('oh-my-pi Windows shim requires Bun and preserves quoted arguments',async t=>{
+  const root=await mkdtemp(join(tmpdir(),'turnsu omp 中文 '));t.after(()=>rm(root,{recursive:true,force:true}));
+  const folder=join(root,'node_modules/@oh-my-pi/pi-coding-agent/dist'),entry=join(folder,'cli.js');await mkdir(folder,{recursive:true});await writeFile(entry,'// installed CLI fixture');
+  const binary=join(root,'omp.cmd'),args=['--mode','acp','--model','model & quotes'];
+  assert.throws(()=>nativeCommand(binary,args,'node.exe'),/Bun/);
+  assert.deepEqual(nativeCommand(binary,args,null,'C:\\Program Files\\bun.exe'),{file:'C:\\Program Files\\bun.exe',args:[entry,...args],entry});
+});

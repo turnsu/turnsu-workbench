@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import { lstat, open, readdir, realpath } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'node:path';
 
-const roots = { codex: '.agents/skills', claude: '.claude/skills', pi: '.pi/skills' };
+const roots = { codex: ['.agents/skills'], claude: ['.claude/skills', '.agents/skills'], pi: ['.pi/skills', '.agents/skills'], kimi: ['.agents/skills', '.kimi/skills'], opencode: ['.agents/skills', '.opencode/skills'], omp: ['.agents/skills', '.omp/skills'] };
 const busy = new Set(['starting', 'running', 'waiting', 'stopping']);
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = message => { throw new Error(message); };
@@ -16,8 +16,8 @@ export class ProjectSkills {
 
   async skillFile(projectId, agent, path) {
     if (!roots[agent] || !valid(path, 300)) fail('请选择当前项目里的技能。');
-    const prefix = roots[agent] + '/';
-    if (!path.startsWith(prefix) || !path.endsWith('/SKILL.md')) fail('技能路径不属于所选 Agent。');
+    const prefix = roots[agent].map(root => root + '/').find(prefix => path.startsWith(prefix));
+    if (!prefix || !path.endsWith('/SKILL.md')) fail('技能路径不属于所选 Agent。');
     const name = path.slice(prefix.length, -'/SKILL.md'.length);
     if (!name || name.includes('/') || name.includes('\\') || name === '.' || name === '..') fail('技能路径无效。');
     const root = await realpath(this.host.project(projectId).path);
@@ -49,7 +49,7 @@ export class ProjectSkills {
     if (!valid(projectId)) fail('请选择本地项目。');
     const root = await realpath(this.host.project(projectId).path), items = [];
     let truncated = false;
-    for (const [agent, folder] of Object.entries(roots)) {
+    for (const [agent, folders] of Object.entries(roots)) for (const folder of folders) {
       let entries;
       try {
         const directory = join(root, ...folder.split('/'));

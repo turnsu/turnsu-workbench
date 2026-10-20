@@ -16,6 +16,7 @@ async function fixture(t, agent = 'codex') {
       async request(method, params) {
         calls.push({ method, params });
         if (method === 'thread/start') return { thread: { id: 'native-capture', turns: [] } };
+        if (method === 'model/list') return {data:[{model:'source-model',defaultReasoningEffort:'medium'}]};
         if (method === 'turn/start') return { turn: { id: 'capture-turn' } };
         throw new Error(method);
       },

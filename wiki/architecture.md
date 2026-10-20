@@ -17,6 +17,8 @@ Electron 主进程只处理窗口、系统文件对话框、受限文件打开�
 
 Host 以 SQLite 保存可见工作状态和原生会话 ID，不复制用户全部原生历史。项目选择和会话索引不会启动所有 Agent；只有读取模型、执行或主动恢复时连接所选执行器。闲置连接可释放，运行中、待批准和停止中的连接保留。历史索引和消息分页，UI 只保留当前页与正在查看的一页；资源边界详见[会话与内存](memory.md)。
 
+会话的整理归属与执行归属分开：`collection_project_id` 只改变导航位置；`sessions.project_id`、原生 ID、目录、草稿、文件和授权始终使用原执行项目。`session.locate` 返回整理项目及必要时的 `workingProjectId`，异步导航据此读取原草稿，并拒绝过期的定位响应。归档时间与置顶时间使用新增列保存；旧会话迁移默认未归档、未置顶，不重写消息。项目显示名称与置顶不修改磁盘路径。`session.move`、`session.archive` 拒绝执行中、待批准和停止中的任务；跨团队整理拒绝，归档后的执行和交互提交拒绝。归档先保存两种草稿，再卸载 App 并撤销浏览器授权，恢复不自动重新授权。
+
 ## Agent 与模型
 
 | 执行器 | 原生接入 | 本版限制 |
@@ -54,3 +56,18 @@ Kimi Code 与 oh-my-pi 当前通过各自原生配置选择模型；工作台可
 | `deploy` | 可选服务部署 |
 
 不在桌面构建中引入团队 Web 或服务端运行依赖。原生 Skill 导出保持对可执行内容、隐藏配置和外部依赖的拒绝边界；未来连接器须另行验证来源、权限和版本，不能借 Skill 安装绕过。
+
+## 源码职责分层
+
+| 目录 | 责任 |
+| --- | --- |
+| `apps/desktop/src/workbench/` | 导航、对话流、输入区、原生批准与工作台编排 |
+| `apps/desktop/src/intelligence-ui/` | 单一 OpenUI 渲染器、Research 组合、草稿与受限 App 桥；上游改编源码独立存放 |
+| `apps/desktop/src/shared/`、`platform/` | 共用控件、视觉、字体；桌面桥接口 |
+| `apps/desktop/src/features/` | 文件、浏览器、连接、能力、方法、计划、团队、微信按功能分类 |
+| `apps/desktop/electron/` | 原生窗口、浏览器视图、系统文件框与私有 Host 生命周期 |
+| `packages/agent-host/ui/` | 页面合同、旧数据单向迁移、SQLite 草稿、确认、成果与固定媒体服务 |
+| `apps/desktop/test/unit/`、`test/` | 纯状态逻辑与生产 Electron 场景；构建工具在 `scripts/` |
+| `packages/agent-host/test/ui/` | Host 页面迁移、版本、只读数据与确认回归 |
+
+根部 `src/main.jsx`、`src/surface.jsx` 只启动入口。工作台与内嵌 App 共用 React/Research 体系；OpenUI 不取代 Electron 或 Host，不增加第二个会话、权限或文件状态源。变更应放在责任所属目录，引用实际拥有该状态的模块，避免根目录再次堆积功能文件。

@@ -1,0 +1,36 @@
+@import './research-tokens.css';
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: var(--radius-control); padding: 8px 10px; background: transparent; color: inherit; font-weight: 400; line-height: 1.4; cursor: pointer; }
+button:hover:not(:disabled) { background: var(--research-soft); }
+/* Theme changes paint immediately; only the hover boundary eases. */
+button { transition: border-color .15s; }
+button:disabled, [data-disabled] { cursor: default; color: var(--research-secondary); opacity: .55; }
+button.primary, [data-slot="button"][data-variant="primary"] { color: var(--research-on-primary); background: var(--research-primary); border: 1px solid var(--research-primary); font-weight: 500; }
+button.primary:hover:not(:disabled), [data-slot="button"][data-variant="primary"]:hover:not(:disabled) { background: color-mix(in srgb, var(--research-primary), var(--research-surface) 15%); }
+[data-slot="button"][data-variant="secondary"] { border: 1px solid var(--research-line); background: var(--research-surface); }
+[data-slot="button"][data-size="icon"] { width: 32px; height: 32px; padding: 6px; }
+[data-slot="badge"] { display: inline-flex; align-items: center; gap: 5px; font-size: var(--type-caption); padding: 0; color: var(--research-secondary); background: transparent; border-radius: 0; }
+input, textarea, select { border: 1px solid var(--research-line-strong); border-radius: var(--radius-control); background: var(--research-surface); padding: 9px 11px; caret-color: var(--research-ink); }
+:is(button, input, textarea, select, summary, [tabindex]):focus-visible { outline: 2px solid var(--research-focus); outline-offset: 2px; }
+::selection { background: var(--research-selection); color: var(--research-ink); }
+.researchPopoverPositioner { z-index: 120; outline: none; }
+.researchMenu, .connectionSource { border: 1px solid var(--research-line-strong); border-radius: var(--radius-card); background: var(--research-surface); color: var(--research-ink); box-shadow: none; outline: none; }
+.researchMenu { padding: 5px; min-width: 190px; max-width: min(340px, calc(100vw - 24px)); max-height: min(440px, var(--available-height)); overflow: auto; }
+.researchMenuLabel { padding: 9px 9px 6px; font-size: var(--type-caption); color: var(--research-secondary); }
+.researchMenuLabel { font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
+.researchMenuItem { display: flex; align-items: center; gap: 9px; min-height: 36px; padding: 8px 9px; border-radius: var(--radius-control); font-size: var(--type-control); cursor: default; outline: none; }
+.researchMenuItem > span { min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.researchMenuItem > svg { flex: none; }
+.researchMenuItem[data-highlighted] { background: var(--research-selection); }
+.researchMenuItem[data-disabled] { pointer-events: none; }
+.researchMenuSeparator { height: 1px; background: var(--research-line); margin: 5px 4px; }
+.connectionSource { width: min(330px, calc(100vw - 24px)); max-height: var(--available-height); overflow: auto; display: grid; gap: 9px; padding: 20px; }
+.agentOptionsTrigger { gap: 6px; min-height: 30px; padding: 5px 7px; color: var(--research-secondary); }
+.agentOptionsTrigger[data-popup-open] { background: var(--research-soft); }
+.researchSelect { width: 100%; justify-content: space-between; text-align: left; padding: 9px 10px; border: 1px solid var(--research-line-strong); background: var(--research-paper); font-size: var(--type-control); }
+.researchSelect > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.researchSelectPopup { min-width: var(--anchor-width); }
+.researchSelectPopup .researchMenuItem > span:last-child { flex: none; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }

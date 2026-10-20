@@ -15,3 +15,5 @@ host-dist/
 *.p12
 .vscode/
 .idea/
+__pycache__/
+*.pyc
