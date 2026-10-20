@@ -278,7 +278,7 @@ app.whenReady().then(async () => {
     );
     stage = "load packaged typography in both documents";
     const readingFontEvidence = '(' + (async () => {
-      const checked = await Promise.all(['Inter', 'Source Serif 4', 'IBM Plex Mono', 'Noto Sans SC'].map(async family => {
+      const checked = await Promise.all(['Inter', 'IBM Plex Mono', 'Noto Sans SC'].map(async family => {
         const faces = await document.fonts.load(`400 16px "${family}"`, family === 'Noto Sans SC' ? '金额确认' : 'Turnsu 174.50');
         return { family, loaded: faces.some(face => face.status === 'loaded') };
       }));
@@ -294,11 +294,12 @@ app.whenReady().then(async () => {
       assert.match(fonts.family, /Inter/);
       assert.ok(fonts.checked.every(font => font.loaded), 'bundled font binaries must actually decode: ' + JSON.stringify(fonts.checked));
     }
-    assert.match(await js('getComputedStyle(document.querySelector(".taskTitle")).fontFamily'), /Source Serif 4/);
+    assert.equal(await js('getComputedStyle(document.querySelector(".taskTitle")).fontFamily'), workbenchFonts.family);
+    assert.equal(await js('getComputedStyle(document.querySelector(".brandMark > span")).fontFamily'), workbenchFonts.family);
     assert.match(await frame().executeJavaScript('getComputedStyle(document.querySelector("td.numeric")).fontFamily'), /Inter/);
     for (const [documentName, requests] of Object.entries(fontRequests)) {
       assert.ok(requests.size > 0 && requests.size < 205, "load only used font subsets, never preload the whole collection");
-      if (documentName === 'workbench') for (const family of ['inter-', 'source-serif-4-', 'ibm-plex-mono-']) assert.ok([...requests].some(url => url.includes('/'+family)), 'each Research font family must decode through a packaged route: '+family);
+      if (documentName === 'workbench') for (const family of ['inter-', 'ibm-plex-mono-']) assert.ok([...requests].some(url => url.includes('/'+family)), 'each UI font family must decode through a packaged route: '+family);
       assert.ok([...requests].every(url => /^turnsu(?:-ui)?:\/\/app\/fonts\//.test(url)), "font requests must remain inside the desktop package");
     }
     const fontUrl = [...fontRequests.app].find(url => url.endsWith(".woff2"));

@@ -53,11 +53,11 @@ export const library = createLibrary({
     { name: "Research composition", components: ["ResearchSummary", "ResearchSection", "ResearchNote", "KeyValue", "Comparison", "Sources", "ActionBar"], notes: [
       '- Start with ResearchSummary(conclusion, explanation, category), then a responsive Metric grid with context, evidence in ResearchSection, inputs and one ActionBar, and Sources. Omit blocks the task does not need.',
       '- Sources and timestamps must be real; never fabricate a comparison. Use ResearchNote to disclose missing context. Keep original amounts and distinguish draft calculations from confirmed execution.',
-      '- The host provides the single outer card and document title. Avoid decorative nested Cards and repeated titles. Do not repeat identical records in both KeyValue and ReviewTable.',
+      '- The host provides the single outer card and document title. Use task-specific titles and labels; never add design-system names such as Research as decoration. Avoid decorative nested Cards and repeated titles. Do not repeat identical records in both KeyValue and ReviewTable.',
     ] },
     { name: "Task review", components: ["Metric", "ReviewTable", "TaskFiles"], notes: [
       '- The host already displays document.title. Use Title for useful section headings rather than repeating that title.',
-      '- Research style: white reading area, serif headings, quiet separators, 16–18px section gaps, right-aligned exact amounts. Avoid nested decorative Cards.',
+      '- Visual style: white reading area, shared sans-serif headings and body, quiet separators, 16–18px section gaps, right-aligned exact amounts. Avoid nested decorative Cards.',
       '- Use Metric in Grid(...,4,130) for responsive summaries; use ReviewTable for editable rows and exact business amounts.',
       '- ImportFiles opens the task file picker; ContinueTask retries only a known pending handoff. ToAssistant is the single confirmation path.',
     ] },

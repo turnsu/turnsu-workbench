@@ -1,7 +1,7 @@
 /* Research: one semantic palette for the workbench and isolated first-party Apps. */
 :root {
   --font-ui: 'Inter', 'PingFang SC', 'Noto Sans SC', sans-serif;
-  --font-title: 'Source Serif 4', 'Songti SC', 'Noto Serif SC', serif;
+  --font-title: var(--font-ui);
   --font-mono: 'IBM Plex Mono', 'SFMono-Regular', monospace;
   --reading-extra: 0px;
   --type-caption: calc(11.5px + var(--reading-extra));

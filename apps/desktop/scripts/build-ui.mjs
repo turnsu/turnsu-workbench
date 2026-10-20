@@ -25,7 +25,7 @@ await mkdir(resolve(root, "dist/brand"), { recursive: true });
 // Remove the retired fixed-side-form entry from incremental development builds.
 for(const name of ["surface.html","surface-host.js"])await rm(resolve(root,"dist",name),{force:true});
 const uiBuild = await build({ entryPoints: [resolve(root, "src/main.jsx"), resolve(root, "src/surface.jsx")], bundle: true, outdir: resolve(root, "dist"), format: "esm", platform: "browser", jsx: "automatic", plugins: [workerPlugin], minify: true, sourcemap: false, loader: { '.woff2': 'file', '.woff': 'file', '.ttf': 'file' }, assetNames: 'fonts/[name]-[hash]', define: { "process.env.NODE_ENV": '"production"' }, metafile: true });
-const fontLicenses = ['OFL-noto-sans-sc.txt', 'OFL-noto-serif-sc.txt', 'OFL-Inter.txt', 'OFL-Source-Serif-4.txt', 'OFL-IBM-Plex-Mono.txt'];
+const fontLicenses = ['OFL-noto-sans-sc.txt', 'OFL-Inter.txt', 'OFL-IBM-Plex-Mono.txt'];
 const currentOutputs = new Set(Object.keys(uiBuild.metafile.outputs).map(path => resolve(path)));
 // Incremental builds must not ship retired font families or older hashed files.
 for (const file of await readdir(resolve(root, 'dist/fonts'), { withFileTypes: true })) {
@@ -36,17 +36,17 @@ for (const name of fontLicenses) await cp(resolve(root, 'src/shared/fonts', name
 await rm(resolve(root, 'dist/licenses'), { recursive: true, force: true });
 await cp(resolve(root, "licenses"), resolve(root, "dist/licenses"), { recursive: true });
 await mkdir(resolve(root, 'dist/licenses/fonts'), { recursive: true });
-for (const name of ['OFL-Inter.txt', 'OFL-Source-Serif-4.txt', 'OFL-IBM-Plex-Mono.txt']) await cp(resolve(root, 'src/shared/fonts', name), resolve(root, 'dist/licenses/fonts', name));
+for (const name of fontLicenses) await cp(resolve(root, 'src/shared/fonts', name), resolve(root, 'dist/licenses/fonts', name));
 await cp(resolve(root, "public/brand"), resolve(root, "dist/brand"), { recursive: true });
 await writeFile(resolve(root, "dist/index.html"), '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Turnsu 工作台</title><link rel="stylesheet" href="./main.css"></head><body><div id="root"></div><script type="module" src="./main.js"></script></body></html>');
 console.log("Turnsu desktop UI built.");
 
 const script = (await readFile(resolve(root, 'dist/surface.js'),'utf8')).replaceAll('</script','<\\/script');
 let css = await readFile(resolve(root, 'dist/surface.css'),'utf8');
-// Research and math fonts travel with both isolated Apps. The native App
+// UI and math fonts travel with both isolated Apps. The native App
 // retains packaged CJK subsets; external hosts use their system CJK fallback.
 for (const rule of css.match(/@font-face\s*\{[^}]*\}/g) || []) {
-  if (!/KaTeX|font-family:["']?(?:Inter|Source Serif 4|IBM Plex Mono)/i.test(rule)) continue;
+  if (!/KaTeX|font-family:["']?(?:Inter|IBM Plex Mono)/i.test(rule)) continue;
   const match = rule.match(/url\((?:["'])?([^)'" ]+\.(woff2|ttf))(?:["'])?\)/);
   if (!match) throw new Error('Missing self-contained App font: ' + rule.slice(0, 160));
   const bytes = await readFile(resolve(root, 'dist', match[1]));

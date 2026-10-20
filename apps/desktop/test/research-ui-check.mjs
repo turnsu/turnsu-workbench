@@ -8,7 +8,7 @@ import { ipcMain } from 'electron';
 export async function checkResearchComponents({ js, frame, until, host, session, window, embedded, website, surfaceCalls, changeAppearance, capturePaintedPage }) {
   const previousSession = host.session(session.id), previousDraft = host.ui.read(session.id).document.data;
   session = await host.command('session.create', { projectId: previousSession.collection_project_id || previousSession.project_id, agent: 'codex' });
-  await host.command('session.rename', { sessionId: session.id, title: 'Research 订单核对（验收数据）' });
+  await host.command('session.rename', { sessionId: session.id, title: '订单核对（验收数据）' });
   host.message(session.id, 'research-example', 'assistant', '以下为组件交互验收用的订单数据。确认前保留草稿，不生成报告。');
   const rows = [{ id: 'a', order: 'TEST-001', customer: '样本甲', amount: '100.00' }, { id: 'b', order: 'TEST-002', customer: '样本乙', amount: '74.50' }];
   const program = `root = Col([
@@ -28,7 +28,7 @@ export async function checkResearchComponents({ js, frame, until, host, session,
     format: 'openui', title: '订单资料核对', program, data: { $copies: 2, $purpose: '内部核对', $rows: rows },
   } });
   window.setContentSize(1180, 820);
-  const selectSession = () => js(`(() => { const button=[...document.querySelectorAll('.sessionButton')].find(item=>item.textContent.includes('Research 订单核对（验收数据）')); if(!button || button.disabled) return false; button.click(); return true; })()`);
+  const selectSession = () => js(`(() => { const button=[...document.querySelectorAll('.sessionButton')].find(item=>item.textContent.includes('订单核对（验收数据）')); if(!button || button.disabled) return false; button.click(); return true; })()`);
   await until(selectSession, 'component conversation did not appear');
   await until(() => frame()?.executeJavaScript('document.querySelectorAll(".statusBlock").length === 4'), 'Research metrics did not render');
   await changeAppearance('明亮');

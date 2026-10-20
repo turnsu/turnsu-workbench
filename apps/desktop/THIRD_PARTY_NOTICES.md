@@ -2,10 +2,10 @@
 
 ## Noto reading fonts
 
-Noto Sans SC (400–600) and Noto Serif SC (600) are bundled as unmodified Google Fonts WOFF2 subsets,
+Noto Sans SC (400–600) is bundled as unmodified Google Fonts WOFF2 subsets,
 under the SIL Open Font License 1.1. Source URLs and SHA-256 hashes are recorded in
-src/fonts/manifest.json. The application ships both full license notices at
-dist/fonts/OFL-noto-sans-sc.txt and dist/fonts/OFL-noto-serif-sc.txt.
+src/shared/fonts/manifest.json. The application ships the full license notice at
+dist/fonts/OFL-noto-sans-sc.txt.
 Fonts load from the local package, not from Google at runtime. No system font installation is required.
 
 ## Company component adaptation
@@ -51,5 +51,5 @@ with the library; the upstream chat, storage and model gateway are not used.
 See licenses/open-intelligent-ui-LICENSE and the generated dist/licenses inventory.
 Base UI provides keyboard and focus behavior for the shared Research controls.
 Onevra informed the activity disclosure behavior (licenses/onevra.txt).
-Research fonts are bundled under their OFL notices; no remote font service is
+Inter and IBM Plex Mono are bundled under their OFL notices; no remote font service is
 needed for the workbench.
